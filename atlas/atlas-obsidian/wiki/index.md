@@ -3,7 +3,7 @@ type: meta
 title: Wiki Index
 status: evergreen
 created: 2026-09-17
-updated: 2026-09-22
+updated: 2026-09-26
 tags:
   - meta
   - index
@@ -19,7 +19,7 @@ Every page in this knowledge base is listed here. Completed operations keep it c
 
 ## Concepts
 
-- No concepts yet.
+- [[V2 Obsidian Plugin Brainstorm]]: candidate features for an Obsidian plugin in V2, with effort, risk, and a suggested order.
 
 ## Entities
 
