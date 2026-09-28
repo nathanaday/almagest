@@ -1,180 +1,109 @@
-// Package plugin holds the tests that keep the plugin's own files consistent: the skills,
-// the agents, and every place the code and the docs name one. See docs/skills.md.
+// Package plugin holds tests only: the agent plugin's skills, agents, links, hooks, and
+// versions against the code that serves them.
 package plugin
 
 import (
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/claudecode"
+	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
-	"github.com/nathanaday/atlas-obsidian/internal/project"
+	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
+	"github.com/nathanaday/atlas-obsidian/internal/sessions"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
+// root is the plugin's folder: the repository root.
 const root = "../.."
 
-// current are the files that must name only skills that exist: the plugin's own files,
-// the current docs, and the code. The design docs of earlier versions are history.
-func current(t *testing.T) []string {
-	t.Helper()
-	var files []string
-	for _, dir := range []string{"skills", "agents", "internal", "hooks"} {
-		filepath.WalkDir(filepath.Join(root, dir), func(p string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() {
-				return nil
-			}
-			if strings.HasSuffix(p, "_test.go") {
-				return nil
-			}
-			if ext := filepath.Ext(p); ext == ".md" || ext == ".go" || ext == ".json" {
-				files = append(files, p)
-			}
-			return nil
-		})
-	}
-	for _, f := range []string{"README.md", "CLAUDE.md", "docs/usage.md", "docs/skills.md", "docs/members-design.md", "docs/threads-design.md"} {
-		files = append(files, filepath.Join(root, f))
-	}
-	return files
+// Skills are the skills of the design's map, by noun.
+var Skills = map[string][]string{
+	"atlas":  {"atlas", "atlas-onboard"},
+	"repo":   {"repo-link", "repo-unlink", "repo-ingest"},
+	"wiki":   {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-rollup", "wiki-review"},
+	"thread": {"thread-work", "thread-stub", "thread-spec", "thread-plan", "thread-run", "thread-receipt"},
 }
 
-func read(t *testing.T, p string) string {
+func allSkills() []string {
+	var out []string
+	for _, list := range Skills {
+		out = append(out, list...)
+	}
+	sort.Strings(out)
+	return out
+}
+
+func read(t *testing.T, rel string) string {
 	t.Helper()
-	data, err := os.ReadFile(p)
+	data, err := os.ReadFile(filepath.Join(root, rel))
 	if err != nil {
 		t.Fatal(err)
 	}
 	return string(data)
 }
 
-// frontmatter returns the value of key in a file's YAML frontmatter, one line or folded.
-func frontmatter(text, key string) string {
-	front, _, ok, err := project.SplitFrontmatter(text)
-	if !ok || err != nil {
-		return ""
-	}
-	lines := strings.Split(front, "\n")
-	for i, line := range lines {
-		if !strings.HasPrefix(line, key+":") {
-			continue
-		}
-		v := strings.TrimSpace(strings.TrimPrefix(line, key+":"))
-		if v == ">" || v == "|" {
-			var parts []string
-			for _, next := range lines[i+1:] {
-				if !strings.HasPrefix(next, " ") {
-					break
-				}
-				parts = append(parts, strings.TrimSpace(next))
-			}
-			v = strings.Join(parts, " ")
-		}
-		return strings.Trim(v, `"`)
-	}
-	return ""
-}
-
-func skillDirs(t *testing.T) []string {
-	t.Helper()
+func TestEverySkillHasItsForm(t *testing.T) {
 	entries, err := os.ReadDir(filepath.Join(root, "skills"))
 	if err != nil {
 		t.Fatal(err)
 	}
-	var out []string
+	var found []string
 	for _, e := range entries {
 		if e.IsDir() {
-			out = append(out, e.Name())
+			found = append(found, e.Name())
 		}
 	}
-	return out
-}
-
-func agents(t *testing.T) []string {
-	t.Helper()
-	entries, err := os.ReadDir(filepath.Join(root, "agents"))
-	if err != nil {
-		t.Fatal(err)
+	sort.Strings(found)
+	if strings.Join(found, ",") != strings.Join(allSkills(), ",") {
+		t.Fatalf("skills/ holds %v; the map has %v", found, allSkills())
 	}
-	var out []string
-	for _, e := range entries {
-		if strings.HasSuffix(e.Name(), ".md") {
-			out = append(out, strings.TrimSuffix(e.Name(), ".md"))
+	for _, name := range found {
+		text := read(t, "skills/"+name+"/SKILL.md")
+		d := doc.Parse(name, []byte(text))
+		if d.FrontErr != nil || d.Str("name") != name {
+			t.Errorf("%s: frontmatter name is %q (%v)", name, d.Str("name"), d.FrontErr)
 		}
-	}
-	return out
-}
-
-func TestEverySkillIsAFolderWithItsNameAndADescription(t *testing.T) {
-	for _, dir := range skillDirs(t) {
-		text := read(t, filepath.Join(root, "skills", dir, "SKILL.md"))
-		if name := frontmatter(text, "name"); name != dir {
-			t.Errorf("skills/%s: name %q", dir, name)
+		desc := d.Str("description")
+		if !strings.Contains(desc, "Use for") || len(desc) > 1024 {
+			t.Errorf("%s: the description says what it does, then Use for, within 1024 characters", name)
 		}
-		desc := frontmatter(text, "description")
-		if desc == "" || len(desc) > 1024 {
-			t.Errorf("skills/%s: description of %d characters", dir, len(desc))
+		prefix, _, _ := strings.Cut(name, "-")
+		if _, ok := Skills[prefix]; !ok {
+			t.Errorf("%s: a skill is named <noun>-<verb> on the four nouns", name)
 		}
-		if !strings.Contains(desc, "Use for") {
-			t.Errorf("skills/%s: the description names no triggers (Use for ...)", dir)
-		}
-	}
-}
-
-func TestTheSkillMapIsTheFolders(t *testing.T) {
-	var mapped []string
-	homes := map[string]bool{}
-	for _, c := range hooks.SkillMap {
-		mapped = append(mapped, c.Home)
-		homes[c.Home] = true
-		for _, s := range c.Skills {
-			if !strings.HasPrefix(s, c.Home+"-") {
-				t.Errorf("%s is filed under %s", s, c.Home)
+		for _, want := range []string{"\n# " + name + "\n", "\nTools: ", "\n## Hand off\n"} {
+			if !strings.Contains(text, want) {
+				t.Errorf("%s: lacks %q", name, strings.TrimSpace(want))
 			}
-			mapped = append(mapped, s)
 		}
-	}
-	sort.Strings(mapped)
-	dirs := skillDirs(t)
-	if strings.Join(mapped, " ") != strings.Join(dirs, " ") {
-		t.Fatalf("the skill map\n  %v\nis not the folders\n  %v", mapped, dirs)
-	}
-	if len(homes) != 3 {
-		t.Fatalf("homes %v", homes)
-	}
-}
-
-func TestEveryAgentHasItsName(t *testing.T) {
-	for _, a := range agents(t) {
-		text := read(t, filepath.Join(root, "agents", a+".md"))
-		if name := frontmatter(text, "name"); name != a {
-			t.Errorf("agents/%s.md: name %q", a, name)
+		if !strings.Contains(text, "\n## Procedure\n") && name != "atlas" {
+			t.Errorf("%s: lacks its Procedure", name)
 		}
-		if frontmatter(text, "description") == "" || frontmatter(text, "tools") == "" {
-			t.Errorf("agents/%s.md: needs a description and tools", a)
+		if !strings.Contains(text, "\n## Gate\n") && !strings.Contains(text, "\n## Gates\n") {
+			t.Errorf("%s: lacks its Gate", name)
 		}
 	}
 }
 
-var mdLink = regexp.MustCompile(`\]\(([^)\s]+)\)`)
+var mdLink = regexp.MustCompile(`\]\(([^)#\s]+\.md)(#[^)]*)?\)`)
 
-func TestEveryRelativeLinkInThePluginResolves(t *testing.T) {
-	for _, dir := range []string{"skills", "agents", "docs/skills.md", "docs/usage.md"} {
-		filepath.WalkDir(filepath.Join(root, dir), func(p string, d os.DirEntry, err error) error {
-			if err != nil || d.IsDir() || filepath.Ext(p) != ".md" {
+func TestEveryLinkResolves(t *testing.T) {
+	for _, dir := range []string{"skills", "agents"} {
+		filepath.WalkDir(filepath.Join(root, dir), func(p string, e os.DirEntry, err error) error {
+			if err != nil || e.IsDir() || !strings.HasSuffix(p, ".md") {
 				return nil
 			}
-			for _, m := range mdLink.FindAllStringSubmatch(read(t, p), -1) {
-				target := m[1]
-				if strings.Contains(target, "://") || strings.HasPrefix(target, "#") || strings.HasPrefix(target, "mailto:") {
-					continue
-				}
-				target, _, _ = strings.Cut(target, "#")
-				if _, err := os.Stat(filepath.Join(filepath.Dir(p), target)); err != nil {
-					t.Errorf("%s links %s, which is not there", p, m[1])
+			data, _ := os.ReadFile(p)
+			for _, m := range mdLink.FindAllStringSubmatch(string(data), -1) {
+				target := filepath.Join(filepath.Dir(p), m[1])
+				if _, err := os.Stat(target); err != nil {
+					t.Errorf("%s links %s, which is missing", p, m[1])
 				}
 			}
 			return nil
@@ -182,73 +111,158 @@ func TestEveryRelativeLinkInThePluginResolves(t *testing.T) {
 	}
 }
 
-// named finds the skills a text names: a slash command, a skill picked in Codex, a skill
-// called by name in prose, and a category-prefixed name in backticks.
-var named = []*regexp.Regexp{
-	regexp.MustCompile(`/atlas-obsidian:([a-z][a-z-]*)`),
-	regexp.MustCompile("`\\$([a-z][a-z-]*)`"),
-	regexp.MustCompile("(?:the|The) `([a-z][a-z-]*)` skill\\b"),
-	regexp.MustCompile("`((?:wiki|thread|atlas)-[a-z][a-z-]*)`"),
-	regexp.MustCompile(`\b((?:wiki|thread|atlas)-[a-z]+(?:-[a-z]+)?) skill\b`),
-	regexp.MustCompile(`\bthe ([a-z]+) skill\b`),
+func TestAgentsAreTheReadOnlyWorkers(t *testing.T) {
+	tools := map[string]bool{}
+	for _, n := range mcpserver.ToolNames() {
+		tools["mcp__plugin_"+hooks.PluginName+"_atlas__"+n] = true
+	}
+	entries, _ := os.ReadDir(filepath.Join(root, "agents"))
+	var names []string
+	for _, e := range entries {
+		name := strings.TrimSuffix(e.Name(), ".md")
+		names = append(names, name)
+		d := doc.Parse(e.Name(), []byte(read(t, "agents/"+e.Name())))
+		if d.Str("name") != name {
+			t.Errorf("%s: frontmatter name %q", e.Name(), d.Str("name"))
+		}
+		for _, tool := range strings.Split(d.Str("tools"), ",") {
+			tool = strings.TrimSpace(tool)
+			if strings.HasPrefix(tool, "mcp__") && !tools[tool] {
+				t.Errorf("%s: no tool %s", name, tool)
+			}
+			if slices.Contains([]string{"Write", "Edit", "MultiEdit", "NotebookEdit"}, tool) {
+				t.Errorf("%s: a read-only agent lists %s", name, tool)
+			}
+			if strings.HasSuffix(tool, "__change") {
+				t.Errorf("%s: a read-only agent lists the change tool", name)
+			}
+		}
+	}
+	sort.Strings(names)
+	want := slices.Clone(sessions.ReadOnlyAgents)
+	sort.Strings(want)
+	if strings.Join(names, ",") != strings.Join(want, ",") {
+		t.Fatalf("agents/ holds %v; the guard knows %v", names, want)
+	}
 }
 
-// notSkills are hyphenated names in backticks that are not skills.
-var notSkills = map[string]bool{"atlas-obsidian": true, "stage": true, "same": true, "next": true, "right": true, "calling": true, "writing": true, "owning": true}
-
-// retired are the skill names 5.6.0 replaced. Only the record of that change in
-// docs/skills.md may name them.
-var retired = map[string]bool{"save": true, "describe": true, "canvas": true, "obsidian-bases": true, "obsidian-markdown": true, "work": true, "wiki-merge": true, "wiki-lint": true, "wiki-mode": true, "think": true}
-
-func TestEverySkillNamedExists(t *testing.T) {
+func TestSkillsNameOnlyWhatExists(t *testing.T) {
 	known := map[string]bool{}
-	for _, s := range skillDirs(t) {
+	for _, s := range allSkills() {
 		known[s] = true
 	}
-	for _, a := range agents(t) {
+	for _, a := range sessions.ReadOnlyAgents {
 		known[a] = true
 	}
-	for _, f := range current(t) {
-		text := read(t, f)
-		for _, re := range named {
-			for _, m := range re.FindAllStringSubmatch(text, -1) {
-				name := m[1]
-				if known[name] || notSkills[name] || strings.HasPrefix(name, "atlas-obsidian") {
-					continue
-				}
-				if retired[name] && strings.HasSuffix(f, "docs/skills.md") {
-					continue
-				}
-				t.Errorf("%s names %q, which is no skill or agent", strings.TrimPrefix(f, root+"/"), name)
+	tools := map[string]bool{}
+	for _, n := range mcpserver.ToolNames() {
+		tools[n] = true
+	}
+	name := regexp.MustCompile(`\[((?:atlas|repo|wiki|thread)-[a-z]+)\]\(`)
+	toolsLine := regexp.MustCompile("(?m)^Tools: (.*)$")
+	for _, s := range allSkills() {
+		text := read(t, "skills/"+s+"/SKILL.md")
+		for _, m := range name.FindAllStringSubmatch(text, -1) {
+			if !known[m[1]] {
+				t.Errorf("%s names %s, which does not exist", s, m[1])
+			}
+		}
+		line := toolsLine.FindStringSubmatch(text)
+		if line == nil {
+			continue
+		}
+		for _, m := range regexp.MustCompile("`([a-z]+)`").FindAllStringSubmatch(line[1], -1) {
+			if !tools[m[1]] {
+				t.Errorf("%s: its Tools line names %s, which is no tool", s, m[1])
 			}
 		}
 	}
 }
 
-func TestTheLaunchPromptsNameSkills(t *testing.T) {
-	known := map[string]bool{}
-	for _, s := range skillDirs(t) {
-		known[s] = true
+func TestHooksFileMatchesTheCommands(t *testing.T) {
+	var file struct {
+		Hooks map[string][]struct {
+			Matcher string `json:"matcher"`
+			Hooks   []struct {
+				Command string `json:"command"`
+			} `json:"hooks"`
+		} `json:"hooks"`
 	}
-	prompts := []string{claudecode.IngestPrompt, claudecode.DescribePrompt}
-	for _, stage := range []string{"stub", "spec", "plan", "receipt", ""} {
-		prompts = append(prompts, claudecode.ThreadPrompt(stage, "thr-1"))
+	if err := json.Unmarshal([]byte(read(t, "hooks/hooks.json")), &file); err != nil {
+		t.Fatal(err)
 	}
-	for _, p := range prompts {
-		name, _, _ := strings.Cut(strings.TrimPrefix(p, "/atlas-obsidian:"), " ")
-		if !known[name] {
-			t.Errorf("launch prompt %q names no skill", p)
+	seen := map[string]bool{}
+	for event, groups := range file.Hooks {
+		for _, g := range groups {
+			for _, h := range g.Hooks {
+				command := h.Command[strings.LastIndex(h.Command, " ")+1:]
+				if hooks.Events[command] != event {
+					t.Errorf("%s runs %s, which is the %s hook", event, command, hooks.Events[command])
+				}
+				seen[command] = true
+			}
+		}
+	}
+	for command := range hooks.Events {
+		if !seen[command] {
+			t.Errorf("hooks.json never runs %s", command)
+		}
+	}
+	guard := file.Hooks["PreToolUse"][0].Matcher
+	for _, tool := range []string{"Write", "Edit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_atlas__change"} {
+		if !regexp.MustCompile("^(" + guard + ")$").MatchString(tool) {
+			t.Errorf("the guard does not see %s", tool)
 		}
 	}
 }
 
-// TestEverySkillSaysWhereItSits holds each skill to the form docs/skills.md sets: the
-// tools it uses and the skills around it.
-func TestEverySkillSaysWhereItSits(t *testing.T) {
-	for _, dir := range skillDirs(t) {
-		text := read(t, filepath.Join(root, "skills", dir, "SKILL.md"))
-		if !strings.Contains(text, "Tools:") {
-			t.Errorf("skills/%s names no tools (a line starting Tools:)", dir)
+func TestOneVersion(t *testing.T) {
+	version := func(rel string) string {
+		var m struct {
+			Version string `json:"version"`
 		}
+		if err := json.Unmarshal([]byte(read(t, rel)), &m); err != nil {
+			t.Fatal(err)
+		}
+		return m.Version
+	}
+	v := version(".claude-plugin/plugin.json")
+	if got := version(".codex-plugin/plugin.json"); got != v {
+		t.Errorf("the Codex plugin is %s, the Claude plugin %s", got, v)
+	}
+	if got := vault.PluginVersion(); got != v {
+		t.Errorf("the Obsidian plugin the binary carries is %s, the agent plugin %s", got, v)
+	}
+	if got := version("obsidian/manifest.json"); got != v {
+		t.Errorf("the Obsidian plugin's source is %s, the agent plugin %s", got, v)
+	}
+	if got := version("obsidian/package.json"); got != v {
+		t.Errorf("the Obsidian plugin's package is %s, the agent plugin %s", got, v)
+	}
+	built, err := os.ReadFile(filepath.Join(root, "obsidian/dist/main.js"))
+	if err == nil {
+		carried, _ := vault.Template("obsidian/main.js")
+		if string(built) != string(carried) {
+			t.Error("the binary carries an older Obsidian plugin than obsidian/dist; run make obsidian")
+		}
+	}
+	var market struct {
+		Plugins []struct {
+			Name    string `json:"name"`
+			Version string `json:"version"`
+		} `json:"plugins"`
+	}
+	json.Unmarshal([]byte(read(t, ".claude-plugin/marketplace.json")), &market)
+	found := false
+	for _, p := range market.Plugins {
+		if p.Name == hooks.PluginName {
+			found = true
+			if p.Version != v {
+				t.Errorf("the marketplace lists %s, the plugin is %s", p.Version, v)
+			}
+		}
+	}
+	if !found {
+		t.Error("the marketplace does not list the plugin")
 	}
 }

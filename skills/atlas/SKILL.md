@@ -1,78 +1,74 @@
 ---
 name: atlas
-description: "The front door: see every project on this machine and what is wrong with them, change the atlas settings, and find the right skill for any request. Use for /atlas, my projects, list projects, what projects do I have, which skill should I use, what can atlas do, refresh the atlas, atlas settings, set new-days, what is wrong with the atlas."
+description: "Orient in the Atlas vault, show the board, make the quick moves on a thread, and route any request to the skill that owns it. Use for /atlas, what is going on, status, where do I work on X, threads, the board, what is open, what should I work on, block, unblock, reprioritize, rename a thread, reopen, review the board, @atlas mentions, and any request when the right skill is not clear."
 ---
 
-# The atlas
+# atlas
 
-The atlas is every project on this machine. A project knows things (its
-**wiki**) and does things (its **threads**); the atlas holds the projects and
-the links between them. Every skill is a verb on one of those three nouns.
-This skill shows the projects, changes the settings, and routes a request to
-the skill that owns it.
+Every request passes this skill first. It reads where the session stands, names the kind
+of request, finds the scope when the request names work in a repository, and hands off.
+It does the small thread moves itself.
 
-Tools: `atlas`, `settings`. Both work from any session: inside a project, or
-in a folder the atlas does not know.
+Tools: `vault`, `search`, `context`, `thread` (list, show, set, reopen). References:
+[threads.md](references/threads.md).
 
-## See what exists
+## Procedure
 
-1. Call `atlas`. It returns every project with its path, description, mode,
-   wiki page count, inbox counts, open thread counts, the page that describes
-   its work, and how recently it moved; the folders the atlas cannot read,
-   with a reason; and the settings.
-2. Show one line per project, the most recent first. Name each folder it
-   cannot read and the reason. Keep it short: the user asked for orientation.
-3. Say what needs attention: a project no page describes, a folder that is
-   gone, a blocked or stale thread, a hub whose members are not mirrored.
+1. Read the opening context. Call `vault` when it is missing or the user asks for the
+   state.
+2. Name the kind of request with the table below.
+3. When the request names work in a repository, find the scope: `search` with
+   `types: [repository, area]` and the request's words, then `context` for the best
+   match. When two repositories match, ask which, and name both. Never guess between
+   two.
+4. Once the work is known, write one line under `## Description` in this session's
+   document (the opening context links it). Use Edit.
+5. Hand off.
 
-## Route
+| The user wants | Skill | Thread? |
+|---|---|---|
+| an answer, an explanation, to explore | [wiki-query](../wiki-query/SKILL.md) | no |
+| a change to one or more repositories | [thread-work](../thread-work/SKILL.md) | yes |
+| to note an idea or a bug for later | [thread-stub](../thread-stub/SKILL.md) | yes, a stub |
+| to ingest files, or process the inbox | [wiki-ingest](../wiki-ingest/SKILL.md) | no |
+| to keep something from this conversation | [wiki-save](../wiki-save/SKILL.md) | no |
+| to bring the wiki up to date with new documents | [wiki-sync](../wiki-sync/SKILL.md) | no |
+| to link, unlink, or describe a repository | [repo-link](../repo-link/SKILL.md), [repo-unlink](../repo-unlink/SKILL.md), [repo-ingest](../repo-ingest/SKILL.md) | no |
+| to check or fix the wiki | [wiki-review](../wiki-review/SKILL.md), [wiki-edit](../wiki-edit/SKILL.md) | no |
+| to organize knowledge across repositories | [wiki-rollup](../wiki-rollup/SKILL.md) | no |
+| a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) | no |
 
-| The user wants | Skill |
-|---|---|
-| **The atlas** | |
-| Make a folder a project, blank or long-lived | `atlas-onboard` |
-| Change a project: name, description, mode, threads on or off, members, sync, forget | `atlas-project` |
-| Find what a hub's members hold in common; upgrade pages, build bridges | `atlas-merge` |
-| **The wiki** (home: `wiki`) | |
-| Turn a source into pages, of any size | `wiki-ingest` |
-| Answer from the wiki | `wiki-query` |
-| Keep an answer, a decision, or an insight | `wiki-save` |
-| Change pages that exist: rewrite, rename, move, split, combine, fix | `wiki-edit` |
-| Describe the work, or bring that page up to date | `wiki-describe` |
-| Check the wiki's health, quick or deep | `wiki-review` |
-| Roll up the log | `wiki-fold` |
-| A canvas board | `wiki-canvas` |
-| A Bases view | `wiki-base` |
-| **The threads** (home: `thread`) | |
-| Do this, fix this, move a thread on | `thread-work` |
-| Note an idea, a bug, a chore | `thread-stub` |
-| Define what done means | `thread-spec` |
-| Decide how to do it | `thread-plan` |
-| Do the planned work | `thread-run` |
-| Close a thread | `thread-receipt` |
-| See the board, change a card, a phase | `thread` |
+A question can turn into work. When the user then asks for a change, route to
+thread-work; the guard refuses the edit without a thread anyway.
 
-`docs/skills.md` in the plugin holds the same map with what each skill owns.
+## The board and the quick moves
 
-## Settings and refresh
+These are small, so this skill does them itself.
 
-- `settings` with `new_days` sets how long a project counts as new in the
-  view, and returns every setting; with no arguments it only reads. Say what
-  the value means before changing it.
-- `atlas` with `refresh: true` reads everything again and rewrites the
-  registry. Run it after the user moved a folder by hand. A project heals its
-  own path when a session starts in it, so refresh is for the view.
+- **The board**: `thread` list. Show the threads by stage, the active ones first with
+  the session working on each. Link `threads/Threads.base` for the live view.
+- **One thread**: `thread` show. Say its stage, its tasks and their status, and `next`.
+- **A quick move**: `thread` set (priority, blocked, title, scope) or reopen. Say the
+  result in one line.
+- **What should I work on**: rank the open threads by priority, then by readiness (a
+  ready task beats a stub), then by how long they waited. Recommend one, with the
+  reason.
+- **Review the board**, on request: stale threads, blocked threads with no plan to
+  unblock, likely duplicates (`search` with each stub's words), and work the user
+  mentioned that has no thread.
 
-## What stays in the terminal
+## Mentions
 
-`atlas-obsidian doctor`, `recover`, `setup`, `open-vault`, `open-agent`,
-`open-claude`, and `open-codex` are commands, not tools. Name the command; do
-not run it through Bash unless the user asks.
+The opening context counts `@atlas` mentions: task lines in the user's notes addressed
+to the agent. When the user asks about them, or the request is unclear, `vault` status
+lists them. Offer each one. Route it like any request. When a document answers it (a
+new stub, an applied change, this session's document), close it with `vault`
+`action: mention`, the note's path, the line, and a link to the answer.
 
-Never edit `atlas/<name>/project.json`, `~/.atlas-obsidian/config.json`, or
-`registry.json` with Write or Edit.
+## Gate
+
+None for reads. A quick move is one line back, not a question.
 
 ## Hand off
 
-To the skill the route table names. Inside a project, `wiki` and `thread`
-orient in each half.
+The routed skill.

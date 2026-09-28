@@ -1,1374 +1,441 @@
-// Package lint checks a vault's wiki without changing it: link resolution, orphans,
-// frontmatter, empty sections, index freshness, and ledger consistency. The report is
-// deterministic for a given tree and audit date.
+// Package lint is the health check. It reads every typed document and reports what is
+// wrong, and which tool or skill fixes it. It never writes.
 package lint
 
 import (
-	"encoding/json"
 	"fmt"
-	"io/fs"
-	"net/url"
 	"os"
-	"path"
-	"path/filepath"
-	"regexp"
 	"sort"
 	"strings"
 	"time"
-	"unicode"
 
-	"github.com/nathanaday/atlas-obsidian/internal/ledger"
-	"github.com/nathanaday/atlas-obsidian/internal/project"
+	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/gitx"
+	"github.com/nathanaday/atlas-obsidian/internal/links"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
-const ReportVersion = 3
+// Severities.
+const (
+	Error   = "error"
+	Warning = "warning"
+	Info    = "info"
+)
 
-// Options tune one run.
+// Thresholds of the info checks.
+const (
+	BehindLimit  = 50
+	PendingAge   = 7 * 24 * time.Hour
+	ProposedAge  = 24 * time.Hour
+	writeSection = "Writes"
+)
+
+// Finding is one thing wrong, and its fix.
+type Finding struct {
+	Check    string    `json:"check"`
+	Severity string    `json:"severity"`
+	Doc      vault.Ref `json:"doc"`
+	Message  string    `json:"message"`
+	Fix      string    `json:"fix"`
+}
+
+// Findings is the output of lint.
+type Findings struct {
+	Findings []Finding      `json:"findings"`
+	Counts   map[string]int `json:"counts"`
+	Checked  int            `json:"checked"`
+}
+
+// Options select a run.
 type Options struct {
-	// Overlay replaces files before analysis: a vault-relative path maps to its new
-	// content, or to nil to treat the file as deleted. Plans use it to check their result.
-	Overlay map[string][]byte
-	// Exclude lists path globs (relative to the vault) to leave out of every check.
-	Exclude []string
-	AsOf    time.Time
+	// Scope limits the run to one scope and the scopes below it; empty is the vault.
+	Scope string
+	// Quick runs only the error checks that read frontmatter.
+	Quick bool
+	Now   time.Time
 }
 
-// LinkFinding is a link that does not resolve as written.
-type LinkFinding struct {
-	Source       string `json:"source"`
-	Line         int    `json:"line"`
-	Target       string `json:"target"`
-	Syntax       string `json:"syntax"`
-	Reason       string `json:"reason"`
-	ResolvedPath string `json:"resolved_path,omitempty"`
-	Suggestion   string `json:"suggestion,omitempty"`
+type run struct {
+	idx  *vault.Index
+	opts Options
+	out  []Finding
 }
 
-// Ambiguous is a link with more than one candidate.
-type Ambiguous struct {
-	Source     string   `json:"source"`
-	Line       int      `json:"line"`
-	Target     string   `json:"target"`
-	Syntax     string   `json:"syntax"`
-	Candidates []string `json:"candidates"`
+func (r *run) add(check, severity string, d *doc.Doc, fix, format string, args ...any) {
+	r.out = append(r.out, Finding{Check: check, Severity: severity, Doc: r.idx.Ref(d), Message: fmt.Sprintf(format, args...), Fix: fix})
 }
 
-// LinkRef is one place a link appears.
-type LinkRef struct {
-	Source string `json:"source"`
-	Line   int    `json:"line"`
-}
-
-// WantedPage is a page the wiki links to that nobody has written yet.
-type WantedPage struct {
-	Title string    `json:"title"`
-	Links []LinkRef `json:"links"`
-}
-
-// Stub is a page that exists and holds nothing yet: a seed page with only headings, or an
-// empty file a page links to.
-type Stub struct {
-	Path       string   `json:"path"`
-	Empty      bool     `json:"empty"`
-	LinkedFrom []string `json:"linked_from"`
-}
-
-type Duplicate struct {
-	Basename string   `json:"basename"`
-	Paths    []string `json:"paths"`
-}
-
-type PathFinding struct {
-	Path    string `json:"path"`
-	Message string `json:"message,omitempty"`
-}
-
-type FrontmatterFinding struct {
-	Path           string   `json:"path"`
-	HasFrontmatter bool     `json:"has_frontmatter"`
-	MissingFields  []string `json:"missing_fields"`
-}
-
-type SectionFinding struct {
-	Path    string `json:"path"`
-	Line    int    `json:"line"`
-	Heading string `json:"heading"`
-}
-
-type Summary struct {
-	PagesScanned   int            `json:"pages_scanned"`
-	LinksScanned   int            `json:"links_scanned"`
-	IssuesFound    int            `json:"issues_found"`
-	WantedPages    int            `json:"wanted_pages"`
-	Stubs          int            `json:"stubs"`
-	Uncited        int            `json:"uncited"`
-	CategoryCounts map[string]int `json:"category_counts"`
-}
-
-// Report is the result of one run.
-type Report struct {
-	Version            int                  `json:"version"`
-	AsOf               string               `json:"as_of"`
-	Summary            Summary              `json:"summary"`
-	DeadLinks          []LinkFinding        `json:"dead_links"`
-	AmbiguousTargets   []Ambiguous          `json:"ambiguous_targets"`
-	DuplicateBasenames []Duplicate          `json:"duplicate_basenames"`
-	Orphans            []PathFinding        `json:"orphans"`
-	UnindexedPages     []PathFinding        `json:"unindexed_pages"`
-	MissingFrontmatter []FrontmatterFinding `json:"missing_frontmatter"`
-	EmptySections      []SectionFinding     `json:"empty_sections"`
-	StaleIndexEntries  []LinkFinding        `json:"stale_index_entries"`
-	ReadErrors         []PathFinding        `json:"read_errors"`
-	LedgerErrors       []PathFinding        `json:"ledger_errors"`
-	MirrorErrors       []PathFinding        `json:"mirror_errors"`
-	WantedPages        []WantedPage         `json:"wanted_pages"`
-	Stubs              []Stub               `json:"stubs"`
-	// Uncited are content pages that cite no source: no sources property and no link
-	// to a source page. A signal for review, not a finding.
-	Uncited []PathFinding `json:"uncited"`
-}
-
-type page struct {
-	path     string
-	text     string
-	body     string // text below the frontmatter
-	masked   string
-	fields   map[string]any
-	hasFront bool
-	frontErr error
-	headings map[string]bool
-	blocks   map[string]bool
-	aliases  []string
-	isIndex  bool // index.md, _index.md, or a folder index
-	isMOC    bool // type: moc
-	// mirrored marks a page under wiki/projects/: a copy of another project's page that
-	// sync derives. Its links are checked, because a dead link there is a fact about the
-	// member; every finding about the page itself belongs to the member and is not made.
-	mirrored bool
-	links    []link
-}
-
-// Mirrored reports whether a project-relative path lies in the mirrors sync derives.
-func Mirrored(rel string) bool { return strings.HasPrefix(rel, project.MirrorDir+"/") }
-
-type target struct {
-	path string
-	page *page
-}
-
-func (t target) withoutSuffix() (string, bool) {
-	ext := strings.ToLower(path.Ext(t.path))
-	if ext == ".md" || ext == ".canvas" || ext == ".base" {
-		return strings.TrimSuffix(t.path, path.Ext(t.path)), true
+// Run checks the vault.
+func Run(idx *vault.Index, opts Options) (*Findings, error) {
+	if opts.Now.IsZero() {
+		opts.Now = time.Now()
 	}
-	return "", false
-}
-
-type link struct {
-	source       string
-	line         int
-	target       string
-	filePart     string
-	fragment     string
-	fragmentKind string // heading or block
-	syntax       string
-	mdRelative   bool
-}
-
-var (
-	fenceOpen   = regexp.MustCompile("^ {0,3}(`{3,}|~{3,})")
-	inlineCode  = regexp.MustCompile("`+[^`\n]*`+")
-	atxHeading  = regexp.MustCompile(`(?m)^[ \t]{0,3}(#{1,6})[ \t]+(.+?)[ \t]*$`)
-	blockID     = regexp.MustCompile(`(?m)(?:^|[ \t])\^([A-Za-z0-9][A-Za-z0-9_-]*)[ \t]*$`)
-	wikiLink    = regexp.MustCompile(`(!)?\[\[([^\]\r\n]+?)\]\]`)
-	mdLink      = regexp.MustCompile(`(!)?\[([^\]\r\n]*)\]\(([^\r\n)]*)\)`)
-	htmlComment = regexp.MustCompile(`(?s)<!--.*?(?:-->|$)`)
-	uriScheme   = regexp.MustCompile(`^[A-Za-z][A-Za-z0-9+.-]*:`)
-	blockIDLine = regexp.MustCompile(`(?m)^[ \t]*\^[A-Za-z0-9][A-Za-z0-9_-]*[ \t]*$`)
-)
-
-var orphanExcluded = map[string]bool{
-	"_index.md": true, "index.md": true, "log.md": true, "hot.md": true, "overview.md": true, "dashboard.md": true,
-}
-
-// folderIndexes are the index pages the layout names after their folder, so that no two
-// pages share the basename index.
-var folderIndexes = map[string]bool{project.CanvasIndex: true, project.MirrorIndex: true}
-
-// duplicateExempt reports whether a basename repeats by design: _index pages do.
-func duplicateExempt(rel string) bool {
-	return strings.ToLower(strings.TrimSuffix(path.Base(rel), path.Ext(rel))) == "_index"
-}
-
-// Run lints the vault at root.
-func Run(root string, opts Options) (*Report, error) {
-	root, err := filepath.Abs(root)
-	if err != nil {
-		return nil, err
-	}
-	if info, err := os.Stat(root); err != nil || !info.IsDir() {
-		return nil, fmt.Errorf("vault root is not a directory: %s", root)
-	}
-	asOf := opts.AsOf
-	if asOf.IsZero() {
-		asOf = time.Now().UTC()
-	}
-	files, err := walk(root)
-	if err != nil {
-		return nil, err
-	}
-	present := map[string]bool{}
-	for _, f := range files {
-		present[f] = true
-	}
-	for rel, content := range opts.Overlay {
-		if content == nil {
-			delete(present, rel)
-		} else {
-			present[rel] = true
-		}
-	}
-	report := &Report{Version: ReportVersion, AsOf: asOf.Format("2006-01-02")}
-	var paths []string
-	for rel := range present {
-		if excluded(rel, opts.Exclude) {
-			continue
-		}
-		paths = append(paths, rel)
-	}
-	sort.Slice(paths, func(i, j int) bool { return pathLess(paths[i], paths[j]) })
-
-	var pages []*page
-	var targets []target
-	for _, rel := range paths {
-		var pg *page
-		if strings.HasPrefix(rel, "wiki/") && strings.EqualFold(path.Ext(rel), ".md") {
-			data, ok := opts.Overlay[rel]
-			if !ok {
-				data, err = os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
-				if err != nil {
-					report.ReadErrors = append(report.ReadErrors, PathFinding{Path: rel, Message: "unable to read page"})
-					targets = append(targets, target{path: rel})
-					continue
-				}
-			}
-			pg = parsePage(rel, string(data))
-			if pg.frontErr != nil {
-				report.ReadErrors = append(report.ReadErrors, PathFinding{Path: rel, Message: pg.frontErr.Error()})
-			}
-			pages = append(pages, pg)
-		}
-		targets = append(targets, target{path: rel, page: pg})
-	}
-
-	resolver := newResolver(targets)
-	near := newNearIndex(targets)
-	wanted := map[string]*WantedPage{}
-	incoming := map[string]map[string]bool{}
-	for _, pg := range pages {
-		incoming[pg.path] = map[string]bool{}
-	}
-	links := 0
-	cites := map[string]bool{}
-	for _, pg := range pages {
-		for _, l := range pg.links {
-			links++
-			candidates := resolver.resolve(l)
-			if len(candidates) > 1 {
-				var names []string
-				for _, c := range candidates {
-					names = append(names, c.path)
-				}
-				entry := Ambiguous{Source: l.source, Line: l.line, Target: l.target, Syntax: l.syntax, Candidates: names}
-				report.AmbiguousTargets = append(report.AmbiguousTargets, entry)
-				if pg.isIndex {
-					report.StaleIndexEntries = append(report.StaleIndexEntries, LinkFinding{Source: l.source, Line: l.line, Target: l.target, Syntax: l.syntax, Reason: "ambiguous-target"})
-				}
-				continue
-			}
-			if len(candidates) == 0 {
-				entry := LinkFinding{Source: l.source, Line: l.line, Target: l.target, Syntax: l.syntax, Reason: "target-not-found"}
-				if title, ok := wantedTitle(l, pg); ok && !pg.mirrored {
-					if entry.Suggestion = near.match(title); entry.Suggestion == "" {
-						key := strings.ToLower(title)
-						if wanted[key] == nil {
-							wanted[key] = &WantedPage{Title: title}
-						}
-						wanted[key].Links = append(wanted[key].Links, LinkRef{Source: l.source, Line: l.line})
-						continue
-					}
-				}
-				report.DeadLinks = append(report.DeadLinks, entry)
-				if pg.isIndex {
-					report.StaleIndexEntries = append(report.StaleIndexEntries, entry)
-				}
-				continue
-			}
-			c := candidates[0]
-			if sourceTarget(c) {
-				cites[l.source] = true
-			}
-			if _, ok := incoming[c.path]; ok && c.path != l.source {
-				incoming[c.path][l.source] = true
-			}
-			if reason := fragmentError(l, c); reason != "" {
-				entry := LinkFinding{Source: l.source, Line: l.line, Target: l.target, Syntax: l.syntax, Reason: reason, ResolvedPath: c.path}
-				report.DeadLinks = append(report.DeadLinks, entry)
-				if pg.isIndex {
-					report.StaleIndexEntries = append(report.StaleIndexEntries, entry)
-				}
-			}
-		}
-	}
-
-	for _, w := range wanted {
-		report.WantedPages = append(report.WantedPages, *w)
-	}
-
-	byStem := map[string][]string{}
-	addStem := func(rel string) {
-		if duplicateExempt(rel) || Mirrored(rel) {
-			return
-		}
-		stem := strings.ToLower(strings.TrimSuffix(path.Base(rel), path.Ext(rel)))
-		byStem[stem] = append(byStem[stem], rel)
-	}
-	for _, pg := range pages {
-		addStem(pg.path)
-	}
-	for _, names := range byStem {
-		if len(names) < 2 {
-			continue
-		}
-		sort.Slice(names, func(i, j int) bool { return pathLess(names[i], names[j]) })
-		report.DuplicateBasenames = append(report.DuplicateBasenames, Duplicate{Basename: strings.TrimSuffix(path.Base(names[0]), path.Ext(names[0])), Paths: names})
-	}
-
-	indexPages := map[string]bool{}
-	for _, pg := range pages {
-		if pg.isIndex || pg.isMOC {
-			indexPages[pg.path] = true
-		}
-	}
-	stubs := map[string]bool{}
-	for _, pg := range pages {
-		if s, ok := stubOf(pg, incoming[pg.path]); ok {
-			stubs[pg.path] = true
-			report.Stubs = append(report.Stubs, s)
-		}
-	}
-	for _, pg := range pages {
-		if !orphanCandidate(pg.path) {
-			continue
-		}
-		navigational, catalogued := false, false
-		for src := range incoming[pg.path] {
-			if path.Base(src) != "log.md" {
-				navigational = true
-			}
-			if indexPages[src] {
-				catalogued = true
-			}
-		}
-		if !navigational {
-			report.Orphans = append(report.Orphans, PathFinding{Path: pg.path})
-		}
-		if !catalogued && !stubs[pg.path] {
-			report.UnindexedPages = append(report.UnindexedPages, PathFinding{Path: pg.path})
-		}
-	}
-
-	for _, pg := range pages {
-		if pg.mirrored {
-			continue
-		}
-		emptyStub := stubs[pg.path] && strings.TrimSpace(pg.text) == ""
-		if pg.frontErr == nil && !emptyStub {
-			if missing := project.MissingFrontmatter(pg.fields); len(missing) > 0 {
-				report.MissingFrontmatter = append(report.MissingFrontmatter, FrontmatterFinding{Path: pg.path, HasFrontmatter: pg.hasFront, MissingFields: missing})
-			}
-		}
-		if !stubs[pg.path] {
-			report.EmptySections = append(report.EmptySections, emptySections(pg)...)
-		}
-	}
-
-	for _, pg := range pages {
-		if uncited(pg, stubs[pg.path], cites[pg.path]) {
-			report.Uncited = append(report.Uncited, PathFinding{Path: pg.path})
-		}
-	}
-
-	report.LedgerErrors = ledgerErrors(root, opts.Overlay, present, asOf)
-	report.MirrorErrors = mirrorErrors(root, opts.Overlay, present)
-
-	sortFindings(report)
-	report.Summary = Summary{PagesScanned: len(pages), LinksScanned: links, WantedPages: len(report.WantedPages), Stubs: len(report.Stubs), Uncited: len(report.Uncited), CategoryCounts: map[string]int{
-		"dead_links":          len(report.DeadLinks),
-		"ambiguous_targets":   len(report.AmbiguousTargets),
-		"duplicate_basenames": len(report.DuplicateBasenames),
-		"orphans":             len(report.Orphans),
-		"unindexed_pages":     len(report.UnindexedPages),
-		"missing_frontmatter": len(report.MissingFrontmatter),
-		"empty_sections":      len(report.EmptySections),
-		"stale_index_entries": len(report.StaleIndexEntries),
-		"read_errors":         len(report.ReadErrors),
-		"ledger_errors":       len(report.LedgerErrors),
-		"mirror_errors":       len(report.MirrorErrors),
-	}}
-	for _, n := range report.Summary.CategoryCounts {
-		report.Summary.IssuesFound += n
-	}
-	report.fillEmpty()
-	return report, nil
-}
-
-// walk lists the files under root.
-func walk(root string) ([]string, error) {
-	var files []string
-	err := filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
+	if opts.Scope != "" {
+		s, err := idx.ResolveType(opts.Scope, "area", "repository")
 		if err != nil {
-			if p == root {
-				return err
-			}
-			return nil
+			return nil, err
 		}
-		if p == root {
-			return nil
+		opts.Scope = s.ID()
+	}
+	r := &run{idx: idx, opts: opts}
+	docs := r.selected()
+	r.titles(docs)
+	for _, d := range docs {
+		r.schema(d)
+		r.scope(d)
+		if d.Type() == "repository" {
+			r.repository(d)
 		}
-		name := d.Name()
-		if d.IsDir() {
-			if strings.HasPrefix(name, ".") || name == "node_modules" {
-				return fs.SkipDir
-			}
-			return nil
+	}
+	r.threads(docs)
+	if !opts.Quick {
+		incoming := r.incoming()
+		for _, d := range docs {
+			r.deadLinks(d)
+			r.knowledge(d, incoming)
+			r.info(d)
 		}
-		if d.Type()&fs.ModeSymlink != 0 || !d.Type().IsRegular() {
-			return nil
+	}
+	sort.SliceStable(r.out, func(i, j int) bool {
+		if a, b := rank(r.out[i].Severity), rank(r.out[j].Severity); a != b {
+			return a < b
 		}
-		rel, _ := filepath.Rel(root, p)
-		files = append(files, filepath.ToSlash(rel))
-		return nil
+		if r.out[i].Check != r.out[j].Check {
+			return r.out[i].Check < r.out[j].Check
+		}
+		return r.out[i].Doc.Path < r.out[j].Doc.Path
 	})
-	return files, err
+	counts := map[string]int{Error: 0, Warning: 0, Info: 0}
+	for _, f := range r.out {
+		counts[f.Severity]++
+	}
+	if r.out == nil {
+		r.out = []Finding{}
+	}
+	return &Findings{Findings: r.out, Counts: counts, Checked: len(docs)}, nil
 }
 
-func excluded(rel string, patterns []string) bool {
-	for _, pattern := range patterns {
-		if ok, _ := path.Match(pattern, rel); ok {
-			return true
+func rank(s string) int {
+	switch s {
+	case Error:
+		return 0
+	case Warning:
+		return 1
+	}
+	return 2
+}
+
+// selected are the typed documents the run checks.
+func (r *run) selected() []*doc.Doc {
+	if r.opts.Scope == "" {
+		return r.idx.Docs
+	}
+	var out []*doc.Doc
+	for _, d := range r.idx.Docs {
+		switch d.Type() {
+		case "area", "repository":
+			if r.idx.Under(d, r.opts.Scope) {
+				out = append(out, d)
+			}
+		default:
+			if r.idx.InScope(d, r.opts.Scope) {
+				out = append(out, d)
+			}
 		}
-		if strings.HasSuffix(pattern, "/*") && strings.HasPrefix(rel, strings.TrimSuffix(pattern, "*")) {
+	}
+	return out
+}
+
+func (r *run) titles(docs []*doc.Doc) {
+	in := map[string]bool{}
+	for _, d := range docs {
+		in[d.Path] = true
+	}
+	for _, d := range docs {
+		if d.Path == vault.Marker {
+			continue
+		}
+		others := without(r.idx.TitleHolders(d.Title()), d.Path)
+		if len(others) > 0 {
+			r.add("duplicate-title", Error, d, "wiki-edit: rename one of them", "its title %q is also held by %s", d.Title(), strings.Join(others, ", "))
+		}
+		for _, a := range d.List("aliases") {
+			if holders := without(r.idx.TitleHolders(a), d.Path); len(holders) > 0 {
+				r.add("duplicate-title", Error, d, "wiki-edit: drop the alias or rename the other document", "its alias %q is also held by %s", a, strings.Join(holders, ", "))
+			}
+		}
+	}
+}
+
+func without(paths []string, p string) []string {
+	var out []string
+	for _, x := range paths {
+		if x != p {
+			out = append(out, x)
+		}
+	}
+	return out
+}
+
+// fixFor names the tool or skill that repairs a document's schema.
+func fixFor(d *doc.Doc) string {
+	t := schema.Get(d.Type())
+	switch {
+	case t == nil:
+		return "your edit"
+	case t.Wiki():
+		return "wiki-edit: a change that sets the field"
+	case t.Family == schema.Thread:
+		return "the thread tool: set, task set, or file"
+	case d.Type() == "vault":
+		return "edit Atlas.md"
+	}
+	return "vault sync"
+}
+
+// linkFields are the fields whose links lint checks one by one, with the check a broken
+// one belongs to.
+var scopeFields = map[string]bool{"scope": true, "parent": true, "repository": true}
+
+func (r *run) schema(d *doc.Doc) {
+	if d.FrontErr != nil {
+		r.add("schema", Error, d, "your edit", "its frontmatter does not parse: %v", d.FrontErr)
+		return
+	}
+	t := schema.Get(d.Type())
+	for _, p := range t.Check(schema.Values(d.Front.Map()), nil) {
+		r.add("schema", Error, d, fixFor(d), "%s", p)
+	}
+	for _, f := range t.Fields {
+		if f.Kind != schema.Link && f.Kind != schema.Links {
+			continue
+		}
+		for _, v := range d.List(f.Name) {
+			check := "schema"
+			if scopeFields[f.Name] {
+				check = "scope"
+			}
+			typ, err := r.idx.TypeOfLink(v)
+			switch {
+			case err != nil:
+				// Two files hold the title; duplicate-title reports it.
+			case typ == "":
+				if check == "schema" {
+					check = "dead-link"
+				}
+				r.add(check, Error, d, fixFor(d), "%s: %s names no document", f.Name, v)
+			case len(f.Targets) > 0 && !contains(f.Targets, typ):
+				r.add(check, Error, d, fixFor(d), "%s: %s is a %s; it must be a %s", f.Name, v, typ, strings.Join(f.Targets, " or "))
+			}
+		}
+	}
+}
+
+func contains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
 			return true
 		}
 	}
 	return false
 }
 
-func pathLess(a, b string) bool {
-	la, lb := strings.ToLower(a), strings.ToLower(b)
-	if la != lb {
-		return la < lb
+// scope finds a loop in the chain of parents.
+func (r *run) scope(d *doc.Doc) {
+	if d.Type() != "area" && d.Type() != "repository" {
+		return
 	}
-	return a < b
+	seen := map[string]bool{d.ID(): true}
+	for p := r.idx.Parent(d); p != nil; p = r.idx.Parent(p) {
+		if seen[p.ID()] {
+			r.add("scope", Error, d, "wiki-edit: change a parent", "its chain of parents loops at %s", vault.Title(p))
+			return
+		}
+		seen[p.ID()] = true
+	}
 }
 
-func parsePage(rel, text string) *page {
-	text = strings.TrimPrefix(text, "\xef\xbb\xbf")
-	pg := &page{path: rel, text: text, headings: map[string]bool{}, blocks: map[string]bool{}}
-	fields, body, err := project.Frontmatter(text)
-	pg.body, pg.frontErr = body, err
-	pg.hasFront = strings.HasPrefix(text, "---")
-	if fields != nil {
-		pg.fields = fields
-		pg.aliases = project.StringList(fields, "aliases")
-		pg.isMOC = project.StringField(fields, "type") == "moc"
-	} else {
-		pg.fields = map[string]any{}
+func (r *run) repository(d *doc.Doc) {
+	p := d.Str("path")
+	if p == "" {
+		return
 	}
-	base := strings.ToLower(path.Base(rel))
-	pg.isIndex = base == "index.md" || base == "_index.md" || folderIndexes[rel]
-	pg.mirrored = Mirrored(rel)
-	pg.masked = maskCode(text)
-	for _, m := range atxHeading.FindAllStringSubmatch(pg.masked, -1) {
-		if h := normalizeHeading(m[2]); h != "" {
-			pg.headings[h] = true
-		}
+	abs := vault.Expand(p)
+	if st, err := os.Stat(abs); err != nil || !st.IsDir() {
+		r.add("repository-path", Error, d, "repo-unlink, or wiki-edit: a change that sets the path", "its path %s is gone", p)
+		return
 	}
-	for _, m := range blockID.FindAllStringSubmatch(pg.masked, -1) {
-		pg.blocks[strings.ToLower(m[1])] = true
+	if !gitx.IsRoot(abs) {
+		r.add("repository-path", Error, d, "wiki-edit: a change that sets the path to the repository's root", "its path %s is not the root of a git work tree", p)
+		return
 	}
-	pg.links = parseLinks(pg)
-	return pg
+	if vault.Within(abs, r.idx.V.Root) {
+		r.add("repository-path", Error, d, "repo-unlink", "its path %s is inside the vault", p)
+	}
 }
 
-// maskCode blanks fenced blocks, inline code, and the frontmatter so links inside them are not graph edges.
-func maskCode(text string) string {
-	lines := strings.SplitAfter(text, "\n")
-	out := make([]string, len(lines))
-	inFence, fence := false, ""
-	inFront := strings.HasPrefix(text, "---")
-	for i, line := range lines {
-		trimmed := strings.TrimRight(line, "\r\n")
-		if inFront {
-			out[i] = blank(line)
-			if i > 0 && trimmed == "---" {
-				inFront = false
-			}
-			continue
-		}
-		if inFence {
-			out[i] = blank(line)
-			if m := fenceOpen.FindStringSubmatch(line); m != nil && strings.HasPrefix(m[1], fence[:1]) && len(m[1]) >= len(fence) && strings.TrimSpace(trimmed) == m[1] {
-				inFence = false
-			}
-			continue
-		}
-		if m := fenceOpen.FindStringSubmatch(line); m != nil {
-			inFence, fence = true, m[1]
-			out[i] = blank(line)
-			continue
-		}
-		out[i] = inlineCode.ReplaceAllStringFunc(line, blank)
+// threads checks each thread's documents against the rules the thread tool enforces.
+func (r *run) threads(docs []*doc.Doc) {
+	stubs := map[string]*doc.Doc{}
+	for _, s := range r.idx.Of("stub") {
+		stubs[s.ID()] = s
 	}
-	return htmlComment.ReplaceAllStringFunc(strings.Join(out, ""), blank)
-}
-
-func blank(s string) string {
-	b := []byte(s)
-	for i, c := range b {
-		if c != '\n' && c != '\r' {
-			b[i] = ' '
-		}
-	}
-	return string(b)
-}
-
-func normalizeHeading(h string) string {
-	h = strings.TrimSpace(regexp.MustCompile(`[ \t]+#+[ \t]*$`).ReplaceAllString(h, ""))
-	return strings.ToLower(strings.Join(strings.Fields(h), " "))
-}
-
-func splitFragment(target string) (file, fragment, kind string) {
-	escaped := false
-	for i, ch := range target {
-		if ch == '\\' && !escaped {
-			escaped = true
-			continue
-		}
-		if ch == '#' && !escaped {
-			frag := strings.TrimSpace(target[i+1:])
-			if strings.HasPrefix(frag, "^") {
-				return target[:i], frag[1:], "block"
-			}
-			return target[:i], frag, "heading"
-		}
-		escaped = false
-	}
-	return target, "", ""
-}
-
-var unescapeRE = regexp.MustCompile(`\\([\\|#\[\]])`)
-
-func wikiTarget(body string) string {
-	t := body
-	if pipe := strings.Index(body, "|"); pipe >= 0 {
-		t = body[:pipe]
-		t = strings.TrimSuffix(t, "\\")
-	}
-	return unescapeRE.ReplaceAllString(strings.TrimSpace(t), "$1")
-}
-
-func mdDestination(v string) string {
-	v = strings.TrimSpace(v)
-	if strings.HasPrefix(v, "<") && strings.Contains(v, ">") {
-		return strings.TrimSpace(v[1:strings.Index(v, ">")])
-	}
-	if m := regexp.MustCompile(`^(.*?)[ \t]+(?:"[^"]*"|'[^']*'|\([^)]*\))[ \t]*$`).FindStringSubmatch(v); m != nil {
-		v = m[1]
-	}
-	return strings.TrimSpace(v)
-}
-
-func lineOf(text string, offset int) int {
-	return strings.Count(text[:offset], "\n") + 1
-}
-
-func parseLinks(pg *page) []link {
-	var links []link
-	var occupied [][2]int
-	for _, m := range wikiLink.FindAllStringSubmatchIndex(pg.masked, -1) {
-		body := pg.masked[m[4]:m[5]]
-		raw := wikiTarget(body)
-		if raw == "" {
-			continue
-		}
-		file, frag, kind := splitFragment(raw)
-		syntax := "wikilink"
-		if m[2] >= 0 {
-			syntax = "embed"
-		}
-		links = append(links, link{source: pg.path, line: lineOf(pg.masked, m[0]), target: raw, filePart: file, fragment: frag, fragmentKind: kind, syntax: syntax})
-		occupied = append(occupied, [2]int{m[0], m[1]})
-	}
-	for _, m := range mdLink.FindAllStringSubmatchIndex(pg.masked, -1) {
-		inside := false
-		for _, o := range occupied {
-			if m[0] >= o[0] && m[0] < o[1] {
-				inside = true
-				break
+	specs, receipts := map[string][]*doc.Doc{}, map[string][]*doc.Doc{}
+	for _, d := range r.idx.Of("spec", "task", "receipt") {
+		id := d.Str("thread_id")
+		if stubs[id] == nil {
+			if stub := r.idx.Linked(d.Str("thread")); stub != nil && stub.Type() == "stub" {
+				id = stub.ID()
 			}
 		}
-		if inside {
+		if stubs[id] == nil {
+			r.add("thread", Error, d, "the thread tool: file it on a thread, or delete it", "its thread %s is not a stub", orNone(d.Str("thread_id")))
 			continue
 		}
-		dest := mdDestination(pg.masked[m[6]:m[7]])
-		if dest == "" || strings.HasPrefix(dest, "//") || uriScheme.MatchString(dest) || strings.HasPrefix(dest, "#") {
-			continue
-		}
-		decoded, err := url.PathUnescape(dest)
-		if err != nil {
-			decoded = dest
-		}
-		file, frag, kind := splitFragment(decoded)
-		syntax := "markdown-link"
-		if m[2] >= 0 {
-			syntax = "markdown-embed"
-		}
-		links = append(links, link{source: pg.path, line: lineOf(pg.masked, m[0]), target: decoded, filePart: file, fragment: frag, fragmentKind: kind, syntax: syntax, mdRelative: true})
-	}
-	sort.SliceStable(links, func(i, j int) bool {
-		if links[i].line != links[j].line {
-			return links[i].line < links[j].line
-		}
-		return pathLess(links[i].target, links[j].target)
-	})
-	return links
-}
-
-// tier holds one set of link targets: the vault's own files, or the files its mounts bring.
-type tier struct {
-	targets    []target
-	byFull     map[string][]target
-	byNoSuffix map[string][]target
-	byBasename map[string][]target
-	byAlias    map[string][]target
-}
-
-// resolver resolves a link against the vault's files.
-type resolver struct {
-	own *tier
-}
-
-func newResolver(own []target) *resolver {
-	return &resolver{own: newTier(own)}
-}
-
-func newTier(targets []target) *tier {
-	r := &tier{targets: targets, byFull: map[string][]target{}, byNoSuffix: map[string][]target{}, byBasename: map[string][]target{}, byAlias: map[string][]target{}}
-	for _, t := range targets {
-		full := strings.ToLower(t.path)
-		r.byFull[full] = append(r.byFull[full], t)
-		name := strings.ToLower(path.Base(t.path))
-		r.byBasename[name] = append(r.byBasename[name], t)
-		if ns, ok := t.withoutSuffix(); ok {
-			r.byNoSuffix[strings.ToLower(ns)] = append(r.byNoSuffix[strings.ToLower(ns)], t)
-			stem := strings.ToLower(path.Base(ns))
-			r.byBasename[stem] = append(r.byBasename[stem], t)
-		}
-		if t.page != nil {
-			for _, alias := range t.page.aliases {
-				key := strings.ToLower(alias)
-				r.byAlias[key] = append(r.byAlias[key], t)
+		switch d.Type() {
+		case "spec":
+			specs[id] = append(specs[id], d)
+		case "receipt":
+			if o := d.Str("outcome"); o != "completed" && o != "killed" {
+				r.add("thread", Error, d, "the thread tool: reopen the thread and file the receipt again", "its outcome is %q; it must be completed or killed", o)
+			}
+			if !d.Front.Bool("superseded") {
+				receipts[id] = append(receipts[id], d)
 			}
 		}
 	}
-	return r
-}
-
-func dedupe(cands []target) []target {
-	seen := map[string]target{}
-	for _, c := range cands {
-		seen[c.path] = c
-	}
-	out := make([]target, 0, len(seen))
-	for _, c := range seen {
-		out = append(out, c)
-	}
-	sort.Slice(out, func(i, j int) bool { return pathLess(out[i].path, out[j].path) })
-	return out
-}
-
-func (r *tier) exact(query string) []target {
-	n := strings.TrimLeft(path.Clean(strings.ReplaceAll(query, "\\", "/")), "/")
-	if n == "" || n == "." {
-		return nil
-	}
-	key := strings.ToLower(n)
-	var cands []target
-	cands = append(cands, r.byFull[key]...)
-	cands = append(cands, r.byNoSuffix[key]...)
-	return dedupe(cands)
-}
-
-func (r *resolver) resolve(l link) []target {
-	raw, err := url.PathUnescape(strings.TrimSpace(l.filePart))
-	if err != nil {
-		raw = strings.TrimSpace(l.filePart)
-	}
-	raw = strings.ReplaceAll(raw, "\\", "/")
-	if raw == "" {
-		return r.own.exact(l.source)
-	}
-	raw = strings.TrimLeft(raw, "/")
-	sourceDir := path.Dir(l.source)
-	var queries []string
-	if l.mdRelative || strings.HasPrefix(raw, "./") || strings.HasPrefix(raw, "../") {
-		queries = append(queries, path.Clean(path.Join(sourceDir, raw)))
-	}
-	queries = append(queries, path.Clean(raw))
-	if !strings.HasPrefix(strings.ToLower(raw), "wiki/") {
-		queries = append(queries, path.Clean(path.Join("wiki", raw)))
-	}
-	return preferNear(l.source, r.own.find(queries, raw))
-}
-
-// preferNear keeps the candidates of a name that sit where the link was written: the
-// hub's own pages for a link from one of them, and the same mirror for a link from a
-// mirrored page. A mirror repeats the hub's names by design, and a name in a page means
-// the page its wiki knows.
-func preferNear(source string, cands []target) []target {
-	if len(cands) < 2 {
-		return cands
-	}
-	folder := mirrorFolder(source)
-	var near []target
-	for _, c := range cands {
-		if mirrorFolder(c.path) == folder {
-			near = append(near, c)
+	for id, list := range specs {
+		if len(list) > 1 {
+			r.add("thread", Error, list[1], "merge the specs by hand and delete one", "thread %s has %d specs; it may have one", vault.Title(stubs[id]), len(list))
 		}
 	}
-	if len(near) > 0 {
-		return near
-	}
-	return cands
-}
-
-// mirrorFolder is the mirror a path lies in, or "" for the hub's own pages.
-func mirrorFolder(rel string) string {
-	if !Mirrored(rel) {
-		return ""
-	}
-	folder, _, _ := strings.Cut(strings.TrimPrefix(rel, project.MirrorDir+"/"), "/")
-	return folder
-}
-
-// find returns the targets a link names: an exact path, then a bare name against
-// basenames and aliases, then a path the target's own ends with.
-func (r *tier) find(queries []string, raw string) []target {
-	for _, q := range queries {
-		if found := r.exact(q); len(found) > 0 {
-			return found
+	for id, list := range receipts {
+		if len(list) > 1 {
+			r.add("thread", Error, list[1], "delete the extra receipt, or reopen the thread", "thread %s has %d receipts; it may have one", vault.Title(stubs[id]), len(list))
 		}
 	}
-	if !strings.Contains(raw, "/") {
-		key := strings.ToLower(raw)
-		var cands []target
-		cands = append(cands, r.byBasename[key]...)
-		cands = append(cands, r.byAlias[key]...)
-		return dedupe(preferWiki(cands))
-	}
-	suffix := strings.ToLower(path.Clean(raw))
-	var cands []target
-	for _, t := range r.targets {
-		if strings.HasSuffix(strings.ToLower(t.path), "/"+suffix) {
-			cands = append(cands, t)
-			continue
-		}
-		if ns, ok := t.withoutSuffix(); ok && strings.HasSuffix(strings.ToLower(ns), "/"+suffix) {
-			cands = append(cands, t)
-		}
-	}
-	return dedupe(preferWiki(cands))
 }
 
-// preferWiki keeps the candidates under wiki/ when there are any. A name in a wiki page
-// means a wiki page, and a thread's documents repeat one file name by design, so without
-// this every link to a thread's title would read as ambiguous.
-func preferWiki(cands []target) []target {
-	var wiki []target
-	for _, c := range cands {
-		if strings.HasPrefix(c.path, project.WikiDir+"/") {
-			wiki = append(wiki, c)
-		}
+func orNone(s string) string {
+	if s == "" {
+		return "(none)"
 	}
-	if len(wiki) > 0 {
-		return wiki
-	}
-	return cands
+	return s
 }
 
-func fragmentError(l link, t target) string {
-	if l.fragment == "" || t.page == nil {
-		return ""
-	}
-	switch l.fragmentKind {
-	case "heading":
-		if !t.page.headings[normalizeHeading(l.fragment)] {
-			return "heading-not-found"
-		}
-	case "block":
-		if !t.page.blocks[strings.ToLower(l.fragment)] {
-			return "block-not-found"
-		}
-	}
-	return ""
-}
-
-// wantedTitle returns the page a link names when the link is a placeholder: a bare
-// wikilink from an ordinary page whose name is already a valid file name.
-func wantedTitle(l link, pg *page) (string, bool) {
-	title := strings.TrimSpace(l.filePart)
-	if l.syntax != "wikilink" || pg.isIndex || title == "" || strings.Contains(title, "/") || project.SanitizeTitle(title) != title {
-		return "", false
-	}
-	switch strings.ToLower(path.Ext(title)) {
-	case ".md", ".canvas", ".base":
-		return "", false
-	}
-	if pg.path == project.LogPage || strings.HasPrefix(strings.ToLower(pg.path), "wiki/folds/") {
-		return "", false
-	}
-	return title, true
-}
-
-// nearIndex holds every page name and alias, to tell a typo from a new page.
-type nearIndex struct {
-	names []nearName
-}
-
-type nearName struct {
-	name   string
-	key    []rune
-	digits string
-}
-
-func newNearIndex(tiers ...[]target) *nearIndex {
-	n := &nearIndex{}
-	add := func(name string) {
-		if key := nameKey(name); len(key) > 0 {
-			n.names = append(n.names, nearName{name: name, key: key, digits: digits(key)})
-		}
-	}
-	for _, targets := range tiers {
-		for _, t := range targets {
-			if strings.EqualFold(path.Ext(t.path), ".md") {
-				add(strings.TrimSuffix(path.Base(t.path), path.Ext(t.path)))
-			}
-			if t.page != nil {
-				for _, alias := range t.page.aliases {
-					add(alias)
+// incoming counts, for each vault path, the documents that link to it.
+func (r *run) incoming() map[string]int {
+	counts := map[string]int{}
+	all := append(append([]*doc.Doc{}, r.idx.Docs...), r.idx.Notes...)
+	for _, d := range all {
+		seen := map[string]bool{}
+		for _, target := range docLinks(d) {
+			for _, p := range r.idx.LinkPaths(target) {
+				if p != d.Path && !seen[p] {
+					counts[p]++
+					seen[p] = true
 				}
 			}
 		}
 	}
-	return n
+	return counts
 }
 
-// match returns the closest page name or alias to title, or "" when none is near: equal
-// once normalized, or with the same digits and one edit for 5 to 8 letters and digits,
-// two for more.
-func (n *nearIndex) match(title string) string {
-	key := nameKey(title)
-	if len(key) == 0 {
-		return ""
-	}
-	limit := 0
-	switch {
-	case len(key) > 8:
-		limit = 2
-	case len(key) > 4:
-		limit = 1
-	}
-	best, bestDist := "", limit+1
-	want := digits(key)
-	for _, c := range n.names {
-		if diff := len(c.key) - len(key); diff > limit || -diff > limit || c.digits != want {
-			continue
-		}
-		if d := editDistance(key, c.key); d < bestDist || (d == bestDist && pathLess(c.name, best)) {
-			best, bestDist = c.name, d
-		}
-	}
-	return best
-}
-
-// nameKey lowercases a name and keeps its letters and digits.
-func nameKey(name string) []rune {
-	var key []rune
-	for _, r := range strings.ToLower(name) {
-		if unicode.IsLetter(r) || unicode.IsDigit(r) {
-			key = append(key, r)
-		}
-	}
-	return key
-}
-
-func digits(key []rune) string {
-	var b strings.Builder
-	for _, r := range key {
-		if unicode.IsDigit(r) {
-			b.WriteRune(r)
-		}
-	}
-	return b.String()
-}
-
-// editDistance counts the insertions, deletions, substitutions, and swaps of adjacent
-// characters that turn a into b.
-func editDistance(a, b []rune) int {
-	d := make([][]int, len(a)+1)
-	for i := range d {
-		d[i] = make([]int, len(b)+1)
-		d[i][0] = i
-	}
-	for j := range d[0] {
-		d[0][j] = j
-	}
-	for i := 1; i <= len(a); i++ {
-		for j := 1; j <= len(b); j++ {
-			cost := 1
-			if a[i-1] == b[j-1] {
-				cost = 0
-			}
-			d[i][j] = min(d[i-1][j]+1, d[i][j-1]+1, d[i-1][j-1]+cost)
-			if i > 1 && j > 1 && a[i-1] == b[j-2] && a[i-2] == b[j-1] {
-				d[i][j] = min(d[i][j], d[i-2][j-2]+1)
-			}
-		}
-	}
-	return d[len(a)][len(b)]
-}
-
-func orphanCandidate(rel string) bool {
-	if orphanExcluded[strings.ToLower(path.Base(rel))] || folderIndexes[rel] || Mirrored(rel) {
-		return false
-	}
-	inner := strings.ToLower(strings.TrimPrefix(rel, "wiki/"))
-	return !strings.HasPrefix(inner, "meta/") && !strings.HasPrefix(inner, "folds/")
-}
-
-// stubOf reports whether a page is a stub: a seed page with nothing under its headings, or
-// an empty file a page other than the log links to. The log, the hot cache, the overview,
-// index pages, task pages, meta pages, and folds are never stubs.
-func stubOf(pg *page, incoming map[string]bool) (Stub, bool) {
-	if !orphanCandidate(pg.path) || pg.frontErr != nil {
-		return Stub{}, false
-	}
-	from := []string{}
-	for src := range incoming {
-		if path.Base(src) != "log.md" {
-			from = append(from, src)
-		}
-	}
-	sort.Slice(from, func(i, j int) bool { return pathLess(from[i], from[j]) })
-	empty := strings.TrimSpace(pg.text) == ""
-	switch {
-	case empty && len(from) > 0:
-	case !empty && project.StringField(pg.fields, "status") == "seed" && bodyEmpty(pg):
-	default:
-		return Stub{}, false
-	}
-	return Stub{Path: pg.path, Empty: empty, LinkedFrom: from}, true
-}
-
-// sourceTarget says whether a link lands on evidence: a source page, a page in a sources
-// folder, or a captured file.
-func sourceTarget(t target) bool {
-	if t.page != nil && project.StringField(t.page.fields, "type") == "source" {
-		return true
-	}
-	return strings.Contains("/"+t.path, "/sources/") || strings.HasPrefix(t.path, project.CapturedDir+"/")
-}
-
-// uncitedExempt are the page types that carry no claims of their own to cite.
-var uncitedExempt = map[string]bool{"source": true, "meta": true, "fold": true, "moc": true, "overview": true}
-
-// uncited says whether a content page cites no source: it names none in its sources
-// property and links no source page. Stubs, mirrors, and navigation pages are exempt.
-func uncited(pg *page, stub, cites bool) bool {
-	if cites || stub || pg.mirrored || pg.frontErr != nil || !orphanCandidate(pg.path) || pg.isIndex || pg.isMOC {
-		return false
-	}
-	if uncitedExempt[project.StringField(pg.fields, "type")] {
-		return false
-	}
-	return len(project.StringList(pg.fields, "sources")) == 0
-}
-
-// bodyEmpty reports whether a page holds nothing below its frontmatter but headings, block
-// ids, comments, and whitespace.
-func bodyEmpty(pg *page) bool {
-	if pg.frontErr != nil {
-		return false
-	}
-	body := htmlComment.ReplaceAllString(pg.body, "")
-	body = atxHeading.ReplaceAllString(body, "")
-	body = blockIDLine.ReplaceAllString(body, "")
-	return strings.TrimSpace(body) == ""
-}
-
-func emptySections(pg *page) []SectionFinding {
-	type heading struct {
-		start, end, level int
-		text              string
-	}
-	var headings []heading
-	for _, m := range atxHeading.FindAllStringSubmatchIndex(pg.masked, -1) {
-		text := strings.TrimSpace(regexp.MustCompile(`[ \t]+#+[ \t]*$`).ReplaceAllString(pg.masked[m[4]:m[5]], ""))
-		headings = append(headings, heading{start: m[0], end: m[1], level: m[3] - m[2], text: text})
-	}
-	var findings []SectionFinding
-	for i, h := range headings {
-		end := len(pg.masked)
-		for _, next := range headings[i+1:] {
-			if next.level <= h.level {
-				end = next.start
-				break
-			}
-		}
-		section := []byte(pg.text[h.end:end])
-		for _, nested := range headings[i+1:] {
-			if nested.start >= end {
-				break
-			}
-			for p := nested.start; p < nested.end && p < end; p++ {
-				if c := section[p-h.end]; c != '\n' && c != '\r' {
-					section[p-h.end] = ' '
-				}
-			}
-		}
-		body := htmlComment.ReplaceAllString(string(section), "")
-		body = blockIDLine.ReplaceAllString(body, "")
-		if strings.TrimSpace(body) != "" {
-			continue
-		}
-		findings = append(findings, SectionFinding{Path: pg.path, Line: lineOf(pg.masked, h.start), Heading: h.text})
-	}
-	return findings
-}
-
-func ledgerErrors(root string, overlay map[string][]byte, present map[string]bool, asOf time.Time) []PathFinding {
-	data, ok := overlay[project.LedgerPath]
-	if !ok {
-		var err error
-		data, err = os.ReadFile(filepath.Join(root, filepath.FromSlash(project.LedgerPath)))
-		if err != nil {
-			return nil
-		}
-	}
-	l, err := ledger.Parse(data)
-	if err != nil {
-		return []PathFinding{{Path: project.LedgerPath, Message: err.Error()}}
-	}
-	var out []PathFinding
-	ids := make([]string, 0, len(l.Sources))
-	for id := range l.Sources {
-		ids = append(ids, id)
-	}
-	sort.Strings(ids)
-	for _, id := range ids {
-		s := l.Sources[id]
-		if s.Origin.Kind == "file" && s.ReviewStatus == "active" {
-			if _, err := os.Stat(filepath.Join(root, filepath.FromSlash(s.Origin.Locator))); err != nil {
-				out = append(out, PathFinding{Path: project.LedgerPath, Message: fmt.Sprintf("%s: captured file is missing: %s", id, s.Origin.Locator)})
-			}
-		}
-		for _, p := range s.Pages {
-			if !present[p] {
-				out = append(out, PathFinding{Path: project.LedgerPath, Message: fmt.Sprintf("%s: linked page does not exist: %s", id, p)})
-			}
-		}
-	}
-	return out
-}
-
-func sortFindings(r *Report) {
-	sort.SliceStable(r.DeadLinks, func(i, j int) bool { return linkLess(r.DeadLinks[i], r.DeadLinks[j]) })
-	sort.SliceStable(r.StaleIndexEntries, func(i, j int) bool { return linkLess(r.StaleIndexEntries[i], r.StaleIndexEntries[j]) })
-	sort.SliceStable(r.AmbiguousTargets, func(i, j int) bool {
-		a, b := r.AmbiguousTargets[i], r.AmbiguousTargets[j]
-		if a.Source != b.Source {
-			return pathLess(a.Source, b.Source)
-		}
-		return a.Line < b.Line
-	})
-	sort.SliceStable(r.DuplicateBasenames, func(i, j int) bool {
-		return pathLess(r.DuplicateBasenames[i].Basename, r.DuplicateBasenames[j].Basename)
-	})
-	sort.SliceStable(r.Orphans, func(i, j int) bool { return pathLess(r.Orphans[i].Path, r.Orphans[j].Path) })
-	sort.SliceStable(r.UnindexedPages, func(i, j int) bool { return pathLess(r.UnindexedPages[i].Path, r.UnindexedPages[j].Path) })
-	sort.SliceStable(r.MissingFrontmatter, func(i, j int) bool { return pathLess(r.MissingFrontmatter[i].Path, r.MissingFrontmatter[j].Path) })
-	sort.SliceStable(r.EmptySections, func(i, j int) bool {
-		a, b := r.EmptySections[i], r.EmptySections[j]
-		if a.Path != b.Path {
-			return pathLess(a.Path, b.Path)
-		}
-		return a.Line < b.Line
-	})
-	sort.SliceStable(r.ReadErrors, func(i, j int) bool { return pathLess(r.ReadErrors[i].Path, r.ReadErrors[j].Path) })
-	sort.SliceStable(r.MirrorErrors, func(i, j int) bool { return pathLess(r.MirrorErrors[i].Path, r.MirrorErrors[j].Path) })
-	// A wanted title and a stub path are each unique, and pathLess breaks a case-insensitive
-	// tie on the exact string, so the map order these come from never reaches the report.
-	sort.SliceStable(r.WantedPages, func(i, j int) bool { return pathLess(r.WantedPages[i].Title, r.WantedPages[j].Title) })
-	sort.SliceStable(r.Stubs, func(i, j int) bool { return pathLess(r.Stubs[i].Path, r.Stubs[j].Path) })
-}
-
-func linkLess(a, b LinkFinding) bool {
-	if a.Source != b.Source {
-		return pathLess(a.Source, b.Source)
-	}
-	if a.Line != b.Line {
-		return a.Line < b.Line
-	}
-	return pathLess(a.Target, b.Target)
-}
-
-// fillEmpty turns nil slices into empty ones so the JSON reads as lists, not null.
-func (r *Report) fillEmpty() {
-	if r.DeadLinks == nil {
-		r.DeadLinks = []LinkFinding{}
-	}
-	if r.AmbiguousTargets == nil {
-		r.AmbiguousTargets = []Ambiguous{}
-	}
-	if r.DuplicateBasenames == nil {
-		r.DuplicateBasenames = []Duplicate{}
-	}
-	if r.Orphans == nil {
-		r.Orphans = []PathFinding{}
-	}
-	if r.UnindexedPages == nil {
-		r.UnindexedPages = []PathFinding{}
-	}
-	if r.MissingFrontmatter == nil {
-		r.MissingFrontmatter = []FrontmatterFinding{}
-	}
-	if r.EmptySections == nil {
-		r.EmptySections = []SectionFinding{}
-	}
-	if r.StaleIndexEntries == nil {
-		r.StaleIndexEntries = []LinkFinding{}
-	}
-	if r.ReadErrors == nil {
-		r.ReadErrors = []PathFinding{}
-	}
-	if r.LedgerErrors == nil {
-		r.LedgerErrors = []PathFinding{}
-	}
-	if r.MirrorErrors == nil {
-		r.MirrorErrors = []PathFinding{}
-	}
-	if r.WantedPages == nil {
-		r.WantedPages = []WantedPage{}
-	}
-	if r.Uncited == nil {
-		r.Uncited = []PathFinding{}
-	}
-	if r.Stubs == nil {
-		r.Stubs = []Stub{}
-	}
-}
-
-// JSON renders the report.
-func (r *Report) JSON() []byte {
-	data, _ := json.MarshalIndent(r, "", "  ")
-	return append(data, '\n')
-}
-
-// Markdown renders the report for a person.
-func (r *Report) Markdown() string {
-	var b strings.Builder
-	fmt.Fprintf(&b, "# Wiki lint\n\n%d pages, %d links, %d findings (as of %s).\n", r.Summary.PagesScanned, r.Summary.LinksScanned, r.Summary.IssuesFound, r.AsOf)
-	section := func(title string, n int) {
-		fmt.Fprintf(&b, "\n## %s (%d)\n\n", title, n)
-		if n == 0 {
-			b.WriteString("None.\n")
-		}
-	}
-	section("Dead links", len(r.DeadLinks))
-	for _, f := range r.DeadLinks {
-		fmt.Fprintf(&b, "- `%s:%d` → `%s` (%s%s)\n", f.Source, f.Line, f.Target, f.Reason, suggestionHint(f))
-	}
-	section("Ambiguous targets", len(r.AmbiguousTargets))
-	for _, f := range r.AmbiguousTargets {
-		fmt.Fprintf(&b, "- `%s:%d` → `%s`: %s\n", f.Source, f.Line, f.Target, strings.Join(f.Candidates, ", "))
-	}
-	section("Duplicate basenames", len(r.DuplicateBasenames))
-	for _, f := range r.DuplicateBasenames {
-		fmt.Fprintf(&b, "- `%s`: %s\n", f.Basename, strings.Join(f.Paths, ", "))
-	}
-	section("Orphans", len(r.Orphans))
-	for _, f := range r.Orphans {
-		fmt.Fprintf(&b, "- `%s`\n", f.Path)
-	}
-	section("Pages missing from every index or MOC", len(r.UnindexedPages))
-	for _, f := range r.UnindexedPages {
-		fmt.Fprintf(&b, "- `%s`\n", f.Path)
-	}
-	section("Missing frontmatter", len(r.MissingFrontmatter))
-	for _, f := range r.MissingFrontmatter {
-		fmt.Fprintf(&b, "- `%s`: %s\n", f.Path, strings.Join(f.MissingFields, ", "))
-	}
-	section("Empty sections", len(r.EmptySections))
-	for _, f := range r.EmptySections {
-		fmt.Fprintf(&b, "- `%s:%d` %s\n", f.Path, f.Line, f.Heading)
-	}
-	section("Stale index entries", len(r.StaleIndexEntries))
-	for _, f := range r.StaleIndexEntries {
-		fmt.Fprintf(&b, "- `%s:%d` → `%s` (%s)\n", f.Source, f.Line, f.Target, f.Reason)
-	}
-	section("Read errors", len(r.ReadErrors))
-	for _, f := range r.ReadErrors {
-		fmt.Fprintf(&b, "- `%s`: %s\n", f.Path, f.Message)
-	}
-	section("Ledger", len(r.LedgerErrors))
-	for _, f := range r.LedgerErrors {
-		fmt.Fprintf(&b, "- %s\n", f.Message)
-	}
-	section("Mirrors", len(r.MirrorErrors))
-	for _, f := range r.MirrorErrors {
-		fmt.Fprintf(&b, "- `%s`: %s\n", f.Path, f.Message)
-	}
-	section("Wanted pages", len(r.WantedPages))
-	if len(r.WantedPages) > 0 {
-		b.WriteString("Pages the wiki links to that nobody has written yet. Not findings; the stub tool creates them.\n\n")
-	}
-	for _, w := range r.WantedPages {
-		var refs []string
-		for _, l := range w.Links {
-			refs = append(refs, fmt.Sprintf("`%s:%d`", l.Source, l.Line))
-		}
-		fmt.Fprintf(&b, "- %s ← %s\n", w.Title, strings.Join(refs, ", "))
-	}
-	section("Uncited", len(r.Uncited))
-	if len(r.Uncited) > 0 {
-		b.WriteString("Pages that cite no source. Not findings; the wiki-review skill weighs them.\n\n")
-	}
-	for _, f := range r.Uncited {
-		fmt.Fprintf(&b, "- `%s`\n", f.Path)
-	}
-	section("Stubs to fill", len(r.Stubs))
-	if len(r.Stubs) > 0 {
-		b.WriteString("Pages that hold nothing yet. Not findings.\n\n")
-	}
-	for _, s := range r.Stubs {
-		fmt.Fprintf(&b, "- `%s`", s.Path)
-		if s.Empty {
-			b.WriteString(" (empty file)")
-		}
-		if len(s.LinkedFrom) > 0 {
-			fmt.Fprintf(&b, " ← %s", strings.Join(s.LinkedFrom, ", "))
-		}
-		b.WriteString("\n")
-	}
-	return b.String()
-}
-
-func suggestionHint(f LinkFinding) string {
-	if f.Suggestion == "" {
-		return ""
-	}
-	return fmt.Sprintf("; did you mean %q?", f.Suggestion)
-}
-
-// Problems lists every finding whose source or path is one of the given files, as short
-// messages. Plans use it to warn about the pages they are about to write.
-func (r *Report) Problems(paths []string) []string {
-	set := map[string]bool{}
-	for _, p := range paths {
-		set[p] = true
-	}
+// docLinks are the link targets of a document: its frontmatter's and its body's, without
+// the copies a change document holds under Writes.
+func docLinks(d *doc.Doc) []string {
 	var out []string
-	for _, f := range r.DeadLinks {
-		if set[f.Source] {
-			out = append(out, fmt.Sprintf("%s:%d links to %q, which does not resolve (%s%s)", f.Source, f.Line, f.Target, f.Reason, suggestionHint(f)))
-		}
-	}
-	for _, w := range r.WantedPages {
-		for _, l := range w.Links {
-			if set[l.Source] {
-				out = append(out, fmt.Sprintf("%s:%d links to %q, which has no page yet", l.Source, l.Line, w.Title))
+	if d.Front != nil {
+		for _, k := range d.Front.Keys() {
+			for _, v := range d.Front.List(k) {
+				if doc.IsLink(v) {
+					out = append(out, doc.LinkTarget(v))
+				}
 			}
 		}
 	}
-	for _, f := range r.AmbiguousTargets {
-		if set[f.Source] {
-			out = append(out, fmt.Sprintf("%s:%d links to %q, which matches %s", f.Source, f.Line, f.Target, strings.Join(f.Candidates, " and ")))
-		}
-	}
-	for _, f := range r.EmptySections {
-		if set[f.Path] {
-			out = append(out, fmt.Sprintf("%s:%d section %q is empty", f.Path, f.Line, f.Heading))
-		}
-	}
-	for _, f := range r.UnindexedPages {
-		if set[f.Path] {
-			out = append(out, fmt.Sprintf("%s is not linked from any index or MOC", f.Path))
-		}
+	for _, l := range links.Find(Checked(d)) {
+		out = append(out, l.Target)
 	}
 	return out
 }
 
-// mirrorErrors checks what the folder shows of the project's mirrors: every member the
-// identity file lists has a mirror whose root page names it, and every mirror folder has
-// its root page. Whether a member is in the atlas config is sync's to say.
-func mirrorErrors(root string, overlay map[string][]byte, present map[string]bool) []PathFinding {
-	cfg, ok := project.ReadMarker(root)
-	if !ok {
-		return nil
+// Checked is the part of a document's body whose links count: all of it, but a change
+// document's Writes, which hold copies of pages.
+func Checked(d *doc.Doc) string {
+	if d.Type() != "change" {
+		return d.Body
 	}
-	roots := map[string]string{} // mirror folder -> the project id its root page names
-	folders := map[string]bool{}
-	for rel := range present {
-		if !Mirrored(rel) {
-			continue
-		}
-		rest := strings.TrimPrefix(rel, project.MirrorDir+"/")
-		folder, inner, ok := strings.Cut(rest, "/")
-		if !ok {
-			continue
-		}
-		folders[folder] = true
-		if inner != folder+".md" {
-			continue
-		}
-		data, ok := overlay[rel]
-		if !ok {
-			data, _ = os.ReadFile(filepath.Join(root, filepath.FromSlash(rel)))
-		}
-		fields, _, err := project.Frontmatter(string(data))
-		if err == nil && fields != nil {
-			roots[folder] = project.StringField(fields, "project")
+	return WithoutWrites(d.Body)
+}
+
+// WithoutWrites cuts a change document's Writes section out of its body.
+func WithoutWrites(body string) string {
+	for _, h := range doc.Headings(body) {
+		if h.Level == 2 && strings.EqualFold(h.Title, writeSection) {
+			lines := strings.Split(body, "\n")
+			return strings.Join(lines[:h.Line], "\n")
 		}
 	}
-	var out []PathFinding
-	for folder := range folders {
-		if _, ok := roots[folder]; !ok {
-			out = append(out, PathFinding{Path: project.MirrorDir + "/" + folder, Message: "mirror has no root page; run sync"})
+	return body
+}
+
+func (r *run) deadLinks(d *doc.Doc) {
+	seen := map[string]bool{}
+	for _, l := range links.Find(Checked(d)) {
+		if l.Target == "" || seen[l.Target] {
+			continue
+		}
+		seen[l.Target] = true
+		if len(r.idx.LinkPaths(l.Target)) == 0 {
+			r.add("dead-link", Error, d, "wiki-edit: create the page, or change the link", "line %d links [[%s]], which resolves to nothing", l.Line, l.Target)
 		}
 	}
-	for _, id := range cfg.Members {
-		found := false
-		for _, named := range roots {
-			if named == id {
-				found = true
-				break
+}
+
+func (r *run) knowledge(d *doc.Doc, incoming map[string]int) {
+	t := schema.Get(d.Type())
+	if t == nil || t.Family != schema.Knowledge {
+		return
+	}
+	if incoming[d.Path] == 0 && !r.idx.Pending(d) {
+		r.add("orphan", Warning, d, "wiki-edit: link it from a related page, or remove it", "no other document links to it")
+	}
+	if d.Type() != "source" && len(d.List("sources")) == 0 {
+		r.add("uncited", Warning, d, "wiki-edit: cite the documents it rests on", "its sources are empty")
+	}
+}
+
+func (r *run) info(d *doc.Doc) {
+	now := r.opts.Now
+	switch d.Type() {
+	case "repository":
+		if described := d.Str("described"); described != "" {
+			g := gitx.Repo{Dir: vault.Expand(d.Str("path"))}
+			if n, err := g.Behind(described); err == nil && n > BehindLimit {
+				r.add("repository-behind", Info, d, "repo-ingest", "its page describes %s, %d commits behind the head", described[:min(7, len(described))], n)
 			}
 		}
-		if !found {
-			out = append(out, PathFinding{Path: project.Marker, Message: "member " + id + " has no mirror under " + project.MirrorDir + "/; run sync"})
+	case "change":
+		if d.Str("status") == "proposed" {
+			if t, ok := vault.ParseTime(d.Str("proposed")); ok && now.Sub(t) > ProposedAge {
+				r.add("change-stale", Info, d, "apply or reject it", "proposed %s and still waiting", d.Str("proposed"))
+			}
+		}
+	case "session":
+		if d.Str("status") == "lost" {
+			for _, task := range d.List("tasks") {
+				if t := r.idx.Linked(task); t != nil && t.Str("status") == "open" {
+					r.add("session-lost", Info, d, "thread-run: pick the task up again", "it was lost while it held the open task %s", vault.Title(t))
+					break
+				}
+			}
 		}
 	}
-	return out
+	if r.idx.Pending(d) {
+		if t, ok := vault.ParseTime(d.Str("created")); ok && now.Sub(t) > PendingAge {
+			r.add("pending", Info, d, "wiki-sync", "the wiki has not absorbed it since %s", d.Str("created"))
+		}
+	}
 }

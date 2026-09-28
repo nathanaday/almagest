@@ -1,24 +1,19 @@
 # Build output
 build/
-dist/
 
 # Go
 *.test
 *.out
 coverage.*
 
-# Editors
+# Editors and operating systems
 .idea/
 .vscode/
 *.swp
-
-# OS
 .DS_Store
-Thumbs.db
 
-# Local scratch: git worktrees and the superpowers plan workspaces
+# Local scratch
 .worktrees/
-.superpowers/
 
-# Obsidian state for this checkout; a knowledge base keeps its own .obsidian/
+# Obsidian state for this checkout
 /.obsidian/

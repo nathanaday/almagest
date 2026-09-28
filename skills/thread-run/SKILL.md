@@ -1,66 +1,44 @@
 ---
 name: thread-run
-description: "Do the work of a thread and keep its plan document current: work the plan in slices, commit along the way, test, write progress at every stopping point, and hand off when done or blocked. Use for run this thread, work on, implement, continue, resume, pick up where we left off, next step."
+description: "Do one task of a thread in its repository, keep the task document current, and close it with its result. Use for run T2, do the next task, continue the task, implement this task."
 ---
 
-# Run a thread
+# thread-run
 
-The work happens in the work folder, the parent of `atlas/`, with the
-ordinary tools. The plan document is the memory between sessions: keep it
-true.
+A task is the unit a session works on. Starting it binds this session to it, so the
+board shows it active and no other session takes it by accident. The task document is
+the record of the work: progress lines as it goes, the result at the end.
 
-Tools: `threads`, `thread`. Reads
-[threads.md](../thread/references/threads.md).
+Tools: `thread` (show, task), `context`, and the repository's own tools. References:
+[threads.md](../atlas/references/threads.md).
 
-## Start or resume
+## Procedure
 
-Call `threads`. Take the thread named, else the one with a plan that was
-updated last. Read its spec and its plan, and the last lines under
-`## Progress`. Say what you are picking up. A thread with no plan goes to
-`thread-plan`, unless the work is small enough to need none: then file a
-plan of a few lines and go on.
+1. Pick the task: the one named, or the Thread View's `next`.
+2. `thread` with `action: task`, `do: start`. The hook binds this session to the task.
+   When another live session holds it, ask the user before you start with `take: true`.
+3. `context` for the task's repository: follow its instruction files and the task's
+   linked policies.
+4. Work in the repository. Change files with Edit and Write, not with the shell: the
+   guard and the session's record see the edit tools. Use the shell to run commands.
+   Commit in the repository's own git as you go, in small commits whose messages name
+   the thread's id. Test what can break.
+5. When the work shows a better way to reach the task's deliverable, take it, and record
+   the change and its reason under `## Progress`. A change to the deliverable itself, or
+   to another task, goes back to the user first.
+6. At each stopping point, add a dated line to the task's `## Progress` with Edit
+   (`- 2026-09-27: …`). The session document quotes it, so write it once.
+7. Run the task's `## Verify`.
+8. `thread` with `action: task`, `do: done`, and the `result`: what changed, the
+   commits, how it was verified.
+9. When the task is blocked: `thread` with `action: task`, `do: set`, and `blocked` (one
+   line); add a progress line; stop.
 
-## How to work
+## Gate
 
-- **Own the outcome.** The spec is the intent and the plan is the approach;
-  neither is a cage. When the work shows a better way to reach the intent,
-  in the code, the interface, or the look and feel, take it, and record the
-  change under Progress. When the intent itself should change, stop and ask.
-- **Slices and commits.** Work in the slices the plan names. Commit each
-  one when it works, the way the work's AGENTS.md or CLAUDE.md says. `atlas/<name>/` is
-  tracked like any other folder, so a commit may carry the plan's progress
-  with the code. Use a branch when the repository's habits call for one.
-- **Tests.** Behavior that can break gets a test, written with the code or
-  before it. Match the project's own standard; do not test what cannot
-  fail. Run the tests before every commit. A thread closes only when they
-  pass.
-- **Subagents.** Use them where the work splits into independent slices or
-  needs a wide search. Give each one the spec, the plan, and the reason for
-  its slice, and let it own the slice end to end, tests included. A
-  subagent that sees one small step decides for that step alone. Review
-  what comes back before you build on it.
-- **Small commits.** A commit holds one slice that works, with its tests,
-  and says what it does. Never commit a failing test.
-- **The wiki** changes only through its skills. A decision the user should
-  find later, beyond this thread, is a `wiki-save`; one that belongs to this
-  thread alone goes in the plan.
-
-## Write progress
-
-At every stopping point (a slice done, a decision, a surprise, a block, the
-end of the session) add a dated line under `## Progress` in the plan
-document with Edit: what was done, what was decided or found, what is next.
-Add the heading the first time. The Edit marks the thread as updated.
-Always write where you stopped before the session ends.
+None inside a task. The gates were the spec and the tasks.
 
 ## Hand off
 
-- Blocked: write what it waits on under Progress, then `thread` with `id`
-  and `blocked`.
-- The work is done and the tests pass: hand to `thread-receipt`, which
-  verifies before it closes. Do not close the thread here.
-
-## Hand off
-
-`thread-receipt` when the work is done; `thread-work` to continue in a later
-session.
+The next ready task, or [thread-receipt](../thread-receipt/SKILL.md) when no task is
+open.

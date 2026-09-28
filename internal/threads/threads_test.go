@@ -1,424 +1,224 @@
-package threads
+package threads_test
 
 import (
-	"errors"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/project"
+	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/sessions"
+	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/atlas-obsidian/internal/threads"
 )
 
-var now = time.Date(2026, 9, 13, 12, 0, 0, 0, time.Local)
-
-func newProject(t *testing.T) *project.Project {
-	t.Helper()
-	work := filepath.Join(t.TempDir(), "webapp")
-	if err := os.MkdirAll(work, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	pRes, err := project.Init(work, project.Options{}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p := pRes.Project
-	return p
-}
-
-func write(t *testing.T, p *project.Project, rel, text string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(p.Path(rel)), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(p.Path(rel), []byte(text), 0o644); err != nil {
-		t.Fatal(err)
+func ok(t *testing.T) func(*threads.Result, error) *threads.Result {
+	return func(r *threads.Result, err error) *threads.Result {
+		t.Helper()
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r
 	}
 }
 
-func read(t *testing.T, p *project.Project, rel string) string {
-	t.Helper()
-	data, err := os.ReadFile(p.Path(rel))
-	if err != nil {
-		t.Fatal(err)
-	}
-	return string(data)
-}
+func TestAThreadFromStubToReceipt(t *testing.T) {
+	tv := testvault.New(t)
+	repo := tv.Repo("p3-edge", nil)
+	tv.Page("repository", "p3-edge", map[string]any{"path": repo}, "")
+	tv.Write("inbox/alarms.md", "fix the vehicle false alarms\n")
+	tv.Commit()
 
-func start(t *testing.T, p *project.Project, title, text string) *Thread {
-	t.Helper()
-	th, err := Start(p, New{Title: title, Text: text}, now)
-	if err != nil {
-		t.Fatal(err)
+	r := ok(t)(threads.Open(tv.V, threads.OpenIn{Text: "Vehicles trip false alarms at night.", Title: "Filter vehicle false alarms", Scope: []string{"p3-edge"}, Priority: "high", Inbox: "alarms.md"}, tv.Tick(time.Minute)))
+	if r.View.Stub.State["stage"] != "stub" || r.View.Next != "spec" || r.Commit == "" {
+		t.Fatalf("open: %+v", r.View)
 	}
-	return th
-}
-
-func ptr(s string) *string { return &s }
-
-func TestPaths(t *testing.T) {
-	if !IsCard("threads/A.md") || !IsCard("threads/archive/A.md") || IsCard(project.ThreadsIndex) || IsCard("threads/deep/er/A.md") || IsCard("threads/stubs/A.md") {
-		t.Fatal("IsCard")
+	if tv.V.Exists("inbox/alarms.md") {
+		t.Fatal("the inbox note leaves in the same commit")
 	}
-	if DocStage("threads/stubs/A.md") != Stub || DocStage("threads/receipts/A.md") != Receipt || DocStage("threads/stubs/deep/A.md") != "" || DocStage("threads/plans/a.txt") != "" || DocStage("threads/A.md") != "" {
-		t.Fatal("DocStage")
-	}
-	if !Owned(project.ThreadsIndex) || !Owned("threads/archive/A.md") || Owned("threads/specs/A.md") || Owned("threads/phases/A.md") {
-		t.Fatal("Owned")
-	}
-}
-
-func TestStartWritesACardAndAStub(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "", "# Login breaks on Safari\n\nThe cookie is dropped.")
-	if th.Title != "Login breaks on Safari" || th.Stage != Stub || th.Path != "threads/Login breaks on Safari.md" || th.Priority != "normal" || len(th.Docs) != 1 {
-		t.Fatalf("%+v", th)
-	}
-	stub := read(t, p, "threads/stubs/Login breaks on Safari.md")
-	for _, want := range []string{"type: stub", "thread: " + th.ID, "> [!stub] Login breaks on Safari", "**Stub** → Spec → Plan → Receipt", "[Thread](<../Login breaks on Safari.md>)", "The cookie is dropped."} {
+	stub := tv.Read("threads/Filter vehicle false alarms/Filter vehicle false alarms.md")
+	for _, want := range []string{`scope: ["[[p3-edge]]"]`, "priority: high", "> [!stub] Filter vehicle false alarms", "**Stub** → Spec → Tasks → Receipt", "## Stub\n\nVehicles trip false alarms at night."} {
 		if !strings.Contains(stub, want) {
-			t.Fatalf("stub lacks %q:\n%s", want, stub)
+			t.Errorf("stub lacks %q:\n%s", want, stub)
 		}
 	}
-	card := read(t, p, th.Path)
-	for _, want := range []string{"stage: stub", "> [!thread] Login breaks on Safari", "[Stub](<stubs/Login breaks on Safari.md>)", "> - Spec · none", "![[threads/stubs/Login breaks on Safari]]"} {
-		if !strings.Contains(card, want) {
-			t.Fatalf("card lacks %q:\n%s", want, card)
-		}
+	if tv.Log()[0] != "thread: open Filter vehicle false alarms" {
+		t.Fatalf("log %v", tv.Log())
 	}
-	index := read(t, p, project.ThreadsIndex)
-	if !strings.Contains(index, "> [!stub] Stub · 1") || !strings.Contains(index, "[Login breaks on Safari](<Login breaks on Safari.md>)") {
-		t.Fatal(index)
+
+	r = ok(t)(threads.File(tv.V, "Filter vehicle false alarms", "spec", "## Goal\n\nNo false alarms from vehicles.\n\n## Done when\n\n- a test passes", "", tv.Tick(time.Minute)))
+	if r.View.Spec == nil || r.View.Next != "tasks" {
+		t.Fatalf("spec: %+v", r.View)
 	}
-	if _, err := Start(p, New{}, now); err == nil {
-		t.Fatal("a thread with no title and no text was opened")
+	if _, err := threads.File(tv.V, r.View.Stub.ID, "spec", "again", "", testvault.Now); err == nil {
+		t.Fatal("a thread has one spec")
 	}
-	if _, err := Start(p, New{Title: "x", Phase: "Nope"}, now); err == nil {
-		t.Fatal("an unknown phase was accepted")
+
+	r = ok(t)(threads.Tasks(tv.V, r.View.Stub.ID, []threads.TaskIn{
+		{Title: "Score boxes by motion", Text: "## What\n\nScore.\n\n## Verify\n\n- go test", Repository: "p3-edge"},
+		{Title: "Tune the threshold", Text: "## What\n\nTune.", Repository: "p3-edge", Depends: []string{"T1"}},
+	}, tv.Tick(time.Minute)))
+	if len(r.View.Tasks) != 2 || r.View.Next != "task T1" || r.View.Tasks[1].Ready {
+		t.Fatalf("tasks: %+v", r.View)
 	}
-	// The same title twice takes another file name for every page.
-	again := start(t, p, "Login breaks on Safari", "again")
-	if again.Path != "threads/Login breaks on Safari (2).md" || again.Docs[0].Path != "threads/stubs/Login breaks on Safari (2).md" {
-		t.Fatalf("%+v", again)
+	t2 := tv.Read("threads/Filter vehicle false alarms/Filter vehicle false alarms — T2 Tune the threshold.md")
+	if !strings.Contains(t2, `depends: ["[[Filter vehicle false alarms — T1 Score boxes by motion]]"]`) || !strings.Contains(t2, "## Progress") || !strings.Contains(t2, "after [[Filter vehicle false alarms — T1 Score boxes by motion|T1]]") {
+		t.Fatalf("T2:\n%s", t2)
+	}
+	if _, err := threads.Task(tv.V, "T2", r.View.Stub.ID, threads.TaskDo{Do: "start"}, testvault.Now); err == nil || !strings.Contains(err.Error(), "call thread task T1 done first") {
+		t.Fatalf("a refusal teaches: %v", err)
+	}
+	if _, err := threads.File(tv.V, r.View.Stub.ID, "receipt", "Delivered.", "completed", testvault.Now); err == nil || !strings.Contains(err.Error(), "T1 Score boxes by motion, T2 Tune the threshold still open") {
+		t.Fatalf("a completed receipt waits: %v", err)
+	}
+	ok(t)(threads.Task(tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "done", Result: "Scored. Commit abc123. go test passes."}, tv.Tick(time.Minute)))
+	r = ok(t)(threads.Task(tv.V, "T2", r.View.Stub.ID, threads.TaskDo{Do: "drop"}, tv.Tick(time.Minute)))
+	if r.View.Next != "receipt" || r.View.Stub.State["tasks"] != "1/1" {
+		t.Fatalf("next: %+v", r.View)
+	}
+	r = ok(t)(threads.File(tv.V, r.View.Stub.ID, "receipt", "## Delivered\n\nMotion scoring.", "completed", tv.Tick(time.Minute)))
+	if r.View.Stub.State["stage"] != "closed" || r.View.Stub.State["outcome"] != "completed" || r.View.Next != "none" {
+		t.Fatalf("closed: %+v", r.View.Stub.State)
+	}
+	if _, err := threads.Tasks(tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "More"}}, testvault.Now); err != threads.ErrClosed {
+		t.Fatalf("a closed thread takes no document: %v", err)
+	}
+	r = ok(t)(threads.Reopen(tv.V, r.View.Stub.ID, tv.Tick(time.Minute)))
+	if r.View.Receipt != nil || r.View.Stub.State["stage"] != "tasks" {
+		t.Fatalf("reopened: %+v", r.View)
+	}
+	if !tv.V.Exists("threads/Filter vehicle false alarms/Filter vehicle false alarms — Receipt (reopened 2026-09-27).md") {
+		t.Fatal("the receipt is kept, renamed")
+	}
+	tv.Clean()
+}
+
+func TestKilledReceiptDropsOpenTasks(t *testing.T) {
+	tv := testvault.New(t)
+	r := ok(t)(threads.Open(tv.V, threads.OpenIn{Text: "An idea"}, testvault.Now))
+	ok(t)(threads.Tasks(tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "Try it", Text: "x"}}, testvault.Now))
+	r = ok(t)(threads.File(tv.V, r.View.Stub.ID, "receipt", "## Why killed\n\nNot worth it.", "killed", testvault.Now))
+	if r.View.Tasks[0].Ref.State["status"] != "dropped" {
+		t.Fatalf("killed: %+v", r.View.Tasks)
+	}
+	if !strings.Contains(tv.Read(r.View.Receipt.Path), "> [!killed] An idea · killed") {
+		t.Fatalf("receipt:\n%s", tv.Read(r.View.Receipt.Path))
 	}
 }
 
-func TestStartFromANote(t *testing.T) {
-	p := newProject(t)
-	write(t, p, "inbox/idea.md", "Cache the registry\n\nIt is read on every key.")
-	th, err := Start(p, New{From: "inbox/idea.md"}, now)
-	if err != nil || th.Title != "Cache the registry" {
-		t.Fatalf("%+v %v", th, err)
+func TestRenameMovesEveryDocumentAndLink(t *testing.T) {
+	tv := testvault.New(t)
+	r := ok(t)(threads.Open(tv.V, threads.OpenIn{Text: "Do the thing", Title: "Old name"}, testvault.Now))
+	ok(t)(threads.File(tv.V, r.View.Stub.ID, "spec", "## Goal\n\nSee [[Old name]].", "", testvault.Now))
+	ok(t)(threads.Tasks(tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "A", Text: "x"}, {Title: "B", Text: "x", Depends: []string{"A"}}}, testvault.Now))
+	tv.Page("concept", "Linked", nil, "From [[Old name — Spec]].\n")
+	tv.Commit()
+	title := "New name"
+	r = ok(t)(threads.Set(tv.V, r.View.Stub.ID, threads.SetIn{Title: &title}, testvault.Now))
+	if r.View.Stub.Title != "New name" || r.View.Spec.Title != "New name — Spec" || r.View.Tasks[1].Ref.Title != "New name — T2 B" {
+		t.Fatalf("renamed: %+v", r.View)
 	}
-	if _, err := os.Stat(p.Path("inbox/idea.md")); !os.IsNotExist(err) {
-		t.Fatal("the note stayed")
+	if tv.V.Exists("threads/Old name") {
+		t.Fatal("the old folder is gone")
 	}
-	if !strings.Contains(read(t, p, th.Docs[0].Path), "It is read on every key.") {
-		t.Fatal("the stub lacks the note's text")
+	b := tv.Read("threads/New name/New name — T2 B.md")
+	if !strings.Contains(b, `thread: "[[New name]]"`) || !strings.Contains(b, `depends: ["[[New name — T1 A]]"]`) {
+		t.Fatalf("T2:\n%s", b)
 	}
-	if _, err := Start(p, New{From: "threads/stubs/x.md"}, now); err == nil {
-		t.Fatal("a note outside inbox/ was accepted")
+	if !strings.Contains(tv.Read("wiki/concepts/Linked.md"), "[[New name — Spec]]") {
+		t.Fatal("a wiki page's link follows in the rename's commit")
 	}
-}
-
-func TestTheStageIsTheFurthestDocument(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "Fix it", "Do it.")
-	// A stage may be skipped.
-	th, err := File(p, th.ID, Filing{Stage: Plan, Text: "1. Do it."}, now)
-	if err != nil || th.Stage != Plan || th.Doc(Spec) != nil {
-		t.Fatalf("%+v %v", th, err)
-	}
-	// A skipped document may still be filed, and the stage stays.
-	th, err = File(p, "fix", Filing{Stage: Spec, Text: "It works."}, now)
-	if err != nil || th.Stage != Plan || len(th.Docs) != 3 {
-		t.Fatalf("%+v %v", th, err)
-	}
-	if _, err := File(p, th.ID, Filing{Stage: Spec, Text: "again"}, now); err == nil || !strings.Contains(err.Error(), "revise it with Edit") {
-		t.Fatalf("a second spec was filed: %v", err)
-	}
-	// Every document's callout names its siblings.
-	if stub := read(t, p, "threads/stubs/Fix it.md"); !strings.Contains(stub, "**Stub** → [Spec](<../specs/Fix it.md>) → [Plan](<../plans/Fix it.md>) → Receipt") {
-		t.Fatal(stub)
-	}
-	for _, bad := range []Filing{{Stage: "done"}, {Stage: Receipt, Text: "x"}, {Stage: Receipt, Outcome: Completed}, {Stage: Spec, Outcome: Killed}} {
-		if _, err := File(p, th.ID, bad, now); err == nil {
-			t.Fatalf("%+v was accepted", bad)
-		}
-	}
-	// Deleting a document by hand moves the thread back; nothing else holds the stage.
-	os.Remove(p.Path("threads/plans/Fix it.md"))
-	board, err := Sync(p, now)
-	if err != nil || board.Find(th.ID).Stage != Spec || !strings.Contains(read(t, p, th.Path), "stage: spec") {
-		t.Fatalf("%+v %v", board.Find(th.ID), err)
+	tv.Clean()
+	if !strings.HasPrefix(tv.Log()[0], "thread: rename Old name to New name") {
+		t.Fatalf("log %v", tv.Log())
 	}
 }
 
-func TestAReceiptClosesAndReopenOpens(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "Fix it", "Do it.")
-	Set(p, th.ID, Changes{Blocked: ptr("the vendor")}, now)
-	th, err := File(p, th.ID, Filing{Stage: Receipt, Outcome: Killed, Text: "Not worth it."}, now)
-	if err != nil || !th.Closed() || th.Outcome != Killed || th.Path != "threads/archive/Fix it.md" || th.Blocked != "" {
-		t.Fatalf("%+v %v", th, err)
+func TestActiveComesFromLiveSessions(t *testing.T) {
+	tv := testvault.New(t)
+	r := ok(t)(threads.Open(tv.V, threads.OpenIn{Text: "Work", Title: "Work item"}, testvault.Now))
+	ok(t)(threads.Tasks(tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "First", Text: "x"}}, testvault.Now))
+	unlock, _ := tv.V.Lock()
+	e := sessions.Event{SessionID: "a1b2c3d4-0000", Cwd: tv.V.Root}
+	if _, err := sessions.Start(tv.V, e, testvault.Now); err != nil {
+		t.Fatal(err)
 	}
-	receipt := read(t, p, "threads/receipts/Fix it.md")
-	if !strings.Contains(receipt, "> [!killed] Fix it · killed") || !strings.Contains(receipt, "outcome: killed") || !strings.Contains(receipt, "[Thread](<../archive/Fix it.md>)") {
-		t.Fatal(receipt)
+	if _, err := sessions.Touch(tv.V, e, testvault.Now, func(c string) string {
+		return sessions.AddLink(sessions.AddLink(c, "threads", "Work item"), "tasks", "Work item — T1 First")
+	}); err != nil {
+		t.Fatal(err)
 	}
-	// The stub's callout follows the card into the archive.
-	if !strings.Contains(read(t, p, "threads/stubs/Fix it.md"), "[Thread](<../archive/Fix it.md>)") {
-		t.Fatal("the stub still links the open card")
+	if _, err := threads.SyncVault(tv.V); err != nil {
+		t.Fatal(err)
 	}
-	if card := read(t, p, th.Path); !strings.Contains(card, "**Killed**") || !strings.Contains(card, "[Receipt](<../receipts/Fix it.md>)") {
-		t.Fatal(card)
+	unlock()
+	stub := tv.Read(r.View.Stub.Path)
+	if !strings.Contains(stub, "active: true") || !strings.Contains(stub, "active in [[2026-09-27 1432 a1b2c3]]") {
+		t.Fatalf("stub:\n%s", stub)
 	}
-	if index := read(t, p, project.ThreadsIndex); !strings.Contains(index, "> [!receipt] Closed · 1") || !strings.Contains(index, "No open threads") {
-		t.Fatal(index)
+	if _, err := threads.Task(tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "start"}, testvault.Now); err == nil {
+		t.Fatal("a task a live session holds needs take")
 	}
-	if _, err := File(p, th.ID, Filing{Stage: Plan, Text: "x"}, now); err == nil {
-		t.Fatal("a closed thread took a plan")
+	if _, err := threads.Task(tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "start", Take: true}, testvault.Now); err != nil {
+		t.Fatal(err)
 	}
-	if _, err := Set(p, th.ID, Changes{Blocked: ptr("x")}, now); err == nil {
-		t.Fatal("a closed thread was blocked")
+	session := tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if !strings.Contains(session, "> [!session] running · T1 of [[Work item]]") {
+		t.Fatalf("session:\n%s", session)
 	}
-	th, err = Reopen(p, th.ID, now)
-	if err != nil || th.Closed() || th.Stage != Stub || th.Path != "threads/Fix it.md" {
-		t.Fatalf("%+v %v", th, err)
-	}
-	if _, err := Reopen(p, th.ID, now); err == nil {
-		t.Fatal("an open thread was reopened")
+	unlock, _ = tv.V.Lock()
+	lost, _ := sessions.MarkLost(tv.V, testvault.Now.Add(13*time.Hour), 12)
+	threads.SyncVault(tv.V)
+	unlock()
+	if len(lost) != 1 || !strings.Contains(tv.Read(r.View.Stub.Path), "active: false") {
+		t.Fatalf("a lost session lets the thread go: %v", lost)
 	}
 }
 
-func TestSetKeepsHandEditsAndRenames(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "Fix it", "Do it.")
-	File(p, th.ID, Filing{Stage: Spec, Text: "It works."}, now)
-	write(t, p, th.Path, strings.Replace(read(t, p, th.Path), "created:", "owner: nathan\ncreated:", 1))
-	if _, err := CreatePhase(p, "Alpha", "", nil, now); err != nil {
+func TestSyncFollowsAHandEdit(t *testing.T) {
+	tv := testvault.New(t)
+	r := ok(t)(threads.Open(tv.V, threads.OpenIn{Text: "x", Title: "Thread"}, testvault.Now))
+	r = ok(t)(threads.File(tv.V, r.View.Stub.ID, "spec", "## Goal\n\ny", "", testvault.Now))
+	// The user deletes the spec in Obsidian.
+	if err := tv.V.Remove(r.View.Spec.Path); err != nil {
 		t.Fatal(err)
 	}
-	later := now.AddDate(0, 0, 3)
-	th, err := Set(p, th.ID, Changes{Priority: ptr("high"), Phase: ptr("alpha"), Blocked: ptr("waits on\nthe vendor"), Title: ptr("Fix the login")}, later)
-	if err != nil {
-		t.Fatal(err)
+	wrote, err := threads.SyncVault(tv.V)
+	if err != nil || len(wrote) != 1 {
+		t.Fatalf("sync %v %v", wrote, err)
 	}
-	if th.Priority != "high" || th.Phase != "Alpha" || th.Blocked != "waits on the vendor" || th.Title != "Fix the login" || th.Updated != "2026-09-16" || th.Path != "threads/Fix the login.md" {
-		t.Fatalf("%+v", th)
+	stub := tv.Read(r.View.Stub.Path)
+	if !strings.Contains(stub, "stage: stub") || !strings.Contains(stub, "updated: 2026-09-27") {
+		t.Fatalf("the thread moves back:\n%s", stub)
 	}
-	if card := read(t, p, th.Path); !strings.Contains(card, "owner: nathan") || !strings.Contains(card, "> **Blocked:** waits on the vendor") {
-		t.Fatal(card)
+	if again, _ := threads.SyncVault(tv.V); len(again) != 0 {
+		t.Fatal("a second sync writes nothing")
 	}
-	spec := read(t, p, "threads/specs/Fix the login.md")
-	if !strings.Contains(spec, `title: "Fix the login"`) || !strings.Contains(spec, "> [!spec] Fix the login") || !strings.Contains(spec, "It works.") {
-		t.Fatal(spec)
+	// A callout of the user's stays.
+	tv.Write(r.View.Stub.Path, strings.Replace(stub, "## Stub", "> [!note] mine\n\n## Stub", 1))
+	threads.SyncVault(tv.V)
+	if !strings.Contains(tv.Read(r.View.Stub.Path), "> [!note] mine") {
+		t.Fatal("sync keeps the user's callout")
 	}
-	if _, err := os.Stat(p.Path("threads/stubs/Fix it.md")); !os.IsNotExist(err) {
-		t.Fatal("the old stub stayed")
-	}
-	for _, bad := range []Changes{{Priority: ptr("urgent")}, {Phase: ptr("Nope")}, {Title: ptr(" ")}} {
-		if _, err := Set(p, th.ID, bad, now); err == nil {
-			t.Fatalf("%+v was accepted", bad)
-		}
-	}
-	if th, _ := Set(p, th.ID, Changes{Blocked: ptr("")}, now); th.Blocked != "" {
-		t.Fatal("unblock")
+	d := doc.Parse("", []byte(tv.Read(r.View.Stub.Path)))
+	if doc.LeadType(d.Body) != "stub" {
+		t.Fatal("the lead stays first")
 	}
 }
 
-func TestSyncKeepsProseAndTouchesNothingWhenCurrent(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "Fix it", "Do it.")
-	doc := th.Docs[0].Path
-	// The model rewrote the page and dropped the callout; the user's own callout stays.
-	write(t, p, doc, "---\ntype: stub\nthread: "+th.ID+"\ntitle: \"Fix it\"\ncreated: 2026-09-13\n---\n> [!note] Mine\n> kept\n\nNew words.\n")
-	if _, err := Sync(p, now); err != nil {
-		t.Fatal(err)
+func TestTaskSetRenamesAndRefusesLoops(t *testing.T) {
+	tv := testvault.New(t)
+	r := ok(t)(threads.Open(tv.V, threads.OpenIn{Text: "x", Title: "T"}, testvault.Now))
+	ok(t)(threads.Tasks(tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "A", Text: "x"}, {Title: "B", Text: "x", Depends: []string{"T1"}}}, testvault.Now))
+	deps := []string{"T2"}
+	if _, err := threads.Task(tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "set", Depends: &deps}, testvault.Now); err == nil || !strings.Contains(err.Error(), "loop") {
+		t.Fatalf("a loop: %v", err)
 	}
-	got := read(t, p, doc)
-	if !strings.Contains(got, "> [!stub] Fix it") || !strings.Contains(got, "> [!note] Mine\n> kept\n\nNew words.") {
-		t.Fatal(got)
+	title, order := "Alpha", 5
+	r = ok(t)(threads.Task(tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "set", Title: &title, Order: &order}, testvault.Now))
+	if r.View.Tasks[1].Ref.Title != "T — T5 Alpha" {
+		t.Fatalf("renamed: %+v", r.View.Tasks)
 	}
-	old := now.Add(-time.Hour)
-	for _, rel := range []string{doc, th.Path, project.ThreadsIndex} {
-		os.Chtimes(p.Path(rel), old, old)
-	}
-	if _, err := Sync(p, now); err != nil {
-		t.Fatal(err)
-	}
-	for _, rel := range []string{doc, th.Path, project.ThreadsIndex} {
-		if info, _ := os.Stat(p.Path(rel)); !info.ModTime().Equal(old) {
-			t.Fatalf("%s was rewritten", rel)
-		}
-	}
-}
-
-func TestTouch(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "Fix it", "Do it.")
-	later := now.AddDate(0, 0, 2)
-	if err := Touch(p, th.Docs[0].Path, later); err != nil {
-		t.Fatal(err)
-	}
-	board, _ := Load(p)
-	if board.Find(th.ID).Updated != "2026-09-15" {
-		t.Fatalf("%+v", board.Find(th.ID))
-	}
-	if err := Touch(p, "threads/phases/x.md", later); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestLoadReportsProblems(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "Fix it", "Do it.")
-	write(t, p, "threads/specs/Orphan.md", "---\ntype: spec\nthread: thr-20200101-0000\ncreated: 2026-09-13\n---\n")
-	write(t, p, "threads/specs/Bare.md", "No frontmatter.\n")
-	write(t, p, "threads/stubs/Second.md", "---\ntype: stub\nthread: "+th.ID+"\ncreated: 2026-09-13\n---\n")
-	write(t, p, "threads/receipts/Bad.md", "---\ntype: receipt\nthread: "+th.ID+"\noutcome: finished\ncreated: 2026-09-13\n---\n")
-	write(t, p, "threads/Empty.md", "---\ntype: thread\nthread_id: thr-20260913-aaaa\ntitle: \"Empty\"\ncreated: 2026-09-13\nupdated: 2026-09-13\n---\n")
-	board, err := Load(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	reasons := map[string]string{}
-	for _, pr := range board.Problems {
-		reasons[pr.Path] = pr.Reason
-	}
-	for rel, want := range map[string]string{
-		"threads/specs/Orphan.md": "no thread has the id", "threads/specs/Bare.md": "no frontmatter", "threads/stubs/Second.md": "already has a stub",
-		"threads/receipts/Bad.md": "outcome must be", "threads/Empty.md": "no documents",
-	} {
-		if !strings.Contains(reasons[rel], want) {
-			t.Fatalf("%s: %q lacks %q", rel, reasons[rel], want)
-		}
-	}
-	if board.Find(th.ID).Closed() {
-		t.Fatal("a bad receipt closed the thread")
-	}
-}
-
-func TestBoardOrderCountsAndResolve(t *testing.T) {
-	p := newProject(t)
-	a := start(t, p, "Alpha stub", "a")
-	b := start(t, p, "Beta plan", "b")
-	c := start(t, p, "Beta spec", "c")
-	d := start(t, p, "Delta done", "d")
-	File(p, b.ID, Filing{Stage: Plan, Text: "x"}, now.AddDate(0, 0, -20))
-	File(p, c.ID, Filing{Stage: Spec, Text: "x"}, now)
-	File(p, d.ID, Filing{Stage: Receipt, Outcome: Completed, Text: "x"}, now)
-	Set(p, a.ID, Changes{Blocked: ptr("x")}, now)
-	board, _ := Load(p)
-	var order []string
-	for _, th := range board.Open() {
-		order = append(order, th.Title)
-	}
-	if strings.Join(order, ",") != "Beta plan,Beta spec,Alpha stub" {
-		t.Fatal(order)
-	}
-	c2 := board.Counts(now)
-	if c2.Open != 3 || c2.Stub != 1 || c2.Spec != 1 || c2.Plan != 1 || c2.Blocked != 1 || c2.Completed != 1 || c2.Killed != 0 || c2.Stale != 1 {
-		t.Fatalf("%+v", c2)
-	}
-	if th, err := board.Resolve("alpha"); err != nil || th.ID != a.ID {
-		t.Fatal(err)
-	}
-	if _, err := board.Resolve("beta"); err == nil || !strings.Contains(err.Error(), "matches 2") {
-		t.Fatal(err)
-	}
-	if _, err := board.Resolve("nothing"); err == nil {
-		t.Fatal("resolved nothing")
-	}
-	if index := RenderIndex(board, nil, now); !strings.Contains(index, "stale") || strings.Index(index, "[!plan]") > strings.Index(index, "[!stub]") {
-		t.Fatal(index)
-	}
-}
-
-func TestPhases(t *testing.T) {
-	p := newProject(t)
-	if _, err := CreatePhase(p, "Alpha", "Ship it.", nil, now); err != nil {
-		t.Fatal(err)
-	}
-	if page := read(t, p, "threads/phases/Alpha.md"); !strings.Contains(page, "> [!phase] Alpha") || !strings.Contains(page, "Ship it.") {
-		t.Fatal(page)
-	}
-	th, err := Start(p, New{Title: "Fix it", Phase: "alpha"}, now)
-	if err != nil || th.Phase != "Alpha" {
-		t.Fatalf("%+v %v", th, err)
-	}
-	if err := RemovePhase(p, "Alpha", now); err == nil || !strings.Contains(err.Error(), "1 thread still names") {
-		t.Fatal(err)
-	}
-	if _, err := RenamePhase(p, "Alpha", "Beta", now); err != nil {
-		t.Fatal(err)
-	}
-	board, _ := Load(p)
-	if board.Find(th.ID).Phase != "Beta" || !strings.Contains(read(t, p, "threads/phases/Beta.md"), "> [!phase] Beta") || len(board.Problems) != 0 {
-		t.Fatalf("%+v", board)
-	}
-	if board.Finished("Beta") {
-		t.Fatal("finished with an open thread")
-	}
-	File(p, th.ID, Filing{Stage: Receipt, Outcome: Completed, Text: "Done."}, now)
-	board, _ = Load(p)
-	if !board.Finished("Beta") || !strings.Contains(RenderIndex(board, nil, now), "finished") {
-		t.Fatal("not finished")
-	}
-	if ph, err := ReorderPhase(p, "Beta", 5, now); err != nil || ph.Order != 5 {
-		t.Fatal(err)
-	}
-}
-
-func TestEveryFunctionRefusesWhileThreadsAreOff(t *testing.T) {
-	p := newProject(t)
-	th, err := Start(p, New{Title: "Before"}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	p.Config.Threads = false
-	if _, err := Load(p); !errors.Is(err, ErrOff) {
-		t.Fatalf("Load: %v", err)
-	}
-	if _, err := Sync(p, now); !errors.Is(err, ErrOff) {
-		t.Fatalf("Sync: %v", err)
-	}
-	if _, err := Start(p, New{Title: "After"}, now); !errors.Is(err, ErrOff) {
-		t.Fatalf("Start: %v", err)
-	}
-	if _, err := File(p, th.ID, Filing{Stage: Spec, Text: "x"}, now); !errors.Is(err, ErrOff) {
-		t.Fatalf("File: %v", err)
-	}
-	if _, err := Set(p, th.ID, Changes{}, now); !errors.Is(err, ErrOff) {
-		t.Fatalf("Set: %v", err)
-	}
-	if _, err := CreatePhase(p, "P", "", nil, now); !errors.Is(err, ErrOff) {
-		t.Fatalf("CreatePhase: %v", err)
-	}
-	if err := Touch(p, th.Doc(Stub).Path, now.AddDate(0, 0, 1)); err != nil {
-		t.Fatalf("Touch is silent: %v", err)
-	}
-	// The pages stay as they were: turning threads back on finds the thread.
-	p.Config.Threads = true
-	board, err := Load(p)
-	if err != nil || board.Find(th.ID) == nil || board.Find(th.ID).Updated != now.Format("2006-01-02") {
-		t.Fatalf("after: %v %+v", err, board)
-	}
-}
-
-func TestSummaryIsTheStubsFirstParagraph(t *testing.T) {
-	p := newProject(t)
-	th := start(t, p, "", "# Login breaks on Safari\n\nThe cookie\nis dropped.\n\nA second paragraph.")
-	if got := Summary(p, *th); got != "The cookie is dropped." {
-		t.Fatalf("summary %q", got)
-	}
-	long := start(t, p, "Long", strings.Repeat("word ", 100))
-	if got := Summary(p, *long); len([]rune(got)) != summaryRunes || !strings.HasSuffix(got, "…") {
-		t.Fatalf("summary %q", got)
-	}
-	bare := start(t, p, "Bare", "")
-	if got := Summary(p, *bare); got != "" {
-		t.Fatalf("summary %q", got)
+	if !strings.Contains(tv.Read("threads/T/T — T2 B.md"), `depends: ["[[T — T5 Alpha]]"]`) {
+		t.Fatal("the dependency follows the rename")
 	}
 }

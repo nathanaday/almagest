@@ -5,22 +5,15 @@
     "url": "https://github.com/nathanaday"
   },
   "metadata": {
-    "description": "atlas-obsidian: a wiki and the state of the work, in every project, and one view across them.",
-    "version": "5.6.0"
+    "description": "Atlas: one Obsidian vault for the wiki, the threads, the sessions, and the changes of your work.",
+    "version": "6.0.0"
   },
   "plugins": [
     {
       "name": "atlas-obsidian",
       "source": "./",
-      "description": "A source-cited Obsidian wiki and the threads of the work, in one folder inside every project, backed by the atlas-obsidian binary.",
-      "version": "5.6.0",
-      "category": "productivity"
-    },
-    {
-      "name": "atlas-obsidian-v2-exp",
-      "source": "./v2-exp",
-      "description": "Atlas V2, experimental: one Obsidian vault for the wiki, the threads, the sessions, and the changes of your work, backed by the atlas binary.",
-      "version": "0.1.0",
+      "description": "One Obsidian vault for the wiki, the threads, the sessions, and the changes of your work, backed by the atlas binary.",
+      "version": "6.0.0",
       "category": "productivity"
     }
   ]

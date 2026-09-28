@@ -1,38 +1,32 @@
 ---
 name: thread-stub
-description: "Open a thread and stop there: a card and a stub in the user's words, from a sentence, from notes waiting in the project's inbox, or in another project the atlas lists, with no questions asked. Use for add a thread, note this, stub this, remember to, open a thread, report a bug, idea for later, todo, inbox notes, open this in project X. To start the work now, thread-work."
+description: "Open a thread from a sentence, in the user's words, with no questions. Use for note this, stub this, remember to, idea for later, open a thread, report a bug, add a todo."
 ---
 
-# Open a thread
+# thread-stub
 
-A stub is where a thread begins: a short, loose note about an issue, a
-feature, or a chore. It costs nothing. It holds what the user said, as they
-said it; the thinking comes later, in the spec.
+A stub is the first words of a line of work, loose by design. It keeps the user's words
+as they gave them. The questions come later, in thread-spec.
 
-Tools: `inbox`, `thread`. Reads [threads.md](../thread/references/threads.md).
+Tools: `search`, `thread` open. References: [threads.md](../atlas/references/threads.md).
 
-## Three doors, one result
+## Procedure
 
-1. **A sentence.** Call `thread` with `text`: the user's words, verbatim.
-   Add `title` only when the first line would make a poor one. Add
-   `priority` or `phase` only when the user named them.
-2. **A note in the inbox.** `inbox` lists everything waiting, each with a
-   hint: `note` is yours, `source` is `wiki-ingest`'s. For each note call
-   `thread` with `from` and the note's path; its content becomes the stub and
-   the note is removed. A note that holds several ideas becomes several
-   threads: pass `text` for each and `from` on the last. Say which files you
-   read as notes before you open anything, because the hint is a guess.
-3. **Another project.** The same call with `project`. A new thread always
-   opens in the project named, or this one; nothing routes a new thread.
+1. `search` the open stubs for the same work: `types: [stub]`,
+   `state: {stage: [stub, spec, tasks]}`, and the request's words. When one matches,
+   offer to add the new words to its `## Notes` (with Edit), and stop if the user
+   agrees.
+2. Call `thread` with `action: open`: `text` is the user's words as given; `title` is a
+   short name for the work; `scope` is the repositories or areas the request names or
+   the conversation is about, or empty.
+3. Say the stub's link in one line.
 
-Ask nothing. Do not improve the text, research it, or plan it. When
-something you noticed during other work deserves a thread, open one in your
-own words and say that you did.
+Ask nothing else. A stub is loose by design.
 
-## Report
+## Gate
 
-Say the title, the id, and the stub's path.
+None.
 
 ## Hand off
 
-`thread-work` when the user wants to go further now; it picks the next stage.
+[thread-work](../thread-work/SKILL.md), when the user wants to start now.

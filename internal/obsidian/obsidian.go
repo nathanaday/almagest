@@ -1,4 +1,4 @@
-// Package obsidian reads and extends the desktop app's vault registry and opens manage.
+// Package obsidian reads and extends the desktop app's vault registry and opens vaults.
 //
 // Obsidian only opens vaults it already knows. It keeps that list in obsidian.json,
 // reads it once at launch, and rewrites it whenever its state changes. So a folder
@@ -180,12 +180,12 @@ func launch(args ...string) error {
 	return cmd.Run()
 }
 
-// Open asks the desktop to open a registered vault.
 // OpenPath opens one file of a vault Obsidian already knows.
 func OpenPath(path string) error {
 	return launch(OpenURI(path))
 }
 
+// Open asks the desktop to open a registered vault.
 func Open(vault string) error {
 	if err := launch(OpenURI(vault)); err != nil {
 		return fmt.Errorf("could not launch Obsidian; open this link by hand: %s", OpenURI(vault))

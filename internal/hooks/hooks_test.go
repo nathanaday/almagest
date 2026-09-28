@@ -1,460 +1,309 @@
-package hooks
+package hooks_test
 
 import (
 	"bytes"
 	"encoding/json"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/home"
-	"github.com/nathanaday/atlas-obsidian/internal/manage"
-	"github.com/nathanaday/atlas-obsidian/internal/project"
+	"github.com/nathanaday/atlas-obsidian/internal/change"
+	"github.com/nathanaday/atlas-obsidian/internal/hooks"
+	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/threads"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
-func patchInput(t *testing.T, cwd, patch string) *bytes.Reader {
-	t.Helper()
-	data, err := json.Marshal(map[string]any{
-		"cwd": cwd, "tool_name": "apply_patch",
-		"tool_input": map[string]string{"command": "*** Begin Patch\n" + patch + "\n*** End Patch"},
-	})
-	if err != nil {
-		t.Fatal(err)
-	}
-	return bytes.NewReader(data)
+const sid = "a1b2c3d4-5e6f-7a8b-9c0d-000000000001"
+
+type fixture struct {
+	t  *testing.T
+	tv *testvault.T
 }
 
-func TestCodexPatchGuard(t *testing.T) {
-	_, work := atlas(t, time.Now())
-	for _, tc := range []struct {
-		name, patch string
-		deny        bool
-	}{
-		{"code", "*** Update File: src/main.go\n@@\n-old\n+new", false},
-		{"add", "*** Add File: atlas/code/wiki/new.md\n+new", true},
-		{"delete", "*** Delete File: atlas/code/wiki/hot.md", true},
-		{"mixed", "*** Update File: src/main.go\n@@\n-old\n+new\n*** Update File: atlas/code/wiki/hot.md\n@@\n-old\n+new", true},
-		{"move in", "*** Update File: src/main.go\n*** Move to: atlas/code/wiki/new.md\n@@\n-old\n+new", true},
-		{"move out", "*** Update File: atlas/code/wiki/hot.md\n*** Move to: elsewhere.md\n@@\n-old\n+new", true},
-		{"identity", "*** Update File: atlas/code/project.json", true},
-		{"board", "*** Update File: atlas/code/threads/threads.md", true},
-		{"new stage", "*** Add File: atlas/code/threads/specs/new.md\n+new", true},
-		{"mirrored thread", "*** Update File: atlas/code/threads/projects/svc/specs/new.md\n@@\n-old\n+new", true},
-		{"raw", "*** Delete File: atlas/code/.raw/captured/source.md", true},
-		{"multiple protected", "*** Delete File: atlas/code/wiki/hot.md\n*** Delete File: atlas/code/wiki/index.md", true},
-		{"absolute", "*** Delete File: " + filepath.Join(work, "atlas/code/wiki/hot.md"), true},
-		{"body is data", "*** Add File: src/example.txt\n+*** Delete File: atlas/code/wiki/hot.md", false},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			var out bytes.Buffer
-			if err := Guard(patchInput(t, work, tc.patch), &out); err != nil {
-				t.Fatal(err)
-			}
-			if tc.deny {
-				if !json.Valid(out.Bytes()) || !strings.Contains(out.String(), `"permissionDecision":"deny"`) {
-					t.Fatalf("expected one denial object, got %s", out.String())
-				}
-			} else if out.Len() != 0 {
-				t.Fatalf("unexpected denial: %s", out.String())
-			}
-		})
-	}
+func setup(t *testing.T) *fixture {
+	return &fixture{t: t, tv: testvault.New(t)}
 }
 
-func TestCodexPatchTouchesEveryThread(t *testing.T) {
-	day := time.Date(2026, 9, 17, 12, 0, 0, 0, time.UTC)
-	_, work := atlas(t, day)
-	p, err := project.Open(work)
-	if err != nil {
-		t.Fatal(err)
-	}
-	var patch string
-	var ids []string
-	for _, title := range []string{"First", "Second"} {
-		th, err := threads.Start(p, threads.New{Title: title}, day)
-		if err != nil {
-			t.Fatal(err)
+func (f *fixture) env() hooks.Env {
+	return hooks.Env{Getenv: func(k string) string {
+		if k == vault.EnvHome {
+			return f.tv.Home.Root
 		}
-		ids = append(ids, th.ID)
-		patch += "*** Update File: " + p.Path(th.Docs[0].Path) + "\n@@\n-old\n+new\n"
+		return ""
+	}, Now: func() time.Time { return f.tv.Clock }}
+}
+
+// run runs a hook with an event and returns its output.
+func (f *fixture) run(command string, event map[string]any) string {
+	f.t.Helper()
+	if _, ok := event["session_id"]; !ok {
+		event["session_id"] = sid
 	}
+	if _, ok := event["cwd"]; !ok {
+		event["cwd"] = f.tv.V.Root
+	}
+	data, _ := json.Marshal(event)
 	var out bytes.Buffer
-	if err := Guard(patchInput(t, work, patch), &out); err != nil || out.Len() != 0 {
-		t.Fatalf("existing stage prose must be editable: %v %s", err, out.String())
-	}
-	if err := Touched(patchInput(t, work, patch), day.AddDate(0, 0, 3)); err != nil {
-		t.Fatal(err)
-	}
-	board, err := threads.Load(p)
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, id := range ids {
-		if got := board.Find(id).Updated; got != "2026-09-20" {
-			t.Errorf("%s updated %s", id, got)
-		}
-	}
-}
-
-// env answers ATLAS_OBSIDIAN_HOME with a temp path that does not exist, so a test that names
-// no home reads no atlas at all instead of the developer's ~/.atlas-obsidian.
-func env(t *testing.T, values map[string]string) Env {
-	t.Helper()
-	noAtlas := filepath.Join(t.TempDir(), "no-atlas")
-	return func(k string) string {
-		if k == home.EnvHome && values[k] == "" {
-			return noAtlas
-		}
-		return values[k]
-	}
-}
-
-// atlas makes a home with one project in a git repository, and returns the home and the
-// work folder.
-func atlas(t *testing.T, now time.Time) (home.Home, string) {
-	t.Helper()
-	if !gitx.Available() {
-		t.Skip("git is not installed")
-	}
-	root := t.TempDir()
-	h := home.Home{Root: filepath.Join(root, "home")}
-	cfg := h.Default()
-	work := filepath.Join(root, "code")
-	os.MkdirAll(filepath.Join(work, "src"), 0o755)
-	os.WriteFile(filepath.Join(work, "src", "main.go"), []byte("package main\n"), 0o644)
-	if _, err := manage.Init(h, cfg, work, project.Options{Name: "code", Description: "The web app."}, nil, false); err != nil {
-		t.Fatal(err)
-	}
-	return h, work
-}
-
-func run(t *testing.T, cwd string, e Env, context bool, now time.Time) string {
-	t.Helper()
-	var out bytes.Buffer
-	if err := SessionStart(strings.NewReader(`{"cwd":"`+cwd+`"}`), &out, e, context, now); err != nil {
-		t.Fatal(err)
+	if err := hooks.Run(command, bytes.NewReader(data), &out, f.env()); err != nil {
+		f.t.Fatalf("%s: %v", command, err)
 	}
 	return out.String()
 }
 
-func TestSessionStartInAProject(t *testing.T) {
-	now := time.Now()
-	h, work := atlas(t, now)
-	e := env(t, map[string]string{home.EnvHome: h.Root})
-	p, _ := project.Open(work)
-	text := run(t, filepath.Join(work, "src"), e, true, now)
-	for _, want := range []string{
-		"atlas-obsidian: project code at " + home.Display(work) + " (git, ",
-		"Description: The web app.",
-		"Wiki: atlas/code/wiki · ",
-		" pages · generic mode",
-		"The wiki has no page describing this work; the wiki-describe skill writes it.",
-		SearchSentence + " " + WriteSentence,
-		"Skills: " + Skills,
-		"Open threads: none. Open one with the thread-stub skill.",
-		"<vault-context>",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("missing %q in:\n%s", want, text)
+func denied(out string) bool { return strings.Contains(out, `"permissionDecision":"deny"`) }
+
+func edit(path, old string) map[string]any {
+	return map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": path, "old_string": old, "new_string": "x"}}
+}
+
+func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
+	f := setup(t)
+	f.tv.Write("Atlas.md", f.tv.Read("Atlas.md")+"\nEvery agent reads this.\n")
+	out := f.run("session-start", map[string]any{"source": "startup"})
+	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Open threads: none.", "Inbox: 0 files", "<vault-context>", "Every agent reads this."} {
+		if !strings.Contains(out, want) {
+			t.Errorf("context lacks %q:\n%s", want, out)
 		}
 	}
-	for _, absent := range []string{"type: meta", "Projects:", "knowledge base"} {
-		if strings.Contains(text, absent) {
-			t.Errorf("%q should not be there:\n%s", absent, text)
-		}
+	doc := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if !strings.Contains(doc, "status: running") || !strings.Contains(doc, "harness_id: "+sid) || !strings.Contains(doc, "> [!session] running") {
+		t.Fatalf("session:\n%s", doc)
 	}
-	// Context off, and the place named by the environment rather than the folder.
-	off := env(t, map[string]string{home.EnvHome: h.Root, project.EnvProject: work, "ATLAS_OBSIDIAN_SESSION_CONTEXT": "0"})
-	if text := run(t, "/nowhere", off, true, now); !strings.Contains(text, "atlas-obsidian: project code") || strings.Contains(text, "<vault-context>") {
-		t.Fatalf("the environment names the project, with context off:\n%s", text)
-	}
-	// Outside every project the hook is silent.
-	if text := run(t, t.TempDir(), env(t, nil), true, now); text != "" {
-		t.Fatalf("silent outside a project:\n%s", text)
-	}
-	// Threads, phases, a note, an unreadable page, task pages, and the page that describes
-	// the work.
-	if _, err := threads.CreatePhase(p, "Alpha", "", nil, now); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := threads.Start(p, threads.New{Title: "Fix the dialog", Text: "It quits on Enter.", Phase: "Alpha", Priority: "high"}, now); err != nil {
-		t.Fatal(err)
-	}
-	old := now.AddDate(0, 0, -20)
-	if _, err := threads.Start(p, threads.New{Title: "Stale one"}, old); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := threads.File(p, "Stale one", threads.Filing{Stage: threads.Plan, Text: "1. Go."}, old); err != nil {
-		t.Fatal(err)
-	}
-	os.WriteFile(p.Path("inbox/idea.md"), []byte("An idea."), 0o644)
-	os.WriteFile(p.Path("inbox/paper.pdf"), []byte("%PDF"), 0o644)
-	os.WriteFile(p.Path(project.SpecsDir+"/broken.md"), []byte("x"), 0o644)
-	head, _ := p.Work().Head()
-	os.MkdirAll(p.Path("wiki/entities"), 0o755)
-	os.WriteFile(p.Path("wiki/entities/code.md"), []byte("---\ntitle: code\ntype: entity\nentity_type: project\nproject: "+p.Config.ID+"\ncommit: "+head+"\nstatus: developing\ncreated: 2026-09-17\nupdated: 2026-09-17\ntags:\n  - entity\n---\n\n# code\n"), 0o644)
-	text = run(t, work, e, false, now)
-	for _, want := range []string{
-		"The work is described in wiki/entities/code.md at " + head[:7] + ", current.",
-		"Open threads: 2 (plan 1, spec 0, stub 1; 1 stale) in 1 phase. A thread moves stub, spec, plan, receipt",
-		"- [plan] Stale one (thr-",
-		" · stale\n",
-		"- [stub] Fix the dialog (thr-",
-		" · Alpha · high · updated " + now.Format("2006-01-02") + "\n",
-		"Inbox: 1 source for the wiki-ingest skill, 1 note for the thread-stub skill.",
-		"Not readable: threads/specs/broken.md (",
-	} {
-		if !strings.Contains(text, want) {
-			t.Errorf("missing %q in:\n%s", want, text)
-		}
-	}
-	if strings.Contains(text, "no page describing") {
-		t.Errorf("a described project:\n%s", text)
+	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
+		t.Fatalf("outside a vault a hook says nothing: %q", out)
 	}
 }
 
-func TestSessionStartReportsTheWikisCountsAndAnInterruptedOperation(t *testing.T) {
-	now := time.Now()
-	h, work := atlas(t, now)
-	e := env(t, map[string]string{home.EnvHome: h.Root})
-	p, _ := project.Open(work)
-	os.MkdirAll(p.Path("wiki/concepts"), 0o755)
-	training := project.Skeleton("concept", "Training", now)
-	training = strings.Replace(training, "## Related\n\n", "## Related\n\n[[Optimizer]], [[Backpropagation]]\n\n", 1)
-	os.WriteFile(p.Path("wiki/concepts/Training.md"), []byte(training), 0o644)
-	os.WriteFile(p.Path("wiki/concepts/Backpropagation.md"), []byte(project.Skeleton("concept", "Backpropagation", now)), 0o644)
-	text := run(t, work, e, false, now)
-	want := "Stubs: 1 page to fill (Backpropagation). Wanted: 1 linked page does not exist yet (Optimizer). Fill or seed them with the wiki-edit skill."
-	if !strings.Contains(text, want) {
-		t.Errorf("missing the counts in:\n%s", text)
+func TestGuardProtectsTheVault(t *testing.T) {
+	f := setup(t)
+	root := f.tv.V.Root
+	f.run("session-start", map[string]any{})
+	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "x", Title: "T"}, f.tv.Clock))
+	stub := root + "/" + r.View.Stub.Path
+	own := root + "/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	f.tv.Write("sessions/2026-09/2026-09-27 1400 ffffff.md", "---\nid: ses-ffffff\ntype: session\nharness_id: other\n---\n## Description\n")
+	cases := []struct {
+		name  string
+		event map[string]any
+		deny  bool
+	}{
+		{"a wiki page", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/concepts/X.md"}}, true},
+		{"a relative wiki path", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "wiki/concepts/X.md"}}, true},
+		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
+		{"a Base", edit(root+"/threads/Threads.base", "filters"), true},
+		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
+		{"a new thread document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/threads/T/T — Spec.md"}}, true},
+		{"a thread's frontmatter", edit(stub, "priority: normal"), true},
+		{"a thread's lead", edit(stub, "**Stub**"), true},
+		{"a thread's prose", edit(stub, "## Notes"), false},
+		{"another session's document", edit(root+"/sessions/2026-09/2026-09-27 1400 ffffff.md", "## Description"), true},
+		{"its own status", edit(own, "status: running"), true},
+		{"its own description", edit(own, "## Description\n"), false},
+		{"its own subagents", edit(own, "## Subagents"), true},
+		{"a note of the user's", edit(root+"/Ideas.md", "x"), false},
+		{"a codex patch into the wiki", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: wiki/notes.md\n*** End Patch"}}, true},
 	}
-	four := project.Skeleton("concept", "Four Wants", now)
-	four = strings.Replace(four, "## Related\n\n", "## Related\n\n[[Alpha]], [[Bravo]], [[Charlie]], [[Delta]]\n\n", 1)
-	os.WriteFile(p.Path("wiki/concepts/Four Wants.md"), []byte(four), 0o644)
-	if text = run(t, work, e, false, now); !strings.Contains(text, "Wanted: 5 linked pages do not exist yet (Alpha, Bravo, Charlie, …).") {
-		t.Errorf("missing the capped wanted list in:\n%s", text)
-	}
-	// An interrupted operation warns at start and at stop.
-	os.MkdirAll(p.Path(project.MetaDir), 0o755)
-	os.WriteFile(p.Path(project.MetaDir+"/inflight.json"), []byte(`{"operation_id":"save-x","paths":[]}`), 0o644)
-	if text = run(t, work, e, false, now); !strings.Contains(text, "WARNING: operation save-x was interrupted") {
-		t.Fatalf("recovery warning:\n%s", text)
-	}
-	var out bytes.Buffer
-	Stop(strings.NewReader(`{"cwd":"`+work+`"}`), &out, e)
-	if !strings.Contains(out.String(), `"systemMessage"`) || !strings.Contains(out.String(), "save-x") {
-		t.Fatalf("stop:\n%s", out.String())
-	}
-	out.Reset()
-	Stop(strings.NewReader(`{"cwd":"`+t.TempDir()+`"}`), &out, env(t, nil))
-	if out.Len() != 0 {
-		t.Fatal("stop is silent outside a project")
+	for _, c := range cases {
+		if got := denied(f.run("guard", c.event)); got != c.deny {
+			t.Errorf("%s: denied %v, want %v", c.name, got, c.deny)
+		}
 	}
 }
 
-func TestSessionStartHealsTheConfig(t *testing.T) {
-	now := time.Now()
-	h, work := atlas(t, now)
-	e := env(t, map[string]string{home.EnvHome: h.Root})
-	clone := filepath.Join(t.TempDir(), "clone")
-	os.MkdirAll(clone, 0o755)
-	if _, err := project.Init(clone, project.Options{Name: "clone"}, now); err != nil {
-		t.Fatal(err)
+func (f *fixture) ok(r *threads.Result, err error) *threads.Result {
+	f.t.Helper()
+	if err != nil {
+		f.t.Fatal(err)
 	}
-	if text := run(t, clone, e, false, now); !strings.Contains(text, "The atlas config did not list this project; it does now.") {
-		t.Errorf("missing the added line:\n%s", text)
+	return r
+}
+
+func TestTheThreadRule(t *testing.T) {
+	f := setup(t)
+	edge := f.tv.Repo("p3-edge", nil)
+	cloud := f.tv.Repo("p3-cloud", nil)
+	f.tv.Page("area", "p3", nil, "")
+	f.tv.Page("repository", "p3-edge", map[string]any{"path": edge, "parent": "[[p3]]"}, "")
+	f.tv.Page("repository", "p3-cloud", map[string]any{"path": cloud, "parent": "[[p3]]"}, "")
+	f.tv.Commit()
+	f.run("session-start", map[string]any{})
+	write := map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": edge + "/main.go", "old_string": "a"}}
+	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "needs an open thread that covers it") {
+		t.Fatalf("no thread: %s", out)
 	}
-	if cfg, _ := h.Load(); !cfg.HasProject(clone) {
-		t.Fatal("the config lists the clone now")
+	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "cloud work", Title: "Cloud", Scope: []string{"p3-cloud"}}, f.tv.Clock))
+	f.bind("open", r, nil)
+	if !denied(f.run("guard", write)) {
+		t.Fatal("a thread about another repository does not count")
 	}
-	copied := filepath.Join(t.TempDir(), "copied")
-	os.MkdirAll(filepath.Join(copied, project.Dir, "code"), 0o755)
-	orig, _ := project.Open(work)
-	data, _ := os.ReadFile(orig.Path(project.Marker))
-	os.WriteFile(filepath.Join(copied, project.Dir, "code", project.Marker), data, 0o644)
-	if text := run(t, copied, e, false, now); !strings.Contains(text, "The atlas config listed this project at another path; it now points here.") {
-		t.Errorf("missing the moved line:\n%s", text)
+	r = f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "all of p3", Title: "Everything", Scope: []string{"p3"}}, f.tv.Clock))
+	f.bind("open", r, nil)
+	if denied(f.run("guard", write)) {
+		t.Fatal("a thread scoped to an area above the repository covers it")
+	}
+	f.run("touched", map[string]any{"tool_name": "Bash", "cwd": cloud, "tool_input": map[string]any{"command": "git log --oneline"}})
+	if strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-cloud]]") {
+		t.Fatal("reading a repository is no edit")
+	}
+	f.run("touched", map[string]any{"tool_name": "Bash", "cwd": cloud, "tool_input": map[string]any{"command": "cat >> main.go <<'EOF'\nx\nEOF"}})
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-cloud]]") {
+		t.Fatal("a shell write in a repository lands in the session's record")
+	}
+	f.run("touched", write)
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-edge]]") {
+		t.Fatal("the session lists the repository it edited")
+	}
+	f.ok(threads.File(f.tv.V, r.View.Stub.ID, "receipt", "done", "completed", f.tv.Clock))
+	if !denied(f.run("guard", write)) {
+		t.Fatal("a closed thread does not count")
 	}
 }
 
-func TestGuard(t *testing.T) {
-	if !gitx.Available() {
-		t.Skip("git is not installed")
+// bind runs the touched hook for a thread call, with the tool's result as the host
+// passes it: content blocks that hold the JSON.
+func (f *fixture) bind(action string, r *threads.Result, input map[string]any) {
+	f.t.Helper()
+	data, _ := json.Marshal(r.View)
+	if input == nil {
+		input = map[string]any{}
 	}
-	work := filepath.Join(t.TempDir(), "work")
-	os.MkdirAll(work, 0o755)
-	res, err := project.Init(work, project.Options{Name: "work"}, time.Now())
+	input["action"] = action
+	f.run("touched", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__thread", "tool_input": input, "tool_response": []any{map[string]any{"type": "text", "text": string(data)}}})
+}
+
+func TestTouchedBindsTasksAndChanges(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "x", Title: "Work"}, f.tv.Clock))
+	r = f.ok(threads.Tasks(f.tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "First", Text: "x"}}, f.tv.Clock))
+	r = f.ok(threads.Task(f.tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "start"}, f.tv.Clock))
+	f.bind("task", r, map[string]any{"task": "T1", "thread": r.View.Stub.ID, "do": "start"})
+	session := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if !strings.Contains(session, `threads: ["[[Work]]"]`) || !strings.Contains(session, `tasks: ["[[Work — T1 First]]"]`) {
+		t.Fatalf("session:\n%s", session)
+	}
+	if !strings.Contains(f.tv.Read("threads/Work/Work — T1 First.md"), "active: true") {
+		t.Fatal("the task is active")
+	}
+
+	pv, err := change.Propose(f.tv.V, change.Plan{Title: "Add A", Writes: []change.Write{{Op: "create", Type: "concept", Title: "A", Fields: map[string]any{"description": "a"}}}}, f.tv.Tick(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
-	p := res.Project
-	if _, err := threads.Start(p, threads.New{Title: "Fix it"}, time.Now()); err != nil {
-		t.Fatal(err)
+	data, _ := json.Marshal(pv)
+	tool := "mcp__plugin_atlas-obsidian_atlas__change"
+	f.run("touched", map[string]any{"tool_name": tool, "tool_input": map[string]any{"action": "propose"}, "tool_response": json.RawMessage(data)})
+	if !strings.Contains(f.tv.Read(pv.Ref.Path), `session: "[[2026-09-27 1432 a1b2c3]]"`) {
+		t.Fatal("the change names its session")
 	}
-	cases := map[string]bool{
-		p.Path("wiki/concepts/A.md"):                 true,
-		p.Path("wiki/hot.md"):                        true,
-		p.Path("wiki/projects/svc/entities/A.md"):    true,
-		p.Path(".raw/captured/x.pdf"):                true,
-		p.Path(project.Marker):                       true,
-		p.Path(project.MetaDir + "/lock"):            true,
-		p.Path(project.ThreadsIndex):                 true,
-		p.Path("threads/Fix it.md"):                  true,
-		p.Path("threads/archive/Fix it.md"):          true,
-		p.Path(project.SpecsDir + "/New.md"):         true,
-		p.Path(project.StubsDir + "/Fix it.md"):      false,
-		p.Path(project.PhasesDir + "/Alpha.md"):      false,
-		p.Path("inbox/paper.md"):                     false,
-		p.Path("ideas/note.md"):                      false,
-		p.Path(project.SpecsDir + "/notes.txt"):      false,
-		filepath.Join(work, "src", "main.go"):        false,
-		filepath.Join(work, "threads", "threads.md"): false,
-		filepath.Join(t.TempDir(), "wiki", "x.md"):   false,
+	apply := map[string]any{"tool_name": tool, "tool_input": map[string]any{"action": "apply", "id": pv.Ref.ID}}
+	if out := f.run("guard", apply); !denied(out) || !strings.Contains(out, "wait for the user's yes") {
+		t.Fatalf("the gate: %s", out)
 	}
-	for path, deny := range cases {
-		var out bytes.Buffer
-		if err := Guard(strings.NewReader(`{"tool_name":"Write","tool_input":{"file_path":"`+path+`"}}`), &out); err != nil {
-			t.Fatal(err)
-		}
-		if got := strings.Contains(out.String(), `"deny"`); got != deny {
-			t.Errorf("%s: deny=%v, got %q", path, deny, out.String())
-		}
+	f.tv.Tick(time.Minute)
+	f.run("prompt", map[string]any{"prompt": "<agent-message from=\"a22df3\">\n[Subagent hand-back] …"})
+	if !denied(f.run("guard", apply)) {
+		t.Fatal("a subagent's hand-back is not the user's turn")
 	}
-	var out bytes.Buffer
-	Guard(strings.NewReader(`{"tool_name":"Edit","cwd":"`+p.Atlas()+`","tool_input":{"file_path":"wiki/hot.md"}}`), &out)
-	if !strings.Contains(out.String(), "deny") {
-		t.Fatal("relative paths resolve against cwd")
-	}
-	out.Reset()
-	Guard(strings.NewReader(`{"tool_name":"Write","tool_input":{"file_path":"`+p.Path(project.ThreadsIndex)+`"}}`), &out)
-	if !strings.Contains(out.String(), "are generated") {
-		t.Errorf("the board's reason: %q", out.String())
-	}
-	out.Reset()
-	Guard(strings.NewReader(`{"tool_name":"Write","tool_input":{"file_path":"`+p.Path(project.PlansDir+"/New.md")+`"}}`), &out)
-	if !strings.Contains(out.String(), "a new plan comes from the thread tool (id, stage: plan, text)") {
-		t.Errorf("a new document's reason: %q", out.String())
-	}
-	out.Reset()
-	Guard(strings.NewReader(`{"tool_name":"NotebookEdit","tool_input":{"notebook_path":"`+p.Path("wiki/x.ipynb")+`"}}`), &out)
-	if !strings.Contains(out.String(), "deny") {
-		t.Fatal("a notebook path is guarded too")
-	}
-	out.Reset()
-	Guard(strings.NewReader(`{"tool_name":"Write","tool_input":{}}`), &out)
-	if out.Len() != 0 {
-		t.Fatal("no path, no decision")
+	f.tv.Tick(time.Minute)
+	f.run("prompt", map[string]any{"prompt": "yes"})
+	if denied(f.run("guard", apply)) {
+		t.Fatal("after the user's turn apply passes")
 	}
 }
 
-func TestTouchedMarksTheThread(t *testing.T) {
-	if !gitx.Available() {
-		t.Skip("git is not installed")
+func TestReadOnlyAgents(t *testing.T) {
+	f := setup(t)
+	agent := func(typ string, event map[string]any) map[string]any {
+		event["agent_id"] = "9f07d1aa"
+		event["agent_type"] = "atlas-obsidian:" + typ
+		return event
 	}
-	work := filepath.Join(t.TempDir(), "work")
-	os.MkdirAll(work, 0o755)
-	day := time.Date(2026, 9, 17, 12, 0, 0, 0, time.Local)
-	res, err := project.Init(work, project.Options{Name: "work"}, day)
-	if err != nil {
-		t.Fatal(err)
+	bash := func(cmd string) map[string]any {
+		return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": cmd}}
 	}
-	p := res.Project
-	th, err := threads.Start(p, threads.New{Title: "Fix it"}, day)
-	if err != nil {
-		t.Fatal(err)
+	cases := []struct {
+		name  string
+		event map[string]any
+		deny  bool
+	}{
+		{"extract writes", agent("wiki-extract", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "/tmp/x"}}), true},
+		{"draft proposes", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "propose"}}), true},
+		{"draft searches", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__search", "tool_input": map[string]any{"text": "x"}}), false},
+		{"audit runs a shell", agent("wiki-audit", bash("ls")), true},
+		{"review reads the log", agent("thread-review", bash("git log --oneline -5")), false},
+		{"review reads another repository", agent("thread-review", bash(`git -C "/code/p3 edge" show abc123`)), false},
+		{"review chains a command", agent("thread-review", bash("git -C /x log && rm -rf /")), true},
+		{"review pipes", agent("thread-review", bash("git log | head")), true},
+		{"review writes a file", agent("thread-review", bash("git diff --output=/tmp/x")), true},
+		{"review runs other git", agent("thread-review", bash("git commit -m x")), true},
 	}
-	in := `{"tool_name":"Edit","cwd":"` + work + `","tool_input":{"file_path":"` + p.Path(th.Docs[0].Path) + `"}}`
-	if err := Touched(strings.NewReader(in), day.AddDate(0, 0, 3)); err != nil {
-		t.Fatal(err)
-	}
-	board, _ := threads.Load(p)
-	if got := board.Find(th.ID).Updated; got != "2026-09-20" {
-		t.Fatalf("updated %s", got)
-	}
-	// Any other file is none of its business.
-	if err := Touched(strings.NewReader(`{"tool_input":{"file_path":"`+filepath.Join(work, "main.go")+`"}}`), day); err != nil {
-		t.Fatal(err)
-	}
-}
-
-func TestSessionStartSyncsTheMembers(t *testing.T) {
-	now := time.Now()
-	h, work := atlas(t, now)
-	cfg, err := h.Load()
-	if err != nil {
-		t.Fatal(err)
-	}
-	member := filepath.Join(filepath.Dir(work), "svc")
-	os.MkdirAll(member, 0o755)
-	if _, err := manage.Init(h, cfg, member, project.Options{Name: "svc"}, nil, false); err != nil {
-		t.Fatal(err)
-	}
-	if err := manage.EditProject(cfg, work, manage.Edit{AddMembers: []string{"svc"}}, now); err != nil {
-		t.Fatal(err)
-	}
-	e := env(t, map[string]string{home.EnvHome: h.Root})
-	text := run(t, filepath.Join(work, "src"), e, false, now)
-	if !strings.Contains(text, "Members: svc mirrored under atlas/code/wiki/projects/ (") || !strings.Contains(text, "synced now") {
-		t.Fatalf("members line:\n%s", text)
-	}
-	p, _ := project.Open(work)
-	if _, err := os.Stat(p.Path("wiki/projects/svc/svc.md")); err != nil {
-		t.Fatal("the session start did not sync")
-	}
-	if text := run(t, filepath.Join(work, "src"), e, false, now); strings.Contains(text, "synced now") {
-		t.Fatalf("a second start has nothing to sync:\n%s", text)
-	}
-	var out bytes.Buffer
-	Guard(strings.NewReader(`{"tool_name":"Edit","tool_input":{"file_path":"`+p.Path("wiki/projects/svc/svc.md")+`"}}`), &out)
-	if !strings.Contains(out.String(), "rewritten by sync") {
-		t.Fatalf("the guard names the mirror: %s", out.String())
-	}
-}
-
-func TestSessionStartSaysWhenThreadsAreOff(t *testing.T) {
-	now := time.Now()
-	h, work := atlas(t, now)
-	if err := project.UpdateConfig(work, "threads", now, func(c *project.Config) error { c.Threads = false; return nil }); err != nil {
-		t.Fatal(err)
-	}
-	e := env(t, map[string]string{home.EnvHome: h.Root})
-	text := run(t, work, e, false, now)
-	if !strings.Contains(text, "Threads: off in this project.") || strings.Contains(text, "Open threads") {
-		t.Fatalf("got:\n%s", text)
-	}
-}
-
-func TestSessionStartCountsTheMembersThreads(t *testing.T) {
-	now := time.Now()
-	h, work := atlas(t, now)
-	member := filepath.Join(filepath.Dir(work), "svc")
-	os.MkdirAll(member, 0o755)
-	res, err := project.Init(member, project.Options{Name: "svc"}, now)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := threads.Start(res.Project, threads.New{Title: "Fix it"}, now); err != nil {
-		t.Fatal(err)
-	}
-	cfg, _ := h.Load()
-	cfg.AddProject(member)
-	h.Save(cfg)
-	if err := project.UpdateConfig(work, "members", now, func(c *project.Config) error { c.Members = []string{res.Project.Config.ID}; return nil }); err != nil {
-		t.Fatal(err)
-	}
-	e := env(t, map[string]string{home.EnvHome: h.Root})
-	text := run(t, work, e, false, now)
-	for _, want := range []string{"and their threads under atlas/code/threads/projects/", "Members' open threads: svc 1 (plan 0, spec 0, stub 1)."} {
-		if !strings.Contains(text, want) {
-			t.Fatalf("missing %q in:\n%s", want, text)
+	for _, c := range cases {
+		if got := denied(f.run("guard", c.event)); got != c.deny {
+			t.Errorf("%s: denied %v, want %v", c.name, got, c.deny)
 		}
 	}
-	p, _ := project.Open(work)
-	if _, err := os.Stat(p.Path("threads/projects/svc/stubs/Fix it.md")); err != nil {
-		t.Fatal("the hook did not mirror the member's threads")
+}
+
+func TestSubagentsAndTheEndOfASession(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "x", Title: "Work"}, f.tv.Clock))
+	f.bind("open", r, nil)
+	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
+	f.run("touched", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract", "tool_name": "Read"})
+	f.run("subagent-stop", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
+	parent := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if strings.Count(parent, "wiki-extract") != 1 || !strings.Contains(parent, "· ended 14:32") {
+		t.Fatalf("a worker is one line:\n%s", parent)
+	}
+	f.run("subagent-start", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
+	child := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md")
+	if !strings.Contains(child, `parent: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(child, `threads: ["[[Work]]"]`) {
+		t.Fatalf("a writing subagent inherits the thread:\n%s", child)
+	}
+	f.run("notify", map[string]any{"notification_type": "permission_prompt"})
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: waiting") {
+		t.Fatal("waiting")
+	}
+	f.run("subagent-stop", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md"), "status: ended") {
+		t.Fatal("the subagent's document ends")
+	}
+	f.run("session-end", map[string]any{"reason": "exit"})
+	if s := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"); !strings.Contains(s, "status: ended") {
+		t.Fatalf("ended:\n%s", s)
+	}
+	if !strings.Contains(f.tv.Read(r.View.Stub.Path), "active: false") {
+		t.Fatal("an ended session lets the thread go")
+	}
+}
+
+func TestStopRemindsOnce(t *testing.T) {
+	f := setup(t)
+	repo := f.tv.Repo("p3-edge", nil)
+	f.tv.Page("repository", "p3-edge", map[string]any{"path": repo}, "")
+	f.run("session-start", map[string]any{})
+	f.run("touched", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/x.go"}})
+	out := f.run("stop", map[string]any{})
+	if !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "## Description") {
+		t.Fatalf("stop: %s", out)
+	}
+	if out := f.run("stop", map[string]any{}); out != "" {
+		t.Fatalf("once: %s", out)
+	}
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: idle") {
+		t.Fatal("idle")
+	}
+}
+
+func TestPromptNamesTheOpenNote(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	f.tv.Write("Ideas.md", "x")
+	f.tv.Write(".obsidian/workspace.json", `{"main":{"id":"m","type":"leaf","state":{"state":{"file":"Ideas.md"}}},"active":"m"}`)
+	if out := f.run("prompt", map[string]any{"prompt": "what is this"}); out != "Open in Obsidian: [[Ideas]]\n" {
+		t.Fatalf("prompt: %q", out)
 	}
 }

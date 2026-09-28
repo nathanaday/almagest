@@ -1,122 +1,99 @@
-# atlas-obsidian
+# Atlas
 
-A wiki and the state of the work, in every project.
-
-[![License: MIT](https://img.shields.io/badge/license-MIT-2563eb.svg)](LICENSE)
-[![Go](https://img.shields.io/badge/Go-1.24+-00ADD8.svg?logo=go&logoColor=white)](go.mod)
-[![Claude Code plugin](https://img.shields.io/badge/Claude%20Code-plugin-7c3aed.svg)](.claude-plugin/plugin.json)
-[![Codex plugin](https://img.shields.io/badge/Codex-plugin-10a37f.svg)](.codex-plugin/plugin.json)
-[![Version](https://img.shields.io/badge/version-5.6.0-d97745.svg)](.claude-plugin/plugin.json)
+Status: in development. The 5.x design (a project folder in every repository, and a
+terminal view) is retired; its code is on the `v1` branch.
 
 ## About
 
-`atlas-obsidian` keeps a markdown wiki inside the project. A hook runs when you
-start Claude Code or Codex anywhere in the repository. It hands the session the
-project's description, the wiki's recent context, the open threads, and the files
-waiting in the inbox.
+Working with agents on long projects fails in two ways. You delegate and lose track of
+the work, or you spend your energy keeping documents current. Atlas keeps every document
+of your work in one Obsidian vault, and the agents write most of it for you:
 
-![Every project on one screen](docs/examples/TUI-project-nav.png)
+- what you know: the **wiki**, with a citation for every claim;
+- what you do: the **threads**, one document per stage of each line of work;
+- what your agents do now and did before: one **session** document per agent session;
+- every edit an agent made to the wiki: a **change** document you approve.
 
-*`atlas-obsidian` TUI. Evoke the TUI anywhere and browse your atlas-powered projects*
-
-# Features
-
-### Ingest huge documents into the wiki
-
-![Ingesting a 351-page slide deck](docs/examples/ingesting-huge-slide-deck.png)
-
-The skills use parallel agents to shard and ingest content accurarately. Once hundreds of pages have been ingested, you can make quick, cheap queries to the knowledge base using the Go+MCP core.
-
-### View your knowledge base in Obsidian
-
-Ingestion writes ordinary wikilinks, so Obsidian's graph view and its backlinks
-work on the result. A source page links to the concepts it covers, and each
-concept page lists the sources that cite it.
-
-![The graph around a paper](docs/examples/huge-kb-focus-1.png) 
-
-![The graph around a concept](docs/examples/huge-kb-focus-2.png)
-
-### Connect projects into a high level knowledge base
-
-![A hub wiki over four member projects](docs/examples/huge-kb-high-level.png)
-
-A project may list other projects as members. Its wiki then mirrors each member's wiki using the built in sync system. Updating the children knowledge base propagates the changes upward to the parent hub.
-
-Design and reasons:
-[docs/members-design.md](docs/members-design.md).
+You start an agent in the vault. It finds the repository you mean through the vault's
+areas and repository pages, and it works there in plain view. You read and edit every
+step in Obsidian.
 
 ## Quickstart
 
+Atlas is three parts that share one version: the `atlas` binary (Go, one static file),
+the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that `atlas vault
+init` puts in the vault.
+
 ### Prerequisites
 
-- [Claude Code](https://claude.com/claude-code) or
-  [Codex CLI](https://learn.chatgpt.com/docs/cli), with `claude` or `codex` on
-  your PATH. Codex needs a release with `codex plugin` and `/hooks` support.
-- git, and Go 1.24 or newer to build the binary.
-- macOS or Linux.
-- [Obsidian](https://obsidian.md) is optional. The files are plain Markdown and
-  read fine anywhere, but the folder is laid out for it and ships a CSS snippet
-  that colors each kind of folder.
+- macOS or Linux, `git`, Go 1.24 to build.
+- Claude Code (or Codex), and Obsidian.
 
-### Install
+### Build and install
 
 ```bash
-git clone https://github.com/nathanaday/atlas-obsidian.git
-cd atlas-obsidian
-make install
-
-atlas-obsidian setup --agent claude --plugin-source "$PWD"   # or --agent codex
+make install        # builds ~/.atlas/bin/atlas
+~/.atlas/bin/atlas setup                         # adds the agent plugin to Claude Code
+~/.atlas/bin/atlas setup --agent codex           # or to Codex
 ```
 
-`make install` puts `atlas-obsidian` in `$(go env GOPATH)/bin`, usually
-`~/go/bin`; add that to your PATH if it is not there. 
+To try a checkout without installing the plugin, start Claude Code with
+`claude --plugin-dir /path/to/atlas-obsidian`.
 
-Use `make install` rather than `go install` so the binary is stamped with its version, which
-`atlas-obsidian doctor` compares against the plugin's.
+### Make a vault
 
+Start Claude Code in an empty folder and say "set up atlas". Or from a shell:
+
+```bash
+atlas vault init --path ~/notes/work --name Work --areas few \
+  --description "Work notes: the p3 product and the tools around it."
+atlas open --register     # opens the vault in Obsidian; turn on the Atlas plugin once
+```
+
+## Usage
+
+Start the agent in the vault and ask in plain words. The `atlas` skill routes each
+request.
+
+- "Link the repository at ~/code/p3-edge under a new area p3." The agent proposes a
+  change; you say yes, or press Apply in Obsidian.
+- "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
+- "In p3-edge, score boxes by motion." The agent finds or opens a thread, writes a spec
+  and tasks, stops for your yes at each, does the work, and files a receipt.
+- "Ingest the inbox." Files you dropped in `inbox/` become cited wiki pages.
+- "What should I work on?" The agent ranks the open threads.
+
+The same actions work from a shell:
+
+```bash
+atlas vault                      # the state of the vault
+atlas thread                     # the board
+atlas search "remote update" --scope p3
+atlas change show chg-r8m3tb     # a proposed change
+atlas lint                       # the health check
+```
+
+In Obsidian, `threads/Threads.base` is the board, `sessions/Sessions.base` shows what
+runs now, and `changes/Changes.base` lists the changes that wait for you.
 
 ## Patterns and conventions
 
-Full reasoning in [docs/core-design.md](docs/core-design.md).
+The design is in [`docs/design/`](docs/design/Atlas%20V2.md);
+start with `Atlas V2.md`.
 
-- **One operation, one commit.** A hook refuses the agent's file-edit tools
-  anywhere under `wiki/`. The agent prepares a plan instead; you see what it
-  creates, replaces, and deletes, and approving it makes one git commit.
-  `atlas-obsidian undo` takes that commit back by restoring the files it touched,
-  and refuses if you have changed one of them since.
-- **The folder is yours.** Anything you typed in Obsidian is committed first, as
-  its own operation, so an undo can never reach your edits. Every git command an
-  operation runs is limited to `wiki/`, `.raw/`, `inbox/`, and `project.json`, so
-  an apply never stages your source code.
-- **Code owns what code can derive.** The wiki's log, the ledger of sources, the
-  thread cards, the board that lists them, and the opening callout of each thread
-  document are all written by the binary. The agent writes the prose.
-- **Ids travel; paths stay.** A project's `project.json` holds no path. The paths
-  live in `~/.atlas-obsidian/config.json`, which `init` appends to. The atlas
-  never scans your disk, so a project can live anywhere. Move the folder, and the
-  next session started inside it repairs the entry.
+- Everything is a document with an id and a type. No database and no state folder.
+- Code owns what code can derive: ids, stages, statuses, links, hashes, the first callout
+  of each document. The model writes prose.
+- The wiki changes only through a change document, and apply waits for your turn.
+- An edit inside a linked repository needs an open thread that covers it.
+- Hooks keep a document for every session, so the record does not depend on the model.
 
-## Documentation
+## Layout
 
-- Every command and its options — [docs/usage.md](docs/usage.md)
-- How the engine works and why — [docs/core-design.md](docs/core-design.md)
-- The layout of a project — [docs/v4-design.md](docs/v4-design.md)
-- How threads work — [docs/threads-design.md](docs/threads-design.md)
-- The skills, how they fit, and what each owns — [docs/skills.md](docs/skills.md)
-- One wiki over several projects — [docs/members-design.md](docs/members-design.md)
-
-External: [Obsidian](https://obsidian.md) ·
-[Claude Code plugins](https://code.claude.com/docs/en/plugins) ·
-[Codex plugin packaging](https://developers.openai.com/plugins/build/plugins) ·
-[MCP Go SDK](https://github.com/modelcontextprotocol/go-sdk)
-
-## Credits
-
-The vault layout, the inbox workflow, and the skills derive from
-[claude-obsidian](https://github.com/AgriciDaniel/claude-obsidian) by
-AgriciDaniel (MIT), which follows
-[Andrej Karpathy's LLM Wiki pattern](https://gist.github.com/karpathy/442a6bf555914893e9891c11519de94f).
-Obsidian syntax references draw on
-[kepano/obsidian-skills](https://github.com/kepano/obsidian-skills).
-atlas-obsidian is released under the [MIT License](LICENSE).
+- The binary: `cmd/atlas/`, `internal/` (one package per part; `internal/mcpserver` serves
+  the eight tools, `internal/hooks` the nine hooks, `internal/cli` every command).
+- The agent plugin: `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`,
+  `.claude-plugin/`, `.codex-plugin/`.
+- The Obsidian plugin: `obsidian/` (TypeScript); `make obsidian` builds it into the
+  binary.
+- Notes for agents that work on this code: [CLAUDE.md](CLAUDE.md).

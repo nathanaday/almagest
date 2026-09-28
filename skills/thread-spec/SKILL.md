@@ -1,72 +1,41 @@
 ---
 name: thread-spec
-description: "Turn a thread's stub into a spec: read the stub, research the code and the wiki, decide what can be decided, ask only what cannot, and file the spec document. Use for spec this, define this thread, brainstorm, think this through, weigh the options, tradeoffs, what should this be, flesh out the stub, requirements, design this."
+description: "Turn a thread's stub into a spec: what will be true when the work is done, and why. Research first; ask only what research cannot answer. Use for spec this, define this thread, what should this be, design this, flesh out the stub, requirements."
 ---
 
-# Write a thread's spec
+# thread-spec
 
-The spec says what will be true when the thread is done, and why. It is the
-agreement between the user and whoever does the work. It is quick to write:
-most of the work is reading, and the user answers only what reading cannot.
+A spec says what is true when the work is done, in a list a reviewer can check, with the
+decisions and their reasons. Most of it comes from reading the code and the wiki. The
+user answers only what reading cannot decide and a wrong guess would change.
 
-Tools: `status`, `threads`, `thread`. Reads
-[threads.md](../thread/references/threads.md).
+Tools: `thread` (show, file), `context`, `search`. References:
+[threads.md](../atlas/references/threads.md),
+[conventions.md](../atlas/references/conventions.md).
 
-## Understand before you ask
+## Procedure
 
-1. Call `threads` with the `id`. Read the stub.
-2. Find the answers yourself: the code the thread touches, its tests, the
-   AGENTS.md and CLAUDE.md of the work, recent commits, and the wiki (the page that
-   describes the work, `wiki/hot.md`, a Grep for the subject). A question the
-   code answers is not a question for the user.
-3. Decide what you can decide. Where one option is right, take it and give
-   the reason in the spec. The user reads the spec and can disagree there.
-4. Keep the evidence straight while you decide. Separate what you **observed**
-   (read in the code, the wiki, a test, a measurement), what you **inferred**
-   from it (say the step), what is **unknown** (and could change the
-   decision), and what is the user's **preference**. For a decision that is
-   hard to reverse, write the strongest case against it before you take it.
+1. `thread` show: read the stub and its notes.
+2. `context` for each scope of the thread: the instruction files, the repository facts,
+   and the candidate policies.
+3. Research: read the code the work touches, and the wiki (`search`, then Read) for what
+   the vault already knows.
+4. Decide what the research decides. Ask only what it cannot answer and a wrong guess
+   would change, in one message, each question with a recommended answer. Ask no fixed
+   number of questions.
+5. **The conventions step** ([conventions.md](../atlas/references/conventions.md)): for
+   each candidate policy, decide whether it applies to this thread. Keep the ones that
+   do, each with one line on why.
+6. `thread` file with `part: spec` and the text: `## Goal`, `## Done when` (a list a
+   reviewer can check), `## Decisions` (each with its reason), `## Out of scope`,
+   `## Conventions`, `## Open questions`.
 
-## Ask only what changes the spec
+## Gate
 
-A question goes to the user when the answer is theirs alone (a preference,
-a priority, a constraint outside the code) and a wrong guess would change
-what is built. There is no right number of questions: none is common, and
-ten are fine for a thread that needs them. Ask them together in one
-message, each with the answer you recommend, so the user can reply in a
-line. Do not ask for approval section by section.
-
-When the stub holds several independent pieces of work, say so first and
-offer a thread for each (`thread-stub`). Spec the one the user picks.
-
-## What the spec holds
-
-Write for someone who has not seen this conversation. Use what the thread
-needs and leave out the rest:
-
-- The problem, and who has it.
-- What done looks like, as behavior someone can check.
-- The experience: how it should feel to use, read, or operate. State the
-  intent, so that whoever builds it can make good choices you did not
-  foresee.
-- What is out of scope.
-- Constraints: what must not change, what it must work with.
-- Decisions made, each with its reason, and the options turned down.
-- How it will be verified: the tests or checks that prove it.
-- Open questions that the work itself will answer.
-
-The spec says what and why. How belongs to the plan. Keep the spec free of
-file-by-file instructions: a spec that dictates the code removes the
-judgment of the one who writes the code.
-
-## File it
-
-Call `thread` with `id`, `stage: spec`, and the spec as `text`. The thread
-is now at its spec. Tell the user the path, give the spec in a few lines,
-and name the decisions you made for them. Revise with Edit when they answer.
-A better title found on the way: `thread` with `title`.
+Link the spec and say its goal and its done-when list in a few lines. Wait for the user
+to agree or to edit it. An edit in Obsidian counts: read the spec again before you go
+on.
 
 ## Hand off
 
-The spec is a gate: the user agrees before the plan starts. Then
-`thread-plan`, or `thread-work` to go on through the stages.
+[thread-plan](../thread-plan/SKILL.md).

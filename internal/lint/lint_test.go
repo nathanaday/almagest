@@ -1,571 +1,109 @@
-package lint
+package lint_test
 
 import (
-	"fmt"
-	"os"
-	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/project"
+	"github.com/nathanaday/atlas-obsidian/internal/lint"
+	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 )
 
-const front = "---\ntitle: %s\ntype: concept\nstatus: seed\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags:\n  - x\n---\n"
-
-func mkpage(title, body string) string {
-	return strings.Replace(front, "%s", title, 1) + body
-}
-
-func fixture(t *testing.T, files map[string]string) string {
+func run(t *testing.T, tv *testvault.T, opts lint.Options) *lint.Findings {
 	t.Helper()
-	root := t.TempDir()
-	for rel, text := range files {
-		p := filepath.Join(root, filepath.FromSlash(rel))
-		os.MkdirAll(filepath.Dir(p), 0o755)
-		os.WriteFile(p, []byte(text), 0o644)
-	}
-	return root
-}
-
-func TestLinksOrphansAndIndex(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":           mkpage("Index", "# Index\n\n- [[Alpha]]\n- [[Gone]]\n- [[Shared]]\n"),
-		"wiki/log.md":             mkpage("Log", "## 2026-01-01 — op\n\n- [[Beta]]\n"),
-		"wiki/concepts/Alpha.md":  mkpage("Alpha", "# Alpha\n\nSee [[Beta]] and [[Alpha#Missing]] and [[Beta#^blk]]. Code: `[[NotALink]]`.\n\n```\n[[AlsoNot]]\n```\n\n## Empty\n\n## Filled\n\ntext\n"),
-		"wiki/concepts/Beta.md":   mkpage("Beta", "# Beta\n\nA line. ^blk\n\n[md](Alpha.md) and [ext](https://x.y/z) and [[Al|alias]]\n"),
-		"wiki/concepts/Shared.md": mkpage("Shared", "# Shared\n\ntext\n"),
-		"wiki/entities/Shared.md": mkpage("Shared", "# Shared\n\ntext\n"),
-		"wiki/concepts/Orphan.md": "# Orphan\n\nno frontmatter\n",
-		"wiki/meta/x.md":          mkpage("Meta", "# Meta\n\ntext\n"),
-		".raw/hidden.md":          "[[Alpha]]",
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)})
+	opts.Now = testvault.Now
+	f, err := lint.Run(tv.Index(), opts)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if r.Summary.PagesScanned != 8 {
-		t.Fatalf("pages %d", r.Summary.PagesScanned)
-	}
-	var dead []string
-	for _, f := range r.DeadLinks {
-		dead = append(dead, f.Source+"→"+f.Target+":"+f.Reason)
-	}
-	want := []string{
-		"wiki/concepts/Alpha.md→Alpha#Missing:heading-not-found",
-		"wiki/index.md→Gone:target-not-found",
-	}
-	if strings.Join(dead, "|") != strings.Join(want, "|") {
-		t.Fatalf("dead links %v", dead)
-	}
-	if len(r.AmbiguousTargets) != 1 || r.AmbiguousTargets[0].Target != "Shared" || len(r.AmbiguousTargets[0].Candidates) != 2 {
-		t.Fatalf("ambiguous %+v", r.AmbiguousTargets)
-	}
-	if len(r.DuplicateBasenames) != 1 || r.DuplicateBasenames[0].Basename != "Shared" {
-		t.Fatalf("duplicates %+v", r.DuplicateBasenames)
-	}
-	if len(r.StaleIndexEntries) != 2 {
-		t.Fatalf("stale %+v", r.StaleIndexEntries)
-	}
-	var orphans []string
-	for _, f := range r.Orphans {
-		orphans = append(orphans, f.Path)
-	}
-	// Beta is linked from Alpha (and log, which does not count); Orphan and both Shared pages have nothing but the ambiguous index link.
-	if strings.Join(orphans, ",") != "wiki/concepts/Orphan.md,wiki/concepts/Shared.md,wiki/entities/Shared.md" {
-		t.Fatalf("orphans %v", orphans)
-	}
-	var unindexed []string
-	for _, f := range r.UnindexedPages {
-		unindexed = append(unindexed, f.Path)
-	}
-	if strings.Join(unindexed, ",") != "wiki/concepts/Beta.md,wiki/concepts/Orphan.md,wiki/concepts/Shared.md,wiki/entities/Shared.md" {
-		t.Fatalf("unindexed %v", unindexed)
-	}
-	if len(r.MissingFrontmatter) != 1 || r.MissingFrontmatter[0].Path != "wiki/concepts/Orphan.md" || r.MissingFrontmatter[0].HasFrontmatter || len(r.MissingFrontmatter[0].MissingFields) != 6 {
-		t.Fatalf("frontmatter %+v", r.MissingFrontmatter)
-	}
-	if len(r.EmptySections) != 1 || r.EmptySections[0].Heading != "Empty" || r.EmptySections[0].Path != "wiki/concepts/Alpha.md" {
-		t.Fatalf("empty %+v", r.EmptySections)
-	}
-	if len(r.WantedPages) != 1 || r.WantedPages[0].Title != "Al" || r.WantedPages[0].Links[0].Source != "wiki/concepts/Beta.md" {
-		t.Fatalf("wanted %+v", r.WantedPages)
-	}
-	if r.Summary.IssuesFound != 2+1+1+3+4+1+1+2 {
-		t.Fatalf("issues %d: %s", r.Summary.IssuesFound, r.Markdown())
-	}
-	md := r.Markdown()
-	if !strings.Contains(md, "## Dead links (2)") || !strings.Contains(md, "`wiki/index.md:") {
-		t.Fatalf("markdown:\n%s", md)
-	}
+	return f
 }
 
-func TestOverlayAndProblems(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md": mkpage("Index", "# Index\n\n- [[Alpha]]\n"),
-		"wiki/Alpha.md": mkpage("Alpha", "# Alpha\n\ntext\n"),
-	})
-	overlay := map[string][]byte{
-		"wiki/Alpha.md": nil,
-		"wiki/New.md":   []byte(mkpage("New", "# New\n\n[[Alpha]] [[Index]]\n\n## Todo\n")),
-	}
-	r, err := Run(root, Options{Overlay: overlay})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if r.Summary.PagesScanned != 2 {
-		t.Fatalf("pages %d", r.Summary.PagesScanned)
-	}
-	problems := r.Problems([]string{"wiki/New.md"})
-	joined := strings.Join(problems, "\n")
-	for _, want := range []string{`links to "Alpha"`, `section "Todo" is empty`, "not linked from any index"} {
-		if !strings.Contains(joined, want) {
-			t.Errorf("missing %q in %q", want, joined)
+func has(f *lint.Findings, check, title, text string) bool {
+	for _, x := range f.Findings {
+		if x.Check == check && x.Doc.Title == title && strings.Contains(x.Message, text) {
+			return true
 		}
 	}
-	if strings.Contains(joined, "index.md") {
-		t.Fatal("problems must be limited to the given paths")
+	return false
+}
+
+func TestNewVaultLintsClean(t *testing.T) {
+	tv := testvault.New(t)
+	f := run(t, tv, lint.Options{})
+	if len(f.Findings) != 0 {
+		t.Fatalf("a new vault has findings: %+v", f.Findings)
+	}
+	if f.Checked != 1 {
+		t.Fatalf("checked %d; Atlas.md is the one document", f.Checked)
 	}
 }
 
-func TestWantedPagesAndNearMatches(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":                mkpage("Index", "# Index\n\n- [[Atlas]]\n- [[Gradient Clipping]]\n"),
-		"wiki/log.md":                  mkpage("Log", "## 2026-01-01 — op\n\n- [[Deleted Page]]\n"),
-		"wiki/folds/Fold.md":           mkpage("Fold", "# Fold\n\n[[Deleted Page]]\n"),
-		"wiki/concepts/CNN.md":         mkpage("CNN", "# CNN\n\ntext\n"),
-		"wiki/concepts/Transformer.md": mkpage("Transformer", "# T\n\n[[Chapter 1]] [[Atlas]] [[CNN]]\n"),
-		"wiki/concepts/Chapter 1.md":   mkpage("Chapter 1", "# Chapter 1\n\n[[vanishing gradient problem|VGP]] [[Transformers]]\n"),
-		"wiki/entities/Atlas.md":       mkpage("Atlas", "# Atlas\n\n[[vanishing gradient problem]] and [[Vanishing Gradient Problem#Causes]].\n\n[[Atals]] [[Chapter 2]] [[RNN]] ![[missing.png]] [[notes/Elsewhere]] [[What? Why]]\n"),
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dead []string
-	for _, f := range r.DeadLinks {
-		dead = append(dead, f.Source+"→"+f.Target+":"+f.Suggestion)
-	}
-	wantDead := []string{
-		"wiki/concepts/Chapter 1.md→Transformers:Transformer",
-		"wiki/entities/Atlas.md→Atals:Atlas",
-		"wiki/entities/Atlas.md→missing.png:",
-		"wiki/entities/Atlas.md→notes/Elsewhere:",
-		"wiki/entities/Atlas.md→What? Why:",
-		"wiki/folds/Fold.md→Deleted Page:",
-		"wiki/index.md→Gradient Clipping:",
-		"wiki/log.md→Deleted Page:",
-	}
-	if strings.Join(dead, "|") != strings.Join(wantDead, "|") {
-		t.Fatalf("dead links\n got %v\nwant %v", dead, wantDead)
-	}
-	var wanted []string
-	for _, w := range r.WantedPages {
-		wanted = append(wanted, w.Title)
-	}
-	// Short names match only when equal, and names with different digits never match.
-	if strings.Join(wanted, "|") != "Chapter 2|RNN|vanishing gradient problem" {
-		t.Fatalf("wanted %v", wanted)
-	}
-	if len(r.WantedPages[2].Links) != 3 {
-		t.Fatalf("every link to a wanted page is kept: %+v", r.WantedPages[2])
-	}
-	if r.Summary.WantedPages != 3 || r.Summary.CategoryCounts["dead_links"] != 8 {
-		t.Fatalf("summary %+v", r.Summary)
-	}
-	if _, counted := r.Summary.CategoryCounts["wanted_pages"]; counted {
-		t.Fatal("wanted pages are not findings")
-	}
-	md := r.Markdown()
-	for _, want := range []string{"## Wanted pages (3)", "- vanishing gradient problem ← `wiki/concepts/Chapter 1.md:12`", `did you mean "Atlas"?`} {
-		if !strings.Contains(md, want) {
-			t.Errorf("missing %q in markdown:\n%s", want, md)
-		}
-	}
-	if !strings.Contains(string(r.JSON()), `"suggestion": "Atlas"`) {
-		t.Fatal("the suggestion is in the JSON report")
-	}
-	problems := strings.Join(r.Problems([]string{"wiki/entities/Atlas.md"}), "\n")
-	for _, want := range []string{`links to "vanishing gradient problem", which has no page yet`, `did you mean "Atlas"?`} {
-		if !strings.Contains(problems, want) {
-			t.Errorf("missing %q in problems:\n%s", want, problems)
-		}
-	}
-}
-
-func TestStubs(t *testing.T) {
-	skeleton := "---\ntitle: Seed\ntype: concept\nstatus: seed\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags:\n  - concept\n---\n\n# Seed\n\n## Definition\n\n<!-- later -->\n\n## Sources\n\n"
-	root := fixture(t, map[string]string{
-		"wiki/index.md":                mkpage("Index", "# Index\n\n- [[Written]]\n"),
-		"wiki/log.md":                  mkpage("Log", "## 2026-01-01 — op\n\n- [[Only Logged]]\n"),
-		"wiki/concepts/Written.md":     mkpage("Written", "# Written\n\n[[Seed]] [[Clicked]] [[Filled]]\n"),
-		"wiki/concepts/Seed.md":        skeleton,
-		"wiki/concepts/Filled.md":      strings.Replace(skeleton, "## Sources\n\n", "## Sources\n\nA paper.\n", 1),
-		"wiki/concepts/Lonely Seed.md": strings.ReplaceAll(skeleton, "Seed", "Lonely Seed"),
-		"wiki/Clicked.md":              "",
-		"wiki/Only Logged.md":          "\n",
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var stubs []string
-	for _, s := range r.Stubs {
-		stubs = append(stubs, fmt.Sprintf("%s empty=%v from=%s", s.Path, s.Empty, strings.Join(s.LinkedFrom, ",")))
-	}
-	wantStubs := []string{
-		"wiki/Clicked.md empty=true from=wiki/concepts/Written.md",
-		"wiki/concepts/Lonely Seed.md empty=false from=",
-		"wiki/concepts/Seed.md empty=false from=wiki/concepts/Written.md",
-	}
-	if strings.Join(stubs, "|") != strings.Join(wantStubs, "|") {
-		t.Fatalf("stubs\n got %v\nwant %v", stubs, wantStubs)
-	}
-	paths := func(findings []PathFinding) string {
-		var out []string
-		for _, f := range findings {
-			out = append(out, f.Path)
-		}
-		return strings.Join(out, ",")
-	}
-	// A stub is not unindexed and has no empty sections; a filled page is and has.
-	if got := paths(r.UnindexedPages); got != "wiki/concepts/Filled.md,wiki/Only Logged.md" {
-		t.Fatalf("unindexed %s", got)
-	}
-	if len(r.EmptySections) != 1 || r.EmptySections[0].Path != "wiki/concepts/Filled.md" || r.EmptySections[0].Heading != "Definition" {
-		t.Fatalf("empty sections %+v", r.EmptySections)
-	}
-	// An empty file a page links to needs no frontmatter yet; one only the log links to does.
-	if len(r.MissingFrontmatter) != 1 || r.MissingFrontmatter[0].Path != "wiki/Only Logged.md" {
-		t.Fatalf("missing frontmatter %+v", r.MissingFrontmatter)
-	}
-	// A stub nothing links to is still an orphan.
-	if got := paths(r.Orphans); got != "wiki/concepts/Lonely Seed.md,wiki/Only Logged.md" {
-		t.Fatalf("orphans %s", got)
-	}
-	if r.Summary.Stubs != 3 || len(r.WantedPages) != 0 {
-		t.Fatalf("summary %+v wanted %+v", r.Summary, r.WantedPages)
-	}
-	if _, counted := r.Summary.CategoryCounts["stubs"]; counted {
-		t.Fatal("stubs are not findings")
-	}
-	md := r.Markdown()
-	for _, want := range []string{"## Stubs to fill (3)", "- `wiki/Clicked.md` (empty file) ← wiki/concepts/Written.md"} {
-		if !strings.Contains(md, want) {
-			t.Errorf("missing %q in markdown:\n%s", want, md)
-		}
-	}
-}
-
-// A link that names a file, not a page, stays a dead link: a page named "note.md" would
-// be the file "note.md.md", which does not resolve the link.
-func TestALinkWithAFileExtensionIsNotAWantedPage(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":          mkpage("Index", "# Index\n\n- [[Alpha]]\n"),
-		"wiki/concepts/Alpha.md": mkpage("Alpha", "# Alpha\n\n[[note.md]]\n\n[[board.canvas]]\n\n[[table.base]]\n\n[[plain]]\n"),
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var wanted []string
-	for _, w := range r.WantedPages {
-		wanted = append(wanted, w.Title)
-	}
-	if strings.Join(wanted, ",") != "plain" {
-		t.Fatalf("wanted %v", wanted)
-	}
-	var dead []string
-	for _, f := range r.DeadLinks {
-		dead = append(dead, f.Target)
-	}
-	if strings.Join(dead, ",") != "note.md,board.canvas,table.base" {
-		t.Fatalf("dead links %v", dead)
-	}
-}
-
-// A seed page with nothing under its headings is a stub, and a stub the user wrote by hand
-// still owes its frontmatter; only an empty file is excused.
-func TestASeedStubKeepsItsMissingFrontmatterFinding(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":          mkpage("Index", "# Index\n\n- [[Half]]\n- [[Empty]]\n"),
-		"wiki/concepts/Half.md":  "---\ntitle: Half\ntype: concept\nstatus: seed\n---\n\n# Half\n\n## Definition\n",
-		"wiki/concepts/Empty.md": "",
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 15, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var stubs []string
-	for _, s := range r.Stubs {
-		stubs = append(stubs, s.Path)
-	}
-	if strings.Join(stubs, ",") != "wiki/concepts/Empty.md,wiki/concepts/Half.md" {
-		t.Fatalf("stubs %v", stubs)
-	}
-	if len(r.MissingFrontmatter) != 1 || r.MissingFrontmatter[0].Path != "wiki/concepts/Half.md" ||
-		!r.MissingFrontmatter[0].HasFrontmatter ||
-		strings.Join(r.MissingFrontmatter[0].MissingFields, ",") != "created,updated,tags" {
-		t.Fatalf("missing frontmatter %+v", r.MissingFrontmatter)
-	}
-}
-
-func TestLedgerErrors(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md": mkpage("Index", "# I\n"),
-		"wiki/meta/ledgers/source-ledger.json": `{"schema":"atlas-obsidian.source-ledger.v1","generated_at":"2026-01-01T00:00:00Z","sources":{
-			"src-a":{"title":"A","origin":{"kind":"file","locator":".raw/captured/a.pdf"},"authority":"unknown","review_status":"active","pages":["wiki/sources/A.md"]}}}`,
-	})
-	r, _ := Run(root, Options{})
-	if len(r.LedgerErrors) != 2 {
-		t.Fatalf("ledger errors %+v", r.LedgerErrors)
-	}
-	os.WriteFile(filepath.Join(root, "wiki", "meta", "ledgers", "source-ledger.json"), []byte("{"), 0o644)
-	r, _ = Run(root, Options{})
-	if len(r.LedgerErrors) != 1 {
-		t.Fatalf("broken ledger %+v", r.LedgerErrors)
-	}
-}
-
-// A finding in a new project is the layout's own fault, and the user can do nothing about it.
-func TestNewProjectHasNoFindings(t *testing.T) {
-	if !gitx.Available() {
-		t.Skip("git is not installed")
-	}
-	asOf := time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)
-	for _, mode := range project.Modes {
-		work := filepath.Join(t.TempDir(), string(mode))
-		if err := os.MkdirAll(work, 0o755); err != nil {
-			t.Fatal(err)
-		}
-		res, err := project.Init(work, project.Options{Mode: mode}, asOf)
-		if err != nil {
-			t.Fatal(err)
-		}
-		r, err := Run(res.Project.Atlas(), Options{AsOf: asOf})
-		if err != nil {
-			t.Fatal(err)
-		}
-		if r.Summary.IssuesFound != 0 || r.Summary.WantedPages != 0 || r.Summary.Stubs != 0 {
-			t.Errorf("project in %s mode:\n%s", mode, r.Markdown())
-		}
-	}
-}
-
-func TestALinkPrefersTheWiki(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":          mkpage("Index", "# Index\n\n- [[Alpha]]\n"),
-		"wiki/concepts/Alpha.md": mkpage("Alpha", "# Alpha\n\ntext\n"),
-		"threads/Alpha.md":       "---\ntype: thread\n---\n\ncard\n",
-		"threads/stubs/Alpha.md": "---\ntype: stub\n---\n\nstub\n",
-		"threads/specs/Alpha.md": "---\ntype: spec\n---\n\nspec\n",
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 14, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(r.AmbiguousTargets) != 0 || len(r.DeadLinks) != 0 {
-		t.Fatalf("ambiguous %+v dead %+v", r.AmbiguousTargets, r.DeadLinks)
-	}
-	// The thread pages are not wiki pages, so they are neither scanned nor orphans.
-	if r.Summary.PagesScanned != 2 || len(r.Orphans) != 0 {
-		t.Fatalf("scanned %d orphans %+v", r.Summary.PagesScanned, r.Orphans)
-	}
-}
-
-func TestFolderIndexPagesCatalogAndAreNotOrphans(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":             mkpage("Index", "# Index\n\n- [[Alpha]]\n"),
-		"wiki/concepts/Alpha.md":    mkpage("Alpha", "# Alpha\n\ntext\n"),
-		"wiki/concepts/Beta.md":     mkpage("Beta", "# Beta\n\n[[Alpha]]\n"),
-		"wiki/canvases/canvases.md": mkpage("Canvases", "# Canvases\n\n- [[Beta]]\n"),
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(r.Orphans) != 0 || len(r.UnindexedPages) != 0 {
-		t.Fatalf("orphans %v unindexed %v", r.Orphans, r.UnindexedPages)
-	}
-}
-
-func TestExcludeAndFrontmatterYAMLError(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":           mkpage("Index", "# I\n\n[[Scratch]]\n"),
-		"wiki/scratch/Scratch.md": "---\ntitle: [unclosed\n---\n# S\n",
-	})
-	r, _ := Run(root, Options{})
-	if len(r.ReadErrors) != 1 || len(r.DeadLinks) != 0 {
-		t.Fatalf("yaml error should be a read error, not missing frontmatter: %+v %+v", r.ReadErrors, r.MissingFrontmatter)
-	}
-	r, _ = Run(root, Options{Exclude: []string{"wiki/scratch/*"}})
-	if r.Summary.PagesScanned != 1 || len(r.DeadLinks) != 1 {
-		t.Fatalf("exclude: %+v", r.Summary)
-	}
-}
-
-// Pages under wiki/tasks/ are ordinary pages: nothing checks them as tasks, and the
-// index catalogs them like any other.
-func TestTaskPagesAreOrdinaryPages(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":          mkpage("Index", "# Index\n\n- [[Old task]]\n"),
-		"wiki/tasks/Old task.md": "---\ntype: task\ntitle: Old task\nstatus: done\ncreated: 2026-08-01\nupdated: 2026-08-01\ntags:\n  - task\ntask_id: task-20260801-aaaa\n---\n\n# Old task\n\nx\n",
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 1, 0, 0, 0, 0, time.Local)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if len(r.Orphans) != 0 || len(r.UnindexedPages) != 0 || len(r.DeadLinks) != 0 {
-		t.Fatalf("orphans %v unindexed %v dead %v", r.Orphans, r.UnindexedPages, r.DeadLinks)
-	}
-}
-
-func TestMirroredPagesAreTargetsNotFindings(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":                         mkpage("Index", "# Index\n\n- [[Alpha]]\n"),
-		"wiki/concepts/Alpha.md":                mkpage("Alpha", "# Alpha\n\nSee [[wiki/projects/svc/entities/Config|Config]].\n"),
-		"wiki/projects/projects.md":             mkpage("Projects", "# Projects\n\n| [[wiki/projects/svc/svc\\|svc]] |\n"),
-		"wiki/projects/svc/svc.md":              "---\nproject: \"id-svc\"\n---\n# svc\n\n[[wiki/projects/svc/entities/Config|Config]]\n",
-		"wiki/projects/svc/entities/Config.md":  "---\ntitle: Config\nproject: \"id-svc\"\n---\n# Config\n\n## Empty\n\n[[Nowhere]] and [[Alpha]] and [[wiki/projects/svc/overview|Overview]].\n",
-		"wiki/projects/svc/overview.md":         "# Overview\n\ntext\n",
-		"wiki/projects/other/entities/Alpha.md": "# Alpha\n\ntext\n",
-	})
-	os.WriteFile(filepath.Join(root, project.Marker), []byte(`{"schema":"`+project.Schema+`","id":"hub","name":"hub","mode":"generic","members":["id-svc","id-gone"]}`), 0o644)
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 21, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	var dead []string
-	for _, f := range r.DeadLinks {
-		dead = append(dead, f.Source+"→"+f.Target)
-	}
-	if strings.Join(dead, "|") != "wiki/projects/svc/entities/Config.md→Nowhere" {
-		t.Fatalf("dead links %v", dead)
-	}
-	if len(r.WantedPages) != 0 {
-		t.Fatalf("a mirrored page's dead link wants nothing: %+v", r.WantedPages)
-	}
-	// Two Alphas, two overviews: not duplicates, because the mirrors are another wiki's.
-	if len(r.DuplicateBasenames) != 0 || len(r.Orphans) != 0 || len(r.UnindexedPages) != 0 || len(r.MissingFrontmatter) != 0 || len(r.EmptySections) != 0 {
-		t.Fatalf("findings about mirrored pages: %s", r.Markdown())
-	}
-	// A bare [[Alpha]] from a mirrored page is ambiguous, and the report says so.
-	if len(r.AmbiguousTargets) != 1 || r.AmbiguousTargets[0].Source != "wiki/projects/svc/entities/Config.md" {
-		t.Fatalf("ambiguous %+v", r.AmbiguousTargets)
-	}
-	var mirror []string
-	for _, f := range r.MirrorErrors {
-		mirror = append(mirror, f.Path+": "+f.Message)
-	}
-	want := []string{
-		project.Marker + ": member id-gone has no mirror under wiki/projects/; run sync",
-		"wiki/projects/other: mirror has no root page; run sync",
-	}
-	if strings.Join(mirror, "|") != strings.Join(want, "|") {
-		t.Fatalf("mirror errors %v", mirror)
-	}
-}
-
-func TestVaultRewrite(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":          mkpage("Index", "# Index\n"),
-		"wiki/concepts/Alpha.md": mkpage("Alpha", "# Alpha\n"),
-		"wiki/concepts/Beta.md":  mkpage("Beta", "# Beta\n"),
-		"wiki/canvases/m.canvas": "{}",
-		"wiki/img/a b.png":       "x",
-	})
-	v, err := LoadVault(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	prefix := func(resolved string) string {
-		if resolved == "wiki/concepts/Beta.md" {
-			return ""
-		}
-		return "wiki/projects/x/" + strings.TrimPrefix(resolved, "wiki/")
-	}
-	in := "[[Alpha]] [[Alpha#H|see]] ![[Alpha]] [[Beta]] [[Gone]] [[m.canvas]] ![[a b.png]] [md](Alpha.md) [rel](./Beta.md) [img](../img/a%20b.png) [ext](https://x.y) `[[Alpha]]`\n\n```\n[[Alpha]]\n```\n<!-- [[Alpha]] -->\n"
-	got := v.Rewrite("wiki/concepts/Alpha.md", in, prefix)
-	want := "[[wiki/projects/x/concepts/Alpha|Alpha]] [[wiki/projects/x/concepts/Alpha#H|see]] ![[wiki/projects/x/concepts/Alpha|Alpha]] [[Beta]] [[Gone]] [[wiki/projects/x/canvases/m.canvas|m.canvas]] ![[wiki/projects/x/img/a b.png|a b.png]] [md](wiki/projects/x/concepts/Alpha.md) [rel](./Beta.md) [img](wiki/projects/x/img/a%20b.png) [ext](https://x.y) `[[Alpha]]`\n\n```\n[[Alpha]]\n```\n<!-- [[Alpha]] -->\n"
-	if got != want {
-		t.Fatalf("got\n%s\nwant\n%s", got, want)
-	}
-}
-
-func TestVaultPagesNameKeyAndNear(t *testing.T) {
-	root := fixture(t, map[string]string{
-		"wiki/index.md":          mkpage("Index", "# Index\n\n[[Alpha]]\n"),
-		"wiki/concepts/Alpha.md": "---\ntitle: Alpha\ntype: concept\nstatus: seed\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags:\n  - x\n  - y\naliases:\n  - First\n---\n# Alpha\n\nSee [[Beta]] and [[Gone]] and `[[Code]]`.\n\n## Part Two\n\ntext\n",
-		"wiki/concepts/Beta.md":  "# Beta\n\nno frontmatter\n",
-	})
-	v, err := LoadVault(root)
-	if err != nil {
-		t.Fatal(err)
-	}
-	pages := v.Pages()
-	if len(pages) != 3 {
-		t.Fatalf("pages %d", len(pages))
-	}
-	alpha := pages[0]
-	if alpha.Path != "wiki/concepts/Alpha.md" || alpha.Title != "Alpha" || alpha.Type != "concept" {
-		t.Fatalf("alpha %+v", alpha)
-	}
-	if strings.Join(alpha.Aliases, ",") != "First" || strings.Join(alpha.Tags, ",") != "x,y" || strings.Join(alpha.Headings, ",") != "alpha,part two" {
-		t.Fatalf("alpha %+v", alpha)
-	}
-	if strings.Contains(alpha.Text, "title: Alpha") || strings.Contains(alpha.Text, "[[Code]]") || !strings.Contains(alpha.Text, "See [[Beta]]") {
-		t.Fatalf("text %q", alpha.Text)
-	}
-	if len(alpha.Links) != 2 || alpha.Links[0] != (Link{Target: "Beta", Resolved: "wiki/concepts/Beta.md"}) || alpha.Links[1] != (Link{Target: "Gone"}) {
-		t.Fatalf("links %+v", alpha.Links)
-	}
-	if beta := pages[1]; beta.Title != "Beta" || beta.Type != "" {
-		t.Fatalf("beta %+v", beta)
-	}
-	if NameKey("CS513 Course-Project!") != "cs513courseproject" {
-		t.Fatalf("key %q", NameKey("CS513 Course-Project!"))
-	}
-	for _, c := range []struct {
-		a, b string
-		want bool
-	}{
-		{"Backpropagation", "backpropagation", true},
-		{"Backpropagation", "Backpropogation", true},
-		{"Alpha", "Alpah", true},
-		{"Alpha", "Beta", false},
-		{"CS513", "CS566", false},
-		{"", "x", false},
+func TestChecks(t *testing.T) {
+	tv := testvault.New(t)
+	repo := tv.Repo("p3-edge", nil)
+	tv.Page("area", "p3", map[string]any{"parent": "[[p3 loop]]"}, "")
+	tv.Page("area", "p3 loop", map[string]any{"parent": "[[p3]]"}, "")
+	tv.Page("repository", "p3-edge", map[string]any{"path": repo, "parent": "[[p3]]"}, "")
+	tv.Page("repository", "gone", map[string]any{"path": tv.Dir + "/nowhere"}, "")
+	tv.Page("concept", "Motion scoring", map[string]any{"scope": "[[Nowhere]]", "status": "shaky"}, "Links [[Missing page]] and `[[not a link]]`.\n")
+	tv.Page("concept", "Lonely", map[string]any{"sources": []string{"[[Motion scoring]]"}}, "")
+	tv.Page("entity", "Motion", nil, "see [[Motion scoring]]\n")
+	tv.Write("scratchpad/Motion scoring.md", "a scratch note with the same title\n")
+	tv.Write("threads/X/X — Spec.md", "---\nid: spc-aaaaaa\ntype: spec\nthread: \"[[X]]\"\nthread_id: thr-zzzzzz\ncreated: 2026-09-27\nupdated: 2026-09-27\n---\n")
+	f := run(t, tv, lint.Options{})
+	for _, want := range []struct{ check, title, text string }{
+		{"scope", "p3", "loops"},
+		{"repository-path", "gone", "is gone"},
+		{"scope", "Motion scoring", "[[Nowhere]] names no document"},
+		{"schema", "Motion scoring", `status: is "shaky"`},
+		{"dead-link", "Motion scoring", "[[Missing page]]"},
+		{"duplicate-title", "Motion scoring", "scratchpad/Motion scoring.md"},
+		{"uncited", "Motion", "sources are empty"},
+		{"orphan", "Lonely", "no other document"},
+		{"thread", "X — Spec", "not a stub"},
 	} {
-		if got := Near(c.a, c.b); got != c.want {
-			t.Errorf("Near(%q, %q) = %v", c.a, c.b, got)
+		if !has(f, want.check, want.title, want.text) {
+			t.Errorf("no %s finding on %s with %q", want.check, want.title, want.text)
+		}
+	}
+	if has(f, "dead-link", "Motion scoring", "not a link") {
+		t.Error("a link in code is not a link")
+	}
+	if f.Findings[0].Severity != lint.Error {
+		t.Error("errors come first")
+	}
+	quick := run(t, tv, lint.Options{Quick: true})
+	for _, x := range quick.Findings {
+		if x.Severity != lint.Error || x.Check == "dead-link" && strings.Contains(x.Message, "line") {
+			t.Errorf("a quick run makes only frontmatter error checks: %+v", x)
 		}
 	}
 }
 
-func TestUncitedListsContentPagesWithoutASource(t *testing.T) {
-	src := "---\ntitle: Paper\ntype: source\nstatus: seed\ncreated: 2026-01-01\nupdated: 2026-01-01\ntags:\n  - x\n---\n# Paper\n\ntext\n"
-	root := fixture(t, map[string]string{
-		"wiki/index.md":            mkpage("Index", "# Index\n\n- [[Cited]]\n- [[Listed]]\n- [[Bare]]\n- [[Paper]]\n- [[Seed]]\n"),
-		"wiki/sources/Paper.md":    src,
-		"wiki/concepts/Cited.md":   mkpage("Cited", "# Cited\n\nFrom [[Paper]].\n"),
-		"wiki/concepts/Listed.md":  strings.Replace(mkpage("Listed", "# Listed\n\ntext\n"), "tags:", "sources:\n  - \"[[Paper]]\"\ntags:", 1),
-		"wiki/concepts/Bare.md":    mkpage("Bare", "# Bare\n\nA claim with no source. See [[Cited]].\n"),
-		"wiki/concepts/Seed.md":    strings.Replace(mkpage("Seed", "# Seed\n"), "status: seed", "status: seed", 1),
-		"wiki/projects/m/Other.md": mkpage("Other", "# Other\n\nMirrored, not ours.\n"),
-	})
-	r, err := Run(root, Options{AsOf: time.Date(2026, 9, 12, 0, 0, 0, 0, time.UTC)})
-	if err != nil {
-		t.Fatal(err)
+func TestScopeLimitsTheRun(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Page("area", "p3", nil, "")
+	tv.Page("area", "home", nil, "")
+	tv.Page("concept", "In p3", map[string]any{"scope": "[[p3]]"}, "")
+	tv.Page("concept", "At home", map[string]any{"scope": "[[home]]"}, "")
+	f := run(t, tv, lint.Options{Scope: "p3"})
+	for _, x := range f.Findings {
+		if x.Doc.Title == "At home" || x.Doc.Title == "home" {
+			t.Fatalf("a scoped run checks only its scope: %+v", x)
+		}
 	}
-	var got []string
-	for _, f := range r.Uncited {
-		got = append(got, f.Path)
+	if !has(f, "uncited", "In p3", "") {
+		t.Fatal("the scope's own pages are checked")
 	}
-	if strings.Join(got, ",") != "wiki/concepts/Bare.md" || r.Summary.Uncited != 1 {
-		t.Fatalf("uncited %v, summary %d", got, r.Summary.Uncited)
-	}
-	if !strings.Contains(r.Markdown(), "## Uncited") {
-		t.Fatalf("markdown:\n%s", r.Markdown())
+}
+
+func TestPendingAndStaleChanges(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Page("source", "Old paper", map[string]any{"sha256": "abcdef0123456789", "file": "[[x.pdf]]", "created": "2026-09-01"}, "")
+	tv.Write("changes/2026-09/2026-09-25 Waiting.md", "---\nid: chg-bbbbbb\ntype: change\ncreated: 2026-09-25\nupdated: 2026-09-25\nstatus: proposed\nproposed: 2026-09-25T10:00:00\n---\n")
+	f := run(t, tv, lint.Options{Now: testvault.Now.Add(time.Hour)})
+	if !has(f, "change-stale", "2026-09-25 Waiting", "proposed") {
+		t.Error("a change proposed two days ago is stale")
 	}
 }

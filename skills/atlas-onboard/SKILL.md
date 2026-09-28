@@ -1,117 +1,43 @@
 ---
 name: atlas-onboard
-description: "Make a folder a project in one guided flow: a blank folder gets its wiki, its threads, and a git repository; a long-lived repository or folder of documents also gets the page that describes it, a wiki structure the user approves, and threads for the work already in flight (TODO and FIXME markers, roadmap documents, open issues). Use for onboard this, onboard this repo, new project, init here, make this a project, set up a wiki here, set up atlas, adopt this codebase, start a project."
+description: "Make a new Atlas vault: ask its name, folder, and how to organize it, then link its first repositories. Use for set up atlas, new vault, start a vault here, onboard, make this folder a vault."
 ---
 
-# Onboard a folder
+# atlas-onboard
 
-A folder becomes a project: `atlas/<name>/` inside it, with the wiki and the
-threads, listed in the atlas. A blank folder needs only that. A folder with
-history also needs the wiki to know the work and the board to hold the work
-already under way, so a first session there starts with a map and a list,
-not a blank page. Every step shows what it will do and waits for a yes.
+A vault is one Obsidian vault and one git repository that holds the wiki, the threads,
+the sessions, and the changes of the user's work. This skill asks the three questions a
+vault needs, makes it, and offers to link the first repositories.
 
-Tools: `atlas`, `project`, `status`, `threads`, `thread`. Reads
-[modes.md](../wiki/references/modes.md) for the structure. Hands the
-describing to `wiki-describe`.
+Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
 
-## 1. Look before asking
+## Procedure
 
-Call `atlas`, to see the projects that exist. Then look at the folder:
+1. Ask for the vault's name and folder in one question. The default folder is the
+   working directory when it is empty. A folder that already holds notes, or that is
+   already the root of a git repository, is adopted as it is. A folder inside another
+   repository is refused: the vault must be the root of its own history.
+2. Ask the area question, with option 3 as the default:
+   1. "I prefer a lot of areas, for the most order" (`many`);
+   2. "I like to keep things simple" (`few`);
+   3. "I don't know yet, or I'll create them myself" (`manual`).
+3. Ask for one or two sentences on what the vault is for. They become the body of
+   `Atlas.md`, the context every session reads first.
+4. Call `vault` with `action: init`, the name, the path, `areas`, and the description.
+5. Offer to link repositories. The user names paths, or a folder that holds
+   repositories: then list the git work trees one level below it (`ls` and a check for
+   `.git`) and let the user pick. Hand the list to repo-link, which links them in one
+   change.
+6. Tell the user to open the vault in Obsidian (`atlas open --register`) and to turn on
+   the Atlas plugin under Community plugins once. The vault works without the plugin;
+   the plugin adds colors, the sessions pane, and the Apply button.
 
-- inside a project already, or inside another project's folder: stop, say
-  which, and hand to `atlas-project`;
-- blank: no files, or only a README;
-- long-lived: code, documents, a git history.
+## Gate
 
-Read the README, AGENTS.md, and CLAUDE.md when there are any; they answer
-most of the questions below.
-
-## 2. Make the project
-
-Ask one question at a time, each with a default the user can take with a yes:
-
-1. **Where.** The session's folder, or the path the user names.
-2. **Name.** The folder's name.
-3. **Description.** One to three sentences: what the work is and what its
-   wiki should remember. `wiki-ingest` and `wiki-query` read it to judge what
-   belongs. Draft it from what you read.
-4. **Mode.** `generic` unless the user wants `lyt` ([modes.md](../wiki/references/modes.md)).
-5. **Threads.** On unless the user wants a wiki only.
-
-State the whole change in one line, and say when the folder becomes a git
-repository:
-
-> Make `~/code/webapp` the project `webapp` (generic mode, threads on), "The customer-facing web application; its wiki holds the alarm pipeline and the field tests". The folder is in no repository, so this runs `git init` there.
-
-On yes: `project` with `action: init`, `work`, `name`, `description`,
-`mode`, and `threads`. Pass `no_git` only when the user refuses a
-repository, and say that the wiki then has no history and no operation can
-run until there is one. On a refusal, say why in the tool's words and ask
-again for that one answer.
-
-A blank folder is done here: go to step 6.
-
-## 3. Describe the work
-
-Hand to `wiki-describe`. It stages a snapshot of the work, reads it and the
-code, and writes the page that says what the project is, how it is built and
-laid out, and what it has delivered, as one operation the user approves. Its
-snapshot also lists the TODO, FIXME, XXX, and HACK lines of the work, which
-step 5 reads.
-
-## 4. Propose the structure
-
-The mode files pages by type; a profile in [modes.md](../wiki/references/modes.md)
-adds the folders and page types one kind of work needs. From the snapshot
-and the page `wiki-describe` wrote:
-
-1. Pick the profile that fits (a software repository, research, a course,
-   a business project), or none.
-2. Name the pages the work already calls for: the components, modules, or
-   documents a reader will look up, as entities; the ideas the work
-   introduces, as concepts. At most twelve, each with a one-line reason.
-   A page the describe operation wrote is not proposed again.
-3. Show the structure as one list. On a yes, `wiki-edit` seeds the pages the
-   user picked in one operation: a skeleton for each from `route`, linked
-   from the project page and the index, so no seed starts as an orphan. A
-   seed costs little, and lint lists it as a stub until an ingest or a save
-   fills it.
-
-An empty folder tree is not a structure. Propose folders only for pages that
-exist or are seeded now.
-
-## 5. Gather the work in flight
-
-When threads are on, find the work already under way:
-
-- the snapshot's markers: group the TODO and FIXME lines by what they are
-  about; one thread per piece of work, not per line;
-- roadmap, TODO, or plan documents in the work (the snapshot lists the
-  headings of every document under `docs/`);
-- open issues, when the work has a GitHub remote and `gh` is signed in:
-  `gh issue list --state open --limit 50`. Ask before the first call; it
-  reaches the network.
-
-Show the candidates as one numbered list: a title, where it came from, and a
-line of the text. The user picks. A fault you found while reading the work
-may join the list, marked as yours. Each pick becomes a thread with
-`thread-stub`'s rule: the words as found, with the file and line or the issue
-number, and nothing added. A pile of forty stubs helps nobody; say when the
-list is long and offer the ten that matter most.
-
-## 6. Report
-
-Say what exists now: the project's folder, the describe operation, the
-seeded pages, the threads opened, and what was skipped. The thread files are
-the work's own files and nothing commits them: say they wait for the user's
-next commit. Then say how to
-work: a session anywhere inside the work is the project's session;
-`atlas-obsidian open-vault NAME` opens it in Obsidian; the inbox takes
-sources for `wiki-ingest` and notes for `thread-stub`.
+`vault` init writes only after steps 1 to 3 are answered. repo-link has its own gate.
 
 ## Hand off
 
-`thread-work` on a thread the user picks, `wiki-ingest` for sources waiting
-in the inbox, `atlas-project` to change what was set here, and to make this
-project a member of a hub, or a hub of others.
+[repo-link](../repo-link/SKILL.md), then [repo-ingest](../repo-ingest/SKILL.md) for each
+repository the user wants described now; [wiki-ingest](../wiki-ingest/SKILL.md) when the
+user has files to add.

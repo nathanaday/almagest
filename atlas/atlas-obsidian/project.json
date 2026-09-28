@@ -1,9 +1,0 @@
-{
-  "schema": "atlas-obsidian.project.v1",
-  "id": "721b76b6-fec5-4e58-b580-b2104565c869",
-  "name": "atlas-obsidian",
-  "description": "The design, decisions, and reference material behind atlas-obsidian: Obsidian vaults, Claude Code plugins and MCP, and the Go code that ties them together.",
-  "mode": "generic",
-  "created": "2026-09-17",
-  "threads": true
-}
