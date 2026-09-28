@@ -57,7 +57,7 @@
 			"x": 1040,
 			"y": 760,
 			"width": 400,
-			"height": 700,
+			"height": 570,
 			"color": "5"
 		},
 		{
@@ -123,7 +123,7 @@
 		{
 			"id": "6bdd542e87b4f474",
 			"type": "text",
-			"text": "**atlas**\norient, the board, quick moves, route\n`vault search context thread session`",
+			"text": "**atlas**\norient, the board, quick moves, route\n`vault search context thread`",
 			"x": 0,
 			"y": 0,
 			"width": 340,
@@ -193,7 +193,7 @@
 		{
 			"id": "fb97bb8a1bcbc0ec",
 			"type": "text",
-			"text": "**wiki-save**\nkeep something from the conversation\n`search match change`",
+			"text": "**wiki-save**\nkeep something from the conversation\n`source`",
 			"x": 0,
 			"y": 1150,
 			"width": 340,
@@ -243,7 +243,7 @@
 		{
 			"id": "df931b51affc1572",
 			"type": "text",
-			"text": "**thread-work**\nthe conductor of the stages\n`search context thread session`",
+			"text": "**thread-work**\nruns the stage skills in order\n`search context thread`",
 			"x": 0,
 			"y": 1920,
 			"width": 340,
@@ -271,9 +271,9 @@
 			"color": "3"
 		},
 		{
-			"id": "f43815c76b61974b",
+			"id": "742a9acbe8231a8a",
 			"type": "text",
-			"text": "**thread-tasks**\nsplit the spec into tasks; gate 2\n`thread context`",
+			"text": "**thread-plan**\nsplit the spec into tasks; gate 2\n`thread context`",
 			"x": 0,
 			"y": 2310,
 			"width": 340,
@@ -281,9 +281,9 @@
 			"color": "3"
 		},
 		{
-			"id": "15c7edbee7269136",
+			"id": "c42cfccf0e9bef40",
 			"type": "text",
-			"text": "**thread-task**\ndo one task in its repository\n`thread context session`",
+			"text": "**thread-run**\ndo one task in its repository\n`thread context`",
 			"x": 0,
 			"y": 2440,
 			"width": 340,
@@ -293,7 +293,7 @@
 		{
 			"id": "c91a366f1c893ade",
 			"type": "text",
-			"text": "**thread-receipt**\nverify and close\n`thread session`",
+			"text": "**thread-receipt**\nverify and close\n`thread`",
 			"x": 0,
 			"y": 2570,
 			"width": 340,
@@ -321,9 +321,9 @@
 			"color": "3"
 		},
 		{
-			"id": "c45ae09dff1e7164",
+			"id": "78f147cb0b8fd906",
 			"type": "text",
-			"text": "**wiki-reviewer**\na scope \u2192 Findings\nread-only",
+			"text": "**wiki-audit**\na scope \u2192 Findings\nread-only",
 			"x": 560,
 			"y": 960,
 			"width": 300,
@@ -421,16 +421,6 @@
 			"color": "5"
 		},
 		{
-			"id": "77732095d5092873",
-			"type": "text",
-			"text": "**session**\nSession Note \u2192 the hook writes it",
-			"x": 1080,
-			"y": 1320,
-			"width": 320,
-			"height": 100,
-			"color": "5"
-		},
-		{
 			"id": "4d63ed5fa70f8aad",
 			"type": "text",
 			"text": "**session-start**\nSessionStart: the session document, sync, the opening context",
@@ -453,7 +443,7 @@
 		{
 			"id": "080ee6d466055185",
 			"type": "text",
-			"text": "**guard**\nPreToolUse: five rules, among them the thread rule and read-only agents",
+			"text": "**guard**\nPreToolUse: seven rules, among them the thread rule, the apply gate, and read-only agents",
 			"x": 2640,
 			"y": 260,
 			"width": 320,
@@ -706,10 +696,10 @@
 			"toSide": "left"
 		},
 		{
-			"id": "9d25860dd3c141f7",
+			"id": "5419198f44b79e12",
 			"fromNode": "0ecaf72e77b32eff",
 			"fromSide": "right",
-			"toNode": "c45ae09dff1e7164",
+			"toNode": "78f147cb0b8fd906",
 			"toSide": "left"
 		},
 		{

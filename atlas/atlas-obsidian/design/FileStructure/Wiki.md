@@ -96,7 +96,7 @@ The conventions step of [[thread-spec]] and [[thread-plan]] reads policies. A po
 
 ## Source
 
-The front page of an outside document that the vault captured. Capture creates it with the fields code owns; the ingest change writes the body.
+The page that stands for an outside document the vault captured. Capture creates it with the fields code owns; the ingest change writes the body.
 
 ```yaml
 ---
@@ -160,8 +160,8 @@ updated: 2026-09-27
 parent: "[[p3]]"
 description: "The p3 cloud front end: a React app over the p3 API."
 aliases: [p3 cloud]
+path: "~/code/p3-cloud"               # the model gives it; code checks it
 # owned by code:
-path: "~/code/p3-cloud"
 remote: "git@github.com:acme/p3-cloud.git"
 branch: main
 described: 9e41c07                  # the commit the body describes
@@ -172,7 +172,7 @@ Body sections: `## What it is`, `## How it is built`, `## Layout`, `## Component
 
 Rules:
 
-- `path` must be the root of a git work tree, outside the vault. `change` refuses any other path.
+- `path` is the model's, and code checks it: it must be the root of a git work tree, outside the vault, and no other repository page may hold it.
 - Code fills `remote` and `branch` from git when the page is created. The model never writes them.
 - Code sets `described` when a change that absorbs a snapshot of this repository applies. `context` counts the commits since, so an agent knows when the page is behind.
 - `vault sync` lists every repository's path in `.claude/settings.local.json`. See [[Vault Layout#Settings for the harness]].

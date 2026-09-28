@@ -30,7 +30,9 @@ A ribbon icon and a command: `atlas vault sync`, then a notice with what changed
 
 ### Review a change
 
-On a change document with `status: proposed`, a bar over the page with **Apply**, **Reject**, and the counts. Apply runs `atlas change apply <id>`; Reject asks for a reason and runs `atlas change reject`. A click on Apply is the user's yes, so a large ingest can be reviewed and approved entirely in Obsidian. The agent's next turn sees the change applied.
+On a change document with `status: proposed`, a bar over the page with **Apply**, **Reject**, and the counts. Apply saves the open file first, so an edit you just typed goes in, then runs `atlas change apply <id>`; Reject asks for a reason and runs `atlas change reject`. A click on Apply is the user's yes, so a large ingest can be reviewed and approved entirely in Obsidian. The agent's next turn sees the change applied.
+
+## Phase 2
 
 ### Mentions
 
@@ -43,10 +45,9 @@ A mention is a task line addressed to the agent:
 
 - The plugin highlights `@atlas` in the editor (a CodeMirror 6 decoration) and in reading view (a post-processor).
 - The binary finds every open mention outside `wiki/`, `changes/`, and `sessions/`. [[Vault Status]] lists them, and the session-start context counts them.
-- The [[atlas]] skill offers them. A mention that asks for work becomes a stub (`thread` open with `mention`). A mention that asks for something else is closed by `vault` with `action: mention`, with a link to what answered it (a change, a session).
+- The [[atlas]] skill offers them. Whatever answers a mention (a new stub, a change, a session), the skill closes it with `vault` `action: mention` and a link to the answer. One action closes every mention.
 - Closing a mention checks its box and appends ` → [[link]]`. That edits one line of your note. It is the one write code makes into a document you own, and it is the answer you asked for.
 
-## Phase 2
 
 ### Sessions sidebar
 

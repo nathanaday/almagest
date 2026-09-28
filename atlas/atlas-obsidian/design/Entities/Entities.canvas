@@ -25,9 +25,9 @@
 			"type": "group",
 			"label": "Describe the session",
 			"x": 1490,
-			"y": 1660,
-			"width": 1260,
-			"height": 460,
+			"y": 1770,
+			"width": 1220,
+			"height": 240,
 			"color": "5"
 		},
 		{
@@ -331,29 +331,29 @@
 		},
 		{
 			"id": "df35848a7a45e885",
-			"type": "file",
-			"file": "design/Entities/Session Note.md",
+			"type": "text",
+			"text": "The agent Edits three sections of its own session document: Description, Progress, Summary",
 			"x": 1550,
-			"y": 1720,
-			"width": 380,
-			"height": 340,
-			"color": "6"
+			"y": 1830,
+			"width": 300,
+			"height": 120,
+			"color": "3"
 		},
 		{
 			"id": "eb8ebee68518d0fd",
 			"type": "text",
-			"text": "**session**",
-			"x": 2040,
-			"y": 1850,
-			"width": 240,
-			"height": 80,
-			"color": "5"
+			"text": "**guard** allows only those sections of its own document",
+			"x": 1960,
+			"y": 1840,
+			"width": 280,
+			"height": 100,
+			"color": "4"
 		},
 		{
 			"id": "e31c1ef08f759fd2",
 			"type": "text",
-			"text": "**PostToolUse** hook writes the note into the calling session's document",
-			"x": 2390,
+			"text": "**PostToolUse** hook copies the description into the frontmatter",
+			"x": 2350,
 			"y": 1835,
 			"width": 300,
 			"height": 110,

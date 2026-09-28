@@ -1,9 +1,9 @@
 
 # wiki-extract
 
-> Read one chunk of one document, and return what it says as an [[Item Map]]. The first draft called this "Map Text". See [[wiki-extract.canvas|the extract flow]].
+> Read one chunk of one document, and return what it says as an [[Item Map]]. See [[wiki-extract.canvas|the extract flow]].
 
-**Takes**: a document id, a chunk index, the scope, and the vault's one-line description (so the agent knows what matters here).
+**Takes**: a document id, a chunk index, the scope, and the vault's `description` from `Atlas.md` (so the agent knows what matters here).
 
 **Returns**: one [[Item Map]].
 

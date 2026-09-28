@@ -15,7 +15,7 @@
    2. "I like to keep things simple" (`few`);
    3. "I don't know yet, or I'll create them myself" (`manual`).
 3. Ask for one or two sentences on what the vault is for. They become the body of `Atlas.md`, the context every session reads.
-4. Call `vault` init with the name, path, `areas`, and the description.
+4. Call `vault` init with the name, the path, `areas`, and the description. A folder that already holds notes, or is already a git repository, is adopted as it is.
 5. Offer to link repositories. The user names paths, or a folder that holds repositories (then list the git work trees one level below it and let the user pick). Hand the list to [[repo-link]], which links them in one change.
 6. Tell the user to open the vault in Obsidian (`atlas open`) and turn on the Atlas plugin.
 

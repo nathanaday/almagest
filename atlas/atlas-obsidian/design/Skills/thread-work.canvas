@@ -43,7 +43,7 @@
 		{
 			"id": "a861e7d168f175c2",
 			"type": "text",
-			"text": "**thread-tasks**",
+			"text": "**thread-plan**",
 			"x": -740,
 			"y": -120,
 			"width": 240,
@@ -103,7 +103,7 @@
 		{
 			"id": "e65c465a6234c36f",
 			"type": "text",
-			"text": "**thread-task**\nstart, work in the repository, progress, verify, done with its result",
+			"text": "**thread-run**\nstart, work in the repository, progress, verify, done with its result",
 			"x": 0,
 			"y": -150,
 			"width": 280,

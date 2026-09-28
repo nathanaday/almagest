@@ -1,7 +1,7 @@
 
 # Agents
 
-An agent is a read-only worker that a skill sends when a task splits. It reads and returns data. It never proposes a change, applies one, or files a thread document. Only the skill that sent it does that. Each agent gets its own session document, linked to its parent ([[Sessions#Subagents]]).
+An agent is a read-only worker that a skill sends when a task splits. It reads and returns data. It never proposes a change, applies one, or files a thread document. Only the skill that sent it does that. A read-only worker gets no session document of its own: the hooks write one line for it under `## Subagents` in its parent's document ([[Sessions#Names and keys]]).
 
 | Agent | Sent by | Takes | Returns | Tools |
 |---|---|---|---|---|

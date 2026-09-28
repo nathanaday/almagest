@@ -1,7 +1,7 @@
 
 # wiki-draft
 
-> Decide what the wiki does with each subject of a [[Match Map]] slice, and draft the writes. The first draft called this "Wiki Draft". See [[wiki-draft.canvas|the draft flow]].
+> Decide what the wiki does with each subject of a [[Match Map]] slice, and draft the writes. See [[wiki-draft.canvas|the draft flow]].
 
 **Takes**: a slice of the Match Map (at most eight subjects), the ids of the documents being absorbed, and the scope of each.
 
@@ -17,7 +17,7 @@
 | `hit` | Do the items confirm a claim the page makes? | **modify**: add the citation | **skip** |
 | any | Do the items contradict the page? | **modify**: keep both claims with their citations, and set `status: contested` | — |
 
-The first draft skipped a `near` subject whose neighbor was a different subject. That loses the subject, so it goes the `new` way instead.
+A `near` subject whose neighbor is a different subject goes the `new` way, so no subject is lost without a reason.
 
 ## The gates for a new page
 

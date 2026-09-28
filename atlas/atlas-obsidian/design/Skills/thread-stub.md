@@ -1,7 +1,7 @@
 
 # thread-stub
 
-> Open a thread from a sentence, in the user's words, with no questions. The first draft's "creating a stub" skill.
+> Open a thread from a sentence, in the user's words, with no questions.
 
 **Use for**: note this, stub this, remember to, idea for later, open a thread, report a bug, add a todo.
 

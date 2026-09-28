@@ -27,6 +27,6 @@ The checks:
 | `repository-behind` | info | a repository page more than 50 commits behind its head |
 | `pending` | info | a pending document older than a week |
 | `change-stale` | info | a change proposed more than a day ago |
-| `session-lost` | info | a lost session that holds an active task |
+| `session-lost` | info | a lost session that lists an open task |
 
 Lint reads and never writes. A fix is a change, a thread write, or your edit.

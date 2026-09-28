@@ -7,7 +7,7 @@ Every document in the vault has a type and an id. The type sets its folder, its 
 
 | Type | Id prefix | Folder | Schema | Written by |
 |---|---|---|---|---|
-| `vault` | `vlt` | `Atlas.md` at the root | [[Vault Layout#Atlas.md]] | `atlas init`; then the user |
+| `vault` | `vlt` | `Atlas.md` at the root | [[Vault Layout#Atlas.md]] | `atlas vault init`; then the user |
 | `area` | `are` | `wiki/areas/` | [[Wiki#Area]] | `change` |
 | `repository` | `rep` | `wiki/repositories/` | [[Wiki#Repository]] | `change` |
 | `concept` | `con` | `wiki/concepts/` | [[Wiki#Concept]] | `change` |
@@ -25,7 +25,7 @@ The stub's id is the thread's id. A thread is its stub and the documents that na
 
 ## Families
 
-- **Scope pages**: `vault`, `area`, `repository`. They form the [[Atlas V2#The context graph|context graph]]. Every other document points at one or more of them through `scope`.
+- **Scope pages**: `vault`, `area`, `repository`. They form the [[Atlas V2#The context graph|context graph]]. Knowledge pages point at one through `scope`; a stub at one or more through `scope`; a task at one through `repository`; a session at the repositories it edited through `repositories`.
 - **Knowledge pages**: `concept`, `entity`, `policy`, `source`. They are the wiki's content. Each one cites its sources.
 - **Thread documents**: `stub`, `spec`, `task`, `receipt`. They are one line of work, from the first sentence to the result.
 - **Record documents**: `session`, `change`. Code writes them as the work happens. They say what ran and what changed.
@@ -40,7 +40,7 @@ updated: 2026-09-27   # set by code when a tool or hook writes, or the model edi
 ```
 
 - The file name is the title. There is no `title` field. The one exception is `Atlas.md`, whose title is its `name`.
-- An id is the prefix, a hyphen, and six characters of lowercase base32 (`k3m9qa`). Code mints it and checks that no document holds it.
+- An id is the prefix, a hyphen, and six characters of lowercase Crockford base32 (digits and letters, without `i`, `l`, `o`, `u`): `k3m9qa`. Code mints it and checks that no document holds it. A session's id is the exception: `ses-` and six hex characters of the harness's id.
 - Other fields are the type's. A field a schema does not name is the user's. Code keeps it and never reads it.
 
 ## What a type's schema says

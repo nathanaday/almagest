@@ -5,18 +5,18 @@
 
 **Use for**: save this, keep this answer, file this decision, remember this in the wiki. Not for files; that is [[wiki-ingest]].
 
-**Tools**: `search`, `match`, `change`. **References**: `references/changes.md`, `references/pages.md`.
+**Tools**: `source` capture, then [[wiki-sync]]. **References**: `references/changes.md`, `references/pages.md`.
 
 ## Procedure
 
 1. Name exactly what to keep. When the user's "this" could mean two things, quote both and ask.
-2. Build one [[Item Map]] yourself: the subjects, and their claims. Each claim cites the documents the conversation used, and this session's document for what the conversation itself concluded (authority `synthetic`).
-3. Call `match`, then decide each subject by the rules of [[wiki-draft]].
-4. Build the [[Wiki Change Plan]]. It absorbs nothing, because a session is not a pending type.
+2. Write the passage to keep, in full: the answer, the decision and its reasons, and the documents the conversation relied on, as links.
+3. Call `source` capture with `text` and a `title`. The source has `origin: pasted` and authority `synthetic`, and it records this session as its locator. The claims now cite a document that holds them.
+4. Hand the new source to [[wiki-sync]]. Saving is then the same pipeline as every other way knowledge enters.
 
 ## Gate
 
-Propose the change, show the preview, wait for the yes, then apply.
+The gate of [[wiki-sync]].
 
 ## Hand off
 

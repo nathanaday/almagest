@@ -23,7 +23,7 @@ Nothing sets a thread's stage. Code derives it from the documents that exist:
 | one task or more | `tasks` |
 | a receipt | `closed` |
 
-Kept from V1, because it holds three things. The documents are always written, since there is nothing else to move. No status field can disagree with the files. A hand edit works: delete the spec in Obsidian, and the next sync moves the thread back.
+V1 had this rule, and it gives three results. The documents are always written, since there is nothing else to move. No status field can disagree with the files. A hand edit works: delete the spec in Obsidian, and the next sync moves the thread back.
 
 A stage may be skipped. A small fix goes from stub to one task. A killed idea goes from stub to receipt.
 
@@ -42,7 +42,7 @@ threads/
 
 - One folder per thread, named by the thread's title. Closed threads stay in place. `Threads.base` filters them out of the open views, and no link breaks.
 - A document names its thread by a link to the stub (`thread: "[[Filter vehicle false alarms]]"`). Code finds a thread's documents by that link and by the `thread_id` field, never by the file name, so a file renamed by hand is still found.
-- Renaming a thread (`thread` set title) renames the folder and every file, and rewrites every link to them, in one commit.
+- Renaming a thread (`thread` set title) renames the folder and every file in one commit, with the link rewrite pass of [[Changes#Link rewrites]].
 
 ## Stub
 
@@ -100,6 +100,7 @@ order: 1
 repository: "[[p3-edge]]"           # one repository; work in two repositories is two tasks
 depends: []                         # other tasks of this thread that must be done first
 status: open                        # open | done | dropped, set by the thread tool
+blocked: ""                         # what this task waits on, in one line
 # owned by code:
 active: false                       # a running session works on this task
 ---
@@ -129,7 +130,7 @@ Body sections: `## Delivered`, `## Verified`, `## Follow-ups` (links to new stub
 
 - A thread has at most one spec and one receipt.
 - A `completed` receipt is refused while a task is `open`. A `killed` receipt sets every open task to `dropped`.
-- A closed thread takes no new document until `thread` reopen, which removes the receipt. Git keeps the old one.
+- A closed thread takes no new document until `thread` reopen. Reopen keeps the receipt, renames it `<Thread> — Receipt (reopened 2026-09-28)`, and sets `superseded: true`, so links to it and the wiki's citations of it hold. A superseded receipt does not close the thread and does not count toward the one-receipt rule.
 - `depends` names tasks of the same thread, and never makes a loop.
 - `scope` and `repository` name scope pages.
 - A new document is created only by `thread`. The guard refuses a Write that creates a file under `threads/`. Edit on the prose of a document that exists is allowed.

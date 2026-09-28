@@ -19,7 +19,7 @@ For each file or text:
 4. Remove the inbox file.
 5. Commit all of it as `capture: <titles>`.
 
-For `repository: <id>`, capture writes a snapshot of the repository at its head as a markdown file: the tree to three levels, the instruction files, the manifests (`go.mod`, `package.json`, …), the docs, and every TODO and FIXME line with its location. The locator is `<repository>@<commit>`.
+For `repository: <id>`, capture writes a snapshot of the repository at its head as a markdown file: the tree to three levels, the instruction files, the manifests (`go.mod`, `package.json`, …), the docs, and every TODO and FIXME line with its location. The locator is `<repository>@<commit>`, and the title is `<repository> @ <short commit>` (`p3-cloud @ 4ac19e2`), so it never takes the repository page's title.
 
 A captured source is [[Changes#Pending documents|pending]] until a change absorbs it.
 

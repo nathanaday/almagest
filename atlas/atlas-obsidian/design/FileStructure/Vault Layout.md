@@ -9,7 +9,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 <vault>/
 ├── Atlas.md                  the vault document: identity, settings, the vault's own context
 ├── inbox/                    you drop files and notes here; wiki-ingest triages them
-├── scratchpad/               yours; no schema; no agent reads it unless you ask
+├── scratchpad/               yours; no schema; no tool reads it, and no agent unless you ask
 ├── sessions/
 │   ├── Sessions.base         what runs now, and what ran
 │   └── 2026-09/              one document per agent session, by month
@@ -29,7 +29,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 └── .git/                     the vault's history; apply's lock is .git/atlas.lock
 ```
 
-`atlas init` writes this layout, the four Bases, and one `setup` commit. `EnsureFolders` rebuilds a folder that a clone left out, because git does not keep an empty folder.
+`atlas vault init` writes this layout, the four Bases, and one `setup` commit. `EnsureFolders` rebuilds a folder that a clone left out, because git does not keep an empty folder.
 
 ## Who writes where
 
@@ -38,7 +38,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 | `Atlas.md` | no | `init` only | yes |
 | `inbox/` | no | `source` capture removes a file in its commit | yes |
 | any note of yours | no | `vault` mention and `thread` open check the box of a mention and link the answer | yes |
-| `scratchpad/` | no | no | yes |
+| `scratchpad/` | no | no; search, lint, and the mention scan skip it | yes |
 | `wiki/` | only through `change` | `change` apply, `source` capture | yes |
 | `threads/` | Edit on the prose of a document that exists | `thread`, the hooks | yes |
 | `sessions/` | Edit of three sections of its own session document | the hooks | yes |
@@ -57,6 +57,7 @@ The vault document is the root of the context graph. Every session reads it firs
 id: vlt-k3m9qa
 type: vault
 name: Work
+description: "Work notes: the p3 product and the tools around it."   # one line; agents read it first
 created: 2026-09-27
 updated: 2026-09-27
 areas: few                          # many | few | manual: how readily the agent proposes areas
@@ -88,11 +89,11 @@ The body is yours: what this vault is for, and the context that every agent in i
 
 ## Git
 
-The vault is one git repository, on `main`. It never contains another repository: `atlas init` refuses a folder inside a git work tree, and `change` refuses a repository page whose path is inside the vault.
+The vault is one git repository, on `main`. It never contains another repository: `atlas vault init` refuses a folder inside another repository's work tree, and `change` refuses a repository page whose path is inside the vault.
 
 | Commit | Made by | Holds |
 |---|---|---|
-| `setup: …` | `atlas init` | the layout |
+| `setup: …` | `atlas vault init` | the layout |
 | `snapshot: N files edited by hand` | every write tool, before it writes, when the tree is dirty | your edits, the session documents, the model's prose edits |
 | `change: <title>` | `change` apply | the change's writes, its link rewrites, and the change document; trailer `Atlas-Change: chg-…` |
 | `undo: <title>` | `change` undo | the restored paths and the change document |

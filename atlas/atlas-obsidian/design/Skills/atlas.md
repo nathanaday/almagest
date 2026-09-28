@@ -1,7 +1,7 @@
 
 # atlas
 
-> Orient in the vault, show the board, make the quick moves on a thread, and route any request to the skill that owns it. The one front door.
+> Orient in the vault, show the board, make the quick moves on a thread, and route any request to the skill that owns it. The skill every request passes first.
 
 **Use for**: /atlas, what is going on, status, where do I work on X, threads, the board, what is open, what should I work on, block, unblock, reprioritize, rename a thread, reopen, review the board, and any request when the right skill is not clear.
 
@@ -32,7 +32,7 @@ A question can turn into work. When the user then asks for a change, route to [[
 
 ## The board and the quick moves
 
-These are small, so the front door does them itself:
+These are small, so this skill does them itself:
 
 - **The board**: `thread` list. Show the threads by stage, the active ones first with the session working on each. Link `Threads.base` for the live view.
 - **One thread**: `thread` show. Say its stage, its tasks and their status, and its `next`.

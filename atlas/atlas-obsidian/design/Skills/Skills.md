@@ -5,7 +5,7 @@ A skill is a procedure and a policy: what to read, what counts as enough evidenc
 
 ## Names
 
-Skills are named `<noun>-<verb>` on four nouns: `atlas`, `repo`, `wiki`, `thread`. One skill is a home: `atlas`, the front door, which orients, shows the board, and routes every request. A new capability finds its noun first.
+Skills are named `<noun>-<verb>` on four nouns: `atlas`, `repo`, `wiki`, `thread`. One skill is a home: `atlas`, which every request passes first. It orients, shows the board, and routes every request. A new capability finds its noun first.
 
 No skill shares a name with a tool. V1 learned that a skill and a tool with one name read as a pair, and they are not: `change` serves every wiki skill, and `thread` serves every thread skill.
 
@@ -20,7 +20,7 @@ No skill shares a name with a tool. V1 learned that a skill and a tool with one 
 | [[repo-ingest]] | describing a repository in the wiki, and bringing the description up to date | `context`, `source`, `match`, `change` | [[wiki-extract]], [[wiki-draft]] | `source` capture, `change` |
 | [[wiki-ingest]] | triaging the inbox and capturing sources | `vault`, `source` capture, `thread` open | — | `source`, `thread`, then [[wiki-sync]] |
 | [[wiki-sync]] | absorbing documents into the wiki: the pipeline | `vault`, `source`, `match`, `change` | [[wiki-extract]], [[wiki-draft]] | `change` |
-| [[wiki-save]] | keeping something from the conversation | `search`, `match`, `change` | — | `change` |
+| [[wiki-save]] | keeping something from the conversation | `source` capture | — | `source`, then [[wiki-sync]] |
 | [[wiki-query]] | answering from the wiki | `search`, `context` | — | nothing |
 | [[wiki-edit]] | changing pages that exist: rewrite, rename, merge, split, repair | `search`, `lint`, `change` | — | `change` |
 | [[wiki-rollup]] | mapping a parent scope from its children: bridges and upgrades | `context`, `search`, `match`, `change` | [[wiki-draft]] | `change` |

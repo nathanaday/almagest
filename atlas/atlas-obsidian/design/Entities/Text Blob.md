@@ -4,7 +4,7 @@
 > One chunk of a document, ready for [[wiki-extract]]. The output of [[source]] read.
 
 ```yaml
-doc: src-p2x7nd               # the document's id (the first draft called it source_id)
+doc: src-p2x7nd               # the document's id
 type: source
 title: DINOv2
 scope: rep-h6t2vc

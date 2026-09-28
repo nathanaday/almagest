@@ -1,7 +1,7 @@
 
 # thread-work
 
-> Take a request or a thread to its next stage and on, until it is done or waits for the user. The conductor of the thread skills. It covers "creating a thread" and "continuing a thread" from the first draft. See [[thread-work.canvas|the thread-work flow]].
+> Take a request or a thread to its next stage and on, until it is done or waits for the user. It runs the thread skills in order, for a new thread and for one that exists. See [[thread-work.canvas|the thread-work flow]].
 
 **Use for**: work on X, do this, fix this, implement, build, continue, resume, pick up where we left off.
 
@@ -24,7 +24,7 @@
 
 ## Gates
 
-Two: the spec and the tasks. An unattended run takes the recommended default at each and says so.
+Two: the spec and the tasks. A run with no user present (a test, or a request that says so) takes the recommended default at each gate and says so.
 
 ## Hand off
 

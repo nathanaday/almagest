@@ -19,8 +19,10 @@ items:
         locator: "p. 3"
     source: src-p2x7nd
 questions: []                             # what the chunk leaves unclear
+partial: false                            # true when the worker could not read the whole chunk
+reason: ""                                # why, when partial
 ```
 
 - An item is a subject the chunk says something about. A claim is one statement, with its locator.
 - `summary` feeds the `## Structure` section of a source page.
-- The first draft had `type`, `source_id`, and `description`. Claims and locators are added, because the drafter must cite, and aliases, because matching needs them.
+- Claims carry locators because the drafter must cite. Aliases are there because matching needs them.

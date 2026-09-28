@@ -3,7 +3,7 @@
 		{
 			"id": "5481f80cad9a1d7b",
 			"type": "group",
-			"label": "The conventions step (in thread-spec and thread-tasks)",
+			"label": "The conventions step (in thread-spec and thread-plan)",
 			"x": -840,
 			"y": -260,
 			"width": 1820,
@@ -13,7 +13,7 @@
 		{
 			"id": "f1a4f0aef89db731",
 			"type": "text",
-			"text": "Find the policies in the wiki that apply to a thread or a task, so the work follows them. **thread-spec** runs it for the thread; **thread-tasks** runs it for each task.",
+			"text": "Find the policies in the wiki that apply to a thread or a task, so the work follows them. **thread-spec** runs it for the thread; **thread-plan** runs it for each task.",
 			"x": -800,
 			"y": -440,
 			"width": 620,
@@ -92,7 +92,7 @@
 		{
 			"id": "248d2f58838e2c5f",
 			"type": "text",
-			"text": "**thread-task** follows them; **thread-review** checks the work against them",
+			"text": "**thread-run** follows them; **thread-review** checks the work against them",
 			"x": 1020,
 			"y": -120,
 			"width": 300,

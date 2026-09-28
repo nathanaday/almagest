@@ -18,7 +18,7 @@
 
 **Killed**
 
-1. `thread` file receipt, `outcome: killed`, with `## Why killed`. Open tasks become dropped.
+4. `thread` file receipt, `outcome: killed`, with `## Why killed`. Open tasks become dropped.
 
 **Both**
 

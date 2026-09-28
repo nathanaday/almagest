@@ -13,7 +13,7 @@
 2. Triage each item:
    - a document to learn from (a paper, notes, an article, a design) → **wiki**;
    - a note that asks for work ("fix the login timeout", "idea: …") → **thread**;
-   - both → capture it, and open a stub that links the source;
+   - both → capture it, then open a stub that links the new source page (without `inbox`, because capture already removed the file);
    - unclear → ask.
    Give each item a scope: the repository or area its subject belongs to, from its name and content against the scope descriptions, or the vault.
 3. Show the triage as one table, with the destination and scope of each item, and wait for one yes.
@@ -21,7 +21,7 @@
 5. Call `thread` open for every thread item, with `inbox` set, so the note leaves the inbox in the same commit.
 6. Tell the plan in one line: the sources, their size, the chunks, and the workers. Ask first only when the total is past about 600 pages.
 
-The first draft checked "git clean?" and cleaned the state first. That is now code: every write tool commits a dirty vault as a snapshot before it writes.
+No step checks for a clean git state: every write tool commits a dirty vault as a snapshot before it writes.
 
 ## Gate
 
