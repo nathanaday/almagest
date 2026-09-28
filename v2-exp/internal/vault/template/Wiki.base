@@ -1,0 +1,72 @@
+filters:
+  and:
+    - file.inFolder("wiki")
+    - 'file.ext == "md"'
+properties:
+  file.name:
+    displayName: Page
+views:
+  - type: table
+    name: By type
+    groupBy:
+      property: type
+      direction: ASC
+    order:
+      - file.name
+      - description
+      - scope
+      - status
+      - updated
+    sort:
+      - property: file.name
+        direction: ASC
+  - type: table
+    name: By scope
+    filters:
+      and:
+        - 'type != "area" && type != "repository"'
+    groupBy:
+      property: scope
+      direction: ASC
+    order:
+      - file.name
+      - type
+      - description
+      - status
+  - type: table
+    name: Scopes
+    filters:
+      or:
+        - 'type == "area"'
+        - 'type == "repository"'
+    groupBy:
+      property: parent
+      direction: ASC
+    order:
+      - file.name
+      - type
+      - description
+      - path
+  - type: table
+    name: Draft and contested
+    filters:
+      or:
+        - 'status == "draft"'
+        - 'status == "contested"'
+    order:
+      - file.name
+      - type
+      - status
+      - scope
+      - sources
+  - type: table
+    name: No sources
+    filters:
+      and:
+        - 'type == "concept" || type == "entity" || type == "policy"'
+        - '!sources || sources.length == 0'
+    order:
+      - file.name
+      - type
+      - scope
+      - updated
