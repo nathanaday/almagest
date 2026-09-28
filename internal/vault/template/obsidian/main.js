@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/badges.ts
 var import_obsidian = require("obsidian");
@@ -437,6 +437,363 @@ function runProgram(bin, args) {
   return exec(bin, args, void 0);
 }
 
+// src/graphcolors.ts
+var import_obsidian3 = require("obsidian");
+
+// src/graphgroups.ts
+var GRAPH_MODES = [
+  { mode: "off", label: "Off" },
+  { mode: "area", label: "Area" },
+  { mode: "type", label: "Type" },
+  { mode: "threads", label: "Threads" },
+  { mode: "activity", label: "Activity" }
+];
+function isGraphMode(value) {
+  return GRAPH_MODES.some((m) => m.mode === value);
+}
+var CATEGORICAL = {
+  light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
+  dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
+};
+var RECENCY = {
+  light: ["#104281", "#256abf", "#5598e7", "#9ec5f4"],
+  dark: ["#b7d3f6", "#6da7ec", "#2a78d6", "#1c5cab"]
+};
+var MUTED = "#898781";
+var THREAD_TYPES = ["stub", "spec", "task", "receipt"];
+var TYPE_GROUPS = [
+  { name: "Areas", types: ["area"] },
+  { name: "Repositories", types: ["repository"] },
+  { name: "Concepts", types: ["concept"] },
+  { name: "Entities", types: ["entity"] },
+  { name: "Policies", types: ["policy"] },
+  { name: "Sources", types: ["source"] },
+  { name: "Threads", types: THREAD_TYPES },
+  { name: "Sessions and changes", types: ["session", "change"] }
+];
+var QUARTERS = ["Newest 25%", "25\u201350%", "50\u201375%", "Oldest 25%"];
+function graphGroups(mode, docs, resolve, theme) {
+  const vault = new Vault(docs, resolve);
+  let groups;
+  switch (mode) {
+    case "area":
+      groups = vault.byArea(theme);
+      break;
+    case "type":
+      groups = vault.byType(theme);
+      break;
+    case "threads":
+      groups = vault.byThreads(theme);
+      break;
+    case "activity":
+      groups = byActivity(docs, theme);
+      break;
+    default:
+      groups = [];
+  }
+  return groups.filter((g) => g.paths.length > 0);
+}
+var Vault = class {
+  constructor(docs, resolve) {
+    this.docs = docs;
+    this.resolve = resolve;
+    for (const d of docs) this.byPath.set(d.path, d);
+    for (const d of docs) {
+      for (const to of d.links) {
+        const from = this.backlinks.get(to) ?? [];
+        from.push(d.path);
+        this.backlinks.set(to, from);
+      }
+    }
+  }
+  docs;
+  resolve;
+  byPath = /* @__PURE__ */ new Map();
+  backlinks = /* @__PURE__ */ new Map();
+  areas = /* @__PURE__ */ new Map();
+  type(path) {
+    const t = path === null ? void 0 : this.byPath.get(path)?.fields.type;
+    return typeof t === "string" ? t : "";
+  }
+  links(doc, field) {
+    return asList(doc.fields[field]).map((l) => this.resolve(linkTitle(l), doc.path)).filter((p) => p !== null && this.byPath.has(p));
+  }
+  byArea(theme) {
+    const members = /* @__PURE__ */ new Map();
+    for (const d of this.docs) {
+      const area = this.areaOf(d.path);
+      if (area === null) continue;
+      members.set(area, [...members.get(area) ?? [], d.path]);
+    }
+    const order = [...members.keys()].sort((a, b) => {
+      const ca = String(this.byPath.get(a)?.fields.created ?? "");
+      const cb = String(this.byPath.get(b)?.fields.created ?? "");
+      return ca.localeCompare(cb) || basename(a).localeCompare(basename(b));
+    });
+    const palette = CATEGORICAL[theme];
+    const groups = order.slice(0, palette.length).map((area, i) => ({
+      name: basename(area),
+      color: palette[i],
+      paths: members.get(area) ?? []
+    }));
+    const rest = order.slice(palette.length).flatMap((area) => members.get(area) ?? []);
+    if (rest.length > 0) groups.push({ name: "Other areas", color: MUTED, paths: rest });
+    return groups;
+  }
+  /** The nearest area of a document: the area it is about, or the area of its scope or thread. */
+  areaOf(path, seen = /* @__PURE__ */ new Set()) {
+    if (this.areas.has(path)) return this.areas.get(path) ?? null;
+    if (seen.has(path)) return null;
+    seen.add(path);
+    const area = this.findArea(path, seen);
+    this.areas.set(path, area);
+    return area;
+  }
+  findArea(path, seen) {
+    const doc = this.byPath.get(path);
+    if (!doc) return null;
+    const first = (paths) => {
+      for (const p of paths) {
+        const a = this.areaOf(p, seen);
+        if (a !== null) return a;
+      }
+      return null;
+    };
+    switch (this.type(path)) {
+      case "area":
+        return path;
+      case "repository":
+      case "concept":
+      case "entity":
+      case "policy":
+      case "source": {
+        const chain = this.links(doc, "chain").filter((p) => this.type(p) === "area");
+        if (chain.length > 0) return chain[chain.length - 1];
+        return first([...this.links(doc, "parent"), ...this.links(doc, "scope")]);
+      }
+      case "stub":
+        return first(this.links(doc, "scope"));
+      case "spec":
+      case "task":
+      case "receipt":
+      case "change":
+        return first(this.links(doc, "thread"));
+      case "session":
+        return first([...this.links(doc, "threads"), ...this.links(doc, "repositories")]);
+    }
+    return null;
+  }
+  byType(theme) {
+    const palette = CATEGORICAL[theme];
+    return TYPE_GROUPS.map((g, i) => ({
+      name: g.name,
+      color: palette[i],
+      paths: this.docs.filter((d) => g.types.includes(this.type(d.path))).map((d) => d.path)
+    }));
+  }
+  byThreads(theme) {
+    const open = [];
+    const closed = [];
+    const none = [];
+    for (const d of this.docs) {
+      const states = this.threadStates(d);
+      if (states.has("open")) open.push(d.path);
+      else if (states.has("closed")) closed.push(d.path);
+      else none.push(d.path);
+    }
+    const palette = CATEGORICAL[theme];
+    return [
+      { name: "Open threads", color: palette[1], paths: open },
+      { name: "Closed threads", color: palette[0], paths: closed },
+      { name: "No threads", color: MUTED, paths: none }
+    ];
+  }
+  /** The stubs a document belongs to. */
+  threadsOf(doc) {
+    switch (this.type(doc.path)) {
+      case "stub":
+        return [doc.path];
+      case "spec":
+      case "task":
+      case "receipt":
+      case "change":
+        return this.links(doc, "thread");
+      case "session":
+        return this.links(doc, "threads");
+    }
+    return [];
+  }
+  /**
+   * The states of the threads a document belongs to or shares a link with. A thread
+   * document takes only its own thread's state.
+   */
+  threadStates(doc) {
+    const stubs = new Set(this.threadsOf(doc));
+    if (!THREAD_TYPES.includes(this.type(doc.path))) {
+      const near = [...doc.links, ...this.backlinks.get(doc.path) ?? []];
+      for (const p of near) {
+        const other = this.byPath.get(p);
+        if (other && THREAD_TYPES.includes(this.type(p))) this.threadsOf(other).forEach((s) => stubs.add(s));
+      }
+    }
+    const states = /* @__PURE__ */ new Set();
+    for (const s of stubs) {
+      if (this.type(s) !== "stub") continue;
+      states.add(this.byPath.get(s)?.fields.stage === "closed" ? "closed" : "open");
+    }
+    return states;
+  }
+};
+function byActivity(docs, theme) {
+  const key = (d) => {
+    const updated = String(d.fields.updated ?? "").slice(0, 10);
+    return /^\d{4}-\d{2}-\d{2}$/.test(updated) ? updated : localDate(d.mtime);
+  };
+  const sorted = [...docs].sort((a, b) => key(b).localeCompare(key(a)) || b.mtime - a.mtime);
+  const groups = QUARTERS.map((name, i) => ({ name, color: RECENCY[theme][i], paths: [] }));
+  sorted.forEach((d, i) => groups[Math.floor(i * 4 / sorted.length)].paths.push(d.path));
+  return groups;
+}
+function localDate(ms) {
+  const t = new Date(ms);
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
+}
+function basename(path) {
+  return path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
+}
+function pathQuery(paths) {
+  const alternatives = paths.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "\\/"));
+  return `path:/^(?:${alternatives.join("|")})$/`;
+}
+function colorGroups(groups) {
+  return groups.map((g) => ({
+    query: pathQuery(g.paths),
+    color: { a: 1, rgb: parseInt(g.color.slice(1), 16) }
+  }));
+}
+function isAtlasQuery(query) {
+  return query.startsWith("path:/^(?:") && query.endsWith(")$/");
+}
+function mergeColorGroups(current, ours) {
+  return [...ours, ...current.filter((g) => !isAtlasQuery(g.query))];
+}
+
+// src/graphcolors.ts
+var BAR2 = "atlas-graph-colors";
+function graphInstance(app) {
+  const internal = app.internalPlugins;
+  const plugin = internal?.getPluginById?.("graph");
+  const instance = plugin?.enabled ? plugin.instance : void 0;
+  return instance && typeof instance.saveOptions === "function" && instance.options ? instance : null;
+}
+function engineOf(view) {
+  const v = view;
+  const engine = v.dataEngine ?? v.engine;
+  return engine && typeof engine.setOptions === "function" && typeof engine.getOptions === "function" ? engine : null;
+}
+function same(a, b) {
+  return JSON.stringify(a) === JSON.stringify(b);
+}
+var GraphColors = class extends import_obsidian3.Component {
+  constructor(host) {
+    super();
+    this.host = host;
+  }
+  host;
+  groups = [];
+  refresh = (0, import_obsidian3.debounce)(() => this.apply(), 1e3, true);
+  get app() {
+    return this.host.app;
+  }
+  onload() {
+    this.registerEvent(this.app.metadataCache.on("resolved", () => this.refresh()));
+    this.registerEvent(this.app.vault.on("rename", () => this.refresh()));
+    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
+    this.registerEvent(this.app.workspace.on("css-change", () => this.refresh()));
+    this.registerEvent(this.app.workspace.on("layout-change", () => this.refresh()));
+    this.app.workspace.onLayoutReady(() => this.apply());
+  }
+  onunload() {
+    this.write([]);
+    for (const leaf of this.app.workspace.getLeavesOfType("graph")) {
+      leaf.view.containerEl.querySelector(`.${BAR2}`)?.remove();
+    }
+  }
+  async setMode(mode) {
+    this.host.settings.graphColors = mode;
+    await this.host.saveSettings();
+    this.apply();
+  }
+  apply() {
+    const mode = this.host.settings.graphColors;
+    const theme = document.body.hasClass("theme-dark") ? "dark" : "light";
+    const cache = this.app.metadataCache;
+    this.groups = mode === "off" ? [] : graphGroups(mode, this.docs(), (link, from) => cache.getFirstLinkpathDest(link, from)?.path ?? null, theme);
+    this.write(colorGroups(this.groups));
+    this.renderBars();
+  }
+  docs() {
+    const cache = this.app.metadataCache;
+    return this.app.vault.getMarkdownFiles().map((file) => ({
+      path: file.path,
+      fields: cache.getFileCache(file)?.frontmatter ?? {},
+      mtime: file.stat.mtime,
+      links: Object.keys(cache.resolvedLinks[file.path] ?? {})
+    }));
+  }
+  /** Puts our groups in the graph's saved options and in every open graph. */
+  write(ours) {
+    const instance = graphInstance(this.app);
+    if (!instance) return;
+    const merged = mergeColorGroups(instance.options.colorGroups ?? [], ours);
+    if (!same(instance.options.colorGroups ?? [], merged)) {
+      instance.options.colorGroups = merged;
+      instance.saveOptions();
+    }
+    for (const type of ["graph", "localgraph"]) {
+      for (const leaf of this.app.workspace.getLeavesOfType(type)) {
+        const engine = engineOf(leaf.view);
+        if (!engine) continue;
+        const current = engine.getOptions().colorGroups ?? [];
+        const next = mergeColorGroups(current, ours);
+        if (!same(current, next)) engine.setOptions({ colorGroups: next });
+      }
+    }
+  }
+  /** The mode buttons and the legend, over each graph view. */
+  renderBars() {
+    const mode = this.host.settings.graphColors;
+    const on = graphInstance(this.app) !== null;
+    for (const leaf of this.app.workspace.getLeavesOfType("graph")) {
+      const content = leaf.view.containerEl.querySelector(".view-content");
+      if (!content) continue;
+      let bar = content.querySelector(`:scope > .${BAR2}`);
+      if (!on) {
+        bar?.remove();
+        continue;
+      }
+      if (!bar) bar = content.createDiv({ cls: BAR2 });
+      bar.empty();
+      const modes = bar.createDiv({ cls: "atlas-graph-modes" });
+      for (const m of GRAPH_MODES) {
+        const button = modes.createEl("button", { text: m.label, cls: "atlas-graph-mode" });
+        button.toggleClass("is-active", m.mode === mode);
+        button.setAttr("aria-pressed", String(m.mode === mode));
+        button.onClickEvent(() => void this.setMode(m.mode));
+      }
+      if (this.groups.length === 0) continue;
+      const legend = bar.createDiv({ cls: "atlas-graph-legend" });
+      for (const g of this.groups) {
+        const row = legend.createDiv({ cls: "atlas-graph-legend-row" });
+        row.createSpan({ cls: "atlas-graph-swatch" }).style.backgroundColor = g.color;
+        row.createSpan({ cls: "atlas-graph-legend-name", text: g.name });
+        row.createSpan({ cls: "atlas-graph-legend-count", text: String(g.paths.length) });
+      }
+    }
+  }
+};
+
 // src/mentions.ts
 var import_state = require("@codemirror/state");
 var import_view = require("@codemirror/view");
@@ -492,7 +849,7 @@ function wrap(node) {
 }
 
 // src/sessions.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var import_os2 = require("os");
 var SESSIONS_VIEW = "atlas-sessions";
 function activeSessions(app) {
@@ -532,21 +889,21 @@ function currentTask(app, s) {
 async function resume(s) {
   const command = resumeCommand(s, (0, import_os2.homedir)());
   if (!command) {
-    new import_obsidian3.Notice("Atlas: this session has no harness id to resume.");
+    new import_obsidian4.Notice("Atlas: this session has no harness id to resume.");
     return;
   }
   if (process.platform !== "darwin") {
     await navigator.clipboard.writeText(command);
-    new import_obsidian3.Notice("Atlas: copied the resume command. Run it in a terminal.");
+    new import_obsidian4.Notice("Atlas: copied the resume command. Run it in a terminal.");
     return;
   }
   try {
     await runProgram("osascript", terminalArgs(command));
   } catch (e) {
-    new import_obsidian3.Notice(`Atlas: cannot open Terminal: ${e.message}`);
+    new import_obsidian4.Notice(`Atlas: cannot open Terminal: ${e.message}`);
   }
 }
-var SessionsView = class extends import_obsidian3.ItemView {
+var SessionsView = class extends import_obsidian4.ItemView {
   generation = 0;
   constructor(leaf) {
     super(leaf);
@@ -610,13 +967,14 @@ var SessionsView = class extends import_obsidian3.ItemView {
 };
 
 // src/settings.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 var DEFAULT_SETTINGS = {
   binaryPath: "",
   syncOnChange: true,
-  badges: true
+  badges: true,
+  graphColors: "area"
 };
-var AtlasSettingTab = class extends import_obsidian4.PluginSettingTab {
+var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -626,7 +984,7 @@ var AtlasSettingTab = class extends import_obsidian4.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const found = findBinary("");
-    const binary = new import_obsidian4.Setting(containerEl).setName("Path to the atlas binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
+    const binary = new import_obsidian5.Setting(containerEl).setName("Path to the atlas binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
       (text) => text.setPlaceholder(found ?? "Not found").setValue(this.plugin.settings.binaryPath).onChange(async (value) => {
         this.plugin.settings.binaryPath = value.trim();
         await this.plugin.saveSettings();
@@ -647,28 +1005,33 @@ var AtlasSettingTab = class extends import_obsidian4.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian4.Setting(containerEl).setName("Sync when a thread document changes").setDesc("Runs atlas vault sync after you edit a file under threads/, so the board and the callouts follow.").addToggle(
+    new import_obsidian5.Setting(containerEl).setName("Sync when a thread document changes").setDesc("Runs atlas vault sync after you edit a file under threads/, so the board and the callouts follow.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian4.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the stage of each stub and the status of each session.").addToggle(
+    new import_obsidian5.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the stage of each stub and the status of each session.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.badges).onChange(async (value) => {
         this.plugin.settings.badges = value;
         await this.plugin.saveSettings();
         this.plugin.badges.setEnabled(value);
       })
     );
+    new import_obsidian5.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by area, by type, by the state of their threads, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
+      for (const { mode, label } of GRAPH_MODES) dropdown.addOption(mode, label);
+      dropdown.setValue(this.plugin.settings.graphColors).onChange((value) => void this.plugin.graphColors.setMode(value));
+    });
   }
 };
 
 // src/main.ts
 var SYNC_DELAY = 1500;
 var ECHO_WINDOW = 5e3;
-var AtlasPlugin = class extends import_obsidian5.Plugin {
+var AtlasPlugin = class extends import_obsidian6.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   badges;
+  graphColors;
   syncing = false;
   syncTimer = null;
   pending = /* @__PURE__ */ new Set();
@@ -683,6 +1046,14 @@ var AtlasPlugin = class extends import_obsidian5.Plugin {
     this.badges = this.addChild(new Badges(this.app));
     this.badges.setEnabled(this.settings.badges);
     this.addChild(new ChangeBar(this));
+    this.graphColors = this.addChild(new GraphColors(this));
+    for (const { mode, label } of GRAPH_MODES) {
+      this.addCommand({
+        id: `graph-colors-${mode}`,
+        name: mode === "off" ? "Stop coloring the graph" : `Color the graph by ${label.toLowerCase()}`,
+        callback: () => void this.graphColors.setMode(mode)
+      });
+    }
     this.addRibbonIcon("refresh-cw", "Atlas: sync the vault", () => void this.sync(true));
     this.addCommand({ id: "sync", name: "Sync the vault", callback: () => void this.sync(true) });
     this.registerView(SESSIONS_VIEW, (leaf) => new SessionsView(leaf));
@@ -715,6 +1086,7 @@ var AtlasPlugin = class extends import_obsidian5.Plugin {
   }
   async loadSettings() {
     this.settings = { ...DEFAULT_SETTINGS, ...await this.loadData() };
+    if (!isGraphMode(this.settings.graphColors)) this.settings.graphColors = DEFAULT_SETTINGS.graphColors;
   }
   async saveSettings() {
     await this.saveData(this.settings);
@@ -722,7 +1094,7 @@ var AtlasPlugin = class extends import_obsidian5.Plugin {
   /** Runs one atlas command in this vault and returns its JSON. */
   atlas(args) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian5.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian6.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args);
@@ -730,7 +1102,7 @@ var AtlasPlugin = class extends import_obsidian5.Plugin {
   // Sync
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian5.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian6.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -742,10 +1114,10 @@ var AtlasPlugin = class extends import_obsidian5.Plugin {
       const out = await this.atlas(["vault", "sync"]);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian5.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      if (manual) new import_obsidian6.Notice(`Atlas: ${syncSummary(out.synced)}`);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian5.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian6.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -783,7 +1155,7 @@ var AtlasPlugin = class extends import_obsidian5.Plugin {
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian5.debounce)(
+  refreshSessions = (0, import_obsidian6.debounce)(
     () => {
       const waiting = activeSessions(this.app).filter((s) => s.status === "waiting").length;
       this.statusItem?.setText(waiting > 0 ? waitingLabel(waiting) : "");

@@ -184,6 +184,22 @@ func (r Repo) Add(paths ...string) error {
 	return err
 }
 
+// Untrack removes the paths the index holds from it, keeps the files on disk, and
+// returns the paths it removed.
+func (r Repo) Untrack(paths ...string) ([]string, error) {
+	var removed []string
+	for _, p := range paths {
+		if !r.Tracked(p) {
+			continue
+		}
+		if _, err := r.run("rm", "--cached", "-q", "--", p); err != nil {
+			return removed, err
+		}
+		removed = append(removed, p)
+	}
+	return removed, nil
+}
+
 // Tracked reports whether the index holds path.
 func (r Repo) Tracked(p string) bool {
 	out, err := r.run("ls-files", "-z", "--", p)

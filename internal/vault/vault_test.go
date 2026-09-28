@@ -3,6 +3,7 @@ package vault_test
 import (
 	"encoding/json"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -155,6 +156,35 @@ func TestLockIsExclusive(t *testing.T) {
 	}
 	unlock()
 	<-done
+}
+
+func TestAWriteUntracksTheGraphSettings(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write(".obsidian/graph.json", `{"colorGroups":[]}`)
+	// A vault made before the graph settings were excluded tracks them.
+	if out, err := exec.Command("git", "-C", tv.V.Root, "add", "-f", ".obsidian/graph.json").CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	tv.Commit()
+	if !tv.V.Git().Tracked(".obsidian/graph.json") {
+		t.Fatal("the setup did not track the graph settings")
+	}
+	tx, err := vault.Begin(tv.V, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tx.Close()
+	if tv.V.Git().Tracked(".obsidian/graph.json") {
+		t.Fatal("the graph settings are still tracked")
+	}
+	if tv.Read(".obsidian/graph.json") != `{"colorGroups":[]}` {
+		t.Fatal("untracking removed the file")
+	}
+	if log := tv.Log(); log[0] != "untrack machine files: .obsidian/graph.json" {
+		t.Fatalf("log %v", log)
+	}
+	tv.Write(".obsidian/graph.json", `{"colorGroups":[{"query":"path:/^(?:a\\.md)$/"}]}`)
+	tv.Clean()
 }
 
 func TestSyncSettingsKeepsOtherKeys(t *testing.T) {

@@ -50,8 +50,9 @@ The design pages are the spec. When the code departs from them, the reason is be
   path the pages name and removes only the paths the pages named before a write and no
   longer do. Apply and undo pass their before-list.
 - **Machine files stay out of git** through `.git/info/exclude`
-  (`.claude/settings.local.json`, `.obsidian/workspace*.json`), so init edits no file of
-  the user's. `EnsureFolders` rewrites the entries on every write.
+  (`.claude/settings.local.json`, `.obsidian/workspace*.json`, `.obsidian/graph.json`), so
+  init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
+  and untracks an excluded file that an older vault tracked, in a commit of its own.
 - **Scopes are browsable without folders.** `scope` stays the one record of where a
   page belongs; folders follow the type. Code derives from it: `chain` on every wiki
   page (its scope and the areas above it, top first; an area's or repository's own
@@ -89,10 +90,21 @@ The design pages are the spec. When the code departs from them, the reason is be
 - `ATLAS_HOOK_LOG=<file>` appends every hook event the binary receives, one JSON line
   each. Use it to check a host's events.
 
+Obsidian 1.13.7, verified live (2026-09-28): the graph colors. A group's
+`path:/^(?:…)$/` regex colors nodes, `view.dataEngine.setOptions({colorGroups})` recolors
+an open graph, and a hidden window pauses timers and rendering.
+
+To drive Obsidian without touching the user's app, run a second instance with its own data
+folder: copy `obsidian-<version>.asar` from `~/Library/Application Support/obsidian/` into
+the folder, write `obsidian.json` there with one vault, and run
+`open -n -a Obsidian --args --user-data-dir=<folder> --remote-debugging-port=9333`. Then
+evaluate JavaScript and take screenshots through the DevTools protocol at
+`localhost:9333/json/list`, after `Page.bringToFront`.
+
 Not yet verified: Codex's hook events (the guard reads `apply_patch` paths; the rest is
-untested on Codex), the Notification types in a live session, and the Obsidian plugin
-inside Obsidian (it builds and its helpers are tested; the change bar, the badges, and the
-sessions pane have not run in the app).
+untested on Codex), the Notification types in a live session, and the rest of the Obsidian
+plugin inside Obsidian (the change bar, the badges, and the sessions pane have not run in
+the app).
 
 ## Constraints
 

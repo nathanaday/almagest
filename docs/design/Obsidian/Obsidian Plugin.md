@@ -59,6 +59,27 @@ A button resumes a session in a terminal (`claude --resume <session id>` in the 
 
 When a thread document changes, the plugin runs `atlas vault sync` after a short delay, so the board and the callouts follow a hand edit at once. Sync writes a file only when its derived content differs, so its own writes end the loop.
 
+### Graph colors
+
+The plugin colors the nodes of Obsidian's graph in one of four modes. Buttons over the graph view select the mode, and a legend under them names each color and counts its nodes. A command for each mode and a setting do the same. The default mode is Area.
+
+| Mode | Groups |
+|---|---|
+| Area | One color for each area. A document takes its nearest area: an area is its own; a repository or a knowledge page takes the last area in its `chain`; a stub takes the area of its first scope; a spec, task, receipt, or change takes its thread's area; a session takes the area of its first thread or repository. The eight oldest areas (by `created`) get the eight colors, so a new area never repaints the others. The areas after the eighth share one gray group. |
+| Type | Areas, repositories, concepts, entities, policies, sources, threads (stub, spec, task, receipt), and sessions with changes. |
+| Threads | Open threads, closed threads, and no threads (gray). A thread document takes its own thread's state. Another document takes the state of each thread that it belongs to (a session's or a change's) or shares a link with, in either direction. An open thread wins over a closed one. A thread is closed when its stub has `stage: closed`. |
+| Activity | Four quarters of the markdown files, newest first. The sort key is the day of `updated`, then the file's modification time. A file with no `updated` uses the day of its modification time. |
+
+The colors come from one categorical palette in a fixed order, with light and dark steps. Activity uses one blue ramp, where the newest quarter has the most contrast with the background. The plugin uses the steps of the current theme and applies them again when the theme changes.
+
+How the groups reach the graph:
+
+- **One query per group lists its paths.** The query is a regular expression that matches whole paths: `path:/^(?:wiki\/concepts\/Idea\.md|…)$/`. A quoted `path:"Notes.md"` would also match `inbox/Notes.md`. A search on a property cannot follow a thread to its stub or a scope to its area, so the plugin computes each group from the metadata cache.
+- **The groups follow the vault.** The plugin computes the groups again one second after the metadata cache resolves a change, after a rename or a delete, after a layout change, and after a theme change. It writes them only when they differ.
+- **Atlas owns the queries of that one form.** On each write the plugin removes every group whose query starts with `path:/^(?:` and ends with `)$/`, puts its own groups first, and keeps the user's groups after them. Obsidian colors a node with the first group that matches, so the user's groups color only the nodes that Atlas's groups leave out. The plugin stores no list of its queries. Off, or a disabled plugin, removes Atlas's groups and keeps the user's groups.
+- **The plugin writes to the graph's options and to every open graph.** It sets `colorGroups` in the core graph plugin's options and saves them, and it passes the groups to the engine of each open global and local graph. These are not public API. Each access is checked, so a change in Obsidian turns the colors off and breaks nothing else.
+- **`.obsidian/graph.json` stays out of git.** Obsidian rewrites it on every zoom, and the plugin rewrites it when a document changes, so a tracked file would add a snapshot commit to most writes. `EnsureFolders` excludes it. A vault that tracked it before gets one commit, `untrack machine files: .obsidian/graph.json`, and the file stays on disk.
+
 ## Later
 
 - **Live canvas edits.** An agent's write to a `.canvas` file reloads the open canvas, and a user's edit goes to the same file. A race exists while Obsidian delays its save. Build a node-by-node merge only if the race matters in practice, because the canvas view's API is undocumented.

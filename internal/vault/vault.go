@@ -41,9 +41,10 @@ var Folders = []string{
 }
 
 // Excluded are the patterns kept out of the vault's history on each machine: the
-// harness settings hold this machine's paths, and Obsidian rewrites its workspace on
-// every click.
-var Excluded = []string{"/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", ".DS_Store"}
+// harness settings hold this machine's paths, Obsidian rewrites its workspace on every
+// click and its graph settings on every zoom, and the Obsidian plugin rewrites the
+// graph's color groups when a document changes.
+var Excluded = []string{"/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store"}
 
 // Defaults of the vault document.
 var (
@@ -197,7 +198,28 @@ func (v *Vault) EnsureFolders() error {
 			return err
 		}
 	}
-	return v.Git().Exclude(Excluded...)
+	g := v.Git()
+	if err := g.Exclude(Excluded...); err != nil {
+		return err
+	}
+	return untrackExcluded(g)
+}
+
+// untrackExcluded removes from git the files of Excluded that a vault tracked before
+// they were excluded, in a commit of its own. The files stay on disk.
+func untrackExcluded(g gitx.Repo) error {
+	var files []string
+	for _, p := range Excluded {
+		if rel, ok := strings.CutPrefix(p, "/"); ok {
+			files = append(files, rel)
+		}
+	}
+	removed, err := g.Untrack(files...)
+	if err != nil || len(removed) == 0 || !g.HasHead() {
+		return err
+	}
+	_, err = g.Commit("untrack machine files: " + strings.Join(removed, ", "))
+	return err
 }
 
 // FindAbove is the nearest folder at or above dir that holds a vault document, or "".
