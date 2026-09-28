@@ -1,5 +1,5 @@
 
-# Vault
+# Vault Layout
 
 The layout of a vault, the vault document, and the rules for ids, titles, links, and git.
 

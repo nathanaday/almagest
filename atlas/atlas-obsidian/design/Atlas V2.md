@@ -48,7 +48,7 @@ Changes    ── sources ▶ the documents a change absorbed into the wiki
 ```
 
 - [[Document Types]] lists the thirteen document types.
-- [[Vault]] gives the layout of the vault, ids, titles, links, and git.
+- [[Vault Layout]] gives the layout of the vault, ids, titles, links, and git.
 - [[Entities]] lists the data that tools take and return.
 - [[Tools]], [[Agents]], [[Skills]], and [[Hooks]] list the parts that act.
 - [[System Map.canvas|System Map]] shows every part on one canvas.
@@ -85,7 +85,7 @@ The wiki is mapped from the leaves up:
 Every document that can teach the wiki (a source, a spec, a receipt) is **pending** until an applied change lists it. Code derives this. It compares each document's content hash to the hashes that applied changes recorded. The `vault` tool reports the pending documents, and the `wiki-sync` skill absorbs them through one pipeline:
 
 ```text
-document → chunks → Text Blob → (wiki-extract) → Item Map → match → Match Map → (wiki-draft) → Change Plan → change → commit
+document → chunks → Text Blob → (wiki-extract) → Item Map → match → Match Map → (wiki-draft) → Wiki Change Plan → change → commit
 ```
 
 Ingest, saving a conversation, describing a repository, and learning from a closed thread all use this pipeline. See [[Wiki Sync.canvas|Wiki Sync]].
@@ -138,7 +138,7 @@ These decisions change or complete the first V2 brainstorm.
 ## Reading order
 
 1. [[Atlas V1 Feedback]], then this page.
-2. [[Document Types]], [[Vault]], [[Wiki]], [[Threads]], [[Sessions]], [[Changes]].
+2. [[Document Types]], [[Vault Layout]], [[Wiki]], [[Threads]], [[Sessions]], [[Changes]].
 3. [[Entities]] and [[Entities.canvas|the entity flow]].
 4. [[Tools]], [[Agents]], [[Hooks]].
 5. [[Skills]] and the skill canvases.

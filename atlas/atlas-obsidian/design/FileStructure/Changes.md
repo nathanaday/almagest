@@ -108,7 +108,7 @@ the full new content of the page
 4. The model sets no field that code owns. Code drops such a field and reports it as a warning.
 5. A modify, rename, or remove names a page by id. Its `base` is the hash the model read; when the model gives none, code records the hash at propose time. Apply refuses when the file changed since.
 6. A rename adds a modify for every page that links to the old title. A remove with `redirect` does the same toward the redirect. A remove without one lists the pages whose links it breaks, as warnings.
-7. `absorbs` names documents of a type in `wikify` ([[Vault#Atlas.md]]).
+7. `absorbs` names documents of a type in `wikify` ([[Vault Layout#Atlas.md]]).
 8. At most 100 writes. A larger batch is two changes.
 
 Links in new content that resolve to nothing are warnings, not refusals, because a later change may create the target.

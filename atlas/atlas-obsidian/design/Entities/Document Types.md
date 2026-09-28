@@ -7,7 +7,7 @@ Every document in the vault has a type and an id. The type sets its folder, its 
 
 | Type | Id prefix | Folder | Schema | Written by |
 |---|---|---|---|---|
-| `vault` | `vlt` | `Atlas.md` at the root | [[Vault#Atlas.md]] | `atlas init`; then the user |
+| `vault` | `vlt` | `Atlas.md` at the root | [[Vault Layout#Atlas.md]] | `atlas init`; then the user |
 | `area` | `are` | `wiki/areas/` | [[Wiki#Area]] | `change` |
 | `repository` | `rep` | `wiki/repositories/` | [[Wiki#Repository]] | `change` |
 | `concept` | `con` | `wiki/concepts/` | [[Wiki#Concept]] | `change` |
