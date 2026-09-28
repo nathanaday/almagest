@@ -19,7 +19,7 @@ state: {}                                          # the type's derived state, b
 |---|---|
 | `stub` | `stage`, `outcome`, `active`, `tasks`, `priority`, `blocked` |
 | `task` | `status`, `active`, `order`, `repository` |
-| `session` | `status`, `thread`, `task` |
+| `session` | `status`, `threads`, `tasks` |
 | `change` | `status`, `counts` |
 | `source` | `pending` |
 | `repository` | `path`, `behind` (commits since `described`) |

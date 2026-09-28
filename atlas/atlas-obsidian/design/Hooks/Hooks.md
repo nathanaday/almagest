@@ -57,9 +57,9 @@ The context is data about the vault. The vault context is the user's text, and t
 | 2 | the path is under `wiki/` | Write, Edit | `change` propose |
 | 3 | the path is under `changes/` or `sessions/`, or is `Atlas.md`, a `.base` file, or `.claude/settings.json` | Write, Edit | the tool that owns it |
 | 4 | the path is a new file under `threads/` | Write | `thread` open, file, or tasks |
-| 5 | the path is inside a linked repository, and the session's document has no `thread` | Write, Edit | `thread` open or attach, and the thread-work skill |
+| 5 | the path is inside a linked repository, and the session's `threads` is empty | Write, Edit | `thread` open or attach, and the thread-work skill |
 
-- Rule 5 is the thread rule: work on a repository needs a thread. A subagent inherits its parent's thread at `SubagentStart`, so a subagent sent by a session that has a thread may edit.
+- Rule 5 is the thread rule: work on a repository needs a thread. A subagent inherits its parent's `threads` at `SubagentStart`, so a subagent sent by a session that has a thread may edit.
 - Edit of an existing thread document is allowed. That is how the model writes a spec's prose or a task's progress.
 - Bash is guarded only by rule 1. A shell command can write anywhere, and parsing shell is not reliable. The snapshot commit keeps any such write in the vault recoverable, and the repository's own git keeps the rest.
 
@@ -71,7 +71,7 @@ The context is data about the vault. The vault context is the user's text, and t
 |---|---|
 | Write or Edit inside a linked repository | adds the repository to the session's `repositories` |
 | Write or Edit of a thread document | the document's `updated`; binds the session to the thread |
-| `thread` open, attach, file, tasks, task | binds the session to the thread; `task` start sets the session's `task`; done or drop clears it; then runs the sync of `active` |
+| `thread` open, attach, file, tasks, task | adds the thread to the session's `threads`; `task` start adds the task to `tasks`; then runs the sync of `active` |
 | `change` propose, apply | adds the change to the session's `changes`; writes the session into the change's `session` |
 | `session` | writes the [[Session Note]] into the session document |
 | any call | `updated`, at most once a minute |

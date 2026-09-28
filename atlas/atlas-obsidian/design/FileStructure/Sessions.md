@@ -26,8 +26,8 @@ ended: ""
 cwd: "~/notes/work"
 parent: ""                          # the parent session, for a subagent
 agent: ""                           # the subagent's type, for a subagent
-thread: "[[Filter vehicle false alarms]]"
-task: "[[Filter vehicle false alarms — T1 Score boxes by motion]]"
+threads: ["[[Filter vehicle false alarms]]"]      # every thread the session worked on
+tasks: ["[[Filter vehicle false alarms — T1 Score boxes by motion]]"]   # every task it started
 repositories: ["[[p3-edge]]"]       # every repository the session edited
 changes: ["[[2026-09-27 Ingest the DINOv2 paper]]"]
 # written through the session tool:
@@ -37,7 +37,7 @@ description: "Score detection boxes by motion to cut vehicle false alarms"
 
 Body:
 
-1. The lead callout, owned by the hooks: `> [!session] running · T1 of [[Filter vehicle false alarms]] · [[p3-edge]]`.
+1. The lead callout, owned by the hooks: `> [!session] running · T1 of [[Filter vehicle false alarms]] · [[p3-edge]]`. It names the task started last that is still open.
 2. `## Progress`: dated lines. `session` progress appends one.
 3. `## Summary`: what the session did, written at its end.
 
@@ -59,13 +59,13 @@ Hooks own every link between a session and another document, keyed by the harnes
 
 | Field | Set by the hook when |
 |---|---|
-| `thread` | a `thread` call that acts on one thread: `open`, `attach`, `file`, `tasks`, `task`. A read (`list`, `show`) binds nothing |
-| `task` | `thread` task `start`; cleared by `done` or `drop` on that task |
+| `threads` | a `thread` call that acts on one thread: `open`, `attach`, `file`, `tasks`, `task`. A read (`list`, `show`) binds nothing |
+| `tasks` | `thread` task `start` |
 | `repositories` | an Edit or Write lands inside a linked repository |
 | `changes` | a `change` call proposes or applies a change; the hook also writes `session` into the change document |
 | `parent`, `agent` | `SubagentStart`, from `parentSessionId` and `agent_type` |
 
-A subagent starts with its parent's `thread` and `task`, so the thread rule holds inside it.
+A subagent starts with its parent's `threads` and `tasks`, so the thread rule holds inside it.
 
 ## Subagents
 
@@ -83,4 +83,4 @@ The `Stop` hook reminds the agent once when the session edited a repository or p
 
 ## Sessions.base
 
-Views: running and waiting now; today; by thread; by repository; lost. Each row shows the description, the status, the thread, and the task.
+Views: running and waiting now; today; by thread; by repository; lost. Each row shows the description, the status, the threads, and the tasks.
