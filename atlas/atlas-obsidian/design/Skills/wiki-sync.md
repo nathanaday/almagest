@@ -20,13 +20,13 @@
    - every drafted write;
    - for each source: a modify of its source page, with its description, authority, `## Summary`, and `## Structure` (from the chunk summaries);
    - `absorbs`: the document ids; `thread`: the thread, when every document belongs to one;
-   - `summary`: what the change does, the counts, and every skipped subject with its reason.
+   - `title`: a short name ("Ingest the DINOv2 paper"); `notes`: what the change does, and every skipped subject with its reason.
    Past 25 new pages, keep the ones the most claims support and list the rest for a later run.
 9. **Propose** the change.
 
 ## Gate
 
-Show the [[Change Preview]] and link the change document, so the user can read the pages in Obsidian and edit one before the yes. Say the coverage: every chunk read, any chunk partial, the subjects skipped. Wait for the yes, then apply.
+Show the [[Change Preview]] and link the change document, so the user can read the pages in Obsidian and edit one before the yes. Say the coverage: every chunk read, any chunk partial, the subjects skipped. Wait for the yes, then apply. The guard refuses apply in the same turn as the proposal.
 
 A change with no writes (the documents held nothing new) needs no yes. Apply it and say so in one line: the documents are no longer pending.
 

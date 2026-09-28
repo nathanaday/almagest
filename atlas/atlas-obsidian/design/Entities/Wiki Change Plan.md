@@ -4,7 +4,8 @@
 > The writes one change will make. [[wiki-draft]] returns fragments; the skill joins them; [[change]] propose takes the whole.
 
 ```yaml
-summary: "Ingest the DINOv2 paper: its source page, two concepts, one entity"
+title: "Ingest the DINOv2 paper"      # short: the file name and the commit subject
+notes: "…"                            # what the change does and why; the skipped subjects; becomes ## Notes
 absorbs: [src-p2x7nd]                 # the documents this change absorbs
 thread: ""                            # the thread it serves, if any
 supersedes: ""                        # a proposed change this one replaces
@@ -32,9 +33,7 @@ writes:
     redirect: con-k3m9qa              # optional: links to the removed page go here
 ```
 
-Changes from the first draft:
-
-- `add`, `modify`, `remove` become `create`, `modify`, `rename`, `remove`. A rename lets code rewrite the links; a remove and a create would break them.
-- `content` splits into `fields` and `body`. Code writes the fields it owns and checks the rest against the schema.
-- A new page gives a type and a title, not a `page_id`. Code mints the id and routes the path.
-- `absorbs` names the documents the change absorbs, which is how code knows what is still [[Changes#Pending documents|pending]].
+- `rename` exists so code can rewrite the links ([[Changes#Link rewrites]]). A remove and a create would break them.
+- `fields` and `body` are apart, so code writes the fields it owns and checks the rest against the schema.
+- A new page gives a type and a title. Code mints the id and routes the path.
+- `absorbs` is how code knows what is still [[Changes#Pending documents|pending]].

@@ -6,6 +6,7 @@
 One search serves every need: finding a wiki page, finding the repository a request means, and finding the thread for a piece of work.
 
 - The candidates are every document with a known `type`. Files without one (the scratchpad, the inbox, your own notes) are not searched.
+- Change documents are left out unless `types` names `change`, and `## Writes` is never ranked, because it holds copies of pages.
 - `scope` includes every scope below it. A document with several scopes (a stub) matches when any of them is inside.
 - `state` filters on the derived state in the [[Doc Ref]]: `{stage: [stub, spec, tasks]}` finds open threads; `{status: [proposed]}` finds changes that wait for you.
 - Ranking: BM25 over title (weight 3), aliases (3), description (2), and body (1). An empty `text` with filters lists the matches, newest `updated` first.

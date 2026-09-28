@@ -24,7 +24,7 @@ Four read, four write. The writers are the only code paths that change the vault
 2. **The vault.** Every tool takes an optional `vault` (a path or a name from `~/.atlas/config.json`). Without it, the server resolves: the vault at or above the working directory (the nearest `Atlas.md` of type `vault`); then the vault that links a repository holding the working directory; then it refuses, naming both checks.
 3. **Ids in, Doc Refs out.** A tool takes ids, or titles that resolve to exactly one document. It returns [[Doc Ref]]s, never bare paths.
 4. **Refusals teach.** A refusal names the rule and the call that would succeed: "thread T2 depends on T1, which is open; call thread task T1 done first".
-5. **Commits.** Every write takes `.git/atlas.lock`, commits a dirty tree as `snapshot` first, and ends in one commit ([[Vault Layout#Git]]).
+5. **Commits.** `source` capture, `change` apply and undo, and every `thread` write take `.git/atlas.lock`, recover a change a crash left `applying`, commit a dirty tree as `snapshot`, and end in one commit ([[Vault Layout#Git]]). `change` propose and reject, `vault` sync and mention, and the hooks write without a commit, under the same lock; the next snapshot keeps what they wrote.
 6. **Sync.** Every `thread` write and every `change` apply ends in the sync of derived fields that it touched.
 7. **No session id.** No tool needs one. The hooks link each call to its session ([[Sessions#Links]]), and the agent writes its own session document's prose with Edit.
 

@@ -94,12 +94,12 @@ The vault is one git repository, on `main`. It never contains another repository
 |---|---|---|
 | `setup: …` | `atlas init` | the layout |
 | `snapshot: N files edited by hand` | every write tool, before it writes, when the tree is dirty | your edits, the session documents, the model's prose edits |
-| `change: <summary>` | `change` apply | the change's writes and the change document; trailer `Atlas-Change: chg-…` |
-| `undo: <summary>` | `change` undo | the restored paths and the change document |
+| `change: <title>` | `change` apply | the change's writes, its link rewrites, and the change document; trailer `Atlas-Change: chg-…` |
+| `undo: <title>` | `change` undo | the restored paths and the change document |
 | `capture: <title>` | `source` capture | the captured file, the source page, the removed inbox file |
-| `thread: <summary>` | `thread` | the thread documents the call wrote; trailer `Atlas-Thread: thr-…` |
+| `thread: <summary>` | `thread` | the thread documents the call wrote, and for a rename its link rewrites; trailer `Atlas-Thread: thr-…` |
 
-A write tool takes `.git/atlas.lock` (`flock`) for the length of its commit, so two sessions never commit at once.
+Every write to a document, from a tool, a hook, or `vault sync`, takes `.git/atlas.lock` (`flock`). The lock is held only for the write, so a hook waits milliseconds at most, and two sessions never write one file at once.
 
 ## Settings for the harness
 
