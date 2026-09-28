@@ -7,6 +7,10 @@ hooks. The atlas side lists every project and shows them in a terminal view.
 
 Read `README.md` first. This file holds what the code and README do not say.
 
+Atlas V2 is built beside V1 in `v2-exp/`: its own Go module and its own plugin
+(`atlas-obsidian-v2-exp`). Work on V2 reads `v2-exp/CLAUDE.md`; nothing below applies
+to it, and V1 stays as it is.
+
 ## Sources of truth
 
 | Thing | Location |
