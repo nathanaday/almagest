@@ -1,47 +1,425 @@
 {
-	"nodes":[
-		{"id":"4e1cba7b50ae8272","type":"group","x":-1160,"y":-410,"width":2380,"height":820,"color":"5","label":"Wiki Draft Tool"},
-		{"id":"a0aafd4613a0ee5b","type":"text","text":"Which Description of the concept is clearer?","x":-10,"y":-70,"width":250,"height":60},
-		{"id":"4718da7ac39415da","type":"text","text":"Skip","x":-10,"y":40,"width":250,"height":60},
-		{"id":"40384805be47bc3c","type":"text","text":"Skip","x":15,"y":330,"width":250,"height":60},
-		{"id":"f2ad9a59aa33f2f0","type":"text","text":"Should we add this item to the wiki?","x":-420,"y":-280,"width":254,"height":82},
-		{"id":"1ce76dcbaf88d7d7","type":"text","text":"Is the neighboring item the same concept?","x":-360,"y":-20,"width":250,"height":82},
-		{"id":"3941ba533305a86e","type":"text","text":"Does this item provide new information to the matching page?","x":-360,"y":152,"width":250,"height":104},
-		{"id":"15eebd1dc1236305","type":"text","text":"Skip","x":-110,"y":-390,"width":250,"height":60},
-		{"id":"14cbed951aee0ed2","type":"text","text":"Modify wiki page ","x":360,"y":174,"width":250,"height":60},
-		{"id":"5a254fc08ff1409b","type":"text","text":"Draft Page","x":360,"y":-269,"width":250,"height":60},
-		{"id":"7b6eee7ca51296e4","type":"text","text":"Modify wiki page ","x":360,"y":-130,"width":250,"height":60},
-		{"id":"6ac7cb49fdea5013","type":"text","text":"Draft page (with wiki's link)","x":360,"y":-40,"width":250,"height":60},
-		{"id":"4a3c369e8f26cc19","type":"text","text":"For neighboring items","x":-740,"y":-10,"width":250,"height":60},
-		{"id":"cc759d72c7953ca0","type":"text","text":"For item hits","x":-740,"y":174,"width":250,"height":60},
-		{"id":"89c8373bf306ae62","type":"text","text":"For item misses","x":-746,"y":-269,"width":250,"height":60},
-		{"id":"7cfdc5728cf4b044","type":"text","text":"For each item in map","x":-1100,"y":-10,"width":250,"height":60},
-		{"id":"3d8d25edf1a94ef6","type":"text","text":"Accumulate planned changes:\n- Pages added\n- Pages modified","x":840,"y":-65,"width":341,"height":110},
-		{"id":"fa47b1e29ec63bc2","type":"text","text":"Get Source Text by ID","x":-1100,"y":256,"width":250,"height":60,"color":"5"},
-		{"id":"c825c288f9aafa66","x":-1720,"y":-179,"width":400,"height":400,"type":"file","file":"design/Entities/Item Map.md"},
-		{"id":"1270f8329b09ac0c","x":1360,"y":-210,"width":400,"height":400,"type":"file","file":"design/Entities/Wiki Change Plan.md"}
+	"nodes": [
+		{
+			"id": "4b80c9e2e5e4aa6f",
+			"type": "group",
+			"label": "wiki-draft (agent): a slice of subjects in, writes out",
+			"x": -1300,
+			"y": -500,
+			"width": 1880,
+			"height": 1200,
+			"color": "3"
+		},
+		{
+			"id": "1200e4bd29bc5262",
+			"type": "file",
+			"file": "design/Entities/Match Map.md",
+			"x": -1760,
+			"y": -200,
+			"width": 400,
+			"height": 400,
+			"color": "6"
+		},
+		{
+			"id": "d96a7674fe74c05f",
+			"type": "text",
+			"text": "For each subject in the slice",
+			"x": -1240,
+			"y": -30,
+			"width": 250,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "08776ee2e9418138",
+			"type": "text",
+			"text": "`new`",
+			"x": -880,
+			"y": -330,
+			"width": 160,
+			"height": 60,
+			"color": "5"
+		},
+		{
+			"id": "c72222f7ad6310bc",
+			"type": "text",
+			"text": "`near`",
+			"x": -880,
+			"y": -30,
+			"width": 160,
+			"height": 60,
+			"color": "5"
+		},
+		{
+			"id": "8d08a57a33c26a77",
+			"type": "text",
+			"text": "`hit`",
+			"x": -880,
+			"y": 300,
+			"width": 160,
+			"height": 60,
+			"color": "5"
+		},
+		{
+			"id": "ffd7a6cff852ebf4",
+			"type": "text",
+			"text": "Should the wiki hold this subject? (the gates)",
+			"x": -620,
+			"y": -350,
+			"width": 270,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "3f72c885e4c756a9",
+			"type": "text",
+			"text": "**create** a page in the source's scope, cited",
+			"x": -200,
+			"y": -440,
+			"width": 270,
+			"height": 80,
+			"color": "3"
+		},
+		{
+			"id": "3e6692e4adc8be6d",
+			"type": "text",
+			"text": "**skip**, with the reason",
+			"x": -200,
+			"y": -300,
+			"width": 270,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "0ad7f1da0c9f9b3a",
+			"type": "text",
+			"text": "Read each neighbor. Is one of them the same subject?",
+			"x": -620,
+			"y": -50,
+			"width": 270,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "489f1c0d8a8f1fce",
+			"type": "text",
+			"text": "Treat it as a **hit** on that page; add the name as an alias",
+			"x": -200,
+			"y": -110,
+			"width": 270,
+			"height": 90,
+			"color": "3"
+		},
+		{
+			"id": "cb338e80193ef1e5",
+			"type": "text",
+			"text": "Treat it as **new**; link the closest neighbor under Related",
+			"x": -200,
+			"y": 20,
+			"width": 270,
+			"height": 90,
+			"color": "3"
+		},
+		{
+			"id": "4face6e69a2c7a83",
+			"type": "text",
+			"text": "Read the page. Do the items add information?",
+			"x": -620,
+			"y": 190,
+			"width": 270,
+			"height": 90,
+			"color": "3"
+		},
+		{
+			"id": "4dfe6d90d6eb2148",
+			"type": "text",
+			"text": "**modify**: merge the claims, cite them, keep the clearer description",
+			"x": -200,
+			"y": 170,
+			"width": 270,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "6d1d961a64ffa0e7",
+			"type": "text",
+			"text": "Do they confirm a claim the page makes?",
+			"x": -620,
+			"y": 340,
+			"width": 270,
+			"height": 80,
+			"color": "3"
+		},
+		{
+			"id": "320cbea5fa36498e",
+			"type": "text",
+			"text": "**modify**: add the citation",
+			"x": -200,
+			"y": 330,
+			"width": 270,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "5b61d67073d8a23d",
+			"type": "text",
+			"text": "**skip**",
+			"x": -200,
+			"y": 430,
+			"width": 270,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "d5b101ef708d5033",
+			"type": "text",
+			"text": "They contradict the page: **modify**, keep both claims, set `contested`",
+			"x": -200,
+			"y": 540,
+			"width": 270,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "21034a230ab6308a",
+			"type": "text",
+			"text": "**source** read, when a claim needs the text around it",
+			"x": -1240,
+			"y": 300,
+			"width": 250,
+			"height": 90,
+			"color": "5"
+		},
+		{
+			"id": "0657ec4d4360fa53",
+			"type": "text",
+			"text": "Accumulate the writes and the skipped subjects",
+			"x": 240,
+			"y": -40,
+			"width": 280,
+			"height": 80,
+			"color": "3"
+		},
+		{
+			"id": "a81ee0e9fa3736f1",
+			"type": "file",
+			"file": "design/Entities/Wiki Change Plan.md",
+			"x": 640,
+			"y": -200,
+			"width": 400,
+			"height": 400,
+			"color": "6"
+		},
+		{
+			"id": "c89c2ecede02a5cc",
+			"type": "text",
+			"text": "Changed from the first draft: a `near` subject whose neighbor is a different subject used to be skipped. It now goes the `new` way, so no subject is lost in silence.",
+			"x": 640,
+			"y": 260,
+			"width": 400,
+			"height": 140
+		},
+		{
+			"id": "41849eee01dd81fa",
+			"type": "text",
+			"text": "**Legend**\n\n- cyan: tool (code)\n- yellow: skill or agent (model)\n- purple: document or entity\n- green: hook (code, automatic)\n- orange: the user\n- red: a gate or a refusal",
+			"x": -1760,
+			"y": -620,
+			"width": 300,
+			"height": 260
+		}
 	],
-	"edges":[
-		{"id":"54e62cb552bd81af","fromNode":"7cfdc5728cf4b044","fromSide":"right","toNode":"89c8373bf306ae62","toSide":"left"},
-		{"id":"3f0c36669c1479ce","fromNode":"7cfdc5728cf4b044","fromSide":"right","toNode":"4a3c369e8f26cc19","toSide":"left"},
-		{"id":"f5dc91a15e35e45c","fromNode":"7cfdc5728cf4b044","fromSide":"right","toNode":"cc759d72c7953ca0","toSide":"left"},
-		{"id":"ee9b9ee97250d97a","fromNode":"fa47b1e29ec63bc2","fromSide":"top","toNode":"7cfdc5728cf4b044","toSide":"bottom"},
-		{"id":"34ef2bc31e6f7d08","fromNode":"89c8373bf306ae62","fromSide":"right","toNode":"f2ad9a59aa33f2f0","toSide":"left"},
-		{"id":"5baa99a6374d8889","fromNode":"4a3c369e8f26cc19","fromSide":"right","toNode":"1ce76dcbaf88d7d7","toSide":"left"},
-		{"id":"d147f8f496ab781d","fromNode":"cc759d72c7953ca0","fromSide":"right","toNode":"3941ba533305a86e","toSide":"left"},
-		{"id":"a1da7ba657bb466c","fromNode":"14cbed951aee0ed2","fromSide":"right","toNode":"3d8d25edf1a94ef6","toSide":"left"},
-		{"id":"92ec46be8be0d16f","fromNode":"3941ba533305a86e","fromSide":"right","toNode":"14cbed951aee0ed2","toSide":"left","label":"Yes"},
-		{"id":"2686b4485b04336b","fromNode":"a0aafd4613a0ee5b","fromSide":"right","toNode":"7b6eee7ca51296e4","toSide":"left","label":"ours"},
-		{"id":"2abac473a46b3733","fromNode":"a0aafd4613a0ee5b","fromSide":"right","toNode":"6ac7cb49fdea5013","toSide":"left","label":"theirs"},
-		{"id":"fb63cd767cdb60dc","fromNode":"1ce76dcbaf88d7d7","fromSide":"right","toNode":"a0aafd4613a0ee5b","toSide":"left","label":"Yes"},
-		{"id":"7fd2f3456b5ea7f4","fromNode":"1ce76dcbaf88d7d7","fromSide":"right","toNode":"4718da7ac39415da","toSide":"left","label":"No"},
-		{"id":"5f703303d801b415","fromNode":"5a254fc08ff1409b","fromSide":"right","toNode":"3d8d25edf1a94ef6","toSide":"left"},
-		{"id":"71471bc605e578d3","fromNode":"7b6eee7ca51296e4","fromSide":"right","toNode":"3d8d25edf1a94ef6","toSide":"left"},
-		{"id":"6fd46b1c08b572df","fromNode":"6ac7cb49fdea5013","fromSide":"right","toNode":"3d8d25edf1a94ef6","toSide":"left"},
-		{"id":"07e502b20e4221a5","fromNode":"3941ba533305a86e","fromSide":"right","toNode":"40384805be47bc3c","toSide":"left","label":"No"},
-		{"id":"6efc6149b7bad0fc","fromNode":"f2ad9a59aa33f2f0","fromSide":"right","toNode":"5a254fc08ff1409b","toSide":"left","label":"Yes"},
-		{"id":"28333ab28b6f618c","fromNode":"f2ad9a59aa33f2f0","fromSide":"right","toNode":"15eebd1dc1236305","toSide":"left","label":"No"},
-		{"id":"cd01b4ce441c0f84","fromNode":"c825c288f9aafa66","fromSide":"right","toNode":"7cfdc5728cf4b044","toSide":"left"},
-		{"id":"9ea1721aeb10629b","fromNode":"3d8d25edf1a94ef6","fromSide":"right","toNode":"1270f8329b09ac0c","toSide":"left"}
+	"edges": [
+		{
+			"id": "28a98136dd0dd471",
+			"fromNode": "1200e4bd29bc5262",
+			"fromSide": "right",
+			"toNode": "d96a7674fe74c05f",
+			"toSide": "left"
+		},
+		{
+			"id": "ea0bb561934e36e8",
+			"fromNode": "d96a7674fe74c05f",
+			"fromSide": "right",
+			"toNode": "08776ee2e9418138",
+			"toSide": "left"
+		},
+		{
+			"id": "33ce0434c6a4c247",
+			"fromNode": "d96a7674fe74c05f",
+			"fromSide": "right",
+			"toNode": "c72222f7ad6310bc",
+			"toSide": "left"
+		},
+		{
+			"id": "10d896232d85919f",
+			"fromNode": "d96a7674fe74c05f",
+			"fromSide": "right",
+			"toNode": "8d08a57a33c26a77",
+			"toSide": "left"
+		},
+		{
+			"id": "a8596c6a49a5244a",
+			"fromNode": "08776ee2e9418138",
+			"fromSide": "right",
+			"toNode": "ffd7a6cff852ebf4",
+			"toSide": "left"
+		},
+		{
+			"id": "48a41baf83f4b68c",
+			"fromNode": "ffd7a6cff852ebf4",
+			"fromSide": "right",
+			"toNode": "3f72c885e4c756a9",
+			"toSide": "left",
+			"label": "yes"
+		},
+		{
+			"id": "6d9bda18b9420110",
+			"fromNode": "ffd7a6cff852ebf4",
+			"fromSide": "right",
+			"toNode": "3e6692e4adc8be6d",
+			"toSide": "left",
+			"label": "no"
+		},
+		{
+			"id": "f86b2ca9b7aad5f6",
+			"fromNode": "c72222f7ad6310bc",
+			"fromSide": "right",
+			"toNode": "0ad7f1da0c9f9b3a",
+			"toSide": "left"
+		},
+		{
+			"id": "c9ec1c01242102d5",
+			"fromNode": "0ad7f1da0c9f9b3a",
+			"fromSide": "right",
+			"toNode": "489f1c0d8a8f1fce",
+			"toSide": "left",
+			"label": "yes"
+		},
+		{
+			"id": "3d07a3900c9bd4d1",
+			"fromNode": "0ad7f1da0c9f9b3a",
+			"fromSide": "right",
+			"toNode": "cb338e80193ef1e5",
+			"toSide": "left",
+			"label": "no"
+		},
+		{
+			"id": "1a73fa8f2281f446",
+			"fromNode": "489f1c0d8a8f1fce",
+			"fromSide": "bottom",
+			"toNode": "4face6e69a2c7a83",
+			"toSide": "top"
+		},
+		{
+			"id": "8ddee088f2e22a03",
+			"fromNode": "cb338e80193ef1e5",
+			"fromSide": "top",
+			"toNode": "ffd7a6cff852ebf4",
+			"toSide": "bottom"
+		},
+		{
+			"id": "a0bf9216ecfaf05f",
+			"fromNode": "8d08a57a33c26a77",
+			"fromSide": "right",
+			"toNode": "4face6e69a2c7a83",
+			"toSide": "left"
+		},
+		{
+			"id": "3b28831019016ebf",
+			"fromNode": "4face6e69a2c7a83",
+			"fromSide": "right",
+			"toNode": "4dfe6d90d6eb2148",
+			"toSide": "left",
+			"label": "yes"
+		},
+		{
+			"id": "8397d15608b1f961",
+			"fromNode": "4face6e69a2c7a83",
+			"fromSide": "bottom",
+			"toNode": "6d1d961a64ffa0e7",
+			"toSide": "top",
+			"label": "no"
+		},
+		{
+			"id": "1fdcf80e0d2bc6ba",
+			"fromNode": "6d1d961a64ffa0e7",
+			"fromSide": "right",
+			"toNode": "320cbea5fa36498e",
+			"toSide": "left",
+			"label": "yes"
+		},
+		{
+			"id": "7374bff4d14fc740",
+			"fromNode": "6d1d961a64ffa0e7",
+			"fromSide": "right",
+			"toNode": "5b61d67073d8a23d",
+			"toSide": "left",
+			"label": "no"
+		},
+		{
+			"id": "daa57f917ca05bc9",
+			"fromNode": "8d08a57a33c26a77",
+			"fromSide": "bottom",
+			"toNode": "d5b101ef708d5033",
+			"toSide": "left",
+			"label": "contradicts"
+		},
+		{
+			"id": "a6f28f1943481869",
+			"fromNode": "21034a230ab6308a",
+			"fromSide": "top",
+			"toNode": "d96a7674fe74c05f",
+			"toSide": "bottom"
+		},
+		{
+			"id": "aaba08e2e080306e",
+			"fromNode": "3f72c885e4c756a9",
+			"fromSide": "right",
+			"toNode": "0657ec4d4360fa53",
+			"toSide": "left"
+		},
+		{
+			"id": "5be8867ae2bc267c",
+			"fromNode": "3e6692e4adc8be6d",
+			"fromSide": "right",
+			"toNode": "0657ec4d4360fa53",
+			"toSide": "left"
+		},
+		{
+			"id": "5c0bceb5b0d85dca",
+			"fromNode": "4dfe6d90d6eb2148",
+			"fromSide": "right",
+			"toNode": "0657ec4d4360fa53",
+			"toSide": "left"
+		},
+		{
+			"id": "045a55106dec73b5",
+			"fromNode": "320cbea5fa36498e",
+			"fromSide": "right",
+			"toNode": "0657ec4d4360fa53",
+			"toSide": "left"
+		},
+		{
+			"id": "88115e77f907c685",
+			"fromNode": "5b61d67073d8a23d",
+			"fromSide": "right",
+			"toNode": "0657ec4d4360fa53",
+			"toSide": "left"
+		},
+		{
+			"id": "712233218c60ae63",
+			"fromNode": "d5b101ef708d5033",
+			"fromSide": "right",
+			"toNode": "0657ec4d4360fa53",
+			"toSide": "left"
+		},
+		{
+			"id": "3f446a14a8a7e8cd",
+			"fromNode": "0657ec4d4360fa53",
+			"fromSide": "right",
+			"toNode": "a81ee0e9fa3736f1",
+			"toSide": "left"
+		}
 	]
 }
