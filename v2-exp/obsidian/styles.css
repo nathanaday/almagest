@@ -30,30 +30,22 @@
 	--callout-icon: lucide-git-pull-request;
 }
 
-/* Folder colors in the file explorer. */
-.nav-folder-title[data-path="inbox"] { --atlas-folder: var(--color-orange-rgb); }
-.nav-folder-title[data-path="scratchpad"] { --atlas-folder: var(--color-yellow-rgb); }
+/* Folder colors in the file explorer: only the folders Atlas runs, and the three wiki
+   folders that hold knowledge. The rest is bookkeeping and keeps the theme's color. */
 .nav-folder-title[data-path="sessions"] { --atlas-folder: var(--color-cyan-rgb); }
 .nav-folder-title[data-path="threads"] { --atlas-folder: var(--color-purple-rgb); }
-.nav-folder-title[data-path="changes"] { --atlas-folder: var(--color-red-rgb); }
 .nav-folder-title[data-path="wiki"] { --atlas-folder: var(--color-blue-rgb); }
-.nav-folder-title[data-path="wiki/areas"] { --atlas-folder: var(--color-green-rgb); }
-.nav-folder-title[data-path="wiki/repositories"] { --atlas-folder: var(--color-orange-rgb); }
-.nav-folder-title[data-path="wiki/concepts"] { --atlas-folder: var(--color-purple-rgb); }
-.nav-folder-title[data-path="wiki/entities"] { --atlas-folder: var(--color-cyan-rgb); }
+.nav-folder-title[data-path="wiki/concepts"] { --atlas-folder: var(--color-green-rgb); }
+.nav-folder-title[data-path="wiki/entities"] { --atlas-folder: var(--color-orange-rgb); }
 .nav-folder-title[data-path="wiki/policies"] { --atlas-folder: var(--color-red-rgb); }
-.nav-folder-title[data-path="wiki/sources"] { --atlas-folder: var(--color-pink-rgb); }
 
-.nav-folder-title[data-path="inbox"],
-.nav-folder-title[data-path="scratchpad"],
 .nav-folder-title[data-path="sessions"],
 .nav-folder-title[data-path="threads"],
-.nav-folder-title[data-path="changes"],
-.nav-folder-title[data-path^="wiki"] {
+.nav-folder-title[data-path="wiki"],
+.nav-folder-title[data-path="wiki/concepts"],
+.nav-folder-title[data-path="wiki/entities"],
+.nav-folder-title[data-path="wiki/policies"] {
 	color: rgb(var(--atlas-folder));
-}
-.nav-folder-title[data-path^="wiki/"]:not([data-path="wiki/areas"]):not([data-path="wiki/repositories"]):not([data-path="wiki/concepts"]):not([data-path="wiki/entities"]):not([data-path="wiki/policies"]):not([data-path="wiki/sources"]) {
-	color: inherit;
 }
 
 /* Badges: a stub's stage and a session's status. */
