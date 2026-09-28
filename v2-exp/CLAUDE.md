@@ -1,0 +1,124 @@
+# atlas-obsidian-v2-exp
+
+Atlas V2, built from scratch beside V1. It is its own Go module
+(`github.com/nathanaday/atlas-obsidian/v2-exp`) and its own plugin
+(`atlas-obsidian-v2-exp` in the repository's marketplace). The root `go test ./...`
+never sees it, and nothing here imports V1. Read `README.md` first. This file holds what
+the code and the README do not say.
+
+## Sources of truth
+
+| Thing | Location |
+|---|---|
+| The design: rules, document types, tools, hooks, skills | `../atlas/atlas-obsidian/design/` (start with `Atlas V2.md`) |
+| Each skill's contract | `skills/<name>/SKILL.md`, `skills/atlas/references/` |
+| Each read-only agent | `agents/<name>.md` |
+| The schemas of the thirteen types | `internal/schema/schema.go` |
+
+The design pages are the spec. When the code departs from them, the reason is below.
+
+## Where the build departs from the design, and why
+
+- **Recovery needs the paths.** A change document gets a code-owned `paths` field while
+  it is `applying`: every path the apply may write. Recovery restores exactly those.
+  Apply removes the field when it ends.
+- **Times carry seconds.** `proposed` and `last_prompt` are `2006-01-02T15:04:05`. With
+  minutes, a yes typed in the minute of the proposal would not open the gate.
+- **The gate counts only the user's turns.** A host sends a subagent's hand-back and a
+  background task's notice as a UserPromptSubmit (`<agent-message …>`,
+  `<task-notification …>`). The prompt hook sets `last_prompt` only for a real prompt
+  (`hooks.UserTurn`). The live test found this hole.
+- **The Stop hook blocks once for the agent's own debts.** An empty `## Description` or
+  a missing progress line returns `decision: block` with the reason, once per session
+  (`reminded`), and never while `stop_hook_active`. A change that waits for the user is a
+  `systemMessage`, because the user acts on it.
+- **The description follows the section.** Every hook event copies the first line of
+  `## Description` into `description`, whatever tool wrote it.
+- **Shell writes reach the record, not the guard.** The design keeps Bash out of the
+  thread rule. The touched hook adds a repository to the session's `repositories` when a
+  Bash command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or
+  names it. The skills tell the agent to change files with Edit and Write.
+- **`thread-review` may name a repository**: `git -C <path> log|diff|show`, since it runs
+  in the vault.
+- **The host's own read-only agents are workers.** `Explore`, `Plan`,
+  `claude-code-guide`, and `statusline-setup` get a line under `## Subagents`, like the
+  plugin's four, and no document. Only the plugin's four are refused writes.
+- **The harness settings keep no memory.** `SyncSettings(drop)` adds every repository
+  path the pages name and removes only the paths the pages named before a write and no
+  longer do. Apply and undo pass their before-list.
+- **Machine files stay out of git** through `.git/info/exclude`
+  (`.claude/settings.local.json`, `.obsidian/workspace*.json`), so init edits no file of
+  the user's. `EnsureFolders` rewrites the entries on every write.
+- **Titles also drop `[ ] # ^`**, which break a wikilink.
+- **The vault's name is not a link target.** Obsidian resolves `[[work]]` to a file named
+  `work`, and the design's own example has an area `work` in a vault `Work`. The vault is
+  an empty `scope` or `parent`.
+- **Match merges subjects that hit one page**, so one drafter writes each page.
+- **A dropped dependency does not block** a task's readiness.
+- **The wrapper and the Obsidian plugin never search PATH or the system folders** for
+  `atlas`: another tool installs a binary of that name there. They look at `$ATLAS_BIN`
+  (the wrapper only), `~/.atlas/bin/atlas`, and `~/go/bin/atlas`.
+
+## Host facts, verified live on Claude Code 2.1.283 (2026-09-28)
+
+- Hook events carry `session_id`, `cwd`, `hook_event_name`, `prompt_id`, and
+  `permission_mode`. SessionStart has `source`; SessionEnd has `reason`; Stop has
+  `stop_hook_active` and `last_assistant_message`.
+- A subagent's SubagentStart, SubagentStop, and tool events carry `agent_id` and
+  `agent_type` (`atlas-obsidian-v2-exp:thread-review`), and the parent's `session_id`.
+- PostToolUse gives `tool_response` for every tool. For an MCP tool it is a JSON string
+  that holds the result's JSON; `hooks.decodeAll` reads both.
+- `cwd` follows the agent's `cd`: after `cd repo && …`, later events carry the
+  repository's folder.
+- Plugin tools are `mcp__plugin_atlas-obsidian-v2-exp_atlas__<tool>`; skills are
+  `atlas-obsidian-v2-exp:<skill>`.
+- `ATLAS_HOOK_LOG=<file>` appends every hook event the binary receives, one JSON line
+  each. Use it to check a host's events.
+
+Not yet verified: Codex's hook events (the guard reads `apply_patch` paths; the rest is
+untested on Codex), the Notification types in a live session, and the Obsidian plugin
+inside Obsidian (it builds and its helpers are tested; the change bar, the badges, and the
+sessions pane have not run in the app).
+
+## Constraints
+
+- Dependencies: `gopkg.in/yaml.v3` and the MCP Go SDK pinned at v1.4.0 (later versions
+  need Go 1.25). Nothing else in Go.
+- The SDK validates tool output against the schema it infers: a field without
+  `omitempty` is required, so an optional pointer or a union needs `omitempty`.
+- Every write takes `.git/atlas.lock`. The lock is not re-entrant: a write takes it once
+  (`vault.Begin`, `change.Begin`, or `v.Lock()`), and inner functions assume it held.
+- A document is found by id or title, never by a path a tool was given.
+- Tests never touch a real `~/.atlas`: `testvault.New` sets `ATLAS_HOME`. They skip
+  without git.
+- Prose in skills, docs, and messages follows the user's global writing guide.
+
+## Build, test, and try
+
+```bash
+make build        # build/atlas
+make install      # ~/.atlas/bin/atlas, with the version of .claude-plugin/plugin.json
+make test
+make obsidian     # build the Obsidian plugin and copy it into the binary's template
+```
+
+The binary, both plugin manifests, the marketplace entry, and the Obsidian plugin share
+one version; `internal/plugin` fails the build when they drift, or when the binary carries
+an older Obsidian plugin than `obsidian/dist`.
+
+End to end in a scratch vault, without touching the real machine folder:
+
+```bash
+export ATLAS_HOME=/tmp/atlas-home ATLAS_BIN=$PWD/build/atlas ATLAS_HOOK_LOG=/tmp/hooks.log
+atlas vault init --path /tmp/work --name Work
+cd /tmp/work && claude -p "…" --plugin-dir /path/to/v2-exp \
+  --allowedTools "mcp__plugin_atlas-obsidian-v2-exp_atlas__*,Read,Grep,Glob,Skill,Edit,Agent"
+claude -p --continue "yes" --plugin-dir …     # the user's answer at a gate
+```
+
+## Not built yet
+
+- The npm package that `npx atlas-obsidian setup` installs from (the Stack page). Setup
+  runs from the binary for now.
+- Capture from a URL (`origin: url`).
+- The "Later" items of the Obsidian plugin page.
