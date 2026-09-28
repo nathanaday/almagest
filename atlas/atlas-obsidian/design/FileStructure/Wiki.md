@@ -175,7 +175,7 @@ Rules:
 - `path` must be the root of a git work tree, outside the vault. `change` refuses any other path.
 - Code fills `remote` and `branch` from git when the page is created. The model never writes them.
 - Code sets `described` when a change that absorbs a snapshot of this repository applies. `context` counts the commits since, so an agent knows when the page is behind.
-- Creating or removing a repository page rewrites `.claude/settings.json`. See [[Vault Layout#Settings for the harness]].
+- `vault sync` lists every repository's path in `.claude/settings.local.json`. See [[Vault Layout#Settings for the harness]].
 
 ## Wiki.base
 

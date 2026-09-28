@@ -19,7 +19,7 @@
 
 ## Gate
 
-Propose the change. Show the preview: each repository with its parent, and each new area. Wait for the yes, then apply. Apply also lists the repositories in `.claude/settings.json`, so a session in the vault can edit them.
+Propose the change. Show the preview: each repository with its parent, and each new area. Wait for the yes, then apply. The next `vault sync` lists the repositories in `.claude/settings.local.json`, so later sessions in the vault can edit them. For this session, tell the user to run `/add-dir <path>`, or run `vault sync` and start a new session.
 
 ## Hand off
 

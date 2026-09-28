@@ -24,7 +24,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 │   ├── areas/  repositories/                 scope pages
 │   ├── concepts/  entities/  policies/       knowledge pages
 │   └── sources/  sources/files/              source pages, and the captured originals
-├── .claude/settings.json     code lists the linked repositories here
+├── .claude/settings.local.json   untracked; code lists the linked repositories here
 ├── .obsidian/                app settings and the Atlas plugin
 └── .git/                     the vault's history; apply's lock is .git/atlas.lock
 ```
@@ -44,7 +44,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 | `sessions/` | Edit of three sections of its own session document | the hooks | yes |
 | `changes/` | through `change` | `change` | yes, a proposed change before you approve it |
 | `*.base` | no | `init` only | yes |
-| `.claude/settings.json` | no | `change` apply, when a repository page is created or removed | no |
+| `.claude/settings.local.json` | no | `vault sync` | yes, every key but the one list code keeps |
 
 The guard hook enforces the model's column. See [[Hooks#guard]].
 
@@ -103,7 +103,13 @@ Every write to a document, from a tool, a hook, or `vault sync`, takes `.git/atl
 
 ## Settings for the harness
 
-`.claude/settings.json` holds one list that code derives: `permissions.additionalDirectories`, the path of every repository page. An agent that starts in the vault can then edit a linked repository with no extra prompt. Claude Code does not load a `CLAUDE.md` from these directories, so the `context` tool returns the repository's instruction files. See [[context]].
+`vault sync` keeps one list in `.claude/settings.local.json`: `permissions.additionalDirectories`, with the path of every repository page. An agent that starts in the vault can then edit a linked repository with no extra prompt.
+
+- The file is Claude Code's local project settings, which git ignores, so a machine's absolute paths never travel with the vault.
+- Sync merges: it adds and removes only the paths that repository pages name, and keeps every other key and entry.
+- The session-start hook runs sync, so a session always starts with the list current. Claude Code reads the file at start, so a repository linked during a session needs `/add-dir <path>` or a new session; [[repo-link]] says so.
+- Claude Code does not load a `CLAUDE.md` from these directories, so the `context` tool returns the repository's instruction files. See [[context]].
+- The other way round, a session that starts inside a repository must reach the vault. `setup` offers to add each vault to `permissions.additionalDirectories` in the user's own settings (`~/.claude/settings.json`), and asks first.
 
 ## The machine file
 

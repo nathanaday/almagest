@@ -7,7 +7,7 @@
 |---|---|---|---|
 | `status` (default) | nothing | [[Vault Status]] | nothing |
 | `init` | `name`, `path` | [[Vault Status]] | the layout, `Atlas.md`, the four Bases, `.obsidian/` with the plugin, `git init`, one `setup` commit; adds the path to `~/.atlas/config.json` |
-| `sync` | nothing | what it changed | derived fields only: thread stages and callouts, `active` flags, lost sessions, `.claude/settings.json` |
+| `sync` | nothing | what it changed | derived fields only: recovery of a change left `applying`, thread stages and callouts, `active` flags, lost sessions, `.claude/settings.local.json` |
 | `mention` | a mention (`path` and `line`) and a `link` | the closed mention | checks the mention's box and appends ` → [[link]]` ([[Obsidian Plugin#Mentions]]) |
 
 `status` is cheap: it reads frontmatter only, and runs the quick checks of [[lint]] for the `problems` count. The session-start hook calls it and prints the result.

@@ -150,7 +150,7 @@ A task's callout shows its order, status, repository, and dependencies. Sync rep
 
 `threads.Sync` makes every derived part agree with the documents: the stub's `stage`, `outcome`, `active`, and `tasks`; each task's `active`; each lead callout. It writes a file only when its content differs and never changes `updated`. Every `thread` call ends in it, the session-start hook runs it, and the Obsidian plugin runs it when a thread document changes.
 
-`active` comes from the session documents. A task is active while it is `open` and a session with status `running` or `waiting` lists it in `tasks`. A thread is active while such a session lists it in `threads`.
+`active` comes from the session documents. A task is active while it is `open` and a session with status `running`, `waiting`, or `idle` lists it in `tasks`. A thread is active while such a session lists it in `threads`. So `active` changes when a session starts, ends, or is lost, not at every turn.
 
 ## Threads.base
 
