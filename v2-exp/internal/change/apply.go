@@ -349,6 +349,17 @@ func Apply(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 	if len(c.problems) > 0 {
 		return nil, &Refusal{Problems: c.problems}
 	}
+	// The change's own document may link a page it renames, in its absorbs, its Absorbed
+	// table, or its notes. Its record starts from the rewritten text, and is no outside
+	// rewrite of its own.
+	record := d.Content
+	for i, rw := range p.Outside {
+		if rw.Path == d.Path {
+			record = rw.Content
+			p.Outside = append(p.Outside[:i], p.Outside[i+1:]...)
+			break
+		}
+	}
 	derived := describedWrites(idx, p, now)
 	before := repoPaths(idx)
 	lines := preview(idx, d, p.Ops, nil, nil, current(idx)).Writes
@@ -376,7 +387,7 @@ func Apply(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	counts := countOps(p.Ops, len(p.Outside))
-	final := replaceWrites(d.Content, renderWrites(p.Ops, p.Outside))
+	final := replaceWrites(record, renderWrites(p.Ops, p.Outside))
 	final = doc.SetFields(final, []doc.Field{{Key: "counts", Value: counts.String()}, {Key: "applied", Value: vault.Stamp(now)}, {Key: "updated", Value: vault.Date(now)}})
 	final = doc.RemoveField(setStatus(final, Applied), "paths")
 	if err := tx.Write(d.Path, []byte(final)); err != nil {
@@ -697,7 +708,20 @@ func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	tx.Mark(paths...)
-	content := setStatus(d.Content, Undone, doc.Field{Key: "updated", Value: vault.Date(now)})
+	// Apply rewrote the record's links to the titles the change gave; undo takes them back.
+	record := d.Content
+	if ops, err := parseWrites(d.Body); err == nil {
+		back := links.Rename{}
+		for _, o := range ops {
+			if o.Kind == "rename" {
+				back[o.NewTitle] = o.Title
+			}
+		}
+		if len(back) > 0 {
+			record, _, _ = rewriteContent(d, record, back, nil)
+		}
+	}
+	content := setStatus(record, Undone, doc.Field{Key: "updated", Value: vault.Date(now)})
 	if err := tx.Write(d.Path, []byte(content)); err != nil {
 		return nil, err
 	}

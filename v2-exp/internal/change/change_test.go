@@ -10,6 +10,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/change"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/vault"
 )
@@ -356,4 +357,38 @@ func TestDescribedFollowsAbsorbedSnapshot(t *testing.T) {
 		t.Fatalf("described:\n%s", tv.Read("wiki/repositories/p3-edge.md"))
 	}
 	tv.Clean()
+}
+
+func TestAChangeThatRenamesWhatItAbsorbsKeepsItsOwnLinks(t *testing.T) {
+	tv := testvault.New(t)
+	src := tv.Page("source", "2309.01234v2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[x.pdf]]", "origin": "inbox"}, "")
+	tv.Write("wiki/sources/files/x.pdf", "%PDF")
+	tv.Commit()
+	pv := propose(t, tv, change.Plan{Title: "Ingest a paper", Notes: "Renames [[2309.01234v2]] to its title.", Absorbs: []string{src}, Writes: []change.Write{
+		{Op: "modify", ID: src, Fields: map[string]any{"description": "A paper on motion.", "authority": "primary"}},
+		{Op: "rename", ID: src, Title: "Motion scoring at night"},
+	}})
+	apply(t, tv, pv.Ref.ID)
+	record := tv.Read(pv.Ref.Path)
+	if strings.Contains(record, "[[2309.01234v2]]") {
+		t.Fatalf("the change's own record keeps the old title:\n%s", record)
+	}
+	for _, want := range []string{`absorbs: ["[[Motion scoring at night]]"]`, "| [[Motion scoring at night]] | " + src, "absorbs [[Motion scoring at night]]", "Renames [[Motion scoring at night]]"} {
+		if !strings.Contains(record, want) {
+			t.Errorf("the record lacks %q:\n%s", want, record)
+		}
+	}
+	if f, _ := lint.Run(tv.Index(), lint.Options{Now: testvault.Now}); f.Counts[lint.Error] != 0 {
+		t.Fatalf("lint after apply: %+v", f.Findings)
+	}
+	tv.Clean()
+	if _, err := change.Undo(tv.V, pv.Ref.ID, testvault.Now); err != nil {
+		t.Fatal(err)
+	}
+	if record := tv.Read(pv.Ref.Path); !strings.Contains(record, `absorbs: ["[[2309.01234v2]]"]`) {
+		t.Fatalf("after undo the record links the old title again:\n%s", record)
+	}
+	if f, _ := lint.Run(tv.Index(), lint.Options{Now: testvault.Now}); f.Counts[lint.Error] != 0 {
+		t.Fatalf("lint after undo: %+v", f.Findings)
+	}
 }
