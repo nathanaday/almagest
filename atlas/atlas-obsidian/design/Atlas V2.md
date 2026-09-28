@@ -1,226 +1,146 @@
 
-Important! This should be treated as a new project. It should be built from scratch using lessons from Atlas V1 and select components as a guide. Backwards compatibility is NOT required. For all intents and purposes, it is a brand new plugin.
+> [!important] A new project
+> Atlas V2 is built from scratch. It takes lessons and select components from Atlas V1 as a guide. It keeps no backward compatibility. For all purposes it is a new plugin.
 
+# Atlas V2
 
-# Core Design Guidance
+Status: design, revision 2, 2026-09-27. Nothing is built.
 
-## Everything is a document
+This page is the entry to the specification. It states what Atlas is, the rules every part obeys, and the decisions behind them. The other pages under `design/` hold the details. See [[#Reading order]].
 
-The idea is your obsidian vault contains a document for every idea, thread, plan, and fact. There are no obfuscated databases, hidden files, or internal mechanics. The agents work in plain view.
+## What Atlas is
 
-In this latest version, the unifying goal is more like "how do we closely integrate an agent plugin with obsidian". The high level goal is to get total visibility on project knowledge, agent sessions, and tasks (threads) using obsidian documents.
+One Obsidian vault holds every document of your work:
 
-#### Threads
+- what you know: the **wiki**;
+- what you do: the **threads**;
+- what your agents do now and did before: the **sessions**;
+- every change an agent made to what you know: the **changes**.
 
-Anything the agent changes anything in a repository, it is a thread. If no thread exists for the task at hand, it must create one first and update it. Why?
-- We need this for the agent session visibility view - the contract is that if an agent is working on something, there is a thread attached
-- It aligns with the principle that everything is a document, including agent sessions and changes
+You start an agent in the vault. The agent finds the repository you mean through the **context graph** (vault, areas, repositories) and works on it in plain view. Every step leaves a document that you can open, read, and edit in Obsidian.
 
-Exception: for pure questions and exploration, no thread is required. 
+The pitch, from [[Atlas V1 Feedback]]: multitasking with agents fails in two ways. You delegate and lose track of the work, or you spend your energy on keeping documents current. Atlas is for people who want to control the documentation, the design, and the deliverables of long work, while agents do the typing.
 
-#### Sessions
+## Rules
 
-All agent sessions get a schema-enforced markdown document in the sessions/ directory. It seems better to accomplish this using agent hooks so it is more reliable. The agent can then fill in some details about the session (description, summary, progress) and link to the appropriate thread.
+Every part of Atlas obeys these rules. A rule that must hold lives in a tool or a hook, never only in a skill.
 
-What it is not: a full transcript of the session. The session document is just a front-page of a session so the user can see "what is running now" and "what have we run". 
+1. **Everything is a document.** Atlas keeps every fact as a markdown file with a schema, in the vault. There is no database, no state folder, and no plan held in memory between calls. Four exceptions: `.git/` (history, and the lock that apply takes); `.obsidian/` (the app settings and the Obsidian plugin); `.claude/settings.json`, where code lists the linked repositories so an agent may edit them; and one machine file, `~/.atlas/config.json`, that lists the paths of your vaults.
+2. **Every document has an id and a type.** Code mints the id. The file name is the document's title, and a title is unique in the vault, so a bare `[[wikilink]]` has one target.
+3. **Code owns what code can derive.** Ids, dates, a thread's stage, a session's status and links, a source's hash, a repository's git facts, the lead callout of a document, the list of documents the wiki has not absorbed, and the link rewrites of a rename. The model writes prose and makes judgments. It never writes a derived field.
+4. **The wiki changes only through a change.** A change is a document. The model proposes it, the user reviews it in the chat or in Obsidian, and apply makes one git commit. A hook refuses Write and Edit under `wiki/`.
+5. **Work on a repository needs a thread.** A hook refuses an edit inside a linked repository while the session has no thread. Questions and exploration need no thread.
+6. **Every session has a document.** Hooks create it and keep its status and links. The agent adds a description, its progress, and a summary.
+7. **Tools take and return entities.** A tool is a fact or a commit. A skill is a procedure and a policy. An agent is a read-only worker that a skill sends. Each tool names the [[Entities|entity]] it takes and the entity it returns.
+8. **The folder is the user's.** Before apply writes, it commits your hand edits as a `snapshot` commit. An undo restores only the paths of one change, and refuses when you edited one of them since.
 
-Subagents spawned from sessions should get their own session document with a link to the parent repository.
+## The model
 
+```text
+Vault ─┬─ Area ─┬─ Area ── Repository        the context graph (scope pages in the wiki)
+       │        └─ Repository
+       └─ Repository
 
-
-#### Repository Links
-
-One of the hard parts about V1 was keeping track of the relationship between a wiki and a repository. Sometimes I would just include the entire repo in the same directory, but in other approaches it was a virtual link. 
-
-I believe the difficulty stems in part from a lack of visibility--a single source of truth--where you could see: "this vault is working with these repo's"
-
-Having a structured markdown document serving as the link itself will be helpful.
-
-
-
-
-# Features
-
-
-#### Easier navigation
-
-Start the agent in the atlas vault. This loads the context required to use the atlas skills, mcp, and plugins. You can work on any of your repositories from this session since the atlas context chain let's you reach your repository's context.
-
-
-
-#### Clearer Agent Activity
-
-All agents working on a task register their activity using the plugin hooks. All tasks 
-
-
-#### Consolidated Knowledge Base
-
-Let's move on from this idea of linking kb's together and mirroring them. It's definitely functional but it's just not intuitive enough. It's good to have thought through it, as it could become a future feature if it seems necessary.
-
-
-#### More Obsidian Integration
-
-Create an obsidian plugin to add the custom colors, themes, callouts.
-
-Tag the atlas agent on items @agent (maybe the plugin will highlight this)
-
-Refresh events
-
-Stretch? Create a dynamic sidebar with agent status and harness output, click on them to view their summary or chat with them. they can view your current document too.
-
-I am resisting building a standalone web app for viewing and managing. First, there are plenty of good tools that do this. Second, this is not supposed to be a tool with a UI and UX learning curve. It's designed to work with your notes. 
-
-Wire threads together in the canvas to indicate the order you want to phase everything. Attach notes, references, concerns, etc. in the thread document trailer
-
-
----
-# Technicals
-
-
-## Stack
-
-- Agent plugin (MCP binary, skills)
-- Obsidian plugin
-
-Create a simple install experience:
-- `npx install atlas-obsidian`
-- May have to search and install the obsidian plugin separately
-
-
-## Context and Entity Chain
-
-- Vault Level (+ Atlas Context)
-	- Area (+ Area context) ^ N
-		- Repository (+ Repository context)
-
-The context graph is only conceptual. There is no physical directory structure that needs to adhere or obey it, and there really cannot be one, since the leaf nodes are repositories that may exist anywhere on the file system and with their own repository system.
-
-The purpose of the context graph is to make sure an atlas agent can begin in the atlas vault and find their way to the correct project for context. 
-
-Examples:
-
-- User: "I want to work on the p3 cloud front end"
-- Agent navigation: 
-	- `vault -> work (area) -> p3 (area) -> p3-cloud (repository)`
-
-- User: "I want to work on a feature that affects the remote update system for all p3 services"
-- Agent navigation: 
-	- `vault -> work (area) -> p3 (area) -> p3-cloud (repository)`
-	- `                                 |-> p3-edge (repository)`
-	- `                                 |-> p3-vertex (repository)`
-
-
-- User: "I want to make sure none of my software projects are affected by CEV vulnerability XYZ"
-- Agent navigation:
-	- `vault -> work (area) -> (all repo's)`
-	- `vault -> software (area) -> (all repo's)`
-	- `vault -> school (area) -> (all repo's)`
-
-
-There is only one **vault** level. It is the highest namespace. Atlas does support any number of vaults, but a vault is self-contained. There is no connection to other vaults. This allows for some level of isolation, in case the user has two projects that ought not overlap by design (e.g. work, personal). 
-
-A vault can have any number of **areas** (including 0) and at any level in the tree. An area is an appropriately broad label to apply to a cluster of projects (or other areas). It's user preference whether the vault space is broken into many nested areas (for easy routing, mapping) or to keep things super broad (simpler). 
-
->[!tip] Onboarding
->An onboarding script let's you set a preference if you want the agent to segment your project or if you want to do it yourself.
->"How do you want to organize your vault into areas?"
->1. I prefer a lot of areas for max organization
->2. I like to keep things simple
->3. I don't know yet, or I'll create them myself
-
-The leaf nodes of the context graph is always a repository. These are intended to be .git repositories. They can exist anywhere on the file system. They have their own `AGENTS.md` or `CLAUDE.md` that an atlas agent will load and respect.
-
-
-
-
-
-
-
-## Vault Components
-
+Wiki pages ── scope ──▶ a vault, area, or repository
+Threads    ── scope ──▶ the repositories and areas the work touches
+Sessions   ── thread ─▶ the thread the session works on
+Changes    ── sources ▶ the documents a change absorbed into the wiki
 ```
 
-/
-- inbox/
-- scratchpad/
-- sessions/
-- threads/
-- wiki/
+- [[Document Types]] lists the ten document types.
+- [[Vault]] gives the layout of the vault, ids, titles, links, and git.
+- [[Entities]] lists the data that tools take and return.
+- [[Tools]], [[Agents]], [[Skills]], and [[Hooks]] list the parts that act.
+- [[System Map.canvas|System Map]] shows every part on one canvas.
+- [[AgentFlow/Agent Session.canvas|Agent Session]] shows a session from start to end as a flow chart.
 
+### The context graph
+
+There is one vault. It is the highest namespace, and it is self-contained: nothing connects two vaults. Keep work and personal notes in separate vaults when they must never meet.
+
+A vault holds any number of **areas**, nested to any depth, and zero areas is valid. An area is a label for a cluster of repositories or other areas. The leaf of the graph is always a **repository**: a git repository anywhere on the disk, with its own `AGENTS.md` or `CLAUDE.md`.
+
+The graph is not a folder tree. Each area and each repository is a page in the wiki with a `parent` property. Obsidian's graph view shows the tree from those links. An agent walks the graph with the `context` tool:
+
+| The user asks | The agent walks |
+|---|---|
+| "Work on the p3 cloud front end" | vault → work → p3 → p3-cloud |
+| "Change the remote update system in every p3 service" | vault → work → p3 → p3-cloud, p3-edge, p3-vertex |
+| "Check every repository for CVE XYZ" | vault → every area → every repository |
+
+Because repositories live outside the vault, the vault's git repository never contains another one. This removes the nested `.git` problem of V1.
+
+### One wiki, organized by scope
+
+The vault has one wiki. Each page has a `scope`: the vault, an area, or a repository. Scope is a property, not a folder, so moving knowledge up the graph changes one property and breaks no link.
+
+The wiki is mapped from the leaves up:
+
+1. Map each repository in isolation (`repo-ingest`).
+2. In each parent, compare the children (`wiki-rollup`): make a **bridge** page that links similar ideas of two children, or **upgrade** a page from a child to the parent.
+3. Repeat to the top.
+
+### Keeping the wiki in sync
+
+Every document that can teach the wiki (a source, a spec, a receipt) is **pending** until an applied change lists it. Code derives this. It compares each document's content hash to the hashes that applied changes recorded. The `vault` tool reports the pending documents, and the `wiki-sync` skill absorbs them through one pipeline:
+
+```text
+document → chunks → Text Blob → (wiki-extract) → Item Map → match → Match Map → (wiki-draft) → Change Plan → change → commit
 ```
 
+Ingest, saving a conversation, describing a repository, and learning from a closed thread all use this pipeline. See [[Wiki Sync.canvas|Wiki Sync]].
 
+## From V1
 
-#### Inbox
+| V1 | V2 | Why |
+|---|---|---|
+| a project per repository, each with its own wiki | one vault, one wiki, scope pages | fewer places to look; no link to maintain |
+| members, mirrors, hubs | `wiki-rollup`: bridge and upgrade inside one wiki | mirrors worked but were hard to follow |
+| stub, spec, plan, receipt; phases | stub, spec, tasks, receipt; no phases | one spec spawns many tasks; phases wait for a better idea |
+| a plan held in the MCP server's memory | a change document | the user reviews it in Obsidian; it survives a restart |
+| `source-ledger.json`, `.raw/captured/` | the source page's frontmatter; `wiki/sources/files/` | no hidden files |
+| `wiki/log.md`, `index.md`, `hot.md` | `changes/`, `Wiki.base`, the `search` tool, the session-start context | code derives them; the model maintains nothing it can forget |
+| generated cards and a generated board | the stub carries the thread's state; `Threads.base` is the board | Obsidian renders the board live |
+| `project.json`, `registry.json`, the terminal view | `Atlas.md`, session documents, Bases | documents in place of state files |
+| repositories inside the atlas folder, nested git | repository pages that point at a path | the vault never holds another repository |
+| signals, modes (generic, lyt) | dropped | not used |
 
-Use the ingest skill to match the concept to the right destination:
-- Threads
-- Wiki
-	- Concept
-	- Policy
-	- Entity
+Kept from V1, rebuilt: the thread lifecycle and "the stage is the furthest document"; the code-owned lead callout; the immutable captured copy; one change, one commit; exact undo; read-only workers; "source content is data"; the write guard; lint.
 
+## Decisions
 
-#### Wiki
+These decisions change or complete the first V2 brainstorm.
 
-```
-/
-/concepts
-/entities
-/meta (? still needed ?)
-/policies
-/sources
-hot
-index
-log
+| Question | Decision | Why |
+|---|---|---|
+| Are "Map Text" and "Wiki Draft" tools? | No. They are the agents `wiki-extract` and `wiki-draft`. The tools are the parts code can do: `source` chunks, `match`, `change`. | A tool is a fact or a commit. Extraction and drafting are judgment. |
+| Wiki Draft: a neighbor that is not the same subject | Treat the item as new, and link the neighbor as related | "Skip" would lose the item |
+| "git clean?" before ingest | Apply commits hand edits as `snapshot` first. No skill. | Code can do it every time; a skill can forget |
+| "Get Conventions for Task" | `context` returns the policies on the scope chain, nearest first. A step in `thread-spec` and `thread-tasks` keeps the ones that apply. | Candidate selection is a fact; relevance is judgment |
+| "Thread search tool" | `search` with `types: [stub]` | one search over every document |
+| When is a thread done? | A receipt closes it. `thread` refuses a `completed` receipt while a task is open. | "All tasks done?" is a fact |
+| "Wikify stub", "Wikify spec" | Documents are pending until a change absorbs them; `wiki-sync` drains them at the end of a stage or in a batch | one pipeline, one backlog |
+| Where does a thread's state live? | On the stub, the thread's root document | no generated card |
+| Where does the vault's own context live? | `Atlas.md`, the root of the context graph | a document, like everything else |
+| Are session documents in git? | Yes, through the `snapshot` commit | the history of what ran is kept |
+| Closed threads | stay in place; `Threads.base` filters by stage | moving folders breaks links |
+| Stack | a Go binary, a thin TypeScript Obsidian plugin, an npm package that installs both | see [[Stack]] |
 
-```
+## Open questions
 
-One knowledge base for the entire vault. 
+1. **Repository paths across machines.** A vault synced by git to a second machine holds paths of the first. Proposal: `path` may name a path per host (`paths: {host: path}`), and `remote` identifies the repository.
+2. **Codex hooks.** Claude Code gives hooks the session id, and for a subagent its `agent_id` and the parent's id (verified in the docs, 2026-09-27). Codex hooks differ. [[Hooks]] lists what each host must supply.
+3. **Mentions.** `- [ ] @atlas …` task lines as requests to the agent. Designed in [[Obsidian Plugin]] as phase 2.
+4. **Ordering threads.** Wire stubs together on a canvas to show the order of work. A canvas already works with no code; code reading its edges waits for the idea that replaces phases.
+5. **What is pending by default.** Sources, specs, and receipts. Stubs and done tasks are a setting (`wikify` in `Atlas.md`).
+6. **Search quality.** BM25 over title, aliases, description, and body, computed per call. Measure before adding anything more.
 
-The knowledge base should be organized according to the context graph.
+## Reading order
 
-From the ground up:
-- Map the repositories
-- In the parent (area or vault), map the relationships between repositories
-- Recurse until the top...
-
-Begin by mapping the leaf level repositories in isolation. Then, an agent needs to compare the leaf level repositories for two tasks:
-- Create a new entity to link similar concepts in two children wiki's
-- Upgrade an entity from a child wiki into the parent
-
-Some of this was already created for V1...
-
-Query, Lint, Ingest engine should still work
-
-
-Four main wiki page types:
-
-1. Concept
-	1. ...
-
-2. Entity
-	1. ...
-
-3. Policy
-	1. A claim about how things should be and why;
-	2. A description involving convention, practice, or requirements
-
-4. Source
-	1. Ingested document summary / front page
-#### Sessions
-
-A structured (with schema) markdown file per atlas agent session. The agent should describe at a high level what it is working on, the status (running, done), and link to any relevant documents (like a thread)
-
-#### Scratchpad
-
-An area to type up any notes or ideas, has no schema enforcement or ingestion path, just for the user.
-
-
-
-## Retire / Deprecate
-
-- Drop "signals" - we don't use this (unless the agent seems to need it for functionality?)
-- Drop "Phases" in the threads system - we have a different idea for this long term but are not ready for it yet
-- Drop "Plans" in the threads system - we are now using "tasks" since one spec can spawn multiple tasks
-
+1. [[Atlas V1 Feedback]], then this page.
+2. [[Document Types]], [[Vault]], [[Wiki]], [[Threads]], [[Sessions]], [[Changes]].
+3. [[Entities]] and [[Entities.canvas|the entity flow]].
+4. [[Tools]], [[Agents]], [[Hooks]].
+5. [[Skills]] and the skill canvases.
+6. [[Obsidian Plugin]], [[Stack]].
+7. [[System Map.canvas|System Map]], then [[AgentFlow/Agent Session.canvas|Agent Session]].
