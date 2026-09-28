@@ -14,6 +14,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/links"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/schema"
+	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/vault"
 )
 
@@ -387,6 +388,9 @@ func Apply(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	counts := countOps(p.Ops, len(p.Outside))
+	if err := healScopes(v, tx); err != nil {
+		return nil, err
+	}
 	final := replaceWrites(record, renderWrites(p.Ops, p.Outside))
 	final = doc.SetFields(final, []doc.Field{{Key: "counts", Value: counts.String()}, {Key: "applied", Value: vault.Stamp(now)}, {Key: "updated", Value: vault.Date(now)}})
 	final = doc.RemoveField(setStatus(final, Applied), "paths")
@@ -725,6 +729,9 @@ func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 	if err := tx.Write(d.Path, []byte(content)); err != nil {
 		return nil, err
 	}
+	if err := healScopes(v, tx); err != nil {
+		return nil, err
+	}
 	title := strings.TrimSpace(strings.TrimPrefix(vault.Title(d), d.Str("created")))
 	undo, err := tx.Commit("undo: "+title, "Atlas-Undo: "+d.ID())
 	if err != nil {
@@ -753,6 +760,18 @@ func idAt(g gitx.Repo, rev, p string) string {
 		return ""
 	}
 	return doc.Parse(p, data).ID()
+}
+
+// healScopes brings every page's chain, the scope callouts, and the map in Atlas.md up
+// to date with the writes, in the same commit: a new area or a new parent moves the pages
+// below it.
+func healScopes(v *vault.Vault, tx *vault.Tx) error {
+	idx, err := vault.Load(v)
+	if err != nil {
+		return err
+	}
+	_, err = scope.Heal(idx, tx.WriteIfChanged)
+	return err
 }
 
 // Wiki reports whether a type's documents are pages a change writes.

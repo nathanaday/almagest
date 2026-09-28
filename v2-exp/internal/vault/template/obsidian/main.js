@@ -155,12 +155,14 @@ function syncSummary(s) {
   if (threads) parts.push(plural(threads, "thread document", "thread documents"));
   if (lost) parts.push(plural(lost, "lost session", "lost sessions"));
   if (sessions) parts.push(plural(sessions, "session callout", "session callouts"));
+  const scopes = s.scopes?.length ?? 0;
+  if (scopes) parts.push(plural(scopes, "wiki page", "wiki pages"));
   if (s.settings) parts.push("the harness settings");
   if (parts.length === 0) return "Nothing to heal.";
   return `Synced ${parts.join(", ")}.`;
 }
 function syncedPaths(s) {
-  return [...s.threads ?? [], ...s.lost ?? [], ...s.sessions ?? []];
+  return [...s.threads ?? [], ...s.lost ?? [], ...s.sessions ?? [], ...s.scopes ?? []];
 }
 function countsLine(counts) {
   if (typeof counts === "string") {

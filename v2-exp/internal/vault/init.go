@@ -121,10 +121,10 @@ func Init(opts InitOptions, h Home, now time.Time) (*Vault, error) {
 }
 
 func writeLayout(v *Vault, name, description, areas, context string, now time.Time) ([]string, error) {
-	var written []string
 	if err := v.EnsureFolders(); err != nil {
 		return nil, err
 	}
+	var written []string
 	body := strings.TrimSpace(context)
 	if body == "" {
 		body = description

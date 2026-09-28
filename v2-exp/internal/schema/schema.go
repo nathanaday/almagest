@@ -116,6 +116,7 @@ func knowledge(extra ...Field) []Field {
 		{Name: "tags", Kind: List},
 		{Name: "status", Kind: Enum, Values: statusValues},
 		{Name: "sources", Kind: Links},
+		{Name: "chain", Kind: Links, Owner: Code, Targets: scopeTargets},
 	}, extra...)...)
 }
 
@@ -139,6 +140,7 @@ var Types = []*Type{
 		Field{Name: "parent", Kind: Link, Targets: []string{"area"}},
 		Field{Name: "description", Kind: Text, Required: true},
 		Field{Name: "aliases", Kind: List},
+		Field{Name: "chain", Kind: Links, Owner: Code, Targets: []string{"area"}},
 	)},
 	{Name: "repository", Prefix: "rep", Folder: "wiki/repositories", Family: Scope, Fields: common(
 		Field{Name: "parent", Kind: Link, Targets: []string{"area"}},
@@ -148,6 +150,7 @@ var Types = []*Type{
 		Field{Name: "remote", Kind: Text, Owner: Code},
 		Field{Name: "branch", Kind: Text, Owner: Code},
 		Field{Name: "described", Kind: Text, Owner: Code},
+		Field{Name: "chain", Kind: Links, Owner: Code, Targets: []string{"area"}},
 	), Sections: []string{"What it is", "How it is built", "Layout", "Components", "Instructions"}},
 	{Name: "concept", Prefix: "con", Folder: "wiki/concepts", Family: Knowledge, Fields: knowledge(),
 		Sections: []string{"Definition", "Explanation", "Related", "Sources"}},

@@ -4,6 +4,7 @@ export interface Synced {
 	threads?: string[] | null;
 	lost?: string[] | null;
 	sessions?: string[] | null;
+	scopes?: string[] | null;
 	settings?: boolean;
 }
 
@@ -62,6 +63,8 @@ export function syncSummary(s: Synced): string {
 	if (threads) parts.push(plural(threads, "thread document", "thread documents"));
 	if (lost) parts.push(plural(lost, "lost session", "lost sessions"));
 	if (sessions) parts.push(plural(sessions, "session callout", "session callouts"));
+	const scopes = s.scopes?.length ?? 0;
+	if (scopes) parts.push(plural(scopes, "wiki page", "wiki pages"));
 	if (s.settings) parts.push("the harness settings");
 	if (parts.length === 0) return "Nothing to heal.";
 	return `Synced ${parts.join(", ")}.`;
@@ -69,7 +72,7 @@ export function syncSummary(s: Synced): string {
 
 /** Every path a sync wrote. */
 export function syncedPaths(s: Synced): string[] {
-	return [...(s.threads ?? []), ...(s.lost ?? []), ...(s.sessions ?? [])];
+	return [...(s.threads ?? []), ...(s.lost ?? []), ...(s.sessions ?? []), ...(s.scopes ?? [])];
 }
 
 /**

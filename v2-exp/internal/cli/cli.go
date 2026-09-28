@@ -266,12 +266,12 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"synced": s}, func(w io.Writer) {
-			n := len(s.Threads) + len(s.Lost) + len(s.Sessions)
+			n := len(s.Threads) + len(s.Lost) + len(s.Sessions) + len(s.Scopes)
 			if n == 0 && !s.Settings {
 				fmt.Fprintln(w, "Nothing to heal.")
 				return
 			}
-			fmt.Fprintf(w, "Synced: %d thread documents, %d lost sessions, %d session callouts", len(s.Threads), len(s.Lost), len(s.Sessions))
+			fmt.Fprintf(w, "Synced: %d thread documents, %d lost sessions, %d session callouts, %d wiki pages and the map", len(s.Threads), len(s.Lost), len(s.Sessions), len(s.Scopes))
 			if s.Settings {
 				fmt.Fprint(w, ", the harness settings")
 			}

@@ -30,6 +30,19 @@
 	--callout-icon: lucide-git-pull-request;
 }
 
+.callout[data-callout="atlas"] {
+	--callout-color: var(--color-cyan-rgb);
+	--callout-icon: lucide-map;
+}
+.callout[data-callout="area"] {
+	--callout-color: var(--color-cyan-rgb);
+	--callout-icon: lucide-layers;
+}
+.callout[data-callout="repository"] {
+	--callout-color: var(--color-cyan-rgb);
+	--callout-icon: lucide-git-branch;
+}
+
 /* Folder colors in the file explorer. The main folders Atlas keeps are cyan; the wiki's
    knowledge folders are cool; the inbox, where the user drops work, is warm.
    Bookkeeping folders keep the theme's color. */

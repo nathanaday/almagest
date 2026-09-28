@@ -49,6 +49,17 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Machine files stay out of git** through `.git/info/exclude`
   (`.claude/settings.local.json`, `.obsidian/workspace*.json`), so init edits no file of
   the user's. `EnsureFolders` rewrites the entries on every write.
+- **Scopes are browsable without folders.** `scope` stays the one record of where a
+  page belongs; folders follow the type. Code derives from it: `chain` on every wiki
+  page (its scope and the areas above it, top first; an area's or repository's own
+  ancestors), a lead callout on each area and repository page with the path from the
+  vault and an inline `base` view filtered on `chain.contains(this.file.asLink())`, and a
+  map of the graph as Atlas.md's lead callout. `scope.Heal` keeps them current: sync
+  writes them, and apply, undo, and capture include them in their commits, so a renamed
+  or re-parented area moves the pages below it in one commit. Folders or tags were
+  rejected: each is a second record of scope that a rename or a new parent must rewrite.
+  The view is inline, not a Base file, because a Base opened alone has no `this` and
+  shows nothing; 0.1.0's `wiki/Scope.base` is removed by sync when unedited.
 - **Titles also drop `[ ] # ^`**, which break a wikilink.
 - **The vault's name is not a link target.** Obsidian resolves `[[work]]` to a file named
   `work`, and the design's own example has an area `work` in a vault `Work`. The vault is

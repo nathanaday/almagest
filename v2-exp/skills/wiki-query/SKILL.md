@@ -16,6 +16,8 @@ Tools: `search`, `context`, and Read.
 1. Call `search` with the question's terms, and with `scope` when the question names
    one. For a question about repositories or areas ("which services use MQTT"), call
    `context` for the area, then search inside it.
+   When the user wants to browse a scope rather than ask, link its area or repository
+   page: its first callout lists every page in the scope and below it, by type.
 2. Read the best pages with Read. Follow a link one hop when the answer needs it.
 3. Answer. Cite each claim with its page (`[[Page]]`), and through the page its source.
    Keep the wiki's claims apart from your own reasoning, and mark the reasoning as

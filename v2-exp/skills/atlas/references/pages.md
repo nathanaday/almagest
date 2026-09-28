@@ -37,6 +37,11 @@ sources: ["[[DINOv2]]"]    # every document the page cites
 
 - A source's `file`, `sha256`, `origin`, `locator`, `measure`, and `captured` are code's.
   The ingest change sets `description`, `authority`, and the body.
+- Every page's `chain` is code's: its scope and every area above it. Sync and apply keep
+  it current when an area is renamed or moves.
+- The first callout of an area or repository page is code's: the path from the vault,
+  and a view of every page in that scope and below it. Atlas.md opens with a map of the
+  areas and repositories. Never write either; a body you give keeps them.
 - A repository's `remote`, `branch`, and `described` are code's. Apply sets `described`
   when a change absorbs a snapshot of the repository.
 - A policy holds for its scope and every scope below it. Conventions belong in policy

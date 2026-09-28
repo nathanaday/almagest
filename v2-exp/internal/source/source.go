@@ -16,6 +16,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/core"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/gitx"
+	graph "github.com/nathanaday/atlas-obsidian/v2-exp/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/vault"
 )
 
@@ -192,6 +193,11 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 		}
 		titles = append(titles, title)
 		created = append(created, rel)
+	}
+	if healed, err := vault.Load(v); err == nil {
+		if _, err := graph.Heal(healed, tx.WriteIfChanged); err != nil {
+			return nil, err
+		}
 	}
 	subject := "capture: " + strings.Join(titles, ", ")
 	if len(titles) == 0 {

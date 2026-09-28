@@ -16,6 +16,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/change"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/lint"
+	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/v2-exp/internal/vault"
@@ -301,6 +302,7 @@ type Synced struct {
 	Threads  []string `json:"threads"`
 	Lost     []string `json:"lost"`
 	Sessions []string `json:"sessions"`
+	Scopes   []string `json:"scopes"`
 	Settings bool     `json:"settings"`
 }
 
@@ -319,7 +321,7 @@ func Sync(v *vault.Vault, now time.Time) (*Synced, error) {
 
 // SyncLocked is Sync for a caller that holds the lock.
 func SyncLocked(v *vault.Vault, now time.Time) (*Synced, error) {
-	out := &Synced{Threads: []string{}, Lost: []string{}, Sessions: []string{}}
+	out := &Synced{Threads: []string{}, Lost: []string{}, Sessions: []string{}, Scopes: []string{}}
 	if err := change.Recover(v); err != nil {
 		return nil, err
 	}
@@ -343,6 +345,13 @@ func SyncLocked(v *vault.Vault, now time.Time) (*Synced, error) {
 		if ok, err := sessions.Refresh(v, s); err == nil && ok {
 			out.Sessions = append(out.Sessions, s.Path)
 		}
+	}
+	if idx, err := vault.Load(v); err == nil {
+		scopes, err := scope.Heal(idx, v.WriteIfChanged)
+		if err != nil {
+			return out, err
+		}
+		out.Scopes = scopes
 	}
 	settings, err := v.SyncSettings(nil)
 	if err != nil {

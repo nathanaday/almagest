@@ -9,7 +9,7 @@ import (
 // callout is the user's, and code never replaces it.
 var OwnedLeads = map[string]bool{
 	"stub": true, "spec": true, "task": true, "receipt": true, "killed": true,
-	"session": true, "change": true,
+	"session": true, "change": true, "area": true, "repository": true, "atlas": true,
 }
 
 var calloutOpen = regexp.MustCompile(`^>\s*\[!([A-Za-z0-9_-]+)\][+-]?`)

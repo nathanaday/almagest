@@ -120,7 +120,7 @@ func (v *Vault) StaleHours() int {
 }
 
 // Context is the body of Atlas.md: the context every agent in the vault must know.
-func (v *Vault) Context() string { return strings.TrimSpace(v.Doc.Body) }
+func (v *Vault) Context() string { return strings.TrimSpace(doc.StripLead(v.Doc.Body)) }
 
 // Abs is a vault-relative path on disk.
 func (v *Vault) Abs(rel string) string { return filepath.Join(v.Root, filepath.FromSlash(rel)) }
@@ -187,6 +187,13 @@ func (v *Vault) Remove(rel string) error {
 func (v *Vault) EnsureFolders() error {
 	for _, f := range Folders {
 		if err := os.MkdirAll(v.Abs(f), 0o755); err != nil {
+			return err
+		}
+	}
+	// The scope callouts once embedded a Base file; they hold the view inline now. The
+	// file goes when nobody edited it.
+	if data, err := v.Read(oldScopeBase); err == nil && sameYAML(string(data), oldScopeBaseContent) {
+		if err := v.Remove(oldScopeBase); err != nil {
 			return err
 		}
 	}
