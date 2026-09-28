@@ -4,8 +4,8 @@
 The basic pitch to keep us grounded:
 
 - In this agentic world, we are asked to multitask, but multitasking has yet to be fun for me
-	- You either over-delegate to agents who are more willing to do it on your behalf, at the cost of being left out of the loop on whats happening (sending me a notification for human input at a point in time doesn't mean anything to me if I haven't been following the work until then)
-	- Or you expend incredible energy keeping your documents from becoming stale while constantly kicking off new tasks
+	- You either over-delegate to agents who are more willing to do it on your behalf, at the cost of being left out of the loop on whats happening
+	- Or you expend incredible energy keeping your documents from becoming stale while kicking off new tasks
 - The goal of Atlas is to make multitasking easier for people who still want to control the documentation, design, and deliverables
 	- All your documents are in one vault
 - Atlas is for people who want to iterate, revise, and work on long-term tasks. This requires a different approach compared to firing off slop and forgetting you even made it

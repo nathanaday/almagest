@@ -1,777 +1,87 @@
 {
-	"nodes": [
-		{
-			"id": "5564bea8bbad76bf",
-			"type": "group",
-			"label": "record documents",
-			"x": 1740,
-			"y": 1280,
-			"width": 380,
-			"height": 240,
-			"color": "6"
-		},
-		{
-			"id": "7e8453428ba8ad39",
-			"type": "group",
-			"label": "thread documents",
-			"x": 1740,
-			"y": 810,
-			"width": 380,
-			"height": 420,
-			"color": "6"
-		},
-		{
-			"id": "25766a25a4f3c217",
-			"type": "group",
-			"label": "knowledge pages",
-			"x": 1740,
-			"y": 340,
-			"width": 380,
-			"height": 420,
-			"color": "6"
-		},
-		{
-			"id": "7faf4feae6aaf50e",
-			"type": "group",
-			"label": "scope pages",
-			"x": 1740,
-			"y": -40,
-			"width": 380,
-			"height": 330,
-			"color": "6"
-		},
-		{
-			"id": "68cb10f033b19db9",
-			"type": "group",
-			"label": "hooks (automatic)",
-			"x": 2600,
-			"y": -40,
-			"width": 400,
-			"height": 1220,
-			"color": "4"
-		},
-		{
-			"id": "b5498127cb0d41be",
-			"type": "group",
-			"label": "tools that write (one commit each)",
-			"x": 1040,
-			"y": 760,
-			"width": 400,
-			"height": 570,
-			"color": "5"
-		},
-		{
-			"id": "7fb7026846f3e884",
-			"type": "group",
-			"label": "tools that read",
-			"x": 1040,
-			"y": 160,
-			"width": 400,
-			"height": 530,
-			"color": "5"
-		},
-		{
-			"id": "0acd17fa5e71567e",
-			"type": "group",
-			"label": "agents (read-only workers)",
-			"x": 520,
-			"y": 660,
-			"width": 380,
-			"height": 570,
-			"color": "3"
-		},
-		{
-			"id": "58d971702edcb826",
-			"type": "group",
-			"label": "thread skills",
-			"x": -40,
-			"y": 1880,
-			"width": 420,
-			"height": 830,
-			"color": "3"
-		},
-		{
-			"id": "140f1faee85bb218",
-			"type": "group",
-			"label": "wiki skills",
-			"x": -40,
-			"y": 850,
-			"width": 420,
-			"height": 960,
-			"color": "3"
-		},
-		{
-			"id": "9cd2ec96b1bfcc68",
-			"type": "group",
-			"label": "repo skills",
-			"x": -40,
-			"y": 340,
-			"width": 420,
-			"height": 440,
-			"color": "3"
-		},
-		{
-			"id": "470d5dd12d9ae91f",
-			"type": "group",
-			"label": "atlas skills",
-			"x": -40,
-			"y": -40,
-			"width": 420,
-			"height": 310,
-			"color": "3"
-		},
-		{
-			"id": "6bdd542e87b4f474",
-			"type": "text",
-			"text": "**atlas**\norient, the board, quick moves, route\n`vault search context thread`",
-			"x": 0,
-			"y": 0,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "4887e2f65c762f84",
-			"type": "text",
-			"text": "**atlas-onboard**\na new vault and its first repositories\n`vault`",
-			"x": 0,
-			"y": 130,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "2d7415db98f461c6",
-			"type": "text",
-			"text": "**repo-link**\nlink a repository under an area\n`context search change`",
-			"x": 0,
-			"y": 380,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "4582e0fbe685ca4a",
-			"type": "text",
-			"text": "**repo-unlink**\nunlink it, and move what depended on it\n`context search thread change`",
-			"x": 0,
-			"y": 510,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "a8f9c26bf45753c9",
-			"type": "text",
-			"text": "**repo-ingest**\ndescribe a repository in the wiki\n`context source match change`",
-			"x": 0,
-			"y": 640,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "7dad0a0ff54b56da",
-			"type": "text",
-			"text": "**wiki-ingest**\ntriage the inbox, capture sources\n`vault source thread`",
-			"x": 0,
-			"y": 890,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "6c0694367c9963b2",
-			"type": "text",
-			"text": "**wiki-sync**\nthe pipeline: any document into the wiki\n`vault source match change`",
-			"x": 0,
-			"y": 1020,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "fb97bb8a1bcbc0ec",
-			"type": "text",
-			"text": "**wiki-save**\nkeep something from the conversation\n`source`",
-			"x": 0,
-			"y": 1150,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "0044a471c449cc42",
-			"type": "text",
-			"text": "**wiki-query**\nanswer from the wiki\n`search context`",
-			"x": 0,
-			"y": 1280,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "21f4f1e44c91da39",
-			"type": "text",
-			"text": "**wiki-edit**\nrewrite, rename, merge, split, repair\n`search lint change`",
-			"x": 0,
-			"y": 1410,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "0368a25086c01e52",
-			"type": "text",
-			"text": "**wiki-rollup**\nbridges and upgrades across child scopes\n`context search match change`",
-			"x": 0,
-			"y": 1540,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "0ecaf72e77b32eff",
-			"type": "text",
-			"text": "**wiki-review**\nthe health of the wiki\n`lint vault`",
-			"x": 0,
-			"y": 1670,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "df931b51affc1572",
-			"type": "text",
-			"text": "**thread-work**\nruns the stage skills in order\n`search context thread`",
-			"x": 0,
-			"y": 1920,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "73cfa377355e4546",
-			"type": "text",
-			"text": "**thread-stub**\nopen a thread in the user's words\n`search thread`",
-			"x": 0,
-			"y": 2050,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "095200cdbdc73808",
-			"type": "text",
-			"text": "**thread-spec**\nwhat done means; gate 1\n`thread context search`",
-			"x": 0,
-			"y": 2180,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "742a9acbe8231a8a",
-			"type": "text",
-			"text": "**thread-plan**\nsplit the spec into tasks; gate 2\n`thread context`",
-			"x": 0,
-			"y": 2310,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "c42cfccf0e9bef40",
-			"type": "text",
-			"text": "**thread-run**\ndo one task in its repository\n`thread context`",
-			"x": 0,
-			"y": 2440,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "c91a366f1c893ade",
-			"type": "text",
-			"text": "**thread-receipt**\nverify and close\n`thread`",
-			"x": 0,
-			"y": 2570,
-			"width": 340,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "d5ebf4accd70fcad",
-			"type": "text",
-			"text": "**wiki-extract**\na chunk \u2192 Item Map\nread-only",
-			"x": 560,
-			"y": 700,
-			"width": 300,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "ab80799eed1143b0",
-			"type": "text",
-			"text": "**wiki-draft**\na Match Map slice \u2192 writes\nread-only",
-			"x": 560,
-			"y": 830,
-			"width": 300,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "78f147cb0b8fd906",
-			"type": "text",
-			"text": "**wiki-audit**\na scope \u2192 Findings\nread-only",
-			"x": 560,
-			"y": 960,
-			"width": 300,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "6c70dc5df610df33",
-			"type": "text",
-			"text": "**thread-review**\na thread's work \u2192 Findings\nread-only",
-			"x": 560,
-			"y": 1090,
-			"width": 300,
-			"height": 100,
-			"color": "3"
-		},
-		{
-			"id": "95b633a636403f37",
-			"type": "text",
-			"text": "**search**\nQuery \u2192 Hits",
-			"x": 1080,
-			"y": 200,
-			"width": 320,
-			"height": 90,
-			"color": "5"
-		},
-		{
-			"id": "c68c35add3750ee6",
-			"type": "text",
-			"text": "**context**\na scope \u2192 Context Chain",
-			"x": 1080,
-			"y": 320,
-			"width": 320,
-			"height": 90,
-			"color": "5"
-		},
-		{
-			"id": "d7a4f452fd8f9155",
-			"type": "text",
-			"text": "**match**\nItem Maps \u2192 Match Map",
-			"x": 1080,
-			"y": 440,
-			"width": 320,
-			"height": 90,
-			"color": "5"
-		},
-		{
-			"id": "7bec8d6abc9db630",
-			"type": "text",
-			"text": "**lint**\na scope \u2192 Findings",
-			"x": 1080,
-			"y": 560,
-			"width": 320,
-			"height": 90,
-			"color": "5"
-		},
-		{
-			"id": "a170cf79f66f71e8",
-			"type": "text",
-			"text": "**vault**\n\u2192 Vault Status; init, sync, mention",
-			"x": 1080,
-			"y": 800,
-			"width": 320,
-			"height": 100,
-			"color": "5"
-		},
-		{
-			"id": "eae0b40a88485343",
-			"type": "text",
-			"text": "**source**\nCapture Request \u2192 sources; chunks; read \u2192 Text Blob",
-			"x": 1080,
-			"y": 930,
-			"width": 320,
-			"height": 100,
-			"color": "5"
-		},
-		{
-			"id": "d1c74de8d349ee70",
-			"type": "text",
-			"text": "**change**\nWiki Change Plan \u2192 Change Preview; apply, reject, undo",
-			"x": 1080,
-			"y": 1060,
-			"width": 320,
-			"height": 100,
-			"color": "5"
-		},
-		{
-			"id": "00bc4f0853df5214",
-			"type": "text",
-			"text": "**thread**\nThread Write \u2192 Thread View",
-			"x": 1080,
-			"y": 1190,
-			"width": 320,
-			"height": 100,
-			"color": "5"
-		},
-		{
-			"id": "4d63ed5fa70f8aad",
-			"type": "text",
-			"text": "**session-start**\nSessionStart: the session document, sync, the opening context",
-			"x": 2640,
-			"y": 0,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "3f8cdd88187688e1",
-			"type": "text",
-			"text": "**prompt**\nUserPromptSubmit: running",
-			"x": 2640,
-			"y": 130,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "080ee6d466055185",
-			"type": "text",
-			"text": "**guard**\nPreToolUse: seven rules, among them the thread rule, the apply gate, and read-only agents",
-			"x": 2640,
-			"y": 260,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "dcc58a7616452aab",
-			"type": "text",
-			"text": "**touched**\nPostToolUse: links the session to what it touched; writes notes",
-			"x": 2640,
-			"y": 390,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "853e9b4638b982cd",
-			"type": "text",
-			"text": "**waiting**\nNotification: waiting for you",
-			"x": 2640,
-			"y": 520,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "c2e6b867c9906b7f",
-			"type": "text",
-			"text": "**stop**\nStop: idle; one reminder",
-			"x": 2640,
-			"y": 650,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "0553e8cd10d6c232",
-			"type": "text",
-			"text": "**subagent-start**\nSubagentStart: a child session document",
-			"x": 2640,
-			"y": 780,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "46fb11a5fb350caa",
-			"type": "text",
-			"text": "**subagent-stop**\nSubagentStop: ended",
-			"x": 2640,
-			"y": 910,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "d9a2915a0bc9182a",
-			"type": "text",
-			"text": "**session-end**\nSessionEnd: ended",
-			"x": 2640,
-			"y": 1040,
-			"width": 320,
-			"height": 100,
-			"color": "4"
-		},
-		{
-			"id": "c9fbef541ee4cc7b",
-			"type": "text",
-			"text": "**Atlas.md**\nthe vault",
-			"x": 1780,
-			"y": 0,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "c5f8fd93256f3848",
-			"type": "text",
-			"text": "**area**\nwiki/areas/",
-			"x": 1780,
-			"y": 90,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "f22faea5eb30eccb",
-			"type": "text",
-			"text": "**repository**\nwiki/repositories/",
-			"x": 1780,
-			"y": 180,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "b5305441a0d7960c",
-			"type": "text",
-			"text": "**concept**\nwiki/concepts/",
-			"x": 1780,
-			"y": 380,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "27942b1cefe11790",
-			"type": "text",
-			"text": "**entity**\nwiki/entities/",
-			"x": 1780,
-			"y": 470,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "36255270abbf5f11",
-			"type": "text",
-			"text": "**policy**\nwiki/policies/",
-			"x": 1780,
-			"y": 560,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "f8d76dc1e32cf1a6",
-			"type": "text",
-			"text": "**source**\nwiki/sources/",
-			"x": 1780,
-			"y": 650,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "3c47ddf2bc590d2d",
-			"type": "text",
-			"text": "**stub**\nthe thread's root",
-			"x": 1780,
-			"y": 850,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "e99c37e42d6641a8",
-			"type": "text",
-			"text": "**spec**",
-			"x": 1780,
-			"y": 940,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "94d0a259979652bd",
-			"type": "text",
-			"text": "**task**",
-			"x": 1780,
-			"y": 1030,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "9f55c277ab96e35d",
-			"type": "text",
-			"text": "**receipt**",
-			"x": 1780,
-			"y": 1120,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "9533251221946097",
-			"type": "text",
-			"text": "**session**\nsessions/",
-			"x": 1780,
-			"y": 1320,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "35335587f3541374",
-			"type": "text",
-			"text": "**change**\nchanges/",
-			"x": 1780,
-			"y": 1410,
-			"width": 300,
-			"height": 70,
-			"color": "6"
-		},
-		{
-			"id": "9d3b11284333828a",
-			"type": "text",
-			"text": "# Atlas V2: the system map\nSkills (yellow) call tools (cyan). Tools and hooks (green) write documents (purple). Agents read and return data; only skills write. See Atlas V2.md for the rules.",
-			"x": 0,
-			"y": -300,
-			"width": 900,
-			"height": 170
-		},
-		{
-			"id": "258f4148577d26c5",
-			"type": "text",
-			"text": "**Legend**\n\n- cyan: tool (code)\n- yellow: skill or agent (model)\n- purple: document or entity\n- green: hook (code, automatic)\n- orange: the user\n- red: a gate or a refusal",
-			"x": -400,
-			"y": 0,
-			"width": 300,
-			"height": 260
-		}
+	"nodes":[
+		{"id":"5564bea8bbad76bf","type":"group","label":"record documents","x":1740,"y":1280,"width":380,"height":240,"color":"6"},
+		{"id":"7e8453428ba8ad39","type":"group","label":"thread documents","x":1740,"y":810,"width":380,"height":420,"color":"6"},
+		{"id":"25766a25a4f3c217","type":"group","label":"knowledge pages","x":1740,"y":340,"width":380,"height":420,"color":"6"},
+		{"id":"7faf4feae6aaf50e","type":"group","label":"scope pages","x":1740,"y":-40,"width":380,"height":330,"color":"6"},
+		{"id":"68cb10f033b19db9","type":"group","label":"hooks (automatic)","x":2600,"y":-40,"width":400,"height":1220,"color":"4"},
+		{"id":"b5498127cb0d41be","type":"group","label":"tools that write (one commit each)","x":1040,"y":760,"width":400,"height":570,"color":"5"},
+		{"id":"7fb7026846f3e884","type":"group","label":"tools that read","x":1040,"y":160,"width":400,"height":530,"color":"5"},
+		{"id":"0acd17fa5e71567e","type":"group","label":"agents (read-only workers)","x":520,"y":660,"width":380,"height":570,"color":"3"},
+		{"id":"58d971702edcb826","type":"group","label":"thread skills","x":-40,"y":1880,"width":420,"height":830,"color":"3"},
+		{"id":"140f1faee85bb218","type":"group","label":"wiki skills","x":-40,"y":850,"width":420,"height":960,"color":"3"},
+		{"id":"9cd2ec96b1bfcc68","type":"group","label":"repo skills","x":-40,"y":340,"width":420,"height":440,"color":"3"},
+		{"id":"470d5dd12d9ae91f","type":"group","label":"atlas skills","x":-40,"y":-40,"width":420,"height":310,"color":"3"},
+		{"id":"6bdd542e87b4f474","type":"text","text":"**atlas**\norient, the board, quick moves, route\n`vault search context thread`","x":0,"y":0,"width":340,"height":100,"color":"3"},
+		{"id":"4887e2f65c762f84","type":"text","text":"**atlas-onboard**\na new vault and its first repositories\n`vault`","x":0,"y":130,"width":340,"height":100,"color":"3"},
+		{"id":"2d7415db98f461c6","type":"text","text":"**repo-link**\nlink a repository under an area\n`context search change`","x":0,"y":380,"width":340,"height":100,"color":"3"},
+		{"id":"4582e0fbe685ca4a","type":"text","text":"**repo-unlink**\nunlink it, and move what depended on it\n`context search thread change`","x":0,"y":510,"width":340,"height":100,"color":"3"},
+		{"id":"a8f9c26bf45753c9","type":"text","text":"**repo-ingest**\ndescribe a repository in the wiki\n`context source match change`","x":0,"y":640,"width":340,"height":100,"color":"3"},
+		{"id":"7dad0a0ff54b56da","type":"text","text":"**wiki-ingest**\ntriage the inbox, capture sources\n`vault source thread`","x":0,"y":890,"width":340,"height":100,"color":"3"},
+		{"id":"6c0694367c9963b2","type":"text","text":"**wiki-sync**\nthe pipeline: any document into the wiki\n`vault source match change`","x":0,"y":1020,"width":340,"height":100,"color":"3"},
+		{"id":"fb97bb8a1bcbc0ec","type":"text","text":"**wiki-save**\nkeep something from the conversation\n`source`","x":0,"y":1150,"width":340,"height":100,"color":"3"},
+		{"id":"0044a471c449cc42","type":"text","text":"**wiki-query**\nanswer from the wiki\n`search context`","x":0,"y":1280,"width":340,"height":100,"color":"3"},
+		{"id":"21f4f1e44c91da39","type":"text","text":"**wiki-edit**\nrewrite, rename, merge, split, repair\n`search lint change`","x":0,"y":1410,"width":340,"height":100,"color":"3"},
+		{"id":"0368a25086c01e52","type":"text","text":"**wiki-rollup**\nbridges and upgrades across child scopes\n`context search match change`","x":0,"y":1540,"width":340,"height":100,"color":"3"},
+		{"id":"0ecaf72e77b32eff","type":"text","text":"**wiki-review**\nthe health of the wiki\n`lint vault`","x":0,"y":1670,"width":340,"height":100,"color":"3"},
+		{"id":"df931b51affc1572","type":"text","text":"**thread-work**\nruns the stage skills in order\n`search context thread`","x":0,"y":1920,"width":340,"height":100,"color":"3"},
+		{"id":"73cfa377355e4546","type":"text","text":"**thread-stub**\nopen a thread in the user's words\n`search thread`","x":0,"y":2050,"width":340,"height":100,"color":"3"},
+		{"id":"095200cdbdc73808","type":"text","text":"**thread-spec**\nwhat done means; gate 1\n`thread context search`","x":0,"y":2180,"width":340,"height":100,"color":"3"},
+		{"id":"742a9acbe8231a8a","type":"text","text":"**thread-plan**\nsplit the spec into tasks; gate 2\n`thread context`","x":0,"y":2310,"width":340,"height":100,"color":"3"},
+		{"id":"c42cfccf0e9bef40","type":"text","text":"**thread-run**\ndo one task in its repository\n`thread context`","x":0,"y":2440,"width":340,"height":100,"color":"3"},
+		{"id":"c91a366f1c893ade","type":"text","text":"**thread-receipt**\nverify and close\n`thread`","x":0,"y":2570,"width":340,"height":100,"color":"3"},
+		{"id":"d5ebf4accd70fcad","type":"text","text":"**wiki-extract**\na chunk → Item Map\nread-only","x":560,"y":700,"width":300,"height":100,"color":"3"},
+		{"id":"ab80799eed1143b0","type":"text","text":"**wiki-draft**\na Match Map slice → writes\nread-only","x":560,"y":830,"width":300,"height":100,"color":"3"},
+		{"id":"78f147cb0b8fd906","type":"text","text":"**wiki-audit**\na scope → Findings\nread-only","x":560,"y":960,"width":300,"height":100,"color":"3"},
+		{"id":"6c70dc5df610df33","type":"text","text":"**thread-review**\na thread's work → Findings\nread-only","x":560,"y":1090,"width":300,"height":100,"color":"3"},
+		{"id":"95b633a636403f37","type":"text","text":"**search**\nQuery → Hits","x":1080,"y":200,"width":320,"height":90,"color":"5"},
+		{"id":"c68c35add3750ee6","type":"text","text":"**context**\na scope → Context Chain","x":1080,"y":320,"width":320,"height":90,"color":"5"},
+		{"id":"d7a4f452fd8f9155","type":"text","text":"**match**\nItem Maps → Match Map","x":1080,"y":440,"width":320,"height":90,"color":"5"},
+		{"id":"7bec8d6abc9db630","type":"text","text":"**lint**\na scope → Findings","x":1080,"y":560,"width":320,"height":90,"color":"5"},
+		{"id":"a170cf79f66f71e8","type":"text","text":"**vault**\n→ Vault Status; init, sync, mention","x":1080,"y":800,"width":320,"height":100,"color":"5"},
+		{"id":"eae0b40a88485343","type":"text","text":"**source**\nCapture Request → sources; chunks; read → Text Blob","x":1080,"y":930,"width":320,"height":100,"color":"5"},
+		{"id":"d1c74de8d349ee70","type":"text","text":"**change**\nWiki Change Plan → Change Preview; apply, reject, undo","x":1080,"y":1060,"width":320,"height":100,"color":"5"},
+		{"id":"00bc4f0853df5214","type":"text","text":"**thread**\nThread Write → Thread View","x":1080,"y":1190,"width":320,"height":100,"color":"5"},
+		{"id":"4d63ed5fa70f8aad","type":"text","text":"**session-start**\nSessionStart: the session document, sync, the opening context","x":2640,"y":0,"width":320,"height":100,"color":"4"},
+		{"id":"3f8cdd88187688e1","type":"text","text":"**prompt**\nUserPromptSubmit: running","x":2640,"y":130,"width":320,"height":100,"color":"4"},
+		{"id":"080ee6d466055185","type":"text","text":"**guard**\nPreToolUse: seven rules, among them the thread rule, the apply gate, and read-only agents","x":2640,"y":260,"width":320,"height":100,"color":"4"},
+		{"id":"dcc58a7616452aab","type":"text","text":"**touched**\nPostToolUse: links the session to what it touched; writes notes","x":2640,"y":390,"width":320,"height":100,"color":"4"},
+		{"id":"853e9b4638b982cd","type":"text","text":"**waiting**\nNotification: waiting for you","x":2640,"y":520,"width":320,"height":100,"color":"4"},
+		{"id":"c2e6b867c9906b7f","type":"text","text":"**stop**\nStop: idle; one reminder","x":2640,"y":650,"width":320,"height":100,"color":"4"},
+		{"id":"0553e8cd10d6c232","type":"text","text":"**subagent-start**\nSubagentStart: a child session document","x":2640,"y":780,"width":320,"height":100,"color":"4"},
+		{"id":"46fb11a5fb350caa","type":"text","text":"**subagent-stop**\nSubagentStop: ended","x":2640,"y":910,"width":320,"height":100,"color":"4"},
+		{"id":"d9a2915a0bc9182a","type":"text","text":"**session-end**\nSessionEnd: ended","x":2640,"y":1040,"width":320,"height":100,"color":"4"},
+		{"id":"c9fbef541ee4cc7b","type":"text","text":"**Atlas.md**\nthe vault","x":1780,"y":0,"width":300,"height":70,"color":"6"},
+		{"id":"c5f8fd93256f3848","type":"text","text":"**area**\nwiki/areas/","x":1780,"y":90,"width":300,"height":70,"color":"6"},
+		{"id":"f22faea5eb30eccb","type":"text","text":"**repository**\nwiki/repositories/","x":1780,"y":180,"width":300,"height":70,"color":"6"},
+		{"id":"b5305441a0d7960c","type":"text","text":"**concept**\nwiki/concepts/","x":1780,"y":380,"width":300,"height":70,"color":"6"},
+		{"id":"27942b1cefe11790","type":"text","text":"**entity**\nwiki/entities/","x":1780,"y":470,"width":300,"height":70,"color":"6"},
+		{"id":"36255270abbf5f11","type":"text","text":"**policy**\nwiki/policies/","x":1780,"y":560,"width":300,"height":70,"color":"6"},
+		{"id":"f8d76dc1e32cf1a6","type":"text","text":"**source**\nwiki/sources/","x":1780,"y":650,"width":300,"height":70,"color":"6"},
+		{"id":"3c47ddf2bc590d2d","type":"text","text":"**stub**\nthe thread's root","x":1780,"y":850,"width":300,"height":70,"color":"6"},
+		{"id":"e99c37e42d6641a8","type":"text","text":"**spec**","x":1780,"y":940,"width":300,"height":70,"color":"6"},
+		{"id":"94d0a259979652bd","type":"text","text":"**task**","x":1780,"y":1030,"width":300,"height":70,"color":"6"},
+		{"id":"9f55c277ab96e35d","type":"text","text":"**receipt**","x":1780,"y":1120,"width":300,"height":70,"color":"6"},
+		{"id":"9533251221946097","type":"text","text":"**session**\nsessions/","x":1780,"y":1320,"width":300,"height":70,"color":"6"},
+		{"id":"35335587f3541374","type":"text","text":"**change**\nchanges/","x":1780,"y":1410,"width":300,"height":70,"color":"6"},
+		{"id":"9d3b11284333828a","type":"text","text":"# Atlas V2: the system map\nSkills (yellow) call tools (cyan). Tools and hooks (green) write documents (purple). Agents read and return data; only skills write. See Atlas V2.md for the rules.","x":0,"y":-300,"width":900,"height":170},
+		{"id":"258f4148577d26c5","type":"text","text":"**Legend**\n\n- cyan: tool (code)\n- yellow: skill or agent (model)\n- purple: document or entity\n- green: hook (code, automatic)\n- orange: the user\n- red: a gate or a refusal","x":-400,"y":0,"width":300,"height":260}
 	],
-	"edges": [
-		{
-			"id": "26dd147bde13ec24",
-			"fromNode": "6c0694367c9963b2",
-			"fromSide": "right",
-			"toNode": "d5ebf4accd70fcad",
-			"toSide": "left"
-		},
-		{
-			"id": "2919905c9f4eefe9",
-			"fromNode": "6c0694367c9963b2",
-			"fromSide": "right",
-			"toNode": "ab80799eed1143b0",
-			"toSide": "left"
-		},
-		{
-			"id": "a69a494da22faf72",
-			"fromNode": "a8f9c26bf45753c9",
-			"fromSide": "right",
-			"toNode": "d5ebf4accd70fcad",
-			"toSide": "left"
-		},
-		{
-			"id": "1be5b79a325ff775",
-			"fromNode": "a8f9c26bf45753c9",
-			"fromSide": "right",
-			"toNode": "ab80799eed1143b0",
-			"toSide": "left"
-		},
-		{
-			"id": "095fc42bc96fb02f",
-			"fromNode": "0368a25086c01e52",
-			"fromSide": "right",
-			"toNode": "ab80799eed1143b0",
-			"toSide": "left"
-		},
-		{
-			"id": "5419198f44b79e12",
-			"fromNode": "0ecaf72e77b32eff",
-			"fromSide": "right",
-			"toNode": "78f147cb0b8fd906",
-			"toSide": "left"
-		},
-		{
-			"id": "440507e26a3fec22",
-			"fromNode": "c91a366f1c893ade",
-			"fromSide": "right",
-			"toNode": "6c70dc5df610df33",
-			"toSide": "left"
-		},
-		{
-			"id": "ef3af200cca74f88",
-			"fromNode": "7fb7026846f3e884",
-			"fromSide": "right",
-			"toNode": "25766a25a4f3c217",
-			"toSide": "left",
-			"label": "read every document"
-		},
-		{
-			"id": "695d231c67f9662d",
-			"fromNode": "d1c74de8d349ee70",
-			"fromSide": "right",
-			"toNode": "7faf4feae6aaf50e",
-			"toSide": "left",
-			"label": "writes"
-		},
-		{
-			"id": "3112707100103d76",
-			"fromNode": "d1c74de8d349ee70",
-			"fromSide": "right",
-			"toNode": "25766a25a4f3c217",
-			"toSide": "left",
-			"label": "writes"
-		},
-		{
-			"id": "3b0832b1e28091ff",
-			"fromNode": "d1c74de8d349ee70",
-			"fromSide": "right",
-			"toNode": "35335587f3541374",
-			"toSide": "left",
-			"label": "writes"
-		},
-		{
-			"id": "efdd13c9faa11d3d",
-			"fromNode": "eae0b40a88485343",
-			"fromSide": "right",
-			"toNode": "f8d76dc1e32cf1a6",
-			"toSide": "left",
-			"label": "captures"
-		},
-		{
-			"id": "79c8f2cf2a19574f",
-			"fromNode": "00bc4f0853df5214",
-			"fromSide": "right",
-			"toNode": "7e8453428ba8ad39",
-			"toSide": "left",
-			"label": "writes"
-		},
-		{
-			"id": "d2ff815567cc110b",
-			"fromNode": "a170cf79f66f71e8",
-			"fromSide": "right",
-			"toNode": "c9fbef541ee4cc7b",
-			"toSide": "left",
-			"label": "init"
-		},
-		{
-			"id": "434cfd97d328dcce",
-			"fromNode": "68cb10f033b19db9",
-			"fromSide": "left",
-			"toNode": "5564bea8bbad76bf",
-			"toSide": "right",
-			"label": "write session documents"
-		}
+	"edges":[
+		{"id":"26dd147bde13ec24","fromNode":"6c0694367c9963b2","fromSide":"right","toNode":"d5ebf4accd70fcad","toSide":"left"},
+		{"id":"2919905c9f4eefe9","fromNode":"6c0694367c9963b2","fromSide":"right","toNode":"ab80799eed1143b0","toSide":"left"},
+		{"id":"a69a494da22faf72","fromNode":"a8f9c26bf45753c9","fromSide":"right","toNode":"d5ebf4accd70fcad","toSide":"left"},
+		{"id":"1be5b79a325ff775","fromNode":"a8f9c26bf45753c9","fromSide":"right","toNode":"ab80799eed1143b0","toSide":"left"},
+		{"id":"095fc42bc96fb02f","fromNode":"0368a25086c01e52","fromSide":"right","toNode":"ab80799eed1143b0","toSide":"left"},
+		{"id":"5419198f44b79e12","fromNode":"0ecaf72e77b32eff","fromSide":"right","toNode":"78f147cb0b8fd906","toSide":"left"},
+		{"id":"440507e26a3fec22","fromNode":"c91a366f1c893ade","fromSide":"right","toNode":"6c70dc5df610df33","toSide":"left"},
+		{"id":"ef3af200cca74f88","fromNode":"7fb7026846f3e884","fromSide":"right","toNode":"25766a25a4f3c217","toSide":"left","label":"read every document"},
+		{"id":"695d231c67f9662d","fromNode":"d1c74de8d349ee70","fromSide":"right","toNode":"7faf4feae6aaf50e","toSide":"left","label":"writes"},
+		{"id":"3112707100103d76","fromNode":"d1c74de8d349ee70","fromSide":"right","toNode":"25766a25a4f3c217","toSide":"left","label":"writes"},
+		{"id":"3b0832b1e28091ff","fromNode":"d1c74de8d349ee70","fromSide":"right","toNode":"35335587f3541374","toSide":"left","label":"writes"},
+		{"id":"efdd13c9faa11d3d","fromNode":"eae0b40a88485343","fromSide":"right","toNode":"f8d76dc1e32cf1a6","toSide":"left","label":"captures"},
+		{"id":"79c8f2cf2a19574f","fromNode":"00bc4f0853df5214","fromSide":"right","toNode":"7e8453428ba8ad39","toSide":"left","label":"writes"},
+		{"id":"d2ff815567cc110b","fromNode":"a170cf79f66f71e8","fromSide":"right","toNode":"c9fbef541ee4cc7b","toSide":"left","label":"init"},
+		{"id":"434cfd97d328dcce","fromNode":"68cb10f033b19db9","fromSide":"left","toNode":"5564bea8bbad76bf","toSide":"right","label":"write session documents"}
 	]
 }
