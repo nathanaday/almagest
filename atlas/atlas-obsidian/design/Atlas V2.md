@@ -88,7 +88,7 @@ Every document that can teach the wiki (a source, a spec, a receipt) is **pendin
 document → chunks → Text Blob → (wiki-extract) → Item Map → match → Match Map → (wiki-draft) → Wiki Change Plan → change → commit
 ```
 
-Ingest, saving a conversation, describing a repository, and learning from a closed thread all use this pipeline. See [[Wiki Sync.canvas|Wiki Sync]].
+Ingest, saving a conversation, describing a repository, and learning from a closed thread all use this pipeline. See [[wiki-sync.canvas|the wiki-sync flow]].
 
 ## From V1
 

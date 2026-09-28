@@ -1,37 +1,356 @@
 {
-	"nodes":[
-		{"id":"fca9b7a029965ae8","type":"group","x":-1500,"y":-420,"width":3000,"height":840,"color":"3","label":"Working on Threads Skill"},
-		{"id":"f2de1472b9c3cf8e","type":"text","text":"Executing a task skill","x":40,"y":-225,"width":250,"height":60,"color":"3"},
-		{"id":"30369eefb256c14d","type":"text","text":"Closing a thread skill","x":460,"y":-110,"width":250,"height":60,"color":"3"},
-		{"id":"10bb08d6b0616de9","type":"text","text":"All tasks done?","x":760,"y":-110,"width":250,"height":60},
-		{"id":"dab51e5338e0993a","type":"text","text":"Reciept","x":1180,"y":-110,"width":250,"height":60,"color":"6"},
-		{"id":"0b22f1223db5e960","type":"text","text":"Creating Tasks Skill","x":-680,"y":-110,"width":250,"height":60,"color":"3"},
-		{"id":"7c26f2dfa0bff9a2","type":"text","text":"Task-1","x":-305,"y":-230,"width":250,"height":70,"color":"6"},
-		{"id":"83a3e39bda97216c","type":"text","text":"Creating a stub skill","x":-1380,"y":-110,"width":250,"height":60,"color":"3"},
-		{"id":"93dd22dc98555b9d","type":"text","text":"Creating a spec skill","x":-1060,"y":-110,"width":250,"height":60,"color":"3"},
-		{"id":"9605d6cb89b5258a","type":"text","text":"Conventions Linking Tool","x":-680,"y":-290,"width":250,"height":60,"color":"5"},
-		{"id":"c47ccee37fa6d3fe","type":"text","text":"Task-2","x":-305,"y":-110,"width":250,"height":60,"color":"6"},
-		{"id":"93685774f4733d39","type":"text","text":"Task-N","x":-305,"y":5,"width":250,"height":60,"color":"6"},
-		{"id":"9b98448e61814c3b","type":"text","text":"Stub","x":-1380,"y":125,"width":250,"height":60,"color":"6"},
-		{"id":"a7339b3b1a35e5cb","type":"text","text":"Spec","x":-1060,"y":125,"width":250,"height":60,"color":"6"},
-		{"id":"b2bfe035a271f4b4","type":"text","text":"Wikify Stub","x":-1380,"y":280,"width":250,"height":60,"color":"5"},
-		{"id":"3b21c125922accec","type":"text","text":"Wikify Spec","x":-1060,"y":280,"width":250,"height":60,"color":"5"}
+	"nodes": [
+		{
+			"id": "d8a5aa9fb6740be3",
+			"type": "group",
+			"label": "thread-work (skill): the conductor of the stage skills",
+			"x": -1460,
+			"y": -360,
+			"width": 2860,
+			"height": 600,
+			"color": "3"
+		},
+		{
+			"id": "b619f4ebc70e8b62",
+			"type": "text",
+			"text": "**thread-stub**",
+			"x": -1400,
+			"y": -120,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "ef95e5666cf1132b",
+			"type": "text",
+			"text": "**thread-spec**",
+			"x": -1080,
+			"y": -120,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "f73e196bdc4bef25",
+			"type": "text",
+			"text": "Gate 1: the user agrees with the spec",
+			"x": -1080,
+			"y": -300,
+			"width": 240,
+			"height": 80,
+			"color": "1"
+		},
+		{
+			"id": "a861e7d168f175c2",
+			"type": "text",
+			"text": "**thread-tasks**",
+			"x": -740,
+			"y": -120,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "1b844673aaa52e6a",
+			"type": "text",
+			"text": "The conventions step",
+			"x": -740,
+			"y": -300,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "79b072ef36a46ed2",
+			"type": "text",
+			"text": "Gate 2: the user agrees with the tasks",
+			"x": -740,
+			"y": 60,
+			"width": 240,
+			"height": 80,
+			"color": "1"
+		},
+		{
+			"id": "8d00ca28570c368a",
+			"type": "text",
+			"text": "T1",
+			"x": -380,
+			"y": -240,
+			"width": 200,
+			"height": 60,
+			"color": "6"
+		},
+		{
+			"id": "ab02d25ea8a0fe86",
+			"type": "text",
+			"text": "T2",
+			"x": -380,
+			"y": -120,
+			"width": 200,
+			"height": 60,
+			"color": "6"
+		},
+		{
+			"id": "3dd37494a72a8a35",
+			"type": "text",
+			"text": "T\u2026N",
+			"x": -380,
+			"y": 0,
+			"width": 200,
+			"height": 60,
+			"color": "6"
+		},
+		{
+			"id": "e65c465a6234c36f",
+			"type": "text",
+			"text": "**thread-task**\nstart, work in the repository, progress, verify, done with its result",
+			"x": 0,
+			"y": -150,
+			"width": 280,
+			"height": 120,
+			"color": "3"
+		},
+		{
+			"id": "334c77e0d5ee575f",
+			"type": "text",
+			"text": "Ready tasks with no dependency between them may run in subagents, one task each",
+			"x": 0,
+			"y": 60,
+			"width": 280,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "edf2a853d0327b45",
+			"type": "text",
+			"text": "Every task done or dropped?",
+			"x": 380,
+			"y": -120,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "a24ebe732aee80fd",
+			"type": "text",
+			"text": "**thread-receipt**\nthread-review, then the receipt",
+			"x": 720,
+			"y": -140,
+			"width": 260,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "dc6f7c70fdc4467c",
+			"type": "text",
+			"text": "**wiki-sync**: the spec and the receipt, as one change",
+			"x": 1080,
+			"y": -130,
+			"width": 260,
+			"height": 80,
+			"color": "3"
+		},
+		{
+			"id": "0afffdd65e3dd4fa",
+			"type": "text",
+			"text": "Stub",
+			"x": -1400,
+			"y": 120,
+			"width": 240,
+			"height": 60,
+			"color": "6"
+		},
+		{
+			"id": "d47dd4ef3770ca7a",
+			"type": "text",
+			"text": "Spec",
+			"x": -1080,
+			"y": 120,
+			"width": 240,
+			"height": 60,
+			"color": "6"
+		},
+		{
+			"id": "77c35b05b7873312",
+			"type": "text",
+			"text": "Receipt",
+			"x": 720,
+			"y": 60,
+			"width": 260,
+			"height": 60,
+			"color": "6"
+		},
+		{
+			"id": "c81226b3bb2bf411",
+			"type": "text",
+			"text": "The spec and the receipt are pending until a change absorbs them. The first draft's \"Wikify stub\" and \"Wikify spec\" steps become this one sync at the end. A stub becomes pending too when `wikify` lists `stub`.",
+			"x": -1400,
+			"y": 300,
+			"width": 560,
+			"height": 130
+		},
+		{
+			"id": "df23ee6482a96b03",
+			"type": "text",
+			"text": "**thread-work** reads the Thread View's `next` at each step: spec, tasks, task T<n>, or receipt",
+			"x": -1400,
+			"y": -520,
+			"width": 560,
+			"height": 90,
+			"color": "3"
+		},
+		{
+			"id": "4fdbce5e596f0e63",
+			"type": "text",
+			"text": "**Legend**\n\n- cyan: tool (code)\n- yellow: skill or agent (model)\n- purple: document or entity\n- green: hook (code, automatic)\n- orange: the user\n- red: a gate or a refusal",
+			"x": -2000,
+			"y": -120,
+			"width": 300,
+			"height": 260
+		}
 	],
-	"edges":[
-		{"id":"d5cca09e6e8e25e0","fromNode":"f2de1472b9c3cf8e","fromSide":"right","toNode":"30369eefb256c14d","toSide":"left"},
-		{"id":"5392cf237511a7e4","fromNode":"7c26f2dfa0bff9a2","fromSide":"right","toNode":"f2de1472b9c3cf8e","toSide":"left"},
-		{"id":"7811312ff42c8c82","fromNode":"10bb08d6b0616de9","fromSide":"top","toNode":"f2de1472b9c3cf8e","toSide":"top","label":"No"},
-		{"id":"a97f7e93e14052d2","fromNode":"30369eefb256c14d","fromSide":"right","toNode":"10bb08d6b0616de9","toSide":"left"},
-		{"id":"30f47f4e90912efb","fromNode":"10bb08d6b0616de9","fromSide":"right","toNode":"dab51e5338e0993a","toSide":"left","label":"Yes"},
-		{"id":"0a630ca24265fe8f","fromNode":"0b22f1223db5e960","fromSide":"right","toNode":"7c26f2dfa0bff9a2","toSide":"left"},
-		{"id":"bf5159765418e87d","fromNode":"0b22f1223db5e960","fromSide":"right","toNode":"c47ccee37fa6d3fe","toSide":"left"},
-		{"id":"6352d50bb84eee05","fromNode":"0b22f1223db5e960","fromSide":"right","toNode":"93685774f4733d39","toSide":"left"},
-		{"id":"1b94af67a4b762e4","fromNode":"0b22f1223db5e960","fromSide":"top","toNode":"9605d6cb89b5258a","toSide":"bottom"},
-		{"id":"217939f7ae34b80b","fromNode":"93dd22dc98555b9d","fromSide":"right","toNode":"0b22f1223db5e960","toSide":"left"},
-		{"id":"5c573979e4512e1b","fromNode":"83a3e39bda97216c","fromSide":"bottom","toNode":"9b98448e61814c3b","toSide":"top"},
-		{"id":"67dc147c23283536","fromNode":"83a3e39bda97216c","fromSide":"right","toNode":"93dd22dc98555b9d","toSide":"left"},
-		{"id":"12b1de165e59fbf9","fromNode":"93dd22dc98555b9d","fromSide":"bottom","toNode":"a7339b3b1a35e5cb","toSide":"top"},
-		{"id":"2872499f270f4d5c","fromNode":"9b98448e61814c3b","fromSide":"bottom","toNode":"b2bfe035a271f4b4","toSide":"top"},
-		{"id":"998f9d2bcec984e7","fromNode":"a7339b3b1a35e5cb","fromSide":"bottom","toNode":"3b21c125922accec","toSide":"top"}
+	"edges": [
+		{
+			"id": "95fd7d2465daadc9",
+			"fromNode": "b619f4ebc70e8b62",
+			"fromSide": "right",
+			"toNode": "ef95e5666cf1132b",
+			"toSide": "left"
+		},
+		{
+			"id": "efa7cbff38e988cb",
+			"fromNode": "ef95e5666cf1132b",
+			"fromSide": "right",
+			"toNode": "a861e7d168f175c2",
+			"toSide": "left"
+		},
+		{
+			"id": "8f14fcf17f9dde67",
+			"fromNode": "a861e7d168f175c2",
+			"fromSide": "right",
+			"toNode": "8d00ca28570c368a",
+			"toSide": "left"
+		},
+		{
+			"id": "715f3cf9b13f3a17",
+			"fromNode": "a861e7d168f175c2",
+			"fromSide": "right",
+			"toNode": "ab02d25ea8a0fe86",
+			"toSide": "left"
+		},
+		{
+			"id": "64437660b5f2b541",
+			"fromNode": "a861e7d168f175c2",
+			"fromSide": "right",
+			"toNode": "3dd37494a72a8a35",
+			"toSide": "left"
+		},
+		{
+			"id": "d6af74cfa340c01a",
+			"fromNode": "8d00ca28570c368a",
+			"fromSide": "right",
+			"toNode": "e65c465a6234c36f",
+			"toSide": "left"
+		},
+		{
+			"id": "fca94869a0e884b6",
+			"fromNode": "ab02d25ea8a0fe86",
+			"fromSide": "right",
+			"toNode": "e65c465a6234c36f",
+			"toSide": "left"
+		},
+		{
+			"id": "cfe45e5636db163b",
+			"fromNode": "3dd37494a72a8a35",
+			"fromSide": "right",
+			"toNode": "e65c465a6234c36f",
+			"toSide": "left"
+		},
+		{
+			"id": "612f95a5f053cbea",
+			"fromNode": "e65c465a6234c36f",
+			"fromSide": "right",
+			"toNode": "edf2a853d0327b45",
+			"toSide": "left"
+		},
+		{
+			"id": "645df0f909b05f6b",
+			"fromNode": "edf2a853d0327b45",
+			"fromSide": "right",
+			"toNode": "a24ebe732aee80fd",
+			"toSide": "left",
+			"label": "yes"
+		},
+		{
+			"id": "d6f5767259733c7a",
+			"fromNode": "a24ebe732aee80fd",
+			"fromSide": "right",
+			"toNode": "dc6f7c70fdc4467c",
+			"toSide": "left"
+		},
+		{
+			"id": "99a0ebc3ce9f3fc9",
+			"fromNode": "ef95e5666cf1132b",
+			"fromSide": "top",
+			"toNode": "f73e196bdc4bef25",
+			"toSide": "bottom"
+		},
+		{
+			"id": "650bbc13c35aefeb",
+			"fromNode": "a861e7d168f175c2",
+			"fromSide": "top",
+			"toNode": "1b844673aaa52e6a",
+			"toSide": "bottom"
+		},
+		{
+			"id": "7e03b4ef9cf5450e",
+			"fromNode": "a861e7d168f175c2",
+			"fromSide": "bottom",
+			"toNode": "79b072ef36a46ed2",
+			"toSide": "top"
+		},
+		{
+			"id": "2871bb07f8e46ef0",
+			"fromNode": "edf2a853d0327b45",
+			"fromSide": "top",
+			"toNode": "e65c465a6234c36f",
+			"toSide": "top",
+			"label": "no: the next ready task"
+		},
+		{
+			"id": "44f1ebed013aa7a3",
+			"fromNode": "e65c465a6234c36f",
+			"fromSide": "bottom",
+			"toNode": "334c77e0d5ee575f",
+			"toSide": "top"
+		},
+		{
+			"id": "0a9a99438e512062",
+			"fromNode": "b619f4ebc70e8b62",
+			"fromSide": "bottom",
+			"toNode": "0afffdd65e3dd4fa",
+			"toSide": "top"
+		},
+		{
+			"id": "c871f0b8b8bd498e",
+			"fromNode": "ef95e5666cf1132b",
+			"fromSide": "bottom",
+			"toNode": "d47dd4ef3770ca7a",
+			"toSide": "top"
+		},
+		{
+			"id": "32977f06dd5d4a7e",
+			"fromNode": "a24ebe732aee80fd",
+			"fromSide": "bottom",
+			"toNode": "77c35b05b7873312",
+			"toSide": "top"
+		},
+		{
+			"id": "a794623ca81feb6e",
+			"fromNode": "df23ee6482a96b03",
+			"fromSide": "bottom",
+			"toNode": "b619f4ebc70e8b62",
+			"toSide": "top"
+		}
 	]
 }

@@ -1,24 +1,182 @@
 {
-	"nodes":[
-		{"id":"8945b3f613917df1","type":"group","x":-795,"y":-160,"width":1590,"height":320,"color":"5","label":"Convensions Linking Tool"},
-		{"id":"1f9a4cf6f915aa5d","type":"text","text":"Return conventions list","x":525,"y":-14,"width":250,"height":60},
-		{"id":"2afaab49fa1cf2a3","type":"text","text":"Yes","x":-85,"y":-18,"width":78,"height":68},
-		{"id":"f7fa25673ca979d2","type":"text","text":"Does the convention apply to this task? ","x":-415,"y":50,"width":250,"height":60},
-		{"id":"414635de333a9e7a","type":"text","text":"No","x":-80,"y":80,"width":73,"height":60},
-		{"id":"5b7e7b40dc540489","type":"text","text":"Add to conventions list","x":71,"y":-14,"width":250,"height":60},
-		{"id":"756be74a4afb3d0e","type":"text","text":"Pass","x":71,"y":85,"width":94,"height":50},
-		{"id":"481b70cd46da992b","type":"text","text":"Get Conventions Tool","x":-775,"y":-74,"width":250,"height":60,"color":"5"},
-		{"id":"bd16f1198e971a1e","type":"text","text":"For each convention in conventions","x":-775,"y":50,"width":250,"height":60},
-		{"id":"999aa2f2b69476b9","x":-800,"y":-420,"width":600,"height":125,"type":"text","text":"The objective of this tool is to identify any relevant conventions from the wiki that may apply to a task. The agent should evoke this tool when creating tasks to make sure tasks follow the set convention."}
+	"nodes": [
+		{
+			"id": "5481f80cad9a1d7b",
+			"type": "group",
+			"label": "The conventions step (in thread-spec and thread-tasks)",
+			"x": -840,
+			"y": -260,
+			"width": 1820,
+			"height": 370,
+			"color": "3"
+		},
+		{
+			"id": "f1a4f0aef89db731",
+			"type": "text",
+			"text": "Find the policies in the wiki that apply to a thread or a task, so the work follows them. **thread-spec** runs it for the thread; **thread-tasks** runs it for each task.",
+			"x": -800,
+			"y": -440,
+			"width": 620,
+			"height": 110
+		},
+		{
+			"id": "3a8a65c74589d6de",
+			"type": "text",
+			"text": "**context** for the scope: every policy on the chain, nearest first",
+			"x": -780,
+			"y": -120,
+			"width": 280,
+			"height": 100,
+			"color": "5"
+		},
+		{
+			"id": "cd62bcdbc24107af",
+			"type": "file",
+			"file": "design/Entities/Context Chain.md",
+			"x": -1260,
+			"y": -210,
+			"width": 400,
+			"height": 400,
+			"color": "6"
+		},
+		{
+			"id": "51d866072cee5864",
+			"type": "text",
+			"text": "For each candidate policy",
+			"x": -400,
+			"y": -100,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "78b61ab79f731f55",
+			"type": "text",
+			"text": "Does it apply to this work?",
+			"x": -60,
+			"y": -100,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "63d9e87a89745c76",
+			"type": "text",
+			"text": "Keep it, with one line on why",
+			"x": 280,
+			"y": -200,
+			"width": 240,
+			"height": 60,
+			"color": "3"
+		},
+		{
+			"id": "b5e3911d6b3f1c87",
+			"type": "text",
+			"text": "Pass",
+			"x": 280,
+			"y": 0,
+			"width": 120,
+			"height": 50,
+			"color": "3"
+		},
+		{
+			"id": "48470ac352e27eca",
+			"type": "text",
+			"text": "Write the kept policies under `## Conventions` in the spec or the task, each linked",
+			"x": 620,
+			"y": -120,
+			"width": 300,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "248d2f58838e2c5f",
+			"type": "text",
+			"text": "**thread-task** follows them; **thread-review** checks the work against them",
+			"x": 1020,
+			"y": -120,
+			"width": 300,
+			"height": 100,
+			"color": "3"
+		},
+		{
+			"id": "6aa3fe1e8eab5c9b",
+			"type": "text",
+			"text": "**Legend**\n\n- cyan: tool (code)\n- yellow: skill or agent (model)\n- purple: document or entity\n- green: hook (code, automatic)\n- orange: the user\n- red: a gate or a refusal",
+			"x": -1260,
+			"y": -560,
+			"width": 300,
+			"height": 260
+		}
 	],
-	"edges":[
-		{"id":"1031aed30e48d4ec","fromNode":"481b70cd46da992b","fromSide":"bottom","toNode":"bd16f1198e971a1e","toSide":"top"},
-		{"id":"23bfd198a91092d9","fromNode":"2afaab49fa1cf2a3","fromSide":"right","toNode":"5b7e7b40dc540489","toSide":"left"},
-		{"id":"f2f66ba1ddde5af6","fromNode":"f7fa25673ca979d2","fromSide":"right","toNode":"2afaab49fa1cf2a3","toSide":"left"},
-		{"id":"873d7b1cb5f00e31","fromNode":"bd16f1198e971a1e","fromSide":"right","toNode":"f7fa25673ca979d2","toSide":"left"},
-		{"id":"5479704793e14663","fromNode":"f7fa25673ca979d2","fromSide":"right","toNode":"414635de333a9e7a","toSide":"left"},
-		{"id":"94332bcd2ea2aee9","fromNode":"5b7e7b40dc540489","fromSide":"top","toNode":"f7fa25673ca979d2","toSide":"top","label":"next"},
-		{"id":"8a07706865ea014b","fromNode":"5b7e7b40dc540489","fromSide":"right","toNode":"1f9a4cf6f915aa5d","toSide":"left","label":"done"},
-		{"id":"b059067d4cc13f4f","fromNode":"414635de333a9e7a","fromSide":"right","toNode":"756be74a4afb3d0e","toSide":"left"}
+	"edges": [
+		{
+			"id": "ef6ad278d8cdbffa",
+			"fromNode": "cd62bcdbc24107af",
+			"fromSide": "right",
+			"toNode": "3a8a65c74589d6de",
+			"toSide": "left"
+		},
+		{
+			"id": "b8e69c15938ea080",
+			"fromNode": "3a8a65c74589d6de",
+			"fromSide": "right",
+			"toNode": "51d866072cee5864",
+			"toSide": "left"
+		},
+		{
+			"id": "11428240ce8002f5",
+			"fromNode": "51d866072cee5864",
+			"fromSide": "right",
+			"toNode": "78b61ab79f731f55",
+			"toSide": "left"
+		},
+		{
+			"id": "544403265cb192e7",
+			"fromNode": "78b61ab79f731f55",
+			"fromSide": "right",
+			"toNode": "63d9e87a89745c76",
+			"toSide": "left",
+			"label": "yes"
+		},
+		{
+			"id": "c2a864542b489a26",
+			"fromNode": "78b61ab79f731f55",
+			"fromSide": "right",
+			"toNode": "b5e3911d6b3f1c87",
+			"toSide": "left",
+			"label": "no"
+		},
+		{
+			"id": "de0b664e5cf97e45",
+			"fromNode": "63d9e87a89745c76",
+			"fromSide": "top",
+			"toNode": "78b61ab79f731f55",
+			"toSide": "top",
+			"label": "next"
+		},
+		{
+			"id": "58ed24ce38ea79cb",
+			"fromNode": "b5e3911d6b3f1c87",
+			"fromSide": "bottom",
+			"toNode": "78b61ab79f731f55",
+			"toSide": "bottom",
+			"label": "next"
+		},
+		{
+			"id": "4a2324de07607670",
+			"fromNode": "63d9e87a89745c76",
+			"fromSide": "right",
+			"toNode": "48470ac352e27eca",
+			"toSide": "left",
+			"label": "done"
+		},
+		{
+			"id": "a559c326b80dadf0",
+			"fromNode": "48470ac352e27eca",
+			"fromSide": "right",
+			"toNode": "248d2f58838e2c5f",
+			"toSide": "left"
+		}
 	]
 }
