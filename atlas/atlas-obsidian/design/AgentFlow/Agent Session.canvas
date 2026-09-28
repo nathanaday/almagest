@@ -1,0 +1,37 @@
+{
+	"nodes":[
+		{"id":"3bf9381db90236f2","type":"group","x":0,"y":-500,"width":1800,"height":640,"label":"Working on a Repository"},
+		{"id":"701793c325dea233","type":"group","x":710,"y":-380,"width":1040,"height":408,"label":"Thread Matching"},
+		{"id":"c8f1e972aef0281e","type":"text","text":"Agent Start","x":-1800,"y":100,"width":250,"height":60},
+		{"id":"13b0fa71493cf7de","type":"text","text":"Register empty session","x":-1800,"y":440,"width":250,"height":60},
+		{"id":"b020a7467aaab4de","type":"text","text":"Open Threads?","x":-1360,"y":0,"width":250,"height":60},
+		{"id":"08fcccbab2aa529f","type":"text","text":"Inbox State?","x":-1360,"y":200,"width":250,"height":60},
+		{"id":"ad708011faf93e87","type":"text","text":"Opening Message","x":-1000,"y":100,"width":250,"height":60},
+		{"id":"1288628be9746c93","type":"text","text":"Thread search tool","x":730,"y":-360,"width":250,"height":60,"color":"5"},
+		{"id":"cb87742ce0e72411","type":"text","text":"Use continuing a thread skill","x":1155,"y":-232,"width":250,"height":60,"color":"3"},
+		{"id":"3e313b1bccb02a5e","type":"text","text":"Working on Threads Skill","x":1470,"y":-232,"width":250,"height":60,"color":"3"},
+		{"id":"8b611ca18e26ad20","type":"text","text":"Does a thread for this work already exist?","x":730,"y":-202,"width":250,"height":105},
+		{"id":"725059c32d7a17bb","type":"text","text":"Use creating a thread skill","x":1155,"y":-52,"width":250,"height":60,"color":"3"},
+		{"id":"0126124ef0c82cca","type":"text","text":"User Request","x":-400,"y":100,"width":250,"height":60,"color":"2"},
+		{"id":"ed9bce87fa57e967","type":"text","text":"User wants to work on a repository","x":100,"y":-97,"width":250,"height":60},
+		{"id":"c50876a02d492683","type":"text","text":"User wants to ingest sources","x":100,"y":380,"width":250,"height":60},
+		{"id":"536f5ba9fa444f98","type":"text","text":"Ingest Skill","x":530,"y":380,"width":250,"height":60,"color":"5"}
+	],
+	"edges":[
+		{"id":"b1a06d3dc16c25fc","fromNode":"c8f1e972aef0281e","fromSide":"bottom","toNode":"13b0fa71493cf7de","toSide":"left"},
+		{"id":"cab73b6f1da0dead","fromNode":"c8f1e972aef0281e","fromSide":"right","toNode":"b020a7467aaab4de","toSide":"left"},
+		{"id":"faa3609705f4649a","fromNode":"c8f1e972aef0281e","fromSide":"right","toNode":"08fcccbab2aa529f","toSide":"left"},
+		{"id":"81ff0f624879b0f1","fromNode":"b020a7467aaab4de","fromSide":"right","toNode":"ad708011faf93e87","toSide":"left"},
+		{"id":"458a16974bac6641","fromNode":"08fcccbab2aa529f","fromSide":"right","toNode":"ad708011faf93e87","toSide":"left"},
+		{"id":"16f4d9dbcad947d9","fromNode":"ad708011faf93e87","fromSide":"right","toNode":"0126124ef0c82cca","toSide":"left"},
+		{"id":"7674473a9f82b05c","fromNode":"1288628be9746c93","fromSide":"bottom","toNode":"8b611ca18e26ad20","toSide":"top","fromEnd":"arrow"},
+		{"id":"72df859420e06152","fromNode":"cb87742ce0e72411","fromSide":"right","toNode":"3e313b1bccb02a5e","toSide":"left"},
+		{"id":"a9782be95193a7bb","fromNode":"8b611ca18e26ad20","fromSide":"right","toNode":"cb87742ce0e72411","toSide":"left","label":"Yes"},
+		{"id":"0c9d20a36d38e86e","fromNode":"725059c32d7a17bb","fromSide":"right","toNode":"3e313b1bccb02a5e","toSide":"bottom"},
+		{"id":"fa0cad53b36ea819","fromNode":"8b611ca18e26ad20","fromSide":"right","toNode":"725059c32d7a17bb","toSide":"left","label":"No"},
+		{"id":"2398ab64b4c09a58","fromNode":"ed9bce87fa57e967","fromSide":"right","toNode":"8b611ca18e26ad20","toSide":"left"},
+		{"id":"12a60fecf240ac69","fromNode":"0126124ef0c82cca","fromSide":"right","toNode":"ed9bce87fa57e967","toSide":"left"},
+		{"id":"56e16b1b8bd206b2","fromNode":"0126124ef0c82cca","fromSide":"right","toNode":"c50876a02d492683","toSide":"left"},
+		{"id":"f6935b9111af906f","fromNode":"c50876a02d492683","fromSide":"right","toNode":"536f5ba9fa444f98","toSide":"left"}
+	]
+}

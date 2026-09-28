@@ -1,0 +1,37 @@
+{
+	"nodes":[
+		{"id":"fca9b7a029965ae8","type":"group","x":-1500,"y":-420,"width":3000,"height":840,"color":"3","label":"Working on Threads Skill"},
+		{"id":"f2de1472b9c3cf8e","type":"text","text":"Executing a task skill","x":40,"y":-225,"width":250,"height":60,"color":"3"},
+		{"id":"30369eefb256c14d","type":"text","text":"Closing a thread skill","x":460,"y":-110,"width":250,"height":60,"color":"3"},
+		{"id":"10bb08d6b0616de9","type":"text","text":"All tasks done?","x":760,"y":-110,"width":250,"height":60},
+		{"id":"dab51e5338e0993a","type":"text","text":"Reciept","x":1180,"y":-110,"width":250,"height":60,"color":"6"},
+		{"id":"0b22f1223db5e960","type":"text","text":"Creating Tasks Skill","x":-680,"y":-110,"width":250,"height":60,"color":"3"},
+		{"id":"7c26f2dfa0bff9a2","type":"text","text":"Task-1","x":-305,"y":-230,"width":250,"height":70,"color":"6"},
+		{"id":"83a3e39bda97216c","type":"text","text":"Creating a stub skill","x":-1380,"y":-110,"width":250,"height":60,"color":"3"},
+		{"id":"93dd22dc98555b9d","type":"text","text":"Creating a spec skill","x":-1060,"y":-110,"width":250,"height":60,"color":"3"},
+		{"id":"9605d6cb89b5258a","type":"text","text":"Conventions Linking Tool","x":-680,"y":-290,"width":250,"height":60,"color":"5"},
+		{"id":"c47ccee37fa6d3fe","type":"text","text":"Task-2","x":-305,"y":-110,"width":250,"height":60,"color":"6"},
+		{"id":"93685774f4733d39","type":"text","text":"Task-N","x":-305,"y":5,"width":250,"height":60,"color":"6"},
+		{"id":"9b98448e61814c3b","type":"text","text":"Stub","x":-1380,"y":125,"width":250,"height":60,"color":"6"},
+		{"id":"a7339b3b1a35e5cb","type":"text","text":"Spec","x":-1060,"y":125,"width":250,"height":60,"color":"6"},
+		{"id":"b2bfe035a271f4b4","type":"text","text":"Wikify Stub","x":-1380,"y":280,"width":250,"height":60,"color":"5"},
+		{"id":"3b21c125922accec","type":"text","text":"Wikify Spec","x":-1060,"y":280,"width":250,"height":60,"color":"5"}
+	],
+	"edges":[
+		{"id":"d5cca09e6e8e25e0","fromNode":"f2de1472b9c3cf8e","fromSide":"right","toNode":"30369eefb256c14d","toSide":"left"},
+		{"id":"5392cf237511a7e4","fromNode":"7c26f2dfa0bff9a2","fromSide":"right","toNode":"f2de1472b9c3cf8e","toSide":"left"},
+		{"id":"7811312ff42c8c82","fromNode":"10bb08d6b0616de9","fromSide":"top","toNode":"f2de1472b9c3cf8e","toSide":"top","label":"No"},
+		{"id":"a97f7e93e14052d2","fromNode":"30369eefb256c14d","fromSide":"right","toNode":"10bb08d6b0616de9","toSide":"left"},
+		{"id":"30f47f4e90912efb","fromNode":"10bb08d6b0616de9","fromSide":"right","toNode":"dab51e5338e0993a","toSide":"left","label":"Yes"},
+		{"id":"0a630ca24265fe8f","fromNode":"0b22f1223db5e960","fromSide":"right","toNode":"7c26f2dfa0bff9a2","toSide":"left"},
+		{"id":"bf5159765418e87d","fromNode":"0b22f1223db5e960","fromSide":"right","toNode":"c47ccee37fa6d3fe","toSide":"left"},
+		{"id":"6352d50bb84eee05","fromNode":"0b22f1223db5e960","fromSide":"right","toNode":"93685774f4733d39","toSide":"left"},
+		{"id":"1b94af67a4b762e4","fromNode":"0b22f1223db5e960","fromSide":"top","toNode":"9605d6cb89b5258a","toSide":"bottom"},
+		{"id":"217939f7ae34b80b","fromNode":"93dd22dc98555b9d","fromSide":"right","toNode":"0b22f1223db5e960","toSide":"left"},
+		{"id":"5c573979e4512e1b","fromNode":"83a3e39bda97216c","fromSide":"bottom","toNode":"9b98448e61814c3b","toSide":"top"},
+		{"id":"67dc147c23283536","fromNode":"83a3e39bda97216c","fromSide":"right","toNode":"93dd22dc98555b9d","toSide":"left"},
+		{"id":"12b1de165e59fbf9","fromNode":"93dd22dc98555b9d","fromSide":"bottom","toNode":"a7339b3b1a35e5cb","toSide":"top"},
+		{"id":"2872499f270f4d5c","fromNode":"9b98448e61814c3b","fromSide":"bottom","toNode":"b2bfe035a271f4b4","toSide":"top"},
+		{"id":"998f9d2bcec984e7","fromNode":"a7339b3b1a35e5cb","fromSide":"bottom","toNode":"3b21c125922accec","toSide":"top"}
+	]
+}

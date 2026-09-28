@@ -1,0 +1,22 @@
+{
+	"nodes":[
+		{"id":"5762c689384f302a","type":"group","x":-440,"y":-150,"width":1160,"height":300,"color":"5","label":"Map Text Tool"},
+		{"id":"7014f310ece31b3d","type":"text","text":"Entity List","x":-24,"y":-30,"width":250,"height":60},
+		{"id":"2edcdc12516527c8","type":"text","text":"Policy List","x":-24,"y":70,"width":250,"height":60},
+		{"id":"1d63028b626e57f3","type":"text","text":"Analyze and extract","x":-384,"y":-30,"width":250,"height":60},
+		{"id":"648f6d41bff62f96","type":"text","text":"Concept List","x":-24,"y":-130,"width":250,"height":60},
+		{"id":"83dd8f2222a562ec","x":-1000,"y":-100,"width":400,"height":203,"type":"file","file":"design/Entities/Text Blob.md"},
+		{"id":"dcdb2ef81f2932f6","x":440,"y":-30,"width":250,"height":60,"type":"text","text":"Accumulate "},
+		{"id":"24449363deab1745","x":960,"y":-200,"width":400,"height":400,"type":"file","file":"design/Entities/Item Map.md"}
+	],
+	"edges":[
+		{"id":"b68a942e25b2c798","fromNode":"1d63028b626e57f3","fromSide":"right","toNode":"7014f310ece31b3d","toSide":"left"},
+		{"id":"32dfb586169abac0","fromNode":"1d63028b626e57f3","fromSide":"right","toNode":"2edcdc12516527c8","toSide":"left"},
+		{"id":"f8f5e3c6d442cd34","fromNode":"1d63028b626e57f3","fromSide":"right","toNode":"648f6d41bff62f96","toSide":"left"},
+		{"id":"49aed0c1c14ef6cf","fromNode":"83dd8f2222a562ec","fromSide":"right","toNode":"1d63028b626e57f3","toSide":"left"},
+		{"id":"d30b52686ac7deac","fromNode":"648f6d41bff62f96","fromSide":"right","toNode":"dcdb2ef81f2932f6","toSide":"left"},
+		{"id":"c642b82acc78219b","fromNode":"7014f310ece31b3d","fromSide":"right","toNode":"dcdb2ef81f2932f6","toSide":"left"},
+		{"id":"6f2633d9dffed7e3","fromNode":"2edcdc12516527c8","fromSide":"right","toNode":"dcdb2ef81f2932f6","toSide":"left"},
+		{"id":"b760c6b16b8bba35","fromNode":"5762c689384f302a","fromSide":"right","toNode":"24449363deab1745","toSide":"left"}
+	]
+}
