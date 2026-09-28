@@ -7,7 +7,7 @@ There are nine tools, served by one MCP server named `atlas`. Tools are nouns an
 
 | Tool | Takes | Returns | Writes |
 |---|---|---|---|
-| [[vault]] | nothing, or a name and path for `init` | [[Vault Status]] | `init`, `sync` |
+| [[vault]] | nothing; a name and path for `init`; a mention to close | [[Vault Status]] | `init`, `sync`, `mention` |
 | [[search]] | [[Query]] | [[Hits]] | nothing |
 | [[context]] | a scope or a path | [[Context Chain]] | nothing |
 | [[match]] | [[Item Map]]s, or page ids | [[Match Map]] | nothing |
@@ -34,7 +34,7 @@ Five read, four write. The writers are the only code paths that change the vault
 An action lives once, as a function in the core. The MCP tool, the CLI command, and the Obsidian plugin reach the same function. Every tool action has a CLI command of the same name:
 
 ```text
-atlas vault [status|init|sync]
+atlas vault [status|init|sync|mention]
 atlas search TEXT [--type T]... [--scope S] [--state K=V]... [--limit N]
 atlas context [SCOPE] [--path P]
 atlas match --items FILE.json | --pages ID... [--within S] [--siblings]

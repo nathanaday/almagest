@@ -37,6 +37,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 |---|---|---|---|
 | `Atlas.md` | no | `init` only | yes |
 | `inbox/` | no | `source` capture removes a file in its commit | yes |
+| any note of yours | no | `vault` mention and `thread` open check the box of a mention and link the answer | yes |
 | `scratchpad/` | no | no | yes |
 | `wiki/` | only through `change` | `change` apply, `source` capture | yes |
 | `threads/` | Edit on the prose of a document that exists | `thread`, the hooks | yes |
