@@ -15,7 +15,7 @@ Every hook is one command, `atlas hook <event>`, which reads the event's JSON on
 | `SessionStart` | `session-start` | creates or resumes the session document; runs `vault sync`; prints the opening context |
 | `UserPromptSubmit` | `prompt` | `status: running`; `updated` |
 | `PreToolUse` on write tools and Bash | `guard` | refuses a write that breaks a rule |
-| `PostToolUse` | `touched` | links the session to what the call touched; writes Session Notes |
+| `PostToolUse` | `touched` | links the session to what the call touched |
 | `Notification` (`permission_prompt`, `idle_prompt`, `agent_needs_input`) | `waiting` | `status: waiting` |
 | `Stop` | `stop` | `status: idle`; one reminder when something is left undone |
 | `SubagentStart` | `subagent-start` | creates the subagent's session document, linked to its parent |
@@ -53,7 +53,7 @@ The context is data about the vault. The vault context is the user's text, and t
 
 | # | When | Refuses | Reason names |
 |---|---|---|---|
-| 1 | the caller is a read-only agent (`agent_type` is `wiki-extract`, `wiki-draft`, `wiki-reviewer`, or `thread-review`) | every write tool; every Bash command but `git log`, `git diff`, and `git show` | "this agent is read-only" |
+| 1 | the caller is a read-only agent (`agent_type` is `wiki-extract`, `wiki-draft`, `wiki-audit`, or `thread-review`) | every write tool; every Bash command but `git log`, `git diff`, and `git show` | "this agent is read-only" |
 | 2 | the path is under `wiki/` | Write, Edit | `change` propose |
 | 3 | the path is under `changes/` or `sessions/`, or is `Atlas.md`, a `.base` file, or `.claude/settings.json` | Write, Edit | the tool that owns it |
 | 4 | the path is a new file under `threads/` | Write | `thread` open, file, or tasks |
@@ -73,7 +73,7 @@ The context is data about the vault. The vault context is the user's text, and t
 | Write or Edit of a thread document | the document's `updated`; binds the session to the thread |
 | `thread` open, attach, file, tasks, task | adds the thread to the session's `threads`; `task` start adds the task to `tasks`; then runs the sync of `active` |
 | `change` propose, apply | adds the change to the session's `changes`; writes the session into the change's `session` |
-| `session` | writes the [[Session Note]] into the session document |
+| Edit of the session's own document | copies the first line of `## Description` into `description` |
 | any call | `updated`, at most once a minute |
 
 ## stop

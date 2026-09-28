@@ -116,7 +116,7 @@ These decisions change or complete the first V2 brainstorm.
 | Are "Map Text" and "Wiki Draft" tools? | No. They are the agents `wiki-extract` and `wiki-draft`. The tools are the parts code can do: `source` chunks, `match`, `change`. | A tool is a fact or a commit. Extraction and drafting are judgment. |
 | Wiki Draft: a neighbor that is not the same subject | Treat the item as new, and link the neighbor as related | "Skip" would lose the item |
 | "git clean?" before ingest | Apply commits hand edits as `snapshot` first. No skill. | Code can do it every time; a skill can forget |
-| "Get Conventions for Task" | `context` returns the policies on the scope chain, nearest first. A step in `thread-spec` and `thread-tasks` keeps the ones that apply. | Candidate selection is a fact; relevance is judgment |
+| "Get Conventions for Task" | `context` returns the policies on the scope chain, nearest first. A step in `thread-spec` and `thread-plan` keeps the ones that apply. | Candidate selection is a fact; relevance is judgment |
 | "Thread search tool" | `search` with `types: [stub]` | one search over every document |
 | When is a thread done? | A receipt closes it. `thread` refuses a `completed` receipt while a task is open. | "All tasks done?" is a fact |
 | "Wikify stub", "Wikify spec" | Documents are pending until a change absorbs them; `wiki-sync` drains them at the end of a stage or in a batch | one pipeline, one backlog |

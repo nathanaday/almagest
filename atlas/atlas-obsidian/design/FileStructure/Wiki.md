@@ -92,7 +92,7 @@ Extra field: `strength`, one of `must | should | may`.
 
 Body sections: `## Rule` (one or two sentences, stated as an instruction), `## Why`, `## Applies when`, `## Exceptions`, `## Sources`.
 
-The conventions step of [[thread-spec]] and [[thread-tasks]] reads policies. A policy that a task must obey is linked from the task.
+The conventions step of [[thread-spec]] and [[thread-plan]] reads policies. A policy that a task must obey is linked from the task.
 
 ## Source
 

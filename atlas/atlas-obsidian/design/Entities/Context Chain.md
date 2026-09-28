@@ -26,4 +26,4 @@ repository:                      # for a repository: facts from git, now
   behind: 12                     # commits from described to head
 ```
 
-The chain is a fact: two correct runs return the same chain. Which policies apply to a task is a judgment, made by the conventions step of [[thread-spec]] and [[thread-tasks]].
+The chain is a fact: two correct runs return the same chain. Which policies apply to a task is a judgment, made by the conventions step of [[thread-spec]] and [[thread-plan]].

@@ -22,4 +22,4 @@ Link the spec and say its goal and its done-when list in a few lines. Wait for t
 
 ## Hand off
 
-[[thread-tasks]].
+[[thread-plan]].

@@ -18,7 +18,7 @@ Every document in the vault has a type and an id. The type sets its folder, its 
 | `spec` | `spc` | `threads/<thread>/` | [[Thread Documents#Spec]] | `thread`; prose as above |
 | `task` | `tsk` | `threads/<thread>/` | [[Thread Documents#Task]] | `thread`; prose as above |
 | `receipt` | `rcp` | `threads/<thread>/` | [[Thread Documents#Receipt]] | `thread`; prose as above |
-| `session` | `ses` | `sessions/<yyyy-mm>/` | [[Sessions#The session document]] | hooks; `session` for the prose |
+| `session` | `ses` | `sessions/<yyyy-mm>/` | [[Sessions#The session document]] | hooks; the agent edits three sections of its own |
 | `change` | `chg` | `changes/<yyyy-mm>/` | [[Changes#The change document]] | `change` |
 
 The stub's id is the thread's id. A thread is its stub and the documents that name it.

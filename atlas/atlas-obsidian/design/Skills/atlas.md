@@ -5,14 +5,14 @@
 
 **Use for**: /atlas, what is going on, status, where do I work on X, threads, the board, what is open, what should I work on, block, unblock, reprioritize, rename a thread, reopen, review the board, and any request when the right skill is not clear.
 
-**Tools**: `vault`, `search`, `context`, `thread` (list, show, set, reopen), `session`. **References**: `references/threads.md`.
+**Tools**: `vault`, `search`, `context`, `thread` (list, show, set, reopen). **References**: `references/threads.md`.
 
 ## Procedure
 
 1. Read the session-start context. Call `vault` when it is missing or the user asks for the state.
 2. Name the kind of request, with the table below.
 3. When the request names work in a repository, find the scope: `search` with `types: [repository, area]`, then `context`. When two repositories match, ask which, naming both. Never guess between two.
-4. Once the work is known, call `session` describe with one line.
+4. Once the work is known, write one line under `## Description` in this session's document (the opening context links it).
 5. Hand off.
 
 | The user wants | Skill | Thread? |

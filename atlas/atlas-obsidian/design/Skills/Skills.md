@@ -13,7 +13,7 @@ No skill shares a name with a tool. V1 learned that a skill and a tool with one 
 
 | Skill | Owns | Tools | Agents | Writes through |
 |---|---|---|---|---|
-| [[atlas]] | orienting in the vault; the board and the quick moves on a thread; routing any request | `vault`, `search`, `context`, `thread`, `session` | — | `thread` set, reopen |
+| [[atlas]] | orienting in the vault; the board and the quick moves on a thread; routing any request | `vault`, `search`, `context`, `thread` | — | `thread` set, reopen |
 | [[atlas-onboard]] | a new vault: its name, its area setting, its first repositories | `vault` init | — | `vault` init, then [[repo-link]] |
 | [[repo-link]] | linking a repository and choosing its area | `context`, `search`, `change` | — | `change` |
 | [[repo-unlink]] | unlinking a repository, and what depended on it | `context`, `search`, `thread`, `change` | — | `change`, `thread` |
@@ -24,13 +24,13 @@ No skill shares a name with a tool. V1 learned that a skill and a tool with one 
 | [[wiki-query]] | answering from the wiki | `search`, `context` | — | nothing |
 | [[wiki-edit]] | changing pages that exist: rewrite, rename, merge, split, repair | `search`, `lint`, `change` | — | `change` |
 | [[wiki-rollup]] | mapping a parent scope from its children: bridges and upgrades | `context`, `search`, `match`, `change` | [[wiki-draft]] | `change` |
-| [[wiki-review]] | the health of the wiki, quick or deep | `lint`, `vault` | [[wiki-reviewer]] | nothing |
-| [[thread-work]] | taking a request or a thread to its next stage and on | `search`, `context`, `thread`, `session` | — | the stage skills |
+| [[wiki-review]] | the health of the wiki, quick or deep | `lint`, `vault` | [[wiki-audit]] | nothing |
+| [[thread-work]] | taking a request or a thread to its next stage and on | `search`, `context`, `thread` | — | the stage skills |
 | [[thread-stub]] | opening a thread, in the user's words | `search`, `thread` open | — | `thread` |
 | [[thread-spec]] | what done means | `thread`, `context`, `search` | — | `thread` file spec |
-| [[thread-tasks]] | splitting the spec into tasks | `thread`, `context` | — | `thread` tasks |
-| [[thread-task]] | doing one task in its repository | `thread`, `context`, `session` | — | `thread` task; the repository's own tools |
-| [[thread-receipt]] | verifying and closing a thread | `thread`, `session` | [[thread-review]] | `thread` file receipt, then [[wiki-sync]] |
+| [[thread-plan]] | splitting the spec into tasks | `thread`, `context` | — | `thread` tasks |
+| [[thread-run]] | doing one task in its repository | `thread`, `context` | — | `thread` task; the repository's own tools |
+| [[thread-receipt]] | verifying and closing a thread | `thread` | [[thread-review]] | `thread` file receipt, then [[wiki-sync]] |
 
 No two skills own one verb. Every write to the wiki goes through `change`, and every write to a thread through `thread`.
 
@@ -72,7 +72,7 @@ References live with the skills and load only when a skill names them.
 | `references/changes.md` | the change contract: the plan, the preview, the yes, conflicts | every skill that writes the wiki |
 | `references/pages.md` | the page schemas and the citation rules, from [[Wiki]] | every skill that writes a page, and [[wiki-draft]] |
 | `references/threads.md` | the thread documents and rules, from [[Thread Documents]] | every thread skill |
-| `references/conventions.md` | the conventions step ([[Conventions Check.canvas|Conventions Check]]) | [[thread-spec]], [[thread-tasks]] |
+| `references/conventions.md` | the conventions step ([[Conventions Check.canvas|Conventions Check]]) | [[thread-spec]], [[thread-plan]] |
 | `references/syntax.md` | Obsidian Flavored Markdown: properties, wikilinks, embeds, callouts | every skill that writes a document |
 
 ## Testing the skills

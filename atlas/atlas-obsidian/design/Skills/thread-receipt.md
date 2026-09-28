@@ -5,14 +5,14 @@
 
 **Use for**: finish, done, close this thread, ship it, wrap up, kill, cancel, abandon, drop this thread.
 
-**Tools**: `thread` (show, file receipt, open), `session`. **Agents**: [[thread-review]]. **References**: `references/threads.md`.
+**Tools**: `thread` (show, file receipt, open). **Agents**: [[thread-review]]. **References**: `references/threads.md`.
 
 ## Procedure
 
 **Completed**
 
 1. `thread` show. Every task must be done or dropped; `thread` refuses the receipt otherwise. List any open task and ask: finish it, or drop it.
-2. Send [[thread-review]]. Fix what breaks the spec's done-when list (back to [[thread-task]]). Record the rest as follow-ups, with the user's yes.
+2. Send [[thread-review]]. Fix what breaks the spec's done-when list (back to [[thread-run]]). Record the rest as follow-ups, with the user's yes.
 3. Run each task's `## Verify` once more.
 4. `thread` file receipt, `outcome: completed`: `## Delivered`, `## Verified`, `## Follow-ups` (a `thread` open for each, linked), `## Learned` (what the wiki should absorb, in a few lines).
 
@@ -22,7 +22,7 @@
 
 **Both**
 
-5. `session` summary.
+5. Write `## Summary` in this session's document.
 6. Offer [[wiki-sync]] for the thread's pending documents (its spec and its receipt), as one change.
 
 ## Gate

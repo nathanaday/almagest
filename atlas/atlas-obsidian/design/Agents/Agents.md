@@ -7,7 +7,7 @@ An agent is a read-only worker that a skill sends when a task splits. It reads a
 |---|---|---|---|---|
 | [[wiki-extract]] | [[wiki-sync]], [[repo-ingest]] | a document and a chunk | [[Item Map]] | Read, Grep, Glob, `source` read |
 | [[wiki-draft]] | [[wiki-sync]], [[wiki-rollup]] | a slice of a [[Match Map]] | writes for a [[Wiki Change Plan]], and the skipped subjects | Read, Grep, Glob, `search`, `context`, `source` read |
-| [[wiki-reviewer]] | [[wiki-review]] (deep) | one scope | [[Findings]] | Read, Grep, Glob, `search`, `lint` |
+| [[wiki-audit]] | [[wiki-review]] (deep) | one scope | [[Findings]] | Read, Grep, Glob, `search`, `lint` |
 | [[thread-review]] | [[thread-receipt]] | a thread and the commits of its tasks | [[Findings]] | Read, Grep, Glob, `thread` show, `context`; Bash, limited to `git log`, `git diff`, and `git show` |
 
 ## Rules for every agent

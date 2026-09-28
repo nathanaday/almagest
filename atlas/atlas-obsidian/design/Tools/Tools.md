@@ -3,7 +3,7 @@
 
 A tool is a fact or a commit. Code owns every question that two correct runs must answer the same way, and every path that changes bytes. No tool writes prose: a tool that files text files the text the model gives it.
 
-There are nine tools, served by one MCP server named `atlas`. Tools are nouns and stay few, because every tool's description sits in every session's context.
+There are eight tools, served by one MCP server named `atlas`. Tools are nouns and stay few, because every tool's description sits in every session's context.
 
 | Tool | Takes | Returns | Writes |
 |---|---|---|---|
@@ -14,10 +14,9 @@ There are nine tools, served by one MCP server named `atlas`. Tools are nouns an
 | [[source]] | [[Capture Request]]; a document and a chunk | captured [[Doc Ref]]s; [[Chunk]]s; a [[Text Blob]] | `capture`: one commit |
 | [[change]] | [[Wiki Change Plan]]; a change id | [[Change Preview]] | `propose`: the change document; `apply`, `undo`: one commit each |
 | [[thread]] | [[Thread Write]]; a thread id | [[Thread View]]; the Board | every write: one commit |
-| [[session]] | [[Session Note]] | the note | nothing; the hook writes the note |
 | [[lint]] | a scope, optional | [[Findings]] | nothing |
 
-Five read, four write. The writers are the only code paths that change the vault, apart from the hooks, which write session documents, and `vault sync`, which heals derived fields.
+Four read, four write. The writers are the only code paths that change the vault, apart from the hooks, which write session documents and a few linked fields, and `vault sync`, which heals derived fields.
 
 ## Conventions
 
@@ -27,7 +26,7 @@ Five read, four write. The writers are the only code paths that change the vault
 4. **Refusals teach.** A refusal names the rule and the call that would succeed: "thread T2 depends on T1, which is open; call thread task T1 done first".
 5. **Commits.** Every write takes `.git/atlas.lock`, commits a dirty tree as `snapshot` first, and ends in one commit ([[Vault Layout#Git]]).
 6. **Sync.** Every `thread` write and every `change` apply ends in the sync of derived fields that it touched.
-7. **No session id.** No tool needs one. The hooks link each call to its session ([[Sessions#Links]]).
+7. **No session id.** No tool needs one. The hooks link each call to its session ([[Sessions#Links]]), and the agent writes its own session document's prose with Edit.
 
 ## One backend, three front ends
 
@@ -43,7 +42,6 @@ atlas source chunks DOC
 atlas source read DOC CHUNK
 atlas change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
 atlas thread [list] | show T | open TEXT... | attach T | file T PART | tasks T FILE.json | task ID DO | set T ... | reopen T
-atlas session note DO TEXT              (for hook tests; a session calls the tool)
 atlas lint [SCOPE] [--json]
 atlas hook EVENT                        (the hooks; reads the event JSON on stdin)
 ```

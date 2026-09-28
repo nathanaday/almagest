@@ -51,7 +51,7 @@ internal/scope/       the context graph: chains, policies, repository facts
 internal/threads/     the thread documents, stage, sync
 internal/sessions/    the session documents, keyed by harness id
 internal/lint/        the checks
-internal/mcpserver/   the nine tools, thin over the packages above
+internal/mcpserver/   the eight tools, thin over the packages above
 internal/hooks/       the nine hook commands
 internal/cli/         one method per command
 ```

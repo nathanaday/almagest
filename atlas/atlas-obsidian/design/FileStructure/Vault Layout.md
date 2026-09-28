@@ -41,7 +41,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 | `scratchpad/` | no | no | yes |
 | `wiki/` | only through `change` | `change` apply, `source` capture | yes |
 | `threads/` | Edit on the prose of a document that exists | `thread`, the hooks | yes |
-| `sessions/` | through `session` | the hooks | yes |
+| `sessions/` | Edit of three sections of its own session document | the hooks | yes |
 | `changes/` | through `change` | `change` | yes, a proposed change before you approve it |
 | `*.base` | no | `init` only | yes |
 | `.claude/settings.json` | no | `change` apply, when a repository page is created or removed | no |

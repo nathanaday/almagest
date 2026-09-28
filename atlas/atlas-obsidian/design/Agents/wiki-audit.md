@@ -1,5 +1,5 @@
 
-# wiki-reviewer
+# wiki-audit
 
 > Read the pages of one scope, and report what a deterministic check cannot find. Sent by the deep run of [[wiki-review]].
 

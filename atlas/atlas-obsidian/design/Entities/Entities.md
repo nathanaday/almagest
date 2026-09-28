@@ -25,12 +25,11 @@ Every tool names one data entity on each side. [[Entities.canvas|The entity flow
 | [[Change Preview]] | the preview and status of a change document | [[change]] | the model, which shows it to the user |
 | [[Thread Write]] | one action on a thread | the model | [[thread]] |
 | [[Thread View]] | a thread and all its documents; the Board | [[thread]] | the model |
-| [[Session Note]] | the agent's prose for its session document | the model | [[session]], then the hook |
 | [[Vault Status]] | the state of the vault in one read | [[vault]] | the session-start hook; the model |
 | [[Findings]] | what is wrong, and the fix | [[lint]] | [[wiki-review]]; the model |
 
 ## Rules
 
 1. A tool takes ids, or titles that resolve to one document. It returns Doc Refs, never bare paths.
-2. Data that must outlive a call goes into a document: a Wiki Change Plan becomes a change document; a Session Note becomes part of a session document.
+2. Data that must outlive a call goes into a document: a Wiki Change Plan becomes a change document.
 3. Workers return data, never documents. [[wiki-extract]] returns an Item Map; [[wiki-draft]] returns part of a Wiki Change Plan. Only the skill that sent them calls a tool that writes.

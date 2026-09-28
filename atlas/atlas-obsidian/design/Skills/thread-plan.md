@@ -1,5 +1,5 @@
 
-# thread-tasks
+# thread-plan
 
 > Split the spec into tasks: each one a piece of work in one repository that can be verified alone. It replaces V1's plan stage, because one spec spawns many tasks.
 
@@ -26,4 +26,4 @@ Show the tasks as a list: order, repository, dependencies, and the verify line o
 
 ## Hand off
 
-[[thread-task]], through [[thread-work]].
+[[thread-run]], through [[thread-work]].

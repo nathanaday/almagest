@@ -5,7 +5,7 @@
 
 **Use for**: work on X, do this, fix this, implement, build, continue, resume, pick up where we left off.
 
-**Tools**: `search`, `context`, `thread`, `session`. **References**: `references/threads.md`.
+**Tools**: `search`, `context`, `thread`. **References**: `references/threads.md`.
 
 ## Procedure
 
@@ -14,13 +14,13 @@
    - one match → say it in one line, and `thread` attach;
    - several → ask which, or whether this is new work;
    - none → [[thread-stub]], with the request in the user's words.
-3. `session` describe, with the thread and what this session will do.
+3. Write `## Description` in this session's document: the thread, and what this session will do.
 4. **Loop** on the Thread View's `next`:
    - `spec` → [[thread-spec]]. Gate 1: the user agrees with the spec. Small work with an obvious approach may skip the spec; say so.
-   - `tasks` → [[thread-tasks]]. Gate 2: the user agrees with the tasks.
-   - `task T<n>` → [[thread-task]]. Tasks that are ready and independent may go to subagents, one task each, each running [[thread-task]]; each subagent gets its own session document and inherits the thread.
+   - `tasks` → [[thread-plan]]. Gate 2: the user agrees with the tasks.
+   - `task T<n>` → [[thread-run]]. Tasks that are ready and independent may go to subagents, one task each, each running [[thread-run]]; each subagent gets its own session document and inherits the thread.
    - `receipt` → [[thread-receipt]].
-5. Stop at a gate, at a blocked task, or when the user's turn is needed. Before stopping, `session` progress with where the thread stands.
+5. Stop at a gate, at a blocked task, or when the user's turn is needed. Before stopping, make sure the task's `## Progress` says where the work stands.
 
 ## Gates
 
