@@ -51,7 +51,7 @@ reason: ""                          # for a rejected change
 
 The body:
 
-````markdown
+``````markdown
 > [!change] Proposed · 3 create, 1 modify · absorbs [[DINOv2]]
 > Review the pages below. Edit any of them here if you want. Then say yes in the chat.
 
@@ -91,7 +91,7 @@ the full new content of the page
 ### rename · [[Old title]] → New title
 
 ### remove · [[Stale page]] → redirect [[Replacement]]
-````
+``````
 
 - Code writes the whole document except `## Summary`, which is the model's.
 - A page's content sits in a fence of backticks longer than any run of backticks inside it, so any markdown survives. Obsidian draws no link from inside a fence, so a proposal adds no false edges to the graph.

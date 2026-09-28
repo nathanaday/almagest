@@ -1,5 +1,5 @@
 
-# Threads
+# Thread Documents
 
 A thread is one line of work on one or more repositories: a feature, a fix, a chore. Every change an agent makes to a repository belongs to a thread. A hook refuses an edit inside a linked repository while the session has no thread ([[Hooks#guard]]). Questions and exploration need no thread.
 

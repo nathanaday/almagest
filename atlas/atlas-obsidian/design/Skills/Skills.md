@@ -71,7 +71,7 @@ References live with the skills and load only when a skill names them.
 |---|---|---|
 | `references/changes.md` | the change contract: the plan, the preview, the yes, conflicts | every skill that writes the wiki |
 | `references/pages.md` | the page schemas and the citation rules, from [[Wiki]] | every skill that writes a page, and [[wiki-draft]] |
-| `references/threads.md` | the thread documents and rules, from [[Threads]] | every thread skill |
+| `references/threads.md` | the thread documents and rules, from [[Thread Documents]] | every thread skill |
 | `references/conventions.md` | the conventions step ([[Conventions Check.canvas|Conventions Check]]) | [[thread-spec]], [[thread-tasks]] |
 | `references/syntax.md` | Obsidian Flavored Markdown: properties, wikilinks, embeds, callouts | every skill that writes a document |
 

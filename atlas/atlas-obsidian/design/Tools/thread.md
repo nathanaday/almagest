@@ -1,7 +1,7 @@
 
 # thread
 
-> Every write to a thread, and the two reads. See [[Threads]] for the documents and the rules.
+> Every write to a thread, and the two reads. See [[Thread Documents]] for the documents and the rules.
 
 | Action | Takes | Returns | Writes |
 |---|---|---|---|
@@ -22,4 +22,4 @@
 - `task start` writes nothing. The hook sets the session's `task`, and sync marks the task `active`. Starting a task whose dependencies are open is refused.
 - The acts that bind the session to the thread are `open`, `attach`, `file`, `tasks`, and `task`. `list` and `show` bind nothing, so a question can look at threads freely.
 
-Refusals: every rule in [[Threads#Rules the thread tool enforces]]; a title that collides with another document.
+Refusals: every rule in [[Thread Documents#Rules the thread tool enforces]]; a title that collides with another document.

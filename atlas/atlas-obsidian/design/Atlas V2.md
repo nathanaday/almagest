@@ -138,7 +138,7 @@ These decisions change or complete the first V2 brainstorm.
 ## Reading order
 
 1. [[Atlas V1 Feedback]], then this page.
-2. [[Document Types]], [[Vault Layout]], [[Wiki]], [[Threads]], [[Sessions]], [[Changes]].
+2. [[Document Types]], [[Vault Layout]], [[Wiki]], [[Thread Documents]], [[Sessions]], [[Changes]].
 3. [[Entities]] and [[Entities.canvas|the entity flow]].
 4. [[Tools]], [[Agents]], [[Hooks]].
 5. [[Skills]] and the skill canvases.
