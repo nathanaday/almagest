@@ -47,7 +47,7 @@ Sessions   ── thread ─▶ the thread the session works on
 Changes    ── sources ▶ the documents a change absorbed into the wiki
 ```
 
-- [[Document Types]] lists the ten document types.
+- [[Document Types]] lists the thirteen document types.
 - [[Vault]] gives the layout of the vault, ids, titles, links, and git.
 - [[Entities]] lists the data that tools take and return.
 - [[Tools]], [[Agents]], [[Skills]], and [[Hooks]] list the parts that act.
