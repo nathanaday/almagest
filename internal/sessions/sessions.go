@@ -409,20 +409,18 @@ func Lead(v *vault.Vault, d *doc.Doc) string {
 	return doc.Callout("session", strings.Join(parts, " · "), lines...)
 }
 
-// ThreadDoc finds a thread document by its title: threads/<thread>/<title>.md.
+// ThreadDoc finds a thread document by its title, in its thread's folder anywhere under
+// threads/.
 func ThreadDoc(v *vault.Vault, title string) *doc.Doc {
-	matches, _ := filepath.Glob(v.Abs(path.Join(vault.Threads, "*", escapeGlob(title)+".md")))
-	for _, abs := range matches {
-		if data, err := os.ReadFile(abs); err == nil {
-			return doc.Parse(v.Rel(abs), data)
-		}
+	rel := v.FindThreadFile(title)
+	if rel == "" {
+		return nil
 	}
-	return nil
-}
-
-func escapeGlob(s string) string {
-	r := strings.NewReplacer("*", `\*`, "?", `\?`, "[", `\[`, "]", `\]`)
-	return r.Replace(s)
+	data, err := v.Read(rel)
+	if err != nil {
+		return nil
+	}
+	return doc.Parse(rel, data)
 }
 
 // write writes a session document with its lead callout current.
@@ -459,4 +457,9 @@ func oneLine(s string, n int) string {
 func DescriptionLine(body string) string {
 	text, _ := doc.Section(body, "Description")
 	return oneLine(doc.FirstLine(text), 200)
+}
+
+func escapeGlob(s string) string {
+	r := strings.NewReplacer("*", `\*`, "?", `\?`, "[", `\[`, "]", `\]`)
+	return r.Replace(s)
 }

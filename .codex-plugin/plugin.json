@@ -1,6 +1,6 @@
 {
   "name": "atlas-obsidian",
-  "version": "6.4.0",
+  "version": "6.5.0",
   "description": "One Obsidian vault for the wiki, the threads, the sessions, and the changes of your work, shared by Claude Code and Codex.",
   "author": {"name": "nathanaday", "url": "https://github.com/nathanaday"},
   "license": "MIT",

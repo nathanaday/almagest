@@ -38,8 +38,10 @@ Every knowledge page has a `scope`: the area or repository that holds its folder
 
 - A new page takes the scope of what it came from: the source's scope, or the thread's.
 - A change that sets a page's `scope` moves the page into its type's folder of the new scope. A page whose subject holds for two children of an area moves up this way. See [[wiki-rollup]].
-- A change that renames a scope, or sets its `parent`, moves its folder and everything in it.
+- A change that renames a scope, or sets its `parent`, moves its folder and everything in it, and the threads filed under it ([[Thread Documents#Areas]]).
 - A change that removes a scope empties its folder into the folder of its redirect, when the redirect is a scope, or else into its parent's. The pages inside take that scope.
+- A page with no area lies at the top of the wiki, in its type's folder. File it later with a change that sets its `scope`, or by moving it.
+- Dropping a page right on an area's folder is enough: sync moves a knowledge page that lies directly in a scope's folder, or in `wiki/`, into its type's folder there.
 - You may move a page or a folder yourself, in Obsidian or in a shell. The next sync writes the new scope into the fields. A move keeps every link, because a link names a title and a title is unique in the vault.
 - Every page and file in a scope's folder moves with it, your own notes and images too.
 

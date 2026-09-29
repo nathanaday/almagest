@@ -14,10 +14,10 @@ Every document in the vault has a type and an id. The type sets its folder, its 
 | `entity` | `ent` | `<scope>/entities/` | [[Wiki#Entity]] | `change` |
 | `policy` | `pol` | `<scope>/policies/` | [[Wiki#Policy]] | `change` |
 | `source` | `src` | `<scope>/sources/` | [[Wiki#Source]] | `source` capture, then `change` |
-| `stub` | `thr` | `threads/<thread>/` | [[Thread Documents#Stub]] | `thread`; the model and the user edit the prose |
-| `spec` | `spc` | `threads/<thread>/` | [[Thread Documents#Spec]] | `thread`; prose as above |
-| `task` | `tsk` | `threads/<thread>/` | [[Thread Documents#Task]] | `thread`; prose as above |
-| `receipt` | `rcp` | `threads/<thread>/` | [[Thread Documents#Receipt]] | `thread`; prose as above |
+| `stub` | `thr` | `threads/<home>/<thread>/` | [[Thread Documents#Stub]] | `thread`; the model and the user edit the prose |
+| `spec` | `spc` | `threads/<home>/<thread>/` | [[Thread Documents#Spec]] | `thread`; prose as above |
+| `task` | `tsk` | `threads/<home>/<thread>/` | [[Thread Documents#Task]] | `thread`; prose as above |
+| `receipt` | `rcp` | `threads/<home>/<thread>/` | [[Thread Documents#Receipt]] | `thread`; prose as above |
 | `session` | `ses` | `sessions/<yyyy-mm>/` | [[Sessions#The session document]] | hooks; the agent edits three sections of its own |
 | `change` | `chg` | `changes/<yyyy-mm>/` | [[Changes#The change document]] | `change` |
 

@@ -16,7 +16,8 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 ├── threads/
 │   ├── Threads.base          the board
 │   ├── Threads.canvas        the board as a canvas: a card per open thread, grouped by area
-│   └── <Thread title>/       one folder per thread: stub, spec, tasks, receipt
+│   ├── <Thread title>/       a thread filed under no area yet: stub, spec, tasks, receipt
+│   └── <Area>/…/<Thread title>/   a thread in the folder that stands for its home scope
 ├── changes/
 │   ├── Changes.base          proposed and applied changes
 │   └── 2026-09/              one document per change, by month
@@ -64,6 +65,7 @@ updated: 2026-09-27
 areas: few                          # many | few | manual: how readily the agent proposes areas
 wikify: [source, spec, receipt]     # the types that are pending until a change absorbs them
 stale_hours: 12                     # a running session with no hook event for this long is lost
+layout: 2                           # code's: the layout of the folders; sync moves an older vault once
 ---
 ```
 

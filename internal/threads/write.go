@@ -3,7 +3,9 @@ package threads
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"path"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -141,9 +143,48 @@ func (w *write) scopes(values []string) ([]string, error) {
 // ErrClosed refuses a new document on a closed thread.
 var ErrClosed = errors.New("the thread is closed; thread reopen takes it up again")
 
-// docPath is the path of a thread document of the thread titled thread.
-func docPath(thread, title string) string {
-	return path.Join(vault.Threads, thread, title+".md")
+// homeFolder is the folder under threads/ that a thread's folder goes in: the mirror of
+// its first scope's folder in the wiki, or threads/ itself when the thread names no scope
+// yet, or one whose page lies outside a folder of its own.
+func (w *write) homeFolder(scope []string) string {
+	if len(scope) == 0 {
+		return vault.Threads
+	}
+	d := w.idx.Linked(scope[0])
+	if d == nil {
+		return vault.Threads
+	}
+	if f := w.idx.Folder(d); f != "" {
+		return vault.Mirror(f)
+	}
+	return vault.Threads
+}
+
+// moveFolder moves every file of a thread's folder, the user's files too, to a new folder.
+// A merge moves the files left in from into a folder that exists.
+func (w *write) moveFolder(from, to string, merge bool) error {
+	if from == to {
+		return nil
+	}
+	if !merge && w.v.Exists(to) && !strings.EqualFold(from, to) {
+		return fmt.Errorf("the folder %s exists", to)
+	}
+	var files []string
+	err := filepath.WalkDir(w.v.Abs(from), func(abs string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() {
+			files = append(files, w.v.Rel(abs))
+		}
+		return err
+	})
+	if err != nil {
+		return err
+	}
+	for _, rel := range files {
+		if err := w.tx.Move(rel, to+strings.TrimPrefix(rel, from)); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // Open opens a thread: its folder and its stub, in the user's words.
@@ -174,12 +215,13 @@ func Open(v *vault.Vault, in OpenIn, now time.Time) (*Result, error) {
 	if err := w.free(title); err != nil {
 		return nil, err
 	}
-	if v.Exists(path.Join(vault.Threads, title)) {
-		return nil, fmt.Errorf("the folder threads/%s exists; choose another title", title)
-	}
 	scope, err := w.scopes(in.Scope)
 	if err != nil {
 		return nil, err
+	}
+	folder := path.Join(w.homeFolder(scope), title)
+	if v.Exists(folder) {
+		return nil, fmt.Errorf("the folder %s exists; choose another title", folder)
 	}
 	var inbox string
 	if in.Inbox != "" {
@@ -202,7 +244,7 @@ func Open(v *vault.Vault, in OpenIn, now time.Time) (*Result, error) {
 		{Key: "active", Value: false},
 		{Key: "tasks", Value: "0/0"},
 	}, "## Stub\n\n"+text+"\n\n## Notes\n")
-	if err := w.tx.Write(docPath(title, title), []byte(content)); err != nil {
+	if err := w.tx.Write(path.Join(folder, title+".md"), []byte(content)); err != nil {
 		return nil, err
 	}
 	if inbox != "" {
@@ -734,6 +776,8 @@ func Set(v *vault.Vault, key string, in SetIn, now time.Time) (*Result, error) {
 			what = append(what, "blocked")
 		}
 	}
+	// A new first scope files the thread's folder under that scope; no scope, at the top.
+	home := path.Dir(t.Folder())
 	if in.Scope != nil {
 		scope, err := w.scopes(*in.Scope)
 		if err != nil {
@@ -741,6 +785,7 @@ func Set(v *vault.Vault, key string, in SetIn, now time.Time) (*Result, error) {
 		}
 		set = append(set, doc.Field{Key: "scope", Value: scope})
 		what = append(what, "scope")
+		home = w.homeFolder(scope)
 	}
 	content := doc.SetFields(t.Stub.Content, set)
 	if in.Title == nil || doc.CleanTitle(*in.Title) == t.Title() {
@@ -748,6 +793,9 @@ func Set(v *vault.Vault, key string, in SetIn, now time.Time) (*Result, error) {
 			return nil, errors.New("set needs a title, priority, blocked, or scope")
 		}
 		if err := w.tx.Write(t.Stub.Path, []byte(content)); err != nil {
+			return nil, err
+		}
+		if err := w.moveFolder(t.Folder(), path.Join(home, t.Title()), false); err != nil {
 			return nil, err
 		}
 		return w.finish(fmt.Sprintf("%s: %s", t.Title(), strings.Join(what, ", ")), t.ID())
@@ -761,7 +809,7 @@ func Set(v *vault.Vault, key string, in SetIn, now time.Time) (*Result, error) {
 			return nil, err
 		}
 	}
-	folder := path.Join(vault.Threads, title)
+	folder := path.Join(home, title)
 	if v.Exists(folder) && links.Key(title) != links.Key(t.Title()) {
 		return nil, fmt.Errorf("the folder %s exists", folder)
 	}
@@ -783,6 +831,12 @@ func Set(v *vault.Vault, key string, in SetIn, now time.Time) (*Result, error) {
 	}
 	if err := w.retitle(retitles, contents, moves); err != nil {
 		return nil, err
+	}
+	// The user's own files in the folder go with the documents.
+	if w.v.Exists(t.Folder()) {
+		if err := w.moveFolder(t.Folder(), folder, true); err != nil {
+			return nil, err
+		}
 	}
 	return w.finish(fmt.Sprintf("rename %s to %s", t.Title(), title), t.ID())
 }

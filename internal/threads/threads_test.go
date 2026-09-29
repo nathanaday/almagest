@@ -35,7 +35,7 @@ func TestAThreadFromStubToReceipt(t *testing.T) {
 	if tv.V.Exists("inbox/alarms.md") {
 		t.Fatal("the inbox note leaves in the same commit")
 	}
-	stub := tv.Read("threads/Filter vehicle false alarms/Filter vehicle false alarms.md")
+	stub := tv.Read("threads/p3-edge/Filter vehicle false alarms/Filter vehicle false alarms.md")
 	for _, want := range []string{`scope: ["[[p3-edge]]"]`, "priority: high", "> [!stub] Filter vehicle false alarms", "**Stub** → Spec → Tasks → Receipt", "## Stub\n\nVehicles trip false alarms at night."} {
 		if !strings.Contains(stub, want) {
 			t.Errorf("stub lacks %q:\n%s", want, stub)
@@ -60,7 +60,7 @@ func TestAThreadFromStubToReceipt(t *testing.T) {
 	if len(r.View.Tasks) != 2 || r.View.Next != "task T1" || r.View.Tasks[1].Ready {
 		t.Fatalf("tasks: %+v", r.View)
 	}
-	t2 := tv.Read("threads/Filter vehicle false alarms/Filter vehicle false alarms — T2 Tune the threshold.md")
+	t2 := tv.Read("threads/p3-edge/Filter vehicle false alarms/Filter vehicle false alarms — T2 Tune the threshold.md")
 	if !strings.Contains(t2, `depends: ["[[Filter vehicle false alarms — T1 Score boxes by motion]]"]`) || !strings.Contains(t2, "## Progress") || !strings.Contains(t2, "after [[Filter vehicle false alarms — T1 Score boxes by motion|T1]]") {
 		t.Fatalf("T2:\n%s", t2)
 	}
@@ -86,7 +86,7 @@ func TestAThreadFromStubToReceipt(t *testing.T) {
 	if r.View.Receipt != nil || r.View.Stub.State["stage"] != "tasks" {
 		t.Fatalf("reopened: %+v", r.View)
 	}
-	if !tv.V.Exists("threads/Filter vehicle false alarms/Filter vehicle false alarms — Receipt (reopened 2026-09-27).md") {
+	if !tv.V.Exists("threads/p3-edge/Filter vehicle false alarms/Filter vehicle false alarms — Receipt (reopened 2026-09-27).md") {
 		t.Fatal("the receipt is kept, renamed")
 	}
 	tv.Clean()

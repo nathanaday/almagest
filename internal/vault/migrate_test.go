@@ -1,6 +1,7 @@
 package vault_test
 
 import (
+	"os"
 	"strings"
 	"testing"
 
@@ -23,6 +24,10 @@ func TestSyncMovesAnOldVaultIntoScopeFolders(t *testing.T) {
 	tv.Write("wiki/concepts/Everywhere.md", page("con-aaaaa5", "concept", "scope: \"\"\n"))
 	tv.Write("wiki/sources/Lecture 1.md", page("src-aaaaa6", "source", "scope: \"[[cs566-course]]\"\nfile: \"[[src-aaaaa6.pdf]]\"\nsha256: abcdef\n"))
 	tv.Write("wiki/sources/files/src-aaaaa6.pdf", "%PDF")
+	tv.Write("threads/Train it/Train it.md", "---\nid: thr-aaaaa7\ntype: stub\ncreated: 2026-09-27\nupdated: 2026-09-27\nscope: [\"[[CS566]]\"]\n---\n## Stub\n")
+	tv.Write("threads/Train it/plot.png", "png")
+	tv.Write("threads/Someday/Someday.md", "---\nid: thr-aaaaa8\ntype: stub\ncreated: 2026-09-27\nupdated: 2026-09-27\nscope: []\n---\n## Stub\n")
+	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 2\n", "", 1))
 	tv.Commit()
 	if got := tv.V.AreaParents(); got["cs566"] != "Machine Learning" {
 		t.Fatalf("the fast reader reads an old vault: %v", got)
@@ -40,6 +45,9 @@ func TestSyncMovesAnOldVaultIntoScopeFolders(t *testing.T) {
 		"wiki/Machine Learning/CS566/cs566-course/sources/Lecture 1.md",
 		"wiki/concepts/Everywhere.md",
 		"wiki/sources/files/src-aaaaa6.pdf",
+		"threads/Machine Learning/CS566/Train it/Train it.md",
+		"threads/Machine Learning/CS566/Train it/plot.png",
+		"threads/Someday/Someday.md",
 	} {
 		if !tv.V.Exists(p) {
 			t.Errorf("%s is missing", p)
@@ -49,7 +57,7 @@ func TestSyncMovesAnOldVaultIntoScopeFolders(t *testing.T) {
 		t.Fatal("the old folders go")
 	}
 	log := tv.Log()
-	if log[0] != "layout: move 5 pages into the folders of their scopes" || !strings.HasPrefix(log[1], "snapshot: ") {
+	if log[0] != "layout: move 7 files into the folders of their scopes" || !strings.HasPrefix(log[1], "snapshot: ") {
 		t.Fatalf("log %v", log)
 	}
 	if got := tv.Read("wiki/Machine Learning/CS566/concepts/Backprop.md"); !strings.Contains(got, "A hand edit.") || !strings.Contains(got, `chain: ["[[Machine Learning]]", "[[CS566]]"]`) {
@@ -62,7 +70,14 @@ func TestSyncMovesAnOldVaultIntoScopeFolders(t *testing.T) {
 	if f, _ := lint.Run(tv.Index(), lint.Options{Now: testvault.Now, Quick: true}); f.Counts[lint.Error] != 0 {
 		t.Fatalf("lint: %+v", f.Findings)
 	}
-	if _, err := core.Sync(tv.V, testvault.Now); err != nil || tv.Log()[0] != log[0] {
+	if !strings.Contains(tv.Read("Atlas.md"), "layout: 2") {
+		t.Fatal("Atlas.md records the layout")
+	}
+	// A thread moved back to the top is filed under no area, and stays there.
+	if err := os.Rename(tv.V.Abs("threads/Machine Learning/CS566/Train it"), tv.V.Abs("threads/Train it")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.Sync(tv.V, testvault.Now); err != nil || tv.Log()[0] != log[0] || !tv.V.Exists("threads/Train it/Train it.md") {
 		t.Fatal("a second sync moves nothing")
 	}
 }

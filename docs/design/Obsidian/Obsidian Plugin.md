@@ -31,7 +31,8 @@ Each scope is a folder of the wiki ([[Wiki#Layout]]). In the file explorer:
 - a scope folder's name is bold, and a click on it opens the scope's page; a click on the arrow only opens or closes the folder;
 - the scope's page is hidden inside its folder, since the folder stands for it;
 - renaming a scope folder renames its page, and renaming the page renames its folder, so the two keep one name; Obsidian updates the links to the page;
-- a move or a rename under `wiki/` runs sync, so each page's `scope`, `parent`, and `chain` follow its folder.
+- a folder under `threads/` that stands for a scope is bold too, and a click on it opens the scope's page;
+- a move or a rename under `wiki/` or `threads/` runs sync, so each page's `scope`, `parent`, and `chain`, and each thread's home, follow its folder.
 
 A setting turns the click and the hidden page off.
 

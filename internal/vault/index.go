@@ -435,6 +435,15 @@ func (idx *Index) ScopeIDs(d *doc.Doc) []string {
 		values = []string{d.Str(field)}
 	case "stub":
 		values = d.List("scope")
+		if home := idx.Home(d); home != nil {
+			out := []string{home.ID()}
+			for _, v := range values {
+				if s := idx.Linked(v); s != nil && s.ID() != home.ID() && (s.Type() == "area" || s.Type() == "repository") {
+					out = append(out, s.ID())
+				}
+			}
+			return out
+		}
 	case "task":
 		values = []string{d.Str("repository")}
 	case "spec", "receipt":
@@ -488,14 +497,28 @@ func (idx *Index) Folder(s *doc.Doc) string {
 	return ""
 }
 
-// Container is the scope whose folder holds a path, the nearest one; nil for the vault.
+// Container is the scope whose folder holds a path, the nearest one; nil for the vault. A
+// path under threads/ lies in the mirror of a scope's folder (Mirror).
 func (idx *Index) Container(rel string) *doc.Doc {
-	for dir := path.Dir(rel); strings.HasPrefix(dir, Wiki+"/"); dir = path.Dir(dir) {
-		if s := idx.scopeDirs[strings.ToLower(dir)]; s != nil {
+	for dir := path.Dir(rel); strings.HasPrefix(dir, Wiki+"/") || strings.HasPrefix(dir, Threads+"/"); dir = path.Dir(dir) {
+		key := dir
+		if w := wikiDirOf(dir); w != "" {
+			key = w
+		}
+		if s := idx.scopeDirs[strings.ToLower(key)]; s != nil {
 			return s
 		}
 	}
 	return nil
+}
+
+// Home is the scope whose folder under threads/ holds a thread's folder; nil when the
+// thread lies at the top of threads/, filed under no area yet.
+func (idx *Index) Home(stub *doc.Doc) *doc.Doc {
+	if !strings.HasPrefix(stub.Path, Threads+"/") {
+		return nil
+	}
+	return idx.Container(path.Dir(stub.Path))
 }
 
 // PathScope is the scope a page's path gives it: the nearest scope folder above it, not

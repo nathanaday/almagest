@@ -328,6 +328,16 @@ func SyncLocked(v *vault.Vault, now time.Time) (*Synced, error) {
 	if err := v.EnsureFolders(); err != nil {
 		return nil, err
 	}
+	refiled, err := threads.Refile(v)
+	if err != nil {
+		return nil, err
+	}
+	out.Threads = append(out.Threads, refiled...)
+	filed, err := vault.FileByHand(v)
+	if err != nil {
+		return nil, err
+	}
+	out.Scopes = append(out.Scopes, filed...)
 	lost, err := sessions.MarkLost(v, now, v.StaleHours())
 	if err != nil {
 		return nil, err
@@ -355,7 +365,7 @@ func SyncLocked(v *vault.Vault, now time.Time) (*Synced, error) {
 		if err != nil {
 			return out, err
 		}
-		out.Scopes = scopes
+		out.Scopes = append(out.Scopes, scopes...)
 	}
 	settings, err := v.SyncSettings(nil)
 	if err != nil {

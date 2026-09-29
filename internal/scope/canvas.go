@@ -88,12 +88,12 @@ func Canvas(idx *vault.Index, existing []byte) (string, bool) {
 			continue
 		}
 		home, label, key := noScope, noScopeLabel, "￿"
-		if ids := idx.ScopeIDs(d); len(ids) > 0 {
+		if h := idx.Home(d); h != nil {
 			var titles []string
-			for _, s := range Path(idx, idx.ByID(ids[0])) {
+			for _, s := range Path(idx, h) {
 				titles = append(titles, vault.Title(s))
 			}
-			home, label, key = ids[0], strings.Join(titles, " / "), strings.ToLower(strings.Join(titles, "\x00"))
+			home, label, key = h.ID(), strings.Join(titles, " / "), strings.ToLower(strings.Join(titles, "\x00"))
 		}
 		id := "grp-" + home
 		g := groups[id]

@@ -134,7 +134,7 @@ func (c *check) place(ops []*op) ([]Move, []Move) {
 	}
 	files = append(files, c.idx.Files...)
 	for _, p := range files {
-		if !strings.HasPrefix(p, vault.Wiki+"/") || byPath[p] {
+		if !(strings.HasPrefix(p, vault.Wiki+"/") || strings.HasPrefix(p, vault.Threads+"/")) || byPath[p] {
 			continue
 		}
 		if to := l.relocate(p); to != p {
@@ -220,7 +220,8 @@ func (l *layout) dirOrWiki(id string, o *op) string {
 	return l.dir(id, o)
 }
 
-// relocate is where a file lands when the folder of its scope moves.
+// relocate is where a file lands when the folder of its scope moves. A thread's files move
+// with the scope's mirror under threads/.
 func (l *layout) relocate(p string) string {
 	s := l.c.idx.Container(p)
 	if s == nil {
@@ -230,6 +231,9 @@ func (l *layout) relocate(p string) string {
 	to := l.dir(s.ID(), &op{Kind: "move", Title: p})
 	if to == from {
 		return p
+	}
+	if strings.HasPrefix(p, vault.Threads+"/") {
+		from, to = vault.Mirror(from), vault.Mirror(to)
 	}
 	return to + strings.TrimPrefix(p, from)
 }
@@ -291,7 +295,7 @@ func (l *layout) folderMoves(moves []Move) []Move {
 		}
 		n := 0
 		for _, m := range moves {
-			if strings.HasPrefix(m.From, dir+"/") {
+			if strings.HasPrefix(m.From, dir+"/") || strings.HasPrefix(m.From, vault.Mirror(dir)+"/") {
 				n++
 			}
 		}

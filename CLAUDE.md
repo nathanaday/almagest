@@ -5,8 +5,8 @@ plugin `atlas-obsidian` in the repository's own marketplace, and the Obsidian pl
 `obsidian/`. Read `README.md` first. This file holds what the code and the README do not
 say.
 
-6.4.0 made each scope a folder of the wiki; sync moves an older vault in one `layout:`
-commit. 6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
+6.4.0 made each scope a folder of the wiki, and 6.5.0 filed threads under the same
+folders; sync moves an older vault in one `layout:` commit. 6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
 repository, and a terminal view) with this one. Nothing reads a 5.x file. The 5.x code is
 on the `v1` branch and the `v1-final` tag.
 
@@ -83,10 +83,22 @@ The design pages are the spec. When the code departs from them, the reason is be
   and unique titles already make a move safe for links. `vault.MigrateLayout`, run by
   `EnsureFolders`, moves a vault from `wiki/areas/` and `wiki/repositories/` in one
   `layout:` commit. Until then the index reads the fields (`Index.Legacy`).
+- **Threads are filed the same way.** A thread's folder lies under `threads/` at the
+  place its home scope's folder has under `wiki/` (`vault.Mirror`, `Index.Home`); a
+  thread with no scope lies at the top, which is valid. The folder is the home; code keeps
+  it first in the stub's `scope` and leaves the rest of the list. `thread` open and set
+  scope file the folder, `change.place` moves thread folders with their scope, and
+  `threads.Refile` in sync files a thread left in a folder that stands for no scope.
+  `vault.FileByHand` in sync makes a drop on a folder enough: it keeps a folder under
+  `threads/` for every scope, as a drop target, and moves a knowledge page dropped right
+  in a scope's folder into its type's folder.
+  `MigrateLayout` files the old top-level threads once and writes `layout: 2` in
+  Atlas.md: after that a thread at the top is the user's choice, so only the field can
+  tell a vault that was never filed from one where the user unfiled a thread.
 - **Threads carry a chain, and the board has a canvas.** A stub's `chain` is each of
   its scopes and the areas above each, so an area page and the By area view find a
   thread scoped to a repository below the area. `threads/Threads.canvas` is a card per
-  open thread in a group per first scope. `scope.Derive` writes both, so every commit that
+  open thread in a group per home (its folder). `scope.Derive` writes both, so every commit that
   heals scopes (apply, undo, capture, and each `thread` call) keeps them current. Code
   owns the cards on the grid; a card off the grid, a group's position, the user's nodes,
   and edges between live nodes survive a sync. `Threads.base` of 0.1.0 is replaced by

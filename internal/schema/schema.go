@@ -136,6 +136,7 @@ var Types = []*Type{
 		Field{Name: "areas", Kind: Enum, Values: []string{"many", "few", "manual"}},
 		Field{Name: "wikify", Kind: List},
 		Field{Name: "stale_hours", Kind: Int},
+		Field{Name: "layout", Kind: Int, Owner: Code},
 	)},
 	{Name: "area", Prefix: "are", Folder: "wiki", Family: Scope, Fields: common(
 		Field{Name: "parent", Kind: Link, Targets: []string{"area"}},

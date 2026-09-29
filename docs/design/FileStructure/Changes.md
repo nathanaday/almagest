@@ -127,7 +127,7 @@ The folder of a page is its scope ([[Wiki#Scope]]). Code works out where every f
 
 - A create goes in its type's folder of the scope it names, or in a folder of its own inside its parent's folder for an area or a repository.
 - A modify that sets `scope` moves the page into its type's folder of the new scope. A rename keeps the page in its folder.
-- A scope that the change renames, or gives a new `parent`, moves its folder. Every file inside moves with it: pages, sub-scopes, your notes, and images.
+- A scope that the change renames, or gives a new `parent`, moves its folder. Every file inside moves with it: pages, sub-scopes, your notes, and images. The folder that stands for the scope under `threads/` moves too, with every thread in it ([[Thread Documents#Areas]]).
 - A scope that the change removes empties its folder into its redirect's folder, when the redirect is a scope, or else into its parent's.
 
 The preview gives each write's final path, and `folders` lists each scope folder that moves. Propose and apply refuse a `parent` that loops, a scope whose page lies outside a folder of its own, a title that is the name of a type folder, and two files that would land on one path or on a file that stays.

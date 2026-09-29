@@ -314,8 +314,11 @@ func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 // covers reports whether an open thread holds the repository: in its scope, through an
 // area above it, or as a task's repository.
 func covers(v *vault.Vault, title, repo string, chain map[string]bool) bool {
-	folder := v.Abs(path.Join(vault.Threads, title))
-	data, err := os.ReadFile(filepath.Join(folder, title+".md"))
+	rel := v.FindThreadFile(title)
+	if rel == "" {
+		return false
+	}
+	data, err := v.Read(rel)
 	if err != nil {
 		return false
 	}
@@ -327,6 +330,12 @@ func covers(v *vault.Vault, title, repo string, chain map[string]bool) bool {
 		if chain[strings.ToLower(doc.LinkTarget(s))] {
 			return true
 		}
+	}
+	// The folder the thread lies in stands for its home scope, which a hand move may have
+	// changed before sync writes it into the field.
+	folder := v.Abs(path.Dir(rel))
+	if home := path.Dir(path.Dir(rel)); home != vault.Threads && chain[strings.ToLower(path.Base(home))] {
+		return true
 	}
 	entries, _ := os.ReadDir(folder)
 	for _, e := range entries {

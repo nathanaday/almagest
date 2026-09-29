@@ -1,12 +1,20 @@
 package vault
 
 import (
+	"io/fs"
+	"os"
 	"path"
+	"path/filepath"
 	"strings"
 )
 
 // TypeFolders are the folders the knowledge types take inside the folder of their scope.
 var TypeFolders = map[string]string{"concept": "concepts", "entity": "entities", "policy": "policies", "source": "sources"}
+
+// Layout is the layout version this binary writes, kept in Atlas.md's layout field: 2 is
+// a folder for each scope, in the wiki and in threads/. A vault without the field is moved
+// once (MigrateLayout).
+const Layout = 2
 
 // legacyFolders held the scope pages before each scope had a folder of its own.
 var legacyFolders = []string{"wiki/areas", "wiki/repositories"}
@@ -46,6 +54,23 @@ func Route(scopeDir, typ, title string) string {
 	return scopeDir + "/" + title + ".md"
 }
 
+// Mirror is the folder under threads/ that stands for a scope folder of the wiki:
+// wiki/ML/CS566 is threads/ML/CS566, and the wiki itself is threads/.
+func Mirror(wikiDir string) string {
+	return Threads + strings.TrimPrefix(wikiDir, Wiki)
+}
+
+// wikiDirOf is the scope folder of the wiki a folder of threads/ stands for, or "".
+func wikiDirOf(dir string) string {
+	if dir == Threads {
+		return Wiki
+	}
+	if rest, ok := strings.CutPrefix(dir, Threads+"/"); ok {
+		return Wiki + "/" + rest
+	}
+	return ""
+}
+
 // inLegacyFolder reports whether rel lies directly in a folder that held scope pages
 // before each scope had a folder.
 func inLegacyFolder(rel string) bool {
@@ -56,4 +81,76 @@ func inLegacyFolder(rel string) bool {
 		}
 	}
 	return false
+}
+
+// FindThreadFile is the path of a file named name.md in a thread's folder, anywhere under
+// threads/, read without the index: a stub, when name is a thread's title, or any other
+// thread document. "" when none holds it.
+func (v *Vault) FindThreadFile(name string) string {
+	want := name + ".md"
+	found := ""
+	filepath.WalkDir(v.Abs(Threads), func(abs string, e fs.DirEntry, err error) error {
+		if err != nil || found != "" {
+			return filepath.SkipDir
+		}
+		if e.IsDir() && strings.HasPrefix(e.Name(), ".") {
+			return filepath.SkipDir
+		}
+		if !e.IsDir() && e.Name() == want {
+			found = v.Rel(abs)
+			return filepath.SkipAll
+		}
+		return nil
+	})
+	return found
+}
+
+// FileByHand finishes what a hand move started, so that dropping a file on a folder is
+// enough: it makes the folder under threads/ that stands for each scope, where a thread
+// can be dropped; removes an empty folder of threads/ that stands for no scope; and moves
+// a knowledge page that lies right in the wiki's folder or a scope's folder into its
+// type's folder there. It returns the paths it moved to. Like sync, it commits nothing.
+// The caller holds the lock.
+func FileByHand(v *Vault) ([]string, error) {
+	idx, err := Load(v)
+	if err != nil || idx.Legacy() {
+		return nil, err
+	}
+	folders := idx.ScopeFolders()
+	mirrors := map[string]bool{}
+	for dir := range folders {
+		mirrors[Mirror(dir)] = true
+		if err := os.MkdirAll(v.Abs(Mirror(dir)), 0o755); err != nil {
+			return nil, err
+		}
+	}
+	var stale []string
+	filepath.WalkDir(v.Abs(Threads), func(abs string, e fs.DirEntry, err error) error {
+		if err == nil && e.IsDir() && !mirrors[v.Rel(abs)] && v.Rel(abs) != Threads {
+			stale = append(stale, abs)
+		}
+		return nil
+	})
+	for i := len(stale) - 1; i >= 0; i-- {
+		os.Remove(stale[i]) // only an empty one goes
+	}
+	var moved []string
+	for _, d := range idx.Of("concept", "entity", "policy", "source") {
+		dir := path.Dir(d.Path)
+		if dir != Wiki && folders[dir] == nil {
+			continue
+		}
+		to := Route(dir, d.Type(), d.Title())
+		if v.Exists(to) {
+			continue // lint reports it
+		}
+		if err := os.MkdirAll(filepath.Dir(v.Abs(to)), 0o755); err != nil {
+			return moved, err
+		}
+		if err := os.Rename(v.Abs(d.Path), v.Abs(to)); err != nil {
+			return moved, err
+		}
+		moved = append(moved, to)
+	}
+	return moved, nil
 }

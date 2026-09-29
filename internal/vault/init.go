@@ -145,6 +145,7 @@ func writeLayout(v *Vault, name, description, areas, context string, now time.Ti
 		{Key: "areas", Value: areas},
 		{Key: "wikify", Value: DefaultWikify},
 		{Key: "stale_hours", Value: DefaultStaleHours},
+		{Key: "layout", Value: Layout},
 	}, body)
 	if err := v.Write(Marker, []byte(atlas)); err != nil {
 		return nil, err

@@ -77,6 +77,11 @@ func Derive(idx *vault.Index) map[string]string {
 				content = doc.SetField(content, field, link)
 			}
 		}
+		if d.Type() == "stub" {
+			if scopes := homeFirst(idx, d); scopes != nil {
+				content = doc.SetField(content, "scope", scopes)
+			}
+		}
 		content = doc.SetField(content, "chain", ChainOf(idx, d))
 		if d.Type() == "area" || d.Type() == "repository" {
 			content = doc.ReplaceLead(content, scopeLead(idx, d))
@@ -94,6 +99,28 @@ func Derive(idx *vault.Index) map[string]string {
 	existing, _ := idx.V.Read(vault.ThreadsCanvas)
 	if content, changed := Canvas(idx, existing); changed {
 		out[vault.ThreadsCanvas] = content
+	}
+	return out
+}
+
+// homeFirst is a stub's scope list with its home, the scope its folder lies in, first; nil
+// when the thread lies at the top of threads/ or its list already starts with the home.
+func homeFirst(idx *vault.Index, d *doc.Doc) []string {
+	home := idx.Home(d)
+	if home == nil {
+		return nil
+	}
+	list := d.List("scope")
+	if len(list) > 0 {
+		if s := idx.Linked(list[0]); s != nil && s.ID() == home.ID() {
+			return nil
+		}
+	}
+	out := []string{doc.Link(vault.Title(home))}
+	for _, v := range list {
+		if s := idx.Linked(v); s == nil || s.ID() != home.ID() {
+			out = append(out, v)
+		}
 	}
 	return out
 }

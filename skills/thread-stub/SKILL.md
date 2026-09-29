@@ -18,7 +18,9 @@ Tools: `search`, `thread` open. References: [threads.md](../atlas/references/thr
    agrees.
 2. Call `thread` with `action: open`: `text` is the user's words as given; `title` is a
    short name for the work; `scope` is the repositories or areas the request names or
-   the conversation is about, or empty.
+   the conversation is about, or empty. The first scope is the thread's home: its folder
+   goes under that scope in `threads/`. With no scope the thread waits at the top of
+   `threads/`, and `thread` set scope files it later.
 3. Say the stub's link in one line.
 
 Ask nothing else. A stub is loose by design.

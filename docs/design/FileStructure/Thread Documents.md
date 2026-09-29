@@ -33,17 +33,24 @@ A stage may be skipped. A small fix goes from stub to one task. A killed idea go
 threads/
 ├── Threads.base
 ├── Threads.canvas
-└── Filter vehicle false alarms/
-    ├── Filter vehicle false alarms.md                    stub
-    ├── Filter vehicle false alarms — Spec.md
-    ├── Filter vehicle false alarms — T1 Score boxes by motion.md
-    ├── Filter vehicle false alarms — T2 Tune the threshold.md
-    └── Filter vehicle false alarms — Receipt.md
+├── Some idea/                                            a thread filed under no area yet
+│   └── Some idea.md
+└── work/                                                 stands for wiki/work/
+    └── p3/
+        └── p3-edge/                                      stands for wiki/work/p3/p3-edge/
+            └── Filter vehicle false alarms/
+                ├── Filter vehicle false alarms.md                    stub
+                ├── Filter vehicle false alarms — Spec.md
+                ├── Filter vehicle false alarms — T1 Score boxes by motion.md
+                ├── Filter vehicle false alarms — T2 Tune the threshold.md
+                └── Filter vehicle false alarms — Receipt.md
 ```
 
 - One folder per thread, named by the thread's title. Closed threads stay in place. `Threads.base` filters them out of the open views, and no link breaks.
+- The thread's folder lies in its **home**: the folder under `threads/` at the same place as its home scope's folder in the wiki ([[Wiki#Layout]]). `threads/work/p3/` stands for `wiki/work/p3/`. Such a folder holds no page of its own; the scope's page is in the wiki.
+- A thread that names no scope lies at the top of `threads/`. That is a valid place: open a thread first and file it later.
 - A document names its thread by a link to the stub (`thread: "[[Filter vehicle false alarms]]"`). Code finds a thread's documents by that link and by the `thread_id` field, never by the file name, so a file renamed by hand is still found.
-- Renaming a thread (`thread` set title) renames the folder and every file in one commit, with the link rewrite pass of [[Changes#Link rewrites]].
+- Renaming a thread (`thread` set title) renames the folder and every file in one commit, with the link rewrite pass of [[Changes#Link rewrites]]. The folder keeps its home.
 
 ## Stub
 
@@ -161,11 +168,19 @@ The board, shipped by `init`. Views: open threads grouped by stage, the most adv
 
 ## Areas
 
-A thread's `scope` names the areas and repositories the work touches. Code derives `chain` from it: each scope and every area above each, the first scope's path first. So a thread scoped to the repository `p3-edge` belongs to the area `p3` and to `work` above it. An area or repository page lists the open threads whose `chain` holds it, below the wiki pages in its lead callout. The first scope is the thread's home: the canvas puts its card there.
+A thread's `scope` names the areas and repositories the work touches. Code derives `chain` from it: each scope and every area above each, the first scope's path first. So a thread scoped to the repository `p3-edge` belongs to the area `p3` and to `work` above it. An area or repository page lists the open threads whose `chain` holds it, below the wiki pages in its lead callout.
+
+The folder is the one record of the thread's home, as in the wiki. Code keeps the home first in `scope` and keeps every other scope the list names. A thread at the top of `threads/` has no home, and its list stays as it is.
+
+- `thread` open files the thread under its first scope, or at the top when it names none.
+- `thread` set scope moves the folder under the new first scope, or to the top for an empty list. This is how a thread is filed later.
+- A hand move of the folder, in Obsidian or a shell, changes the home. The next sync writes it into `scope`. Sync keeps a folder under `threads/` for every scope, empty or not, so each area is there to drop a thread on, and removes an empty one that stands for no scope.
+- A change that renames, re-parents, or removes a scope moves the thread folders under it with the scope's folder, in the change's commit ([[Changes#Where pages land]]).
+- Sync refiles a thread whose folder lies in a folder of `threads/` that stands for no scope, such as the old place of an area renamed in a shell: under its first scope, or at the top. A thread at the top, or under a scope, stays where it lies.
 
 ## Threads.canvas
 
-The board as a canvas: one card for each open thread, in one group for each home scope, labeled with its path (`work / p3 / p3-edge`). Threads with no scope go in "No area". In a group, cards sit on a grid of two columns: the furthest stage first, then by priority; a new card follows the cards already there. A card's color is its stage.
+The board as a canvas: one card for each open thread, in one group for each home, labeled with its path (`work / p3 / p3-edge`). Threads with no scope go in "No area". In a group, cards sit on a grid of two columns: the furthest stage first, then by priority; a new card follows the cards already there. A card's color is its stage.
 
 Code writes the file in the same places as `chain`: every `thread` call, `change` apply and undo, capture, and sync. Code owns which cards and groups exist, the labels, the sizes, and the cards on the grid. The user owns the rest, and sync keeps it:
 

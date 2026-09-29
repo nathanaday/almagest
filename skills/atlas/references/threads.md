@@ -39,12 +39,12 @@ from stub to receipt.
 |---|---|---|
 | list | — | the board, by stage |
 | show | thread | the Thread View: the documents, the sessions, and `next` |
-| open | text, title, scope, priority, inbox | the folder and the stub |
+| open | text, title, scope, priority, inbox | the folder, under the first scope (or at the top of threads/ when none), and the stub |
 | attach | thread | nothing on disk; the hook binds this session to the thread |
 | file | thread, part (spec or receipt), text, outcome | the document |
 | tasks | thread, tasks [{title, text, repository, depends, order}] | one document per task |
 | task | task (id, title, or T2 with thread), do: start, done, drop, reopen, set | start binds the task to this session; done writes the result |
-| set | thread, title, priority, blocked, scope | the stub; a new title renames every document and link |
+| set | thread, title, priority, blocked, scope | the stub; a new title renames every document and link; a new first scope moves the folder under it, an empty scope to the top |
 | reopen | thread | the receipt stays, marked superseded |
 
 - `text` and `result` are your prose; the tool writes no prose of its own.
