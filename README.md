@@ -20,9 +20,10 @@ step in Obsidian.
 
 ## Quickstart
 
-Atlas is three parts that share one version: the `atlas-obsidian` binary (Go, one static file),
-the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that `atlas-obsidian vault
-init` puts in the vault.
+Atlas is three parts that share one version: the `atlas-obsidian` binary (Go, one
+static file), the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that
+`atlas-obsidian vault init` puts in the vault. The binary is not named `atlas`, because
+other programs install a binary of that name.
 
 ### Prerequisites
 
@@ -32,10 +33,20 @@ init` puts in the vault.
 ### Build and install
 
 ```bash
-make install        # builds ~/.atlas/bin/atlas-obsidian
-~/.atlas/bin/atlas-obsidian setup                         # adds the agent plugin to Claude Code
-~/.atlas/bin/atlas-obsidian setup --agent codex           # or to Codex
+make install                                      # builds ~/.atlas/bin/atlas-obsidian
+~/.atlas/bin/atlas-obsidian setup                 # adds the agent plugin to Claude Code
+~/.atlas/bin/atlas-obsidian setup --agent codex   # or to Codex
 ```
+
+The plugin finds the binary without `PATH`. To run `atlas-obsidian` from a shell, add
+its folder to `PATH` in your shell profile:
+
+```bash
+export PATH="$HOME/.atlas/bin:$PATH"
+```
+
+An install of 6.0 to 6.2 named the binary `atlas`. After you update, delete
+`~/.atlas/bin/atlas`.
 
 To try a checkout without installing the plugin, start Claude Code with
 `claude --plugin-dir /path/to/atlas-obsidian`.
@@ -47,7 +58,7 @@ Start Claude Code in an empty folder and say "set up atlas". Or from a shell:
 ```bash
 atlas-obsidian vault init --path ~/notes/work --name Work --areas few \
   --description "Work notes: the p3 product and the tools around it."
-atlas-obsidian open --register     # opens the vault in Obsidian; turn on the Atlas plugin once
+atlas-obsidian open --register   # opens it in Obsidian; turn on the Atlas plugin once
 ```
 
 ## Usage
@@ -93,8 +104,9 @@ start with `Atlas V2.md`.
 
 ## Layout
 
-- The binary: `cmd/atlas-obsidian/`, `internal/` (one package per part; `internal/mcpserver` serves
-  the eight tools, `internal/hooks` the nine hooks, `internal/cli` every command).
+- The binary: `cmd/atlas-obsidian/`, `internal/` (one package per part;
+  `internal/mcpserver` serves the eight tools, `internal/hooks` the nine hooks,
+  `internal/cli` every command).
 - The agent plugin: `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`,
   `.claude-plugin/`, `.codex-plugin/`.
 - The Obsidian plugin: `obsidian/` (TypeScript); `make obsidian` builds it into the

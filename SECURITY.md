@@ -12,7 +12,8 @@ Do not open a public issue for it.
 
 Atlas runs on your machine. It has three parts:
 
-- the `atlas-obsidian` binary, which serves the agent's tools over stdio and runs the hooks;
+- the `atlas-obsidian` binary, which serves the agent's tools over stdio and runs the
+  hooks;
 - the agent plugin, which holds the skills, the agents, and the hook configuration;
 - the Obsidian plugin.
 
@@ -49,8 +50,8 @@ and the change is applied after you answer.
   refused. You can still apply it with the Apply button in Obsidian.
 - Code cannot tell a yes from a no. The gate makes sure you had a turn with the preview in
   front of you, and the skill reads your answer.
-- Your own paths have no gate: `atlas-obsidian change apply` in your terminal, and the Apply button
-  in Obsidian.
+- Your own paths have no gate: `atlas-obsidian change apply` in your terminal, and the
+  Apply button in Obsidian.
 
 ### An agent edits files that code owns
 
@@ -79,9 +80,9 @@ refuses such a command when it holds a shell operator, `--output`, `-c`, `--ext-
 ### An agent uses the shell to skip the gate
 
 The guard refuses a Bash command that runs `atlas-obsidian change … apply` or
-`atlas-obsidian hook`. The first
-would apply a change without the gate. The second would send the binary a fake hook event,
-for example a fake prompt from you.
+`atlas-obsidian hook`. It refuses the same commands under `atlas`, the binary's name in 6.0
+to 6.2. The first would apply a change without the gate. The second would send the binary
+a fake hook event, for example a fake prompt from you.
 
 ### Vault contents direct a write or a delete
 
@@ -91,8 +92,8 @@ for example a fake prompt from you.
   links out of the vault. File removal goes through `os.Root`, so it cannot leave the vault.
 - Undo takes its paths from git history, not from frontmatter.
 - A title is cleaned before it becomes a file name. Path separators, leading dots, and the
-  characters that break a wikilink are removed. A session file name is built from the date
-and a hex id.
+  characters that break a wikilink are removed. A session file name is built from the
+  date and a hex id.
 
 ### Commands run with attacker-chosen arguments
 
