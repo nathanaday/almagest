@@ -1,18 +1,17 @@
-
 # wiki-audit
 
-> Read the pages of one scope, and report what a deterministic check cannot find. Sent by the deep run of [[wiki-review]].
+> Read the topics under one tag, and report what a deterministic check cannot find. Sent by the deep run of [[wiki-review]].
 
-**Takes**: a scope, and the [[Findings]] that [[lint]] already reported for it (so the agent does not repeat them).
+**Takes**: a tag, and the [[Findings]] that [[lint]] already reported for it (so the agent does not repeat them).
 
 **Returns**: [[Findings]], with checks of its own:
 
 | Check | Finds |
 |---|---|
-| `gap` | a subject the pages rely on and no page explains |
+| `gap` | a subject the topics rely on and no topic explains |
 | `error` | a claim its cited document does not support, with the locator checked |
-| `contradiction` | two pages that disagree, with neither marked `contested` |
-| `stale` | a page about a repository that its code no longer matches |
-| `scope` | a page in the wrong scope: it holds for the parent, or only for one child |
+| `contradiction` | two topics that disagree, with neither marked `contested` |
+| `stale` | a topic about a repository that its code no longer matches |
+| `tags` | a topic tagged too narrowly (it holds for the parent tag, or for a sibling too) or too widely (it holds only under one child tag) |
 
-Every finding names the page, the evidence, and the fix.
+Every finding names the topic, the evidence, and the fix.

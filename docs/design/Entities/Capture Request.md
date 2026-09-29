@@ -1,27 +1,30 @@
-
 # Capture Request
 
-> The input of [[source]] capture. One of three forms, each with an optional scope.
+> The input of [[source]] capture. One of three forms, each with optional tags and an optional stub to resolve.
 
 ```yaml
 # files waiting in the inbox
 inbox: ["DINOv2.pdf", "meeting notes.md"]
-scope: rep-h6t2vc
+tags: [ml/self-supervised, paper]
 
 # text pasted in the conversation
 text: "…"
 title: "Vendor call, 2026-09-27"
-scope: are-w4q8ze
+tags: [work/p3, meeting]
 
 # a snapshot of a linked repository at its head
-repository: rep-h6t2vc
+repository: doc-h6t2vc
+
+# on any form
+resolves: doc-c7v2kq          # a stub that asked for this source ("read the DINOv2 paper")
+new_tags: false               # true: allow a tag no document holds, in tags: known mode
 ```
 
 The output is a list of captured sources:
 
 ```yaml
 captured:
-  - ref: {Doc Ref}              # the new source page
+  - ref: {Doc Ref}              # the new source
     sha256: 3f9c1e2a…
     measure: "31 pages"
     chunks: [{Chunk}, …]

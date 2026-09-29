@@ -1,14 +1,13 @@
-
 # Agents
 
-An agent is a read-only worker that a skill sends when a task splits. It reads and returns data. It never proposes a change, applies one, or files a thread document. Only the skill that sent it does that. A read-only worker gets no session document of its own: the hooks write one line for it under `## Subagents` in its parent's document ([[Sessions#Names and keys]]).
+An agent is a read-only worker that a skill sends when a task splits. It reads and returns data. It never proposes a change, applies one, or makes a `work` write. Only the skill that sent it does that. A read-only worker gets no session document of its own: the hooks write one line for it under `## Subagents` in its parent's document ([[Sessions#Names and keys]]).
 
 | Agent | Sent by | Takes | Returns | Tools |
 |---|---|---|---|---|
-| [[wiki-extract]] | [[wiki-sync]], [[repo-ingest]] | a document and a chunk | [[Item Map]] | Read, Grep, Glob, `source` read |
-| [[wiki-draft]] | [[wiki-sync]], [[wiki-rollup]] | a slice of a [[Match Map]] | writes for a [[Wiki Change Plan]], and the skipped subjects | Read, Grep, Glob, `search`, `context`, `source` read |
-| [[wiki-audit]] | [[wiki-review]] (deep) | one scope | [[Findings]] | Read, Grep, Glob, `search`, `lint` |
-| [[thread-review]] | [[thread-receipt]] | a thread and the commits of its tasks | [[Findings]] | Read, Grep, Glob, `thread` show, `context`; Bash, limited to `git log`, `git diff`, and `git show` |
+| [[wiki-extract]] | [[wiki-sync]], [[repo-ingest]] | a document, a chunk, and the tag vocabulary | [[Item Map]] | Read, Grep, Glob, `source` read |
+| [[wiki-draft]] | [[wiki-sync]], [[wiki-map]] | a slice of a [[Match Map]] | writes for a [[Wiki Change Plan]], and the skipped subjects | Read, Grep, Glob, `search`, `context`, `source` read |
+| [[wiki-audit]] | [[wiki-review]] (deep) | one tag | [[Findings]] | Read, Grep, Glob, `search`, `lint`, `context` |
+| [[spec-review]] | [[spec-close]] | a plan | [[Findings]] | Read, Grep, Glob, `work` show, `context`; Bash, limited to `git log`, `git diff`, and `git show` |
 
 ## Rules for every agent
 

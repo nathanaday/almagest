@@ -14,12 +14,12 @@ on the `v1` branch and the `v1-final` tag.
 
 | Thing | Location |
 |---|---|
-| The design: rules, document types, tools, hooks, skills | `docs/design/` (start with `Atlas V2.md`) |
+| The design: rules, document types, tools, hooks, skills | `docs/design/` (start with `Atlas 7.md`) |
 | Each skill's contract | `skills/<name>/SKILL.md`, `skills/atlas/references/` |
 | Each read-only agent | `agents/<name>.md` |
-| The schemas of the thirteen types | `internal/schema/schema.go` |
+| The schemas of the types | `internal/schema/schema.go` |
 
-The design pages are the spec. When the code departs from them, the reason is below.
+The design pages are the spec. Since 2026-09-29 they specify 7.0 (flat `wiki/documents/`, tags, stub/spec/event, derived `views/`), and the code is still 6.5; `Stack.md` gives the build order. The departures below describe 6.5, and go as 7.0 replaces each part. When the code departs from the pages, the reason is below.
 
 ## Where the build departs from the design, and why
 
