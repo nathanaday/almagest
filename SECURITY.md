@@ -1,7 +1,7 @@
 # Security
 
-This page says what Atlas trusts, what it guards against, and how. It also says what
-Atlas does not guard against, so you can decide what else your setup needs.
+This page lists what Atlas trusts, what it guards against and how, and what it does not
+guard against.
 
 ## Reporting a vulnerability
 
@@ -38,8 +38,8 @@ Atlas does not trust:
 
 ### An agent changes the wiki without your yes
 
-The wiki changes only through a change. The agent proposes a change, you read the preview,
-and the change is applied after you answer.
+The agent writes to the wiki only through a change document. The agent proposes the
+change, you read the preview and answer, and then the agent applies the change.
 
 - The `change` tool refuses the agent's `apply` until you have sent a prompt after the
   proposal, in the session that proposed it. The tool checks this on the change document it
@@ -48,10 +48,10 @@ and the change is applied after you answer.
   count as your turn.
 - A change with no recorded session, or with a proposal time that does not parse, is
   refused. You can still apply it with the Apply button in Obsidian.
-- Code cannot tell a yes from a no. The gate makes sure you had a turn with the preview in
-  front of you, and the skill reads your answer.
-- Your own paths have no gate: `atlas-obsidian change apply` in your terminal, and the
-  Apply button in Obsidian.
+- The gate does not read your prompt. The skill reads your answer and decides whether to
+  apply.
+- Two ways to apply have no gate, because only you use them: `atlas-obsidian change apply`
+  in your terminal, and the Apply button in Obsidian.
 
 ### An agent edits files that code owns
 
@@ -66,8 +66,8 @@ The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
 - an edit inside a linked repository when the session has no open thread that covers the
   repository.
 
-The guard finds the vault from the file being edited, so these rules hold wherever the
-session runs.
+The guard uses the vault that holds the edited file, not the vault of the session's
+folder. A session that runs outside the vault gets the same refusals.
 
 ### A read-only agent writes
 
@@ -88,12 +88,13 @@ a fake hook event, for example a fake prompt from you.
 
 - A change document records the paths an apply may write, so an interrupted apply can be
   undone at the next session start. Recovery restores only clean relative `.md` paths inside
-  the vault, outside `.git`, `.obsidian`, and `.claude`, and with no folder on the way that
-  links out of the vault. File removal goes through `os.Root`, so it cannot leave the vault.
+  the vault, outside `.git`, `.obsidian`, and `.claude`, where no folder in the path is a
+  link out of the vault. Recovery removes files through `os.Root`, which refuses a path
+  outside the vault.
 - Undo takes its paths from git history, not from frontmatter.
-- A title is cleaned before it becomes a file name. Path separators, leading dots, and the
-  characters that break a wikilink are removed. A session file name is built from the
-  date and a hex id.
+- Before Atlas uses a title as a file name, it removes path separators, leading dots, and
+  the characters that break a wikilink (`[ ] # ^`). Atlas builds a session file name from
+  the date and a hex id.
 
 ### Commands run with attacker-chosen arguments
 
@@ -122,18 +123,18 @@ nodes.
 ### Dependencies
 
 - Go: `gopkg.in/yaml.v3` and the MCP Go SDK, nothing else.
-- npm: exact versions, locked with integrity hashes. The npm packages are used only to
-  build the Obsidian plugin.
+- npm: exact versions, locked with integrity hashes. Only the build of the Obsidian
+  plugin uses them.
 
 ## What Atlas does not guard against
 
 - **An agent's shell.** A shell command can write any file you can, including the vault's
-  documents. The guard reads a shell command only for the rules above. To limit the shell,
+  documents. The guard checks a shell command only against the rules above. To limit the shell,
   use the host's permission settings.
 - **Content you pull from someone else.** A shared vault's pages and a linked repository's
   files become text the agent reads. Review changes from other people before an agent works
   on them.
-- **Your answer.** The gate proves that you had a turn after the proposal, not what you
-  said in it.
+- **Your answer.** The gate checks that you sent a prompt after the proposal. It does not
+  check that the prompt said yes.
 - **The hook log.** `ATLAS_HOOK_LOG` records every hook event in full, including your
   prompts and tool output. Use it only to debug, and delete the file after use.
