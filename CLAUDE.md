@@ -23,8 +23,17 @@ The design pages are the spec. When the code departs from them, the reason is be
 ## Where the build departs from the design, and why
 
 - **Recovery needs the paths.** A change document gets a code-owned `paths` field while
-  it is `applying`: every path the apply may write. Recovery restores exactly those.
-  Apply removes the field when it ends.
+  it is `applying`: every path the apply may write. Recovery restores those that are
+  local documents (`Vault.Local`: a clean relative `.md` path, outside `.git`,
+  `.obsidian`, and `.claude`, with no folder that links out), and skips the rest.
+  Frontmatter comes from a pull or a shell too, and recovery runs at every session
+  start. Apply removes the field when it ends.
+- **The change tool keeps the gate, not the guard.** `change.Apply` takes a `Gate`; the
+  MCP server passes `sessions.UserAnswered`, which reads the change's `session` and that
+  session's `last_prompt`. It judges the document Apply resolved, under the lock, so no
+  other name for the change and no other working folder gets past it. The CLI passes
+  none: the terminal and Obsidian's Apply button are the user's. A change with no
+  `session` waits for Obsidian.
 - **Times carry seconds.** `proposed` and `last_prompt` are `2006-01-02T15:04:05`. With
   minutes, a yes typed in the minute of the proposal would not open the gate.
 - **The gate counts only the user's turns.** A host sends a subagent's hand-back and a
@@ -41,6 +50,12 @@ The design pages are the spec. When the code departs from them, the reason is be
   thread rule. The touched hook adds a repository to the session's `repositories` when a
   Bash command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or
   names it. The skills tell the agent to change files with Edit and Write.
+- **The shell does not run `atlas change … apply` or `atlas hook`.** The guard refuses
+  both, in every folder: one skips the gate, the other forges a user's turn. It is no
+  sandbox; a shell can still write any file. To try a hook or an apply by hand from a
+  session, type the command with `!`.
+- **The guard takes the vault above the file**, not the vault of the session's folder,
+  so a session outside the vault gets the same refusals.
 - **`thread-review` may name a repository**: `git -C <path> log|diff|show`, since it runs
   in the vault.
 - **The host's own read-only agents are workers.** `Explore`, `Plan`,

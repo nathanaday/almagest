@@ -10,6 +10,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -119,6 +120,17 @@ func TestEveryToolAndAction(t *testing.T) {
 		t.Fatalf("propose %v", pv)
 	}
 	c.call("change", map[string]any{"id": id}, false)
+	// The model's apply waits for the user of the session that proposed the change, even
+	// from outside the vault and by another name for the change.
+	path := dig(pv, "ref", "path").(string)
+	session := "sessions/2026-09/2026-09-27 1432 a1b2c3"
+	tv.Write(session+".md", "---\nid: ses-a1b2c3\ntype: session\nharness_id: a1b2c3\nlast_prompt: \"\"\n---\n")
+	tv.Write(path, doc.SetField(tv.Read(path), "session", doc.Link("2026-09-27 1432 a1b2c3")))
+	outside := connect(t, tv, t.TempDir())
+	if _, msg := outside.call("change", map[string]any{"action": "apply", "id": dig(pv, "ref", "title").(string) + ".md", "vault": tv.V.Root}, true); !strings.Contains(msg, "wait for the user's yes") {
+		t.Fatalf("the gate: %s", msg)
+	}
+	tv.Write(session+".md", "---\nid: ses-a1b2c3\ntype: session\nharness_id: a1b2c3\nlast_prompt: \""+vault.Stamp(tv.Tick(time.Minute))+"\"\n---\n")
 	applied, _ := c.call("change", map[string]any{"action": "apply", "id": id}, false)
 	if dig(applied, "commit") == "" || dig(applied, "status") != "applied" {
 		t.Fatalf("apply %v", applied)

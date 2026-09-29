@@ -4,6 +4,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"time"
@@ -403,4 +405,30 @@ func SessionEnd(r io.Reader, env Env) error {
 		_, err := threads.SyncVault(v)
 		return err
 	})
+}
+
+// findChange finds a change document by id or title, reading the change folders only.
+func findChange(v *vault.Vault, key string) *doc.Doc {
+	key = strings.TrimSpace(doc.LinkTarget(key))
+	if key == "" {
+		return nil
+	}
+	files, _ := filepath.Glob(v.Abs(vault.Changes + "/*/*.md"))
+	for _, abs := range files {
+		if strings.EqualFold(strings.TrimSuffix(filepath.Base(abs), ".md"), key) {
+			if data, err := os.ReadFile(abs); err == nil {
+				return doc.Parse(v.Rel(abs), data)
+			}
+		}
+	}
+	for _, abs := range files {
+		data, err := os.ReadFile(abs)
+		if err != nil || !strings.Contains(string(data), "id: "+key) {
+			continue
+		}
+		if d := doc.Parse(v.Rel(abs), data); d.ID() == key {
+			return d
+		}
+	}
+	return nil
 }

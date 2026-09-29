@@ -19,6 +19,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/match"
 	"github.com/nathanaday/atlas-obsidian/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/internal/search"
+	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -269,7 +270,7 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 		pv, err := change.Propose(v, change.Plan{Title: in.Title, Notes: in.Notes, Absorbs: in.Absorbs, Thread: in.Thread, Supersedes: in.Supersedes, Writes: in.Writes}, now)
 		return nil, pv, err
 	case "apply":
-		pv, err := change.Apply(v, in.ID, now)
+		pv, err := change.Apply(v, in.ID, now, sessions.UserAnswered(v))
 		return nil, pv, err
 	case "reject":
 		pv, err := change.Reject(v, in.ID, in.Reason, now)

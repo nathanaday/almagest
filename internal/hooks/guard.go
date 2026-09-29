@@ -8,9 +8,9 @@ import (
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -44,13 +44,10 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		}
 		return nil
 	}
-	v := findVault(in, env)
-	if v == nil {
-		return nil
-	}
-	// Rule 2: the model applies a change only after the user had a turn.
-	if tool == "change" && in.tool().Action == "apply" {
-		if reason := gate(v, in); reason != "" {
+	// Rule 2: the shell does not do what only the user does. The change tool keeps the
+	// gate, and the prompt hook records the user's turns.
+	if in.ToolName == "Bash" {
+		if reason := atlasCommandRefusal(in.tool().Command); reason != "" {
 			return deny(w, reason)
 		}
 		return nil
@@ -58,12 +55,49 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	if !editTools[in.ToolName] {
 		return nil
 	}
+	session := findVault(in, env)
 	for _, f := range in.paths() {
+		// A file belongs to the vault above it, wherever the session runs.
+		v := session
+		if root := vault.FindAbove(filepath.Dir(f.Path)); root != "" {
+			if fv, err := vault.Open(root); err == nil {
+				v = fv
+			}
+		}
+		if v == nil {
+			continue
+		}
 		if reason := pathRefusal(v, in, f); reason != "" {
 			return deny(w, reason)
 		}
 	}
 	return nil
+}
+
+var shellSeparator = regexp.MustCompile("[;&|()\n`]")
+
+// atlasCommandRefusal is why a shell command may not run the atlas binary, or "": a
+// change apply, which would skip the gate, and a hook, which would forge an event.
+func atlasCommandRefusal(cmd string) string {
+	for _, part := range shellSeparator.Split(cmd, -1) {
+		words := strings.Fields(strings.NewReplacer(`"`, "", "'", "").Replace(part))
+		for i, word := range words {
+			if path.Base(word) != "atlas" {
+				continue
+			}
+			rest := words[i+1:]
+			for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
+				rest = rest[1:]
+			}
+			switch {
+			case len(rest) > 0 && rest[0] == "hook":
+				return "atlas hook runs only from the host; the shell does not send hook events"
+			case len(rest) > 0 && rest[0] == "change" && slices.Contains(rest[1:], "apply"):
+				return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
+			}
+		}
+	}
+	return ""
 }
 
 var (
@@ -95,55 +129,6 @@ func readOnlyRefusal(in Input, tool string) string {
 		return agent + " is read-only and runs no shell command"
 	}
 	return ""
-}
-
-// gate is the refusal of a change apply the user has not had a turn to see, or "".
-func gate(v *vault.Vault, in Input) string {
-	key := in.tool().ID
-	c := findChange(v, key)
-	if c == nil {
-		return ""
-	}
-	if change.ParseCounts(c.Str("counts")).Writes() == 0 {
-		return ""
-	}
-	proposed, ok := vault.ParseTime(c.Str("proposed"))
-	if !ok {
-		return ""
-	}
-	s := sessions.Find(v, in.event().Key())
-	if s != nil {
-		if last, ok := vault.ParseTime(s.Str("last_prompt")); ok && last.After(proposed) {
-			return ""
-		}
-	}
-	return fmt.Sprintf("show the preview of %s and wait for the user's yes; apply runs once the user has answered after the proposal", c.Title())
-}
-
-// findChange finds a change document by id or title, reading the change folders only.
-func findChange(v *vault.Vault, key string) *doc.Doc {
-	key = strings.TrimSpace(doc.LinkTarget(key))
-	if key == "" {
-		return nil
-	}
-	files, _ := filepath.Glob(v.Abs(vault.Changes + "/*/*.md"))
-	for _, abs := range files {
-		if strings.EqualFold(strings.TrimSuffix(filepath.Base(abs), ".md"), key) {
-			if data, err := os.ReadFile(abs); err == nil {
-				return doc.Parse(v.Rel(abs), data)
-			}
-		}
-	}
-	for _, abs := range files {
-		data, err := os.ReadFile(abs)
-		if err != nil || !strings.Contains(string(data), "id: "+key) {
-			continue
-		}
-		if d := doc.Parse(v.Rel(abs), data); d.ID() == key {
-			return d
-		}
-	}
-	return nil
 }
 
 // pathRefusal is why a write tool may not touch a file, or "".

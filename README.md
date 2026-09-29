@@ -56,7 +56,9 @@ Start the agent in the vault and ask in plain words. The `atlas` skill routes ea
 request.
 
 - "Link the repository at ~/code/p3-edge under a new area p3." The agent proposes a
-  change; you say yes, or press Apply in Obsidian.
+  change; you say yes, or press Apply in Obsidian. The agent cannot apply a change in the
+  turn that proposed it. This gate holds against the atlas tools; it is not a sandbox
+  against an agent's shell.
 - "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
 - "In p3-edge, score boxes by motion." The agent finds or opens a thread, writes a spec
   and tasks, stops for your yes at each, does the work, and files a receipt.

@@ -511,7 +511,7 @@ func (c *CLI) changeCmd(argv []string) error {
 		}
 		pv, err = change.Show(idx, a.arg(1))
 	case "apply":
-		pv, err = change.Apply(v, a.arg(1), now)
+		pv, err = change.Apply(v, a.arg(1), now, nil)
 	case "reject":
 		pv, err = change.Reject(v, a.arg(1), a.get("reason"), now)
 	case "undo":

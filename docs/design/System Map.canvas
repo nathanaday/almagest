@@ -44,7 +44,7 @@
 		{"id":"00bc4f0853df5214","type":"text","text":"**thread**\nThread Write → Thread View","x":1080,"y":1190,"width":320,"height":100,"color":"5"},
 		{"id":"4d63ed5fa70f8aad","type":"text","text":"**session-start**\nSessionStart: the session document, sync, the opening context","x":2640,"y":0,"width":320,"height":100,"color":"4"},
 		{"id":"3f8cdd88187688e1","type":"text","text":"**prompt**\nUserPromptSubmit: running","x":2640,"y":130,"width":320,"height":100,"color":"4"},
-		{"id":"080ee6d466055185","type":"text","text":"**guard**\nPreToolUse: seven rules, among them the thread rule, the apply gate, and read-only agents","x":2640,"y":260,"width":320,"height":100,"color":"4"},
+		{"id":"080ee6d466055185","type":"text","text":"**guard**\nPreToolUse: seven rules, among them the thread rule, read-only agents, and no atlas apply or hook from the shell","x":2640,"y":260,"width":320,"height":100,"color":"4"},
 		{"id":"dcc58a7616452aab","type":"text","text":"**touched**\nPostToolUse: links the session to what it touched; writes notes","x":2640,"y":390,"width":320,"height":100,"color":"4"},
 		{"id":"853e9b4638b982cd","type":"text","text":"**waiting**\nNotification: waiting for you","x":2640,"y":520,"width":320,"height":100,"color":"4"},
 		{"id":"c2e6b867c9906b7f","type":"text","text":"**stop**\nStop: idle; one reminder","x":2640,"y":650,"width":320,"height":100,"color":"4"},

@@ -116,6 +116,45 @@ func Find(v *vault.Vault, key string) *doc.Doc {
 	return nil
 }
 
+// ByTitle finds a session document by its title: sessions/<month>/<title>.md.
+func ByTitle(v *vault.Vault, title string) *doc.Doc {
+	if title == "" || strings.ContainsAny(title, `/\`) {
+		return nil
+	}
+	matches, _ := filepath.Glob(v.Abs(path.Join(vault.Sessions, "*", escapeGlob(title)+".md")))
+	for _, abs := range matches {
+		if data, err := os.ReadFile(abs); err == nil {
+			if d := doc.Parse(v.Rel(abs), data); d.Type() == "session" {
+				return d
+			}
+		}
+	}
+	return nil
+}
+
+// UserAnswered is the gate of a change the model applies: a change with writes applies
+// only when the user of the session that proposed it had a turn after the proposal.
+func UserAnswered(v *vault.Vault) func(d *doc.Doc, writes int) error {
+	return func(d *doc.Doc, writes int) error {
+		if writes == 0 {
+			return nil
+		}
+		wait := fmt.Errorf("show the preview of %s and wait for the user's yes; apply runs once the user has answered after the proposal", vault.Title(d))
+		proposed, ok := vault.ParseTime(d.Str("proposed"))
+		if !ok {
+			return wait
+		}
+		s := ByTitle(v, doc.LinkTarget(d.Str("session")))
+		if s == nil {
+			return fmt.Errorf("%s names no session that proposed it, so no user answered it here; the user applies it with Apply in Obsidian", vault.Title(d))
+		}
+		if last, ok := vault.ParseTime(s.Str("last_prompt")); ok && last.After(proposed) {
+			return nil
+		}
+		return wait
+	}
+}
+
 // fields is a new session document's frontmatter, in order.
 func fields(id string, e Event, now time.Time, parent, agent string) []doc.Field {
 	harness := e.Harness

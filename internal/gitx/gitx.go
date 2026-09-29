@@ -367,6 +367,9 @@ func (r Repo) Has(object string) bool {
 func (r Repo) RestoreFrom(rev string, paths ...string) error {
 	var restore, remove []string
 	for _, p := range paths {
+		if !filepath.IsLocal(filepath.FromSlash(p)) {
+			return fmt.Errorf("restore %q: the path leaves the work tree", p)
+		}
 		if rev != "" && r.Has(rev+":"+p) {
 			restore = append(restore, p)
 			continue
@@ -378,13 +381,22 @@ func (r Repo) RestoreFrom(rev string, paths ...string) error {
 			return err
 		}
 	}
+	if len(remove) == 0 {
+		return nil
+	}
+	// The root keeps a removal inside the tree when a folder on the way is a link out.
+	root, err := os.OpenRoot(r.Dir)
+	if err != nil {
+		return err
+	}
+	defer root.Close()
 	for _, p := range remove {
 		if r.Tracked(p) {
 			if _, err := r.run("rm", "-q", "-f", "--cached", "--", p); err != nil {
 				return err
 			}
 		}
-		if err := os.Remove(filepath.Join(r.Dir, filepath.FromSlash(p))); err != nil && !errors.Is(err, os.ErrNotExist) {
+		if err := root.Remove(filepath.FromSlash(p)); err != nil && !errors.Is(err, os.ErrNotExist) {
 			return err
 		}
 	}

@@ -50,7 +50,8 @@ func Begin(v *vault.Vault) (*vault.Tx, error) {
 }
 
 // Recover finds each change a crash left applying, puts back every path it may have
-// written, and sets it to proposed. The caller holds the lock.
+// written, and sets it to proposed. It skips a path that is no local document: the field
+// is frontmatter, which a pull or a shell can write. The caller holds the lock.
 func Recover(v *vault.Vault) error {
 	files, _ := filepath.Glob(v.Abs(vault.Changes + "/*/*.md"))
 	g := v.Git()
@@ -64,6 +65,9 @@ func Recover(v *vault.Vault) error {
 			continue
 		}
 		for _, p := range d.List("paths") {
+			if !v.Local(p) {
+				continue
+			}
 			if err := g.RestoreFrom("HEAD", p); err != nil {
 				return fmt.Errorf("recover %s: %w", vault.Title(d), err)
 			}
@@ -313,9 +317,13 @@ func (c *Conflict) Error() string {
 	return fmt.Sprintf("conflict: %s changed since the change read it. Read the page again and propose a change that supersedes this one", strings.Join(c.Paths, ", "))
 }
 
+// Gate refuses to apply a change document with this many writes, or returns nil.
+type Gate func(d *doc.Doc, writes int) error
+
 // Apply reads a proposed change document again, validates it again, writes its pages,
-// and makes one commit.
-func Apply(v *vault.Vault, key string, now time.Time) (*Preview, error) {
+// and makes one commit. A gate, when given, judges the document Apply resolved, under the
+// lock, before anything is written.
+func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, error) {
 	tx, err := Begin(v)
 	if err != nil {
 		return nil, err
@@ -335,6 +343,11 @@ func Apply(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 	ops, err := parseWrites(d.Body)
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", d.Path, err)
+	}
+	if gate != nil {
+		if err := gate(d, len(ops)); err != nil {
+			return nil, err
+		}
 	}
 	c := &check{idx: idx, now: now, claimed: map[string]*op{}, gone: map[string]bool{}, byID: map[string][]*op{}}
 	if err := c.revalidate(ops); err != nil {

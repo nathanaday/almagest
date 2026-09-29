@@ -26,7 +26,7 @@
 
 ## Gate
 
-Show the [[Change Preview]] and link the change document, so the user can read the pages in Obsidian and edit one before the yes. Say the coverage: every chunk read, any chunk partial, the subjects skipped. Wait for the yes, then apply. The guard refuses apply in the same turn as the proposal.
+Show the [[Change Preview]] and link the change document, so the user can read the pages in Obsidian and edit one before the yes. Say the coverage: every chunk read, any chunk partial, the subjects skipped. Wait for the yes, then apply. The change tool refuses apply in the same turn as the proposal.
 
 A change with no writes (the documents held nothing new) needs no yes. Apply it and say so in one line: the documents are no longer pending.
 

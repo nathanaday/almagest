@@ -146,6 +146,30 @@ func (v *Vault) Rel(abs string) string {
 	return filepath.ToSlash(rel)
 }
 
+// Local reports whether a vault-relative path names a document a change may write: a
+// clean relative .md path outside the machine folders, whose folder does not lead out of
+// the vault through a symbolic link.
+func (v *Vault) Local(rel string) bool {
+	if !filepath.IsLocal(rel) || path.Clean(rel) != rel || !strings.HasSuffix(rel, ".md") {
+		return false
+	}
+	top, _, _ := strings.Cut(rel, "/")
+	if top == ".git" || top == Obsidian || top == ".claude" {
+		return false
+	}
+	dir := filepath.Dir(v.Abs(rel))
+	for {
+		if _, err := os.Lstat(dir); err == nil {
+			return Within(dir, v.Root)
+		}
+		parent := filepath.Dir(dir)
+		if parent == dir {
+			return false
+		}
+		dir = parent
+	}
+}
+
 // Git is the vault's repository.
 func (v *Vault) Git() gitx.Repo { return gitx.Repo{Dir: v.Root} }
 

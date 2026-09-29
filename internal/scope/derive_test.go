@@ -64,7 +64,7 @@ func TestANewParentMovesThePagesBelowInOneCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err != nil {
+	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := tv.Read("wiki/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3]]"]`) {
@@ -72,7 +72,7 @@ func TestANewParentMovesThePagesBelowInOneCommit(t *testing.T) {
 	}
 	tv.Clean()
 	pv, _ = change.Propose(tv.V, change.Plan{Title: "Rename p3", Writes: []change.Write{{Op: "rename", ID: tv.ID("p3"), Title: "p3 product"}}}, tv.Tick(time.Minute))
-	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err != nil {
+	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := tv.Read("wiki/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3 product]]"]`) {

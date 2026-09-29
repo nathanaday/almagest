@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -28,7 +29,7 @@ func propose(t *testing.T, tv *testvault.T, p change.Plan) *change.Preview {
 
 func apply(t *testing.T, tv *testvault.T, id string) *change.Preview {
 	t.Helper()
-	pv, err := change.Apply(tv.V, id, tv.Tick(time.Minute))
+	pv, err := change.Apply(tv.V, id, tv.Tick(time.Minute), nil)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -89,7 +90,7 @@ func TestProposeThenApply(t *testing.T) {
 	if !strings.Contains(doc, "status: applied") || !strings.Contains(doc, "> [!change] Applied") {
 		t.Fatalf("status:\n%s", doc)
 	}
-	if _, err := change.Apply(tv.V, pv.Ref.ID, testvault.Now); err == nil {
+	if _, err := change.Apply(tv.V, pv.Ref.ID, testvault.Now, nil); err == nil {
 		t.Fatal("an applied change does not apply twice")
 	}
 }
@@ -134,7 +135,7 @@ func TestApplyRefusesAPageChangedSinceTheProposal(t *testing.T) {
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Rewrite", Writes: []change.Write{{Op: "modify", ID: id, Body: str("## Definition\n\nNew.\n")}}})
 	tv.Write("wiki/concepts/Motion scoring.md", tv.Read("wiki/concepts/Motion scoring.md")+"\nA hand edit.\n")
-	_, err := change.Apply(tv.V, pv.Ref.ID, testvault.Now)
+	_, err := change.Apply(tv.V, pv.Ref.ID, testvault.Now, nil)
 	var c *change.Conflict
 	if !errors.As(err, &c) || c.Paths[0] != "wiki/concepts/Motion scoring.md" {
 		t.Fatalf("conflict: %v", err)
@@ -258,6 +259,52 @@ func TestRecoveryAfterACrash(t *testing.T) {
 	got := tv.Read(pv.Ref.Path)
 	if !strings.Contains(got, "status: rejected") || !strings.Contains(got, "reason: not now") || strings.Contains(got, "paths:") {
 		t.Fatalf("recovered, then rejected:\n%s", got)
+	}
+}
+
+// TestRecoveryStaysInTheVault: paths is frontmatter, which a pull or a shell can write,
+// so recovery restores only local documents and leaves every other path alone.
+func TestRecoveryStaysInTheVault(t *testing.T) {
+	tv := testvault.New(t)
+	id := tv.Page("concept", "Motion scoring", nil, "## Definition\n\nOld.\n")
+	tv.Commit()
+	pv := propose(t, tv, change.Plan{Title: "Crash", Writes: []change.Write{{Op: "modify", ID: id, Body: str("## Definition\n\nNew.\n")}}})
+
+	outside := t.TempDir()
+	victim := filepath.Join(filepath.Dir(tv.V.Root), "victim.md")
+	tv.WriteFile(victim, "keep")
+	absolute := filepath.Join(outside, "absolute.md")
+	tv.WriteFile(absolute, "keep")
+	tv.WriteFile(filepath.Join(outside, "secret.md"), "keep")
+	if err := os.Symlink(outside, tv.V.Abs("linked")); err != nil {
+		t.Fatal(err)
+	}
+	tv.Write("wiki/notes.txt", "keep")
+	hostile := []string{"../victim.md", absolute, ".git/config", ".git/HEAD.md", "wiki/notes.txt", "linked/secret.md", "wiki/../../victim.md"}
+
+	content := tv.Read(pv.Ref.Path)
+	content = doc.SetField(doc.SetField(content, "status", "applying"), "paths", append([]string{"wiki/concepts/Motion scoring.md"}, hostile...))
+	tv.Write(pv.Ref.Path, content)
+	tv.Write("wiki/concepts/Motion scoring.md", "half written")
+	if _, err := change.Reject(tv.V, pv.Ref.ID, "not now", testvault.Now); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(tv.Read("wiki/concepts/Motion scoring.md"), "Old.") {
+		t.Fatal("recovery puts the local page back")
+	}
+	for _, file := range []string{victim, absolute, filepath.Join(outside, "secret.md"), tv.V.Abs(".git/config"), tv.V.Abs("wiki/notes.txt")} {
+		if _, err := os.Stat(file); err != nil {
+			t.Errorf("recovery removed %s: %v", file, err)
+		}
+	}
+	if err := tv.V.Git().RestoreFrom("HEAD", "../victim.md"); err == nil {
+		t.Error("RestoreFrom refuses a path out of the tree")
+	}
+	if err := tv.V.Git().RestoreFrom("HEAD", "linked/secret.md"); err == nil {
+		t.Error("RestoreFrom refuses a removal through a link out of the tree")
+	}
+	if _, err := os.Stat(filepath.Join(outside, "secret.md")); err != nil {
+		t.Errorf("RestoreFrom removed a file through a link: %v", err)
 	}
 }
 

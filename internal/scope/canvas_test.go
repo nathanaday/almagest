@@ -230,7 +230,7 @@ func TestARenamedAreaRelabelsItsGroupInTheSameCommit(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err != nil {
+	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err != nil {
 		t.Fatal(err)
 	}
 	if got := strings.Join(readBoard(t, tv).groups(), " | "); got != "work / p3 product / p3-edge" {

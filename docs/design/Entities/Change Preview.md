@@ -23,4 +23,4 @@ warnings:
 commit: ""                            # after apply: the commit's hash
 ```
 
-The skill shows this preview, links the change document for review in Obsidian, and waits for the user's yes. The guard refuses apply until the user has had a turn ([[Changes#The gate]]).
+The skill shows this preview, links the change document for review in Obsidian, and waits for the user's yes. The change tool refuses apply until the user has had a turn ([[Changes#The gate]]).

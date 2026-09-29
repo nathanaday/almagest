@@ -59,7 +59,7 @@ Sets `status: running` and `last_prompt`. Then it prints one line when Obsidian 
 | # | When | Refuses | Reason names |
 |---|---|---|---|
 | 1 | the caller is a read-only agent (`agent_type` is `wiki-extract`, `wiki-draft`, `wiki-audit`, or `thread-review`) | every write tool; every atlas write action (`change`, `thread` writes, `source` capture, `vault` init, sync, mention); every Bash command, except for `thread-review` a command that is exactly `git log`, `git diff`, or `git show`, with arguments that hold no shell operator (`;`, `&`, `\|`, `<`, `>`, `$`, a backquote) and none of `--output`, `-c`, `--ext-diff`, `--textconv` | "this agent is read-only" |
-| 2 | `change` apply from the model, on a change with writes, when the session's `last_prompt` is not later than the change's `proposed` | the call | "show the preview and wait for the user's yes" ([[Changes#The gate]]) |
+| 2 | a Bash command runs the atlas binary with `change … apply` or `hook` | the command | the `change` tool, Apply in Obsidian, or `!` for the user |
 | 3 | the path is under `wiki/` | Write, Edit | `change` propose |
 | 4 | the path is under `changes/`, or is `Atlas.md`, a `.base` file, or `.claude/settings.local.json` | Write, Edit | the tool that owns it |
 | 5 | the path is under `sessions/` | Write; an Edit of another session's document; an Edit of the session's own document that touches the frontmatter, the lead callout, or `## Subagents` | "edit only Description, Progress, and Summary of your own document" |
@@ -69,7 +69,9 @@ Sets `status: running` and `last_prompt`. Then it prints one line when Obsidian 
 - Rule 7 is the thread rule: work on a repository needs an open thread that covers it. A closed thread, or a thread about another repository, does not count. A subagent that may write inherits its parent's `threads` at `SubagentStart`.
 - Only the `thread` tool binds a session to a thread. An Edit of a thread document binds nothing, so editing some stub does not unlock a repository.
 - Rules 5 and 6 find the frontmatter and the lead callout by reading the file: an Edit whose `old_string` falls inside them is refused.
-- Bash is guarded only by rule 1. A shell command can write anywhere, and no parse of shell is reliable. So the thread rule covers the edit tools, not the shell. The snapshot commit keeps a shell write in the vault recoverable, and the repository's own git keeps the rest.
+- Rules 3 to 7 take the vault above the file, not the vault of the session's folder, so a session outside the vault gets the same refusals.
+- The gate is not a guard rule. The `change` tool keeps it, on the document it applies ([[Changes#The gate]]). Rule 2 only keeps the shell from skipping it through the CLI or from forging a user's turn through `atlas hook prompt`.
+- Bash is guarded only by rules 1 and 2. A shell command can write anywhere, and no parse of shell is reliable. So the thread rule covers the edit tools, not the shell. The snapshot commit keeps a shell write in the vault recoverable, and the repository's own git keeps the rest.
 
 ## touched
 

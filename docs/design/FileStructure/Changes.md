@@ -23,7 +23,7 @@ propose ──▶ proposed ──apply──▶ applying ──▶ applied ─�
 ```
 
 - **propose** validates the plan and writes the document. It commits nothing; the next commit of any kind keeps it.
-- **apply** reads the document again, validates it again, and commits. The guard lets the model call it only after the user has had a turn since the proposal ([[#The gate]]).
+- **apply** reads the document again, validates it again, and commits. The model's call applies only after the user has had a turn since the proposal ([[#The gate]]).
 - **reject** sets the status and the reason, and commits nothing.
 - **undo** restores the paths of one applied change. It refuses when a path changed since.
 
@@ -31,10 +31,12 @@ propose ──▶ proposed ──apply──▶ applying ──▶ applied ─�
 
 A change needs your yes. Two paths give it:
 
-1. **In the chat.** The skill shows the preview and waits. The guard refuses `change` apply from the model unless the session's `last_prompt` is later than the change's `proposed` time. So the model cannot propose and apply in one turn: you always get a turn with the preview in front of you. Code cannot tell a yes from a no in your words; the skill reads your reply, and the gate makes sure there was one.
+1. **In the chat.** The skill shows the preview and waits. The `change` tool refuses the model's apply unless the session named in the change's `session` field has a `last_prompt` later than the change's `proposed` time. The tool checks the document it is about to apply, under the lock, however the call names the change and whatever folder the session runs in. A change with no `session`, or a `proposed` time that does not parse, stays shut; the user applies it in Obsidian. So the model cannot propose and apply in one turn: you always get a turn with the preview in front of you. Code cannot tell a yes from a no in your words; the skill reads your reply, and the gate makes sure there was one.
 2. **In Obsidian.** The plugin's Apply button runs the CLI. The click is the yes ([[Obsidian Plugin#Review a change]]).
 
-A change with no writes (the model found nothing new) changes no page, so the guard lets it through at once.
+A change with no writes (the model found nothing new) changes no page, so the gate lets it through at once.
+
+The gate holds against the tools, not against the shell. The guard refuses a Bash command that runs `atlas change apply` or `atlas hook`, but a shell can write any file, including the session document. The gate keeps an agent from applying by mistake or on instructions it read in a source; it is no sandbox.
 
 ## The change document
 

@@ -937,7 +937,7 @@
 		{
 			"id": "2897842a14cf1535",
 			"type": "text",
-			"text": "**The user** reviews in the chat, or in Obsidian with the change bar; may edit a proposed page. The guard refuses apply until the user has had a turn",
+			"text": "**The user** reviews in the chat, or in Obsidian with the change bar; may edit a proposed page. The change tool refuses apply until the user has had a turn",
 			"x": 1850,
 			"y": 1280,
 			"width": 320,
