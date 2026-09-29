@@ -50,8 +50,8 @@ change, you read the preview and answer, and then the agent applies the change.
   refused. You can still apply it with the Apply button in Obsidian.
 - The gate does not read your prompt. The skill reads your answer and decides whether to
   apply.
-- Two ways to apply have no gate, because only you use them: `atlas-obsidian change apply`
-  in your terminal, and the Apply button in Obsidian.
+- Two ways to apply have no gate: `atlas-obsidian change apply` in your terminal, and the
+  Apply button in Obsidian.
 
 ### An agent edits files that code owns
 
@@ -80,8 +80,7 @@ refuses such a command when it holds a shell operator, `--output`, `-c`, `--ext-
 ### An agent uses the shell to skip the gate
 
 The guard refuses a Bash command that runs `atlas-obsidian change … apply` or
-`atlas-obsidian hook`. It refuses the same commands under `atlas`, the binary's name in 6.0
-to 6.2. The first would apply a change without the gate. The second would send the binary
+`atlas-obsidian hook`. It refuses the same commands under the old name `atlas`. The first would apply a change without the gate. The second would send the binary
 a fake hook event, for example a fake prompt from you.
 
 ### Vault contents direct a write or a delete
@@ -104,8 +103,7 @@ a fake hook event, for example a fake prompt from you.
 
 ### A different program runs in place of the binary
 
-The binary is named `atlas-obsidian` because other programs install a binary named
-`atlas`. The wrapper script and the Obsidian plugin never search `PATH` for the binary.
+The wrapper script and the Obsidian plugin never search `PATH` for the binary.
 The wrapper looks at `$ATLAS_BIN`, `$ATLAS_HOME/bin/atlas-obsidian` (default
 `~/.atlas/bin/atlas-obsidian`), and `~/go/bin/atlas-obsidian`. The Obsidian plugin looks
 at its setting, `~/.atlas/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`.
