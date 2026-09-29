@@ -201,12 +201,17 @@ func renderDocument(p *planned, id string, now time.Time) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("## Writes\n")
-	b.WriteString(renderWrites(p.Ops, p.Outside))
+	b.WriteString(renderWrites(p.Ops, p.Outside, p.Folders))
 	return doc.Render(fields, b.String())
 }
 
-// renderWrites is the Writes section's body: one heading per op, then the link rewrites.
-func renderWrites(ops []*op, outside []Rewrite) string {
+// movesHeading lists the scope folders a change moves. Apply works the moves out again
+// from the pages, so the list is a record for the reader.
+const movesHeading = "folder moves"
+
+// renderWrites is the Writes section's body: one heading per op, then the link rewrites
+// and the folder moves.
+func renderWrites(ops []*op, outside []Rewrite, folders []Move) string {
 	var b strings.Builder
 	for _, o := range ops {
 		b.WriteString("\n" + o.heading() + "\n")
@@ -226,6 +231,12 @@ func renderWrites(ops []*op, outside []Rewrite) string {
 				pairs = append(pairs, "`[["+l+"]]`")
 			}
 			fmt.Fprintf(&b, "- %s: %s\n", rw.Title, strings.Join(pairs, ", "))
+		}
+	}
+	if len(folders) > 0 {
+		b.WriteString("\n### " + movesHeading + "\n\n")
+		for _, m := range folders {
+			fmt.Fprintf(&b, "- `%s` → `%s`: %d files\n", m.From, m.To, m.Files)
 		}
 	}
 	return b.String()
@@ -252,7 +263,7 @@ func parseWrites(body string) ([]*op, error) {
 		}
 		if h, ok := strings.CutPrefix(line, "### "); ok {
 			cur = nil
-			if strings.TrimSpace(h) == "link rewrites" {
+			if t := strings.TrimSpace(h); t == "link rewrites" || t == movesHeading {
 				continue
 			}
 			o, err := parseHeading(h)

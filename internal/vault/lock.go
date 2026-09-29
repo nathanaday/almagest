@@ -169,6 +169,10 @@ func (tx *Tx) Move(from, to string) error {
 	if err := os.Rename(tx.V.Abs(from), tx.V.Abs(to)); err != nil {
 		return err
 	}
+	if strings.EqualFold(from, to) {
+		// A new case of one name: on a disk that ignores case, from is still the file.
+		return nil
+	}
 	return tx.V.Remove(from)
 }
 

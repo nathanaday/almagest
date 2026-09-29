@@ -53,7 +53,7 @@ func TestProposeThenApply(t *testing.T) {
 	if !strings.Contains(strings.Join(pv.Warnings, "\n"), "id is code's") || !strings.Contains(strings.Join(pv.Warnings, "\n"), "[[ViT]] resolves to nothing") {
 		t.Fatalf("warnings %v", pv.Warnings)
 	}
-	if tv.V.Exists("wiki/areas/p3.md") {
+	if tv.V.Exists("wiki/p3/p3.md") {
 		t.Fatal("propose writes no page")
 	}
 	content := tv.Read(pv.Ref.Path)
@@ -73,7 +73,7 @@ func TestProposeThenApply(t *testing.T) {
 	if applied.Writes[1].Lines == "+0" {
 		t.Fatalf("the preview counts the lines a create writes: %+v", applied.Writes)
 	}
-	page := tv.Read("wiki/concepts/Motion scoring.md")
+	page := tv.Read("wiki/p3/concepts/Motion scoring.md")
 	if !strings.Contains(page, "Scoring detection boxes by their motion.") {
 		t.Fatalf("the user's edit goes in:\n%s", page)
 	}
@@ -105,7 +105,7 @@ func TestRefusals(t *testing.T) {
 		w    change.Write
 		want string
 	}{
-		{"a held title", change.Write{Op: "create", Type: "concept", Title: "P3", Fields: map[string]any{"description": "x"}}, "is held by wiki/areas/p3.md"},
+		{"a held title", change.Write{Op: "create", Type: "concept", Title: "P3", Fields: map[string]any{"description": "x"}}, "is held by wiki/p3/p3.md"},
 		{"a source", change.Write{Op: "create", Type: "source", Title: "S"}, "capture"},
 		{"no description", change.Write{Op: "create", Type: "concept", Title: "C"}, "description: is required"},
 		{"a scope that is no scope", change.Write{Op: "create", Type: "concept", Title: "C", Fields: map[string]any{"description": "x", "scope": "X"}}, "must be a area or repository"},
@@ -191,7 +191,10 @@ func TestRemoveWithRedirectKeepsTypedFields(t *testing.T) {
 		t.Fatalf("warnings %v", pv.Warnings)
 	}
 	apply(t, tv, pv.Ref.ID)
-	fact := tv.Read("wiki/concepts/Edge fact.md")
+	if tv.V.Exists("wiki/p3/p3-edge") {
+		t.Fatal("the removed repository's folder empties")
+	}
+	fact := tv.Read("wiki/p3/concepts/Edge fact.md")
 	if !strings.Contains(fact, `scope: "[[p3]]"`) || !strings.Contains(fact, "About [[p3]].") {
 		t.Fatalf("the page moves up to the area:\n%s", fact)
 	}
@@ -356,7 +359,7 @@ func TestRepositoryPages(t *testing.T) {
 	}
 	pv := propose(t, tv, change.Plan{Title: "Link p3-cloud", Writes: []change.Write{{Op: "create", Type: "repository", Title: "p3-cloud", Fields: map[string]any{"path": repo, "description": "The p3 cloud front end.", "remote": "x"}}}})
 	apply(t, tv, pv.Ref.ID)
-	page := tv.Read("wiki/repositories/p3-cloud.md")
+	page := tv.Read("wiki/p3-cloud/p3-cloud.md")
 	if !strings.Contains(page, "branch: main") || strings.Contains(page, "remote: x") {
 		t.Fatalf("code fills remote and branch:\n%s", page)
 	}
@@ -400,8 +403,8 @@ func TestDescribedFollowsAbsorbedSnapshot(t *testing.T) {
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Describe p3-edge", Absorbs: []string{src}, Writes: []change.Write{{Op: "modify", ID: src, Fields: map[string]any{"description": "A snapshot."}}}})
 	apply(t, tv, pv.Ref.ID)
-	if !strings.Contains(tv.Read("wiki/repositories/p3-edge.md"), "described: 4ac19e2") {
-		t.Fatalf("described:\n%s", tv.Read("wiki/repositories/p3-edge.md"))
+	if !strings.Contains(tv.Read("wiki/p3-edge/p3-edge.md"), "described: 4ac19e2") {
+		t.Fatalf("described:\n%s", tv.Read("wiki/p3-edge/p3-edge.md"))
 	}
 	tv.Clean()
 }

@@ -21,8 +21,19 @@ This page supersedes [[V2 Obsidian Plugin Brainstorm]] where the two differ. The
 One stylesheet in the plugin, in place of V1's CSS snippet:
 
 - a callout color and icon for `stub`, `spec`, `task`, `receipt`, `killed`, `session`, and `change`;
-- a color for each top folder (`inbox`, `scratchpad`, `sessions`, `threads`, `changes`, `wiki`) and each wiki folder;
+- a color for each top folder (`inbox`, `scratchpad`, `sessions`, `threads`, `changes`, `wiki`) and for the type folders of the wiki at every level;
 - a badge in the file explorer for a stub's stage and a session's status.
+
+### Scope folders
+
+Each scope is a folder of the wiki ([[Wiki#Layout]]). In the file explorer:
+
+- a scope folder's name is bold, and a click on it opens the scope's page; a click on the arrow only opens or closes the folder;
+- the scope's page is hidden inside its folder, since the folder stands for it;
+- renaming a scope folder renames its page, and renaming the page renames its folder, so the two keep one name; Obsidian updates the links to the page;
+- a move or a rename under `wiki/` runs sync, so each page's `scope`, `parent`, and `chain` follow its folder.
+
+A setting turns the click and the hidden page off.
 
 ### Refresh
 

@@ -5,7 +5,8 @@ plugin `atlas-obsidian` in the repository's own marketplace, and the Obsidian pl
 `obsidian/`. Read `README.md` first. This file holds what the code and the README do not
 say.
 
-6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
+6.4.0 made each scope a folder of the wiki; sync moves an older vault in one `layout:`
+commit. 6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
 repository, and a terminal view) with this one. Nothing reads a 5.x file. The 5.x code is
 on the `v1` branch and the `v1-final` tag.
 
@@ -68,17 +69,20 @@ The design pages are the spec. When the code departs from them, the reason is be
   (`.claude/settings.local.json`, `.obsidian/workspace*.json`, `.obsidian/graph.json`), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
   and untracks an excluded file that an older vault tracked, in a commit of its own.
-- **Scopes are browsable without folders.** `scope` stays the one record of where a
-  page belongs; folders follow the type. Code derives from it: `chain` on every wiki
-  page (its scope and the areas above it, top first; an area's or repository's own
-  ancestors), a lead callout on each area and repository page with the path from the
-  vault and an inline `base` view filtered on `chain.contains(this.file.asLink())`, and a
-  map of the graph as Atlas.md's lead callout. `scope.Heal` keeps them current: sync
-  writes them, and apply, undo, and capture include them in their commits, so a renamed
-  or re-parented area moves the pages below it in one commit. Folders or tags were
-  rejected: each is a second record of scope that a rename or a new parent must rewrite.
-  The view is inline, not a Base file, because a Base opened alone has no `this` and
-  shows nothing; 0.1.0's `wiki/Scope.base` is removed by sync when unedited.
+- **Each scope is a folder, and the folder is the one record of scope.** A folder under
+  `wiki/` whose page has its name and type area or repository is a scope; everything in
+  it belongs there (`Index.PathScope`, `Index.Container`). The index derives `scope` and
+  `parent` from the path, and `scope.Derive` writes them into the fields, with `chain`,
+  the lead callout of each scope page (an inline `base` filtered on
+  `chain.contains(this.file.asLink())`, since a Base opened alone has no `this`), and the
+  map in Atlas.md. The model still sets `scope` or `parent` in a change, as a request to
+  move: `change.place` works out where every file lands, at propose and again at apply,
+  and moves a renamed, re-parented, or removed scope's whole folder, your notes and
+  images too. 6.0 to 6.3 kept scope as a field only and rejected folders as a second
+  record; this reverses it because the file explorer is how people browse a large vault,
+  and unique titles already make a move safe for links. `vault.MigrateLayout`, run by
+  `EnsureFolders`, moves a vault from `wiki/areas/` and `wiki/repositories/` in one
+  `layout:` commit. Until then the index reads the fields (`Index.Legacy`).
 - **Threads carry a chain, and the board has a canvas.** A stub's `chain` is each of
   its scopes and the areas above each, so an area page and the By area view find a
   thread scoped to a repository below the area. `threads/Threads.canvas` is a card per

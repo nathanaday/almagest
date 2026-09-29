@@ -241,18 +241,37 @@ func contains(list []string, s string) bool {
 	return false
 }
 
-// scope finds a loop in the chain of parents.
+// scope checks where a page of the wiki lies: a scope page in a folder of its own, under
+// an area's folder or the wiki's; a knowledge page in its type's folder of its scope.
 func (r *run) scope(d *doc.Doc) {
-	if d.Type() != "area" && d.Type() != "repository" {
+	if !strings.HasPrefix(d.Path, vault.Wiki+"/") {
 		return
 	}
-	seen := map[string]bool{d.ID(): true}
-	for p := r.idx.Parent(d); p != nil; p = r.idx.Parent(p) {
-		if seen[p.ID()] {
-			r.add("scope", Error, d, "wiki-edit: change a parent", "its chain of parents loops at %s", vault.Title(p))
+	title := vault.Title(d)
+	switch d.Type() {
+	case "area", "repository":
+		if r.idx.Legacy() {
+			r.add("layout", Error, d, "vault sync", "it lies in the old layout; sync moves every page into the folder of its scope")
 			return
 		}
-		seen[p.ID()] = true
+		if vault.ReservedTitle(title) {
+			r.add("layout", Error, d, "wiki-edit: rename it", "its title %q is the name of a type folder", title)
+		}
+		if r.idx.Folder(d) == "" {
+			r.add("layout", Error, d, "move it into a folder of the same name, in Obsidian or the shell", "it lies at %s, outside a folder of its own (…/%s/%s.md), so no page belongs to it", d.Path, title, title)
+			return
+		}
+		if p := r.idx.Parent(d); p != nil && p.Type() != "area" {
+			r.add("layout", Error, d, "move its folder out of the repository's folder", "its folder lies in the folder of the repository %s; a repository holds no area or repository", vault.Title(p))
+		}
+	case "concept", "entity", "policy", "source":
+		if r.idx.Legacy() || r.opts.Quick {
+			return
+		}
+		want := r.idx.Folder(r.idx.Container(d.Path)) + "/" + vault.TypeFolders[d.Type()] + "/"
+		if !strings.HasPrefix(d.Path, want) {
+			r.add("layout", Warning, d, "move it into "+want, "it lies outside the %s folder of its scope", vault.TypeFolders[d.Type()])
+		}
 	}
 }
 

@@ -71,7 +71,13 @@ func Derive(idx *vault.Index) map[string]string {
 		if !strings.HasPrefix(d.Path, home+"/") || d.FrontErr != nil {
 			continue
 		}
-		content := doc.SetField(d.Content, "chain", ChainOf(idx, d))
+		content := d.Content
+		if field := placedField(d); field != "" && !idx.Legacy() {
+			if link := idx.ScopeLink(d); link != "" || d.Front.Has(field) {
+				content = doc.SetField(content, field, link)
+			}
+		}
+		content = doc.SetField(content, "chain", ChainOf(idx, d))
 		if d.Type() == "area" || d.Type() == "repository" {
 			content = doc.ReplaceLead(content, scopeLead(idx, d))
 		}
@@ -90,6 +96,18 @@ func Derive(idx *vault.Index) map[string]string {
 		out[vault.ThreadsCanvas] = content
 	}
 	return out
+}
+
+// placedField is the field of a wiki page that its folder decides: a scope page's parent,
+// a knowledge page's scope; "" for a thread.
+func placedField(d *doc.Doc) string {
+	switch d.Type() {
+	case "area", "repository":
+		return "parent"
+	case "stub":
+		return ""
+	}
+	return "scope"
 }
 
 // Heal writes what Derive finds, and returns the paths it wrote.

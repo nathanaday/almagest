@@ -7,17 +7,23 @@ One wiki for the whole vault. It holds two families of pages: **scope pages**, w
 
 ```text
 wiki/
-├── Wiki.base          every page, grouped by type, filtered by scope
-├── areas/             area pages
-├── repositories/      repository pages
-├── concepts/          concept pages
-├── entities/          entity pages
-├── policies/          policy pages
-└── sources/           source pages
-    └── files/         the captured originals: <source id>.<ext>, never edited
+├── Wiki.base                   every page, grouped by type, filtered by scope
+├── concepts/  entities/  policies/  sources/     pages scoped to the vault
+├── sources/files/              the captured originals: <source id>.<ext>, never edited
+└── Machine Learning/           an area: a folder with a page of the same name
+    ├── Machine Learning.md     the area page
+    ├── concepts/  entities/  policies/  sources/
+    └── CS566/                  an area inside it
+        ├── CS566.md
+        ├── concepts/ …
+        └── cs566-course/       a repository: a folder with its page, and no area inside
+            ├── cs566-course.md
+            └── sources/ …
 ```
 
-The folder follows the type. Code routes a new page to its folder, so the model gives a type and a title and never a path. There is no `index.md`, `log.md`, `hot.md`, or `meta/`:
+Each scope is a folder, and each folder has the same layout as the wiki itself: a wiki inside a wiki. A folder under `wiki/` is a scope when it holds a page of its own name, of type `area` or `repository`. Everything inside the folder belongs to that scope, or to a scope below it. A knowledge page lives in its type's folder (`concepts/`, `entities/`, `policies/`, `sources/`) inside the folder of its scope. A type folder comes with its first page and goes with its last. An area or a repository may not take the name of a type folder.
+
+Code routes a new page, so the model gives a type, a title, and a scope, and never a path. The captured originals stay in one folder, `wiki/sources/files/`, for every scope; a source page embeds its original by file name, so a move breaks no embed. There is no `index.md`, `log.md`, `hot.md`, or `meta/`:
 
 | V1 page | V2 |
 |---|---|
@@ -28,10 +34,16 @@ The folder follows the type. Code routes a new page to its folder, so the model 
 
 ## Scope
 
-Every knowledge page has a `scope`: a link to an area or a repository page, or empty for the vault. Scope says where the knowledge holds. It is not a folder.
+Every knowledge page has a `scope`: the area or repository that holds its folder, or the vault. Scope says where the knowledge holds. The folder is the one record of it. Code derives the `scope` field of a knowledge page and the `parent` field of a scope page from the path, so Obsidian and Bases can show them.
 
 - A new page takes the scope of what it came from: the source's scope, or the thread's.
-- A page whose subject holds for two children of an area moves up: the change sets its scope to the area. See [[wiki-rollup]].
+- A change that sets a page's `scope` moves the page into its type's folder of the new scope. A page whose subject holds for two children of an area moves up this way. See [[wiki-rollup]].
+- A change that renames a scope, or sets its `parent`, moves its folder and everything in it.
+- A change that removes a scope empties its folder into the folder of its redirect, when the redirect is a scope, or else into its parent's. The pages inside take that scope.
+- You may move a page or a folder yourself, in Obsidian or in a shell. The next sync writes the new scope into the fields. A move keeps every link, because a link names a title and a title is unique in the vault.
+- Every page and file in a scope's folder moves with it, your own notes and images too.
+
+Folders were rejected at first, because a second record of scope must follow every rename and every new parent. They came back as the only record: `scope` and `parent` are no longer the model's to keep true, only its way to ask for a move. Unique titles make a move safe for links. The file explorer then shows each scope as a small wiki, which a large vault needs.
 - A policy holds for its scope and every scope below it. [[context]] returns the policies on a scope's chain, nearest first.
 
 ## Fields of a knowledge page
@@ -137,7 +149,7 @@ id: are-w4q8ze
 type: area
 created: 2026-09-27
 updated: 2026-09-27
-parent: "[[work]]"                  # an area; empty for the vault
+parent: "[[work]]"                  # derived from the folder; empty for the vault
 description: "The p3 product: its cloud, edge, and vertex services."
 aliases: []
 ---
@@ -145,7 +157,7 @@ aliases: []
 
 Body: what the area holds and the context an agent needs to work in it. Conventions belong in policy pages scoped to the area, not in this body.
 
-Rules: `parent` names an area or is empty. The chain of parents never loops. `change` refuses a loop.
+The page is `<parent's folder>/<title>/<title>.md`. Rules: `parent` names an area or is empty. A change that sets it moves the area's folder, and refuses a parent below the area itself.
 
 ## Repository
 
@@ -175,6 +187,7 @@ Rules:
 - `path` is the model's, and code checks it: it must be the root of a git work tree, outside the vault, and no other repository page may hold it.
 - Code fills `remote` and `branch` from git when the page is created. The model never writes them.
 - Code sets `described` when a change that absorbs a snapshot of this repository applies. `context` counts the commits since, so an agent knows when the page is behind.
+- The page is `<parent's folder>/<title>/<title>.md`. The folder holds the repository's own knowledge pages and no area or repository; lint reports one put there by hand.
 - `vault sync` lists every repository's path in `.claude/settings.local.json`. See [[Vault Layout#Settings for the harness]].
 
 ## Wiki.base

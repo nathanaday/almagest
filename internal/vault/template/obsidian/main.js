@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
 // src/badges.ts
 var import_obsidian = require("obsidian");
@@ -265,6 +265,37 @@ function isThreadPath(path) {
 function waitingLabel(n) {
   return n === 1 ? "Atlas: 1 session waits" : `Atlas: ${n} sessions wait`;
 }
+function baseName(path) {
+  return path.slice(path.lastIndexOf("/") + 1);
+}
+function dirName(path) {
+  const i = path.lastIndexOf("/");
+  return i < 0 ? "" : path.slice(0, i);
+}
+function folderPagePath(folder) {
+  if (!folder.startsWith("wiki/")) return null;
+  return `${folder}/${baseName(folder)}.md`;
+}
+function isFolderPage(path) {
+  return folderPagePath(dirName(path)) === path;
+}
+function companionRename(isFolder, path, oldPath) {
+  if (!path.startsWith("wiki/")) return null;
+  if (isFolder) {
+    const oldName = baseName(oldPath);
+    const name2 = baseName(path);
+    if (oldName === name2) return null;
+    return { from: `${path}/${oldName}.md`, to: `${path}/${name2}.md` };
+  }
+  if (!isFolderPage(oldPath) || dirName(path) !== dirName(oldPath) || !path.endsWith(".md")) return null;
+  const folder = dirName(path);
+  const name = baseName(path).slice(0, -3);
+  if (name === "" || name === baseName(folder)) return null;
+  return { from: folder, to: `${dirName(folder)}/${name}` };
+}
+function cssString(s) {
+  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ")}"`;
+}
 
 // src/changebar.ts
 var BAR = "atlas-change-bar";
@@ -437,8 +468,125 @@ function runProgram(bin, args) {
   return exec(bin, args, void 0);
 }
 
-// src/graphcolors.ts
+// src/folders.ts
 var import_obsidian3 = require("obsidian");
+var SCOPE_TYPES = /* @__PURE__ */ new Set(["area", "repository"]);
+var wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+var ScopeFolders = class extends import_obsidian3.Component {
+  constructor(app, onMove) {
+    super();
+    this.app = app;
+    this.onMove = onMove;
+  }
+  app;
+  onMove;
+  style = null;
+  enabled = false;
+  scopes = /* @__PURE__ */ new Set();
+  refresh = (0, import_obsidian3.debounce)(() => this.apply(), 300, true);
+  onload() {
+    this.style = document.head.createEl("style", { attr: { id: "atlas-scope-folders" } });
+    this.registerEvent(this.app.metadataCache.on("changed", () => this.refresh()));
+    this.registerEvent(this.app.metadataCache.on("resolved", () => this.refresh()));
+    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        this.refresh();
+        if (!file.path.startsWith("wiki/") && !oldPath.startsWith("wiki/")) return;
+        void this.follow(file instanceof import_obsidian3.TFolder, file.path, oldPath).finally(() => this.onMove());
+      })
+    );
+    this.registerDomEvent(document, "click", (evt) => this.onClick(evt), { capture: true });
+    this.app.workspace.onLayoutReady(() => this.refresh());
+  }
+  onunload() {
+    this.style?.remove();
+    this.style = null;
+  }
+  setEnabled(on) {
+    this.enabled = on;
+    this.apply();
+  }
+  isScopePage(file) {
+    const type = this.app.metadataCache.getFileCache(file)?.frontmatter?.type;
+    return typeof type === "string" && SCOPE_TYPES.has(type);
+  }
+  /** The page that makes a folder a scope, or null. */
+  pageOf(folder) {
+    const path = folderPagePath(folder);
+    const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
+    return file instanceof import_obsidian3.TFile && this.isScopePage(file) ? file : null;
+  }
+  apply() {
+    this.scopes.clear();
+    for (const file of this.app.vault.getMarkdownFiles()) {
+      if (isFolderPage(file.path) && this.isScopePage(file)) this.scopes.add(file.parent?.path ?? "");
+    }
+    if (!this.style) return;
+    const rules = [];
+    for (const folder of this.scopes) {
+      rules.push(`.nav-folder-title[data-path=${cssString(folder)}] .nav-folder-title-content { font-weight: var(--font-semibold); }`);
+      if (this.enabled) {
+        rules.push(`.nav-folder-title[data-path=${cssString(folder)}] { cursor: pointer; }`);
+        rules.push(`.nav-file-title[data-path=${cssString(folderPagePath(folder) ?? "")}] { display: none; }`);
+      }
+    }
+    this.style.textContent = rules.join("\n");
+  }
+  onClick(evt) {
+    if (!this.enabled || !(evt.target instanceof Element)) return;
+    if (evt.target.closest(".nav-folder-collapse-indicator")) return;
+    const title = evt.target.closest(".nav-folder-title");
+    const folder = title?.getAttribute("data-path") ?? "";
+    if (!this.scopes.has(folder)) return;
+    const page = this.pageOf(folder);
+    if (page) void this.app.workspace.getLeaf(import_obsidian3.Keymap.isModEvent(evt)).openFile(page);
+  }
+  /** Renames the folder or the page that must follow the user's rename. */
+  async readsAsScopePage(file) {
+    if (this.isScopePage(file)) return true;
+    const info = (0, import_obsidian3.getFrontMatterInfo)(await this.app.vault.cachedRead(file));
+    if (!info.exists) return false;
+    try {
+      const type = (0, import_obsidian3.parseYaml)(info.frontmatter)?.type;
+      return typeof type === "string" && SCOPE_TYPES.has(type);
+    } catch {
+      return false;
+    }
+  }
+  async follow(isFolder, path, oldPath) {
+    const next = companionRename(isFolder, path, oldPath);
+    if (!next) return;
+    let from = this.app.vault.getAbstractFileByPath(next.from);
+    for (let i = 0; !from && i < 20; i++) {
+      await wait(50);
+      from = this.app.vault.getAbstractFileByPath(next.from);
+    }
+    if (!from || this.app.vault.getAbstractFileByPath(next.to)) return;
+    const page = isFolder ? from : this.app.vault.getAbstractFileByPath(path);
+    if (!(page instanceof import_obsidian3.TFile) || !isFolder && !(from instanceof import_obsidian3.TFolder)) return;
+    if (!await this.readsAsScopePage(page)) return;
+    await this.renameKeepingLinks(from, next.to);
+  }
+  /**
+   * Renames a file or folder and updates the links to it, whatever the user's setting for
+   * links says: a link names a title, so a title that changes without its links breaks
+   * them. The setting is not public API; without it the rename follows the setting.
+   */
+  async renameKeepingLinks(file, to) {
+    const vault = this.app.vault;
+    const was = vault.getConfig?.("alwaysUpdateLinks");
+    if (was === false) vault.setConfig?.("alwaysUpdateLinks", true);
+    try {
+      await this.app.fileManager.renameFile(file, to);
+    } finally {
+      if (was === false) vault.setConfig?.("alwaysUpdateLinks", false);
+    }
+  }
+};
+
+// src/graphcolors.ts
+var import_obsidian4 = require("obsidian");
 
 // src/graphgroups.ts
 var GRAPH_MODES = [
@@ -695,14 +843,14 @@ function engineOf(view) {
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
-var GraphColors = class extends import_obsidian3.Component {
+var GraphColors = class extends import_obsidian4.Component {
   constructor(host) {
     super();
     this.host = host;
   }
   host;
   groups = [];
-  refresh = (0, import_obsidian3.debounce)(() => this.apply(), 1e3, true);
+  refresh = (0, import_obsidian4.debounce)(() => this.apply(), 1e3, true);
   get app() {
     return this.host.app;
   }
@@ -849,7 +997,7 @@ function wrap(node) {
 }
 
 // src/sessions.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 var import_os2 = require("os");
 var SESSIONS_VIEW = "atlas-sessions";
 function activeSessions(app) {
@@ -889,21 +1037,21 @@ function currentTask(app, s) {
 async function resume(s) {
   const command = resumeCommand(s, (0, import_os2.homedir)());
   if (!command) {
-    new import_obsidian4.Notice("Atlas: this session has no harness id to resume.");
+    new import_obsidian5.Notice("Atlas: this session has no harness id to resume.");
     return;
   }
   if (process.platform !== "darwin") {
     await navigator.clipboard.writeText(command);
-    new import_obsidian4.Notice("Atlas: copied the resume command. Run it in a terminal.");
+    new import_obsidian5.Notice("Atlas: copied the resume command. Run it in a terminal.");
     return;
   }
   try {
     await runProgram("osascript", terminalArgs(command));
   } catch (e) {
-    new import_obsidian4.Notice(`Atlas: cannot open Terminal: ${e.message}`);
+    new import_obsidian5.Notice(`Atlas: cannot open Terminal: ${e.message}`);
   }
 }
-var SessionsView = class extends import_obsidian4.ItemView {
+var SessionsView = class extends import_obsidian5.ItemView {
   generation = 0;
   constructor(leaf) {
     super(leaf);
@@ -967,14 +1115,15 @@ var SessionsView = class extends import_obsidian4.ItemView {
 };
 
 // src/settings.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 var DEFAULT_SETTINGS = {
   binaryPath: "",
   syncOnChange: true,
   badges: true,
+  folderPages: true,
   graphColors: "area"
 };
-var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
+var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -984,7 +1133,7 @@ var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const found = findBinary("");
-    const binary = new import_obsidian5.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
+    const binary = new import_obsidian6.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
       (text) => text.setPlaceholder(found ?? "Not found").setValue(this.plugin.settings.binaryPath).onChange(async (value) => {
         this.plugin.settings.binaryPath = value.trim();
         await this.plugin.saveSettings();
@@ -1005,20 +1154,27 @@ var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian5.Setting(containerEl).setName("Sync when a thread document changes").setDesc("Runs atlas-obsidian vault sync after you edit a file under threads/, so the board and the callouts follow.").addToggle(
+    new import_obsidian6.Setting(containerEl).setName("Sync when a thread document changes or a wiki page moves").setDesc("Runs atlas-obsidian vault sync after you edit a file under threads/ or move a file in wiki/, so the board, the callouts, and each page's scope follow.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian5.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the stage of each stub and the status of each session.").addToggle(
+    new import_obsidian6.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the stage of each stub and the status of each session.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.badges).onChange(async (value) => {
         this.plugin.settings.badges = value;
         await this.plugin.saveSettings();
         this.plugin.badges.setEnabled(value);
       })
     );
-    new import_obsidian5.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by area, by type, by the state of their threads, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
+    new import_obsidian6.Setting(containerEl).setName("Open a scope folder's page from the folder").setDesc("In the file explorer, a click on an area's or a repository's folder opens its page, and the page itself is hidden inside the folder.").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.folderPages).onChange(async (value) => {
+        this.plugin.settings.folderPages = value;
+        await this.plugin.saveSettings();
+        this.plugin.scopeFolders.setEnabled(value);
+      })
+    );
+    new import_obsidian6.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by area, by type, by the state of their threads, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
       for (const { mode, label } of GRAPH_MODES) dropdown.addOption(mode, label);
       dropdown.setValue(this.plugin.settings.graphColors).onChange((value) => void this.plugin.graphColors.setMode(value));
     });
@@ -1028,9 +1184,10 @@ var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
 // src/main.ts
 var SYNC_DELAY = 1500;
 var ECHO_WINDOW = 5e3;
-var AtlasPlugin = class extends import_obsidian6.Plugin {
+var AtlasPlugin = class extends import_obsidian7.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   badges;
+  scopeFolders;
   graphColors;
   syncing = false;
   syncTimer = null;
@@ -1046,6 +1203,12 @@ var AtlasPlugin = class extends import_obsidian6.Plugin {
     this.badges = this.addChild(new Badges(this.app));
     this.badges.setEnabled(this.settings.badges);
     this.addChild(new ChangeBar(this));
+    this.scopeFolders = this.addChild(
+      new ScopeFolders(this.app, () => {
+        if (this.settings.syncOnChange) this.scheduleSync();
+      })
+    );
+    this.scopeFolders.setEnabled(this.settings.folderPages);
     this.graphColors = this.addChild(new GraphColors(this));
     for (const { mode, label } of GRAPH_MODES) {
       this.addCommand({
@@ -1094,7 +1257,7 @@ var AtlasPlugin = class extends import_obsidian6.Plugin {
   /** Runs one atlas command in this vault and returns its JSON. */
   atlas(args) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian6.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian7.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args);
@@ -1102,7 +1265,7 @@ var AtlasPlugin = class extends import_obsidian6.Plugin {
   // Sync
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian6.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian7.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -1114,10 +1277,10 @@ var AtlasPlugin = class extends import_obsidian6.Plugin {
       const out = await this.atlas(["vault", "sync"]);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian6.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      if (manual) new import_obsidian7.Notice(`Atlas: ${syncSummary(out.synced)}`);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian6.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian7.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -1155,7 +1318,7 @@ var AtlasPlugin = class extends import_obsidian6.Plugin {
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian6.debounce)(
+  refreshSessions = (0, import_obsidian7.debounce)(
     () => {
       const waiting = activeSessions(this.app).filter((s) => s.status === "waiting").length;
       this.statusItem?.setText(waiting > 0 ? waitingLabel(waiting) : "");

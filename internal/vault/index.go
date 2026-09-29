@@ -70,6 +70,10 @@ type Index struct {
 	byAlias map[string][]*doc.Doc
 	byPath  map[string]*doc.Doc
 	fileKey map[string][]string // file name key → paths of non-markdown files and scratchpad notes
+	// scopeDirs maps each scope folder, without case, to the page that makes it a scope.
+	scopeDirs map[string]*doc.Doc
+	// legacy is set while a scope page still lies in wiki/areas or wiki/repositories.
+	legacy bool
 
 	pendingOnce sync.Once
 	absorbed    map[string]map[string]bool // document id → hashes applied changes absorbed
@@ -77,7 +81,7 @@ type Index struct {
 
 // Load reads every document of the vault.
 func Load(v *Vault) (*Index, error) {
-	idx := &Index{V: v, byID: map[string]*doc.Doc{}, byTitle: map[string][]string{}, byAlias: map[string][]*doc.Doc{}, byPath: map[string]*doc.Doc{}, fileKey: map[string][]string{}}
+	idx := &Index{V: v, byID: map[string]*doc.Doc{}, byTitle: map[string][]string{}, byAlias: map[string][]*doc.Doc{}, byPath: map[string]*doc.Doc{}, fileKey: map[string][]string{}, scopeDirs: map[string]*doc.Doc{}}
 	err := filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -115,6 +119,17 @@ func Load(v *Vault) (*Index, error) {
 		return nil, err
 	}
 	sort.Slice(idx.Docs, func(i, j int) bool { return idx.Docs[i].Path < idx.Docs[j].Path })
+	for _, d := range idx.Of("area", "repository") {
+		switch {
+		case IsFolderPage(d.Path):
+			dir := strings.ToLower(path.Dir(d.Path))
+			if idx.scopeDirs[dir] == nil {
+				idx.scopeDirs[dir] = d
+			}
+		case inLegacyFolder(d.Path):
+			idx.legacy = true
+		}
+	}
 	return idx, nil
 }
 
@@ -401,18 +416,27 @@ func orDefault(s, def string) string {
 }
 
 // ScopeIDs are the ids of the scope pages a document points at: a knowledge page's
-// scope, a stub's scopes, a scope page's parent, a task's repository.
+// scope, a stub's scopes, a scope page's parent, a task's repository. A page of the wiki
+// takes its scope from its folder.
 func (idx *Index) ScopeIDs(d *doc.Doc) []string {
 	var values []string
 	switch d.Type() {
-	case "area", "repository":
-		values = []string{d.Str("parent")}
+	case "area", "repository", "concept", "entity", "policy", "source":
+		if idx.placed(d) {
+			if s := idx.PathScope(d); s != nil {
+				return []string{s.ID()}
+			}
+			return []string{}
+		}
+		field := "scope"
+		if d.Type() == "area" || d.Type() == "repository" {
+			field = "parent"
+		}
+		values = []string{d.Str(field)}
 	case "stub":
 		values = d.List("scope")
 	case "task":
 		values = []string{d.Str("repository")}
-	case "concept", "entity", "policy", "source":
-		values = []string{d.Str("scope")}
 	case "spec", "receipt":
 		if stub := idx.Linked(d.Str("thread")); stub != nil {
 			values = stub.List("scope")
@@ -427,13 +451,85 @@ func (idx *Index) ScopeIDs(d *doc.Doc) []string {
 	return out
 }
 
-// Parent is a scope page's parent area, or nil for the vault.
+// Parent is a scope page's parent, or nil for the vault. A page of the wiki takes it from
+// its folder; that is an area, unless a hand move put the page in a repository's folder,
+// which lint reports.
 func (idx *Index) Parent(d *doc.Doc) *doc.Doc {
+	if idx.placed(d) {
+		return idx.PathScope(d)
+	}
 	p := idx.Linked(d.Str("parent"))
 	if p != nil && p.Type() == "area" {
 		return p
 	}
 	return nil
+}
+
+// Legacy reports whether a scope page still lies in wiki/areas or wiki/repositories, where
+// scope pages lived before each scope had a folder. Sync moves them.
+func (idx *Index) Legacy() bool { return idx.legacy }
+
+// placed reports whether a document takes its scope from its path: a page of the wiki,
+// once no scope page lies in a legacy folder.
+func (idx *Index) placed(d *doc.Doc) bool {
+	return !idx.legacy && strings.HasPrefix(d.Path, Wiki+"/")
+}
+
+// Folder is the folder a scope page makes a scope: "wiki" for the vault (nil), the page's
+// folder when it is the page of its own folder, and "" for a scope page anywhere else.
+func (idx *Index) Folder(s *doc.Doc) string {
+	if s == nil || s.Type() == "vault" {
+		return Wiki
+	}
+	dir := path.Dir(s.Path)
+	if idx.scopeDirs[strings.ToLower(dir)] == s {
+		return dir
+	}
+	return ""
+}
+
+// Container is the scope whose folder holds a path, the nearest one; nil for the vault.
+func (idx *Index) Container(rel string) *doc.Doc {
+	for dir := path.Dir(rel); strings.HasPrefix(dir, Wiki+"/"); dir = path.Dir(dir) {
+		if s := idx.scopeDirs[strings.ToLower(dir)]; s != nil {
+			return s
+		}
+	}
+	return nil
+}
+
+// PathScope is the scope a page's path gives it: the nearest scope folder above it, not
+// counting the folder a scope page makes itself. nil is the vault.
+func (idx *Index) PathScope(d *doc.Doc) *doc.Doc {
+	rel := d.Path
+	if f := idx.Folder(d); f != "" && f != Wiki {
+		rel = f
+	}
+	return idx.Container(rel)
+}
+
+// ScopeFolders maps each scope folder to the page that makes it a scope.
+func (idx *Index) ScopeFolders() map[string]*doc.Doc {
+	out := make(map[string]*doc.Doc, len(idx.scopeDirs))
+	for _, d := range idx.scopeDirs {
+		out[path.Dir(d.Path)] = d
+	}
+	return out
+}
+
+// ScopeLink is the link a page's derived field holds: the scope of a knowledge page, the
+// parent of a scope page; "" for the vault.
+func (idx *Index) ScopeLink(d *doc.Doc) string {
+	var s *doc.Doc
+	if d.Type() == "area" || d.Type() == "repository" {
+		s = idx.Parent(d)
+	} else if ids := idx.ScopeIDs(d); len(ids) > 0 {
+		s = idx.byID[ids[0]]
+	}
+	if s == nil {
+		return ""
+	}
+	return doc.Link(Title(s))
 }
 
 // Ancestors are the areas above a scope page, nearest first, stopping at a loop.

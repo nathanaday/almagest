@@ -60,7 +60,7 @@ There is one vault. It is the highest namespace, and it is self-contained: nothi
 
 A vault holds any number of **areas**, nested to any depth, and zero areas is valid. An area is a label for a cluster of repositories or other areas. The leaf of the graph is always a **repository**: a git repository anywhere on the disk, with its own `AGENTS.md` or `CLAUDE.md`.
 
-The graph is not a folder tree. Each area and each repository is a page in the wiki with a `parent` property. Obsidian's graph view shows the tree from those links. An agent walks the graph with the `context` tool:
+The graph is a folder tree in the wiki. Each area and each repository is a folder with a page of the same name, inside the folder of its parent. The file explorer shows the tree, and the page's `parent` property, which code derives from the folder, lets Obsidian's graph view show it too. An agent walks the graph with the `context` tool:
 
 | The user asks | The agent walks |
 |---|---|
@@ -72,7 +72,7 @@ Because repositories live outside the vault, the vault's git repository never co
 
 ### One wiki, organized by scope
 
-The vault has one wiki. Each page has a `scope`: the vault, an area, or a repository. Scope is a property, not a folder, so moving knowledge up the graph changes one property and breaks no link.
+The vault has one wiki. Each page has a `scope`: the vault, an area, or a repository. The scope is the folder that holds the page, so each scope's folder reads as a small wiki of its own. Moving knowledge up the graph moves one file, and breaks no link, because every link names a title and a title is unique in the vault. See [[Wiki#Scope]].
 
 The wiki is mapped from the leaves up:
 

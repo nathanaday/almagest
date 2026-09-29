@@ -8,12 +8,12 @@ Every document in the vault has a type and an id. The type sets its folder, its 
 | Type | Id prefix | Folder | Schema | Written by |
 |---|---|---|---|---|
 | `vault` | `vlt` | `Atlas.md` at the root | [[Vault Layout#Atlas.md]] | `atlas-obsidian vault init`; then the user |
-| `area` | `are` | `wiki/areas/` | [[Wiki#Area]] | `change` |
-| `repository` | `rep` | `wiki/repositories/` | [[Wiki#Repository]] | `change` |
-| `concept` | `con` | `wiki/concepts/` | [[Wiki#Concept]] | `change` |
-| `entity` | `ent` | `wiki/entities/` | [[Wiki#Entity]] | `change` |
-| `policy` | `pol` | `wiki/policies/` | [[Wiki#Policy]] | `change` |
-| `source` | `src` | `wiki/sources/` | [[Wiki#Source]] | `source` capture, then `change` |
+| `area` | `are` | `<parent>/<title>/` | [[Wiki#Area]] | `change` |
+| `repository` | `rep` | `<parent>/<title>/` | [[Wiki#Repository]] | `change` |
+| `concept` | `con` | `<scope>/concepts/` | [[Wiki#Concept]] | `change` |
+| `entity` | `ent` | `<scope>/entities/` | [[Wiki#Entity]] | `change` |
+| `policy` | `pol` | `<scope>/policies/` | [[Wiki#Policy]] | `change` |
+| `source` | `src` | `<scope>/sources/` | [[Wiki#Source]] | `source` capture, then `change` |
 | `stub` | `thr` | `threads/<thread>/` | [[Thread Documents#Stub]] | `thread`; the model and the user edit the prose |
 | `spec` | `spc` | `threads/<thread>/` | [[Thread Documents#Spec]] | `thread`; prose as above |
 | `task` | `tsk` | `threads/<thread>/` | [[Thread Documents#Task]] | `thread`; prose as above |

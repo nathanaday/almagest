@@ -58,6 +58,7 @@ type item struct {
 	locator string
 	inbox   string
 	scope   string
+	folder  string // the folder of the scope: where the source page goes
 }
 
 // Capture brings the requested documents into the vault as one commit.
@@ -84,11 +85,14 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	scope := ""
+	scope, folder := "", vault.Wiki
 	if req.Scope != "" {
 		s, err := idx.ResolveType(req.Scope, "area", "repository")
 		if err != nil {
 			return nil, fmt.Errorf("scope: %w", err)
+		}
+		if folder, err = scopeFolder(idx, s); err != nil {
+			return nil, err
 		}
 		scope = doc.Link(vault.Title(s))
 	}
@@ -110,14 +114,14 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 			}
 			base := path.Base(rel)
 			ext := strings.ToLower(path.Ext(base))
-			items = append(items, item{title: doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, scope: scope})
+			items = append(items, item{title: doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, scope: scope, folder: folder})
 		}
 	case strings.TrimSpace(req.Text) != "":
 		title := doc.CleanTitle(req.Title)
 		if title == "" {
 			return nil, errors.New("captured text needs a title")
 		}
-		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: "pasted", locator: req.Locator, scope: scope})
+		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: "pasted", locator: req.Locator, scope: scope, folder: folder})
 	default:
 		repo, err := idx.ResolveType(req.Repository, "repository")
 		if err != nil {
@@ -127,7 +131,11 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		items = append(items, item{title: fmt.Sprintf("%s @ %s", vault.Title(repo), snap.Commit[:7]), ext: ".md", data: snap.Content, origin: "repository", locator: repo.ID() + "@" + snap.Commit, scope: doc.Link(vault.Title(repo))})
+		folder, err := scopeFolder(idx, repo)
+		if err != nil {
+			return nil, err
+		}
+		items = append(items, item{title: fmt.Sprintf("%s @ %s", vault.Title(repo), snap.Commit[:7]), ext: ".md", data: snap.Content, origin: "repository", locator: repo.ID() + "@" + snap.Commit, scope: doc.Link(vault.Title(repo)), folder: folder})
 	}
 	out := &Result{Captured: []Captured{}}
 	var titles []string
@@ -182,7 +190,7 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 			{Key: "captured", Value: vault.Date(now)},
 			{Key: "authority", Value: "unknown"},
 		}, "!"+doc.Link(file)+"\n")
-		rel := path.Join(vault.Wiki, "sources", title+".md")
+		rel := vault.Route(it.folder, "source", title)
 		if err := tx.Write(rel, []byte(page)); err != nil {
 			return nil, err
 		}
@@ -279,4 +287,12 @@ func repoHead(root string) (string, error) {
 		return "", fmt.Errorf("%s has no commit to snapshot", root)
 	}
 	return g.Head()
+}
+
+// scopeFolder is the folder of a scope a source page goes in.
+func scopeFolder(idx *vault.Index, s *doc.Doc) (string, error) {
+	if f := idx.Folder(s); f != "" {
+		return f, nil
+	}
+	return "", fmt.Errorf("scope: the page of %s lies at %s, outside a folder of its own; move it to …/%s/%s.md first", vault.Title(s), s.Path, vault.Title(s), vault.Title(s))
 }

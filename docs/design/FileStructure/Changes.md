@@ -107,6 +107,10 @@ the full new content of the page
 ### link rewrites
 
 - Filter vehicle false alarms — Spec: `[[Old title]]` → `[[New title]]`
+
+### folder moves
+
+- `wiki/work/p3` → `wiki/work/p3 product`: 41 files
 ``````
 
 - Code writes the whole document except `## Notes`, which is the model's.
@@ -115,13 +119,23 @@ the full new content of the page
 - Code writes the fields it owns into each proposed page (`id`, `type`, `created`, `updated`) at propose time, so the page you review is the page that lands.
 - `## Absorbed` is code's. It records each absorbed document's content hash at propose time.
 - Apply, reject, and undo rewrite the lead callout to say the new status.
+- `### folder moves` lists each scope folder that moves, with the files it carries. It is a record for the reader: apply works out every move again from the pages ([[#Where pages land]]).
 
-## Validation
+## Where pages land
+
+The folder of a page is its scope ([[Wiki#Scope]]). Code works out where every file of the wiki lands, at propose time for the preview and again at apply:
+
+- A create goes in its type's folder of the scope it names, or in a folder of its own inside its parent's folder for an area or a repository.
+- A modify that sets `scope` moves the page into its type's folder of the new scope. A rename keeps the page in its folder.
+- A scope that the change renames, or gives a new `parent`, moves its folder. Every file inside moves with it: pages, sub-scopes, your notes, and images.
+- A scope that the change removes empties its folder into its redirect's folder, when the redirect is a scope, or else into its parent's.
+
+The preview gives each write's final path, and `folders` lists each scope folder that moves. Propose and apply refuse a `parent` that loops, a scope whose page lies outside a folder of its own, a title that is the name of a type folder, and two files that would land on one path or on a file that stays.
 
 `propose` and `apply` refuse a plan that breaks one of these rules. Each refusal names the write and the rule.
 
 1. Every write the model gives is under `wiki/`, and never under `wiki/sources/files/`. Only capture writes there. Code's link rewrites may touch any folder ([[#Link rewrites]]).
-2. A create names a type and a title. Code routes the path. The title and every alias are unique in the vault.
+2. A create names a type and a title. Code routes the path ([[#Where pages land]]). The title and every alias are unique in the vault.
 3. The page matches its type's schema ([[Wiki]]): the required fields exist and hold allowed values; `scope` and `parent` name scope pages; `sources` name documents that exist or that the same change creates; a repository's `path` is the root of a git work tree outside the vault, and no other page holds it.
 4. The model sets no field that code owns. Code drops such a field and reports it as a warning.
 5. A modify, rename, or remove names a page by id. Its `base` is the hash the model read; when the model gives none, code records the hash at propose time. Apply refuses when the file changed since.
@@ -147,7 +161,7 @@ One pass, used by every rename and every remove with a redirect: a change's rena
 4. Parse the change document. Validate it again (you may have edited it).
 5. Check every `base` against the file on disk. A mismatch aborts with `conflict` and names the path. The model reads the page again and proposes a change that supersedes this one.
 6. Set `status: applying` in the change document.
-7. Write each file (temporary file, then rename). Delete each removed file. Make the link rewrites.
+7. Write each file where it lands (temporary file, then rename). Delete each removed file. Move each file that goes with a scope's folder. Make the link rewrites. Remove the folders the moves leave empty.
 8. Derive: `updated` on each page; `described` on a repository page whose snapshot the change absorbs.
 9. Set `status: applied`, `applied`, and the lead callout.
 10. Commit the written paths and the change document as `change: <title>` with the trailer `Atlas-Change: chg-r8m3tb`.
@@ -157,7 +171,7 @@ One pass, used by every rename and every remove with a redirect: a change's rena
 1. Take the lock, recover, and commit a dirty tree as a snapshot.
 2. Find the change's commit by its trailer.
 3. Refuse when any path the change wrote differs from what the commit wrote (`git diff <commit> -- <paths>` is not empty). The change document itself is left out of this check. The refusal names the paths.
-4. Restore each path from the commit's parent, or remove it when the change created it.
+4. Restore each path from the commit's parent, or remove it when the change created it. A moved file is two paths, so undo puts it back. Remove the folders this leaves empty.
 5. Set `status: undone` and the lead callout, and commit as `undo: <title>`.
 6. Run `vault sync`, so the harness settings follow a restored or removed repository page.
 

@@ -42,8 +42,10 @@ func TestNewVaultLintsClean(t *testing.T) {
 func TestChecks(t *testing.T) {
 	tv := testvault.New(t)
 	repo := tv.Repo("p3-edge", nil)
-	tv.Page("area", "p3", map[string]any{"parent": "[[p3 loop]]"}, "")
-	tv.Page("area", "p3 loop", map[string]any{"parent": "[[p3]]"}, "")
+	tv.Page("area", "p3", nil, "")
+	tv.Write("wiki/concepts/Stray.md", "---\nid: are-stray1\ntype: area\ncreated: 2026-09-27\nupdated: 2026-09-27\ndescription: x\n---\n")
+	tv.Write("wiki/p3/Loose.md", "---\nid: con-loose1\ntype: concept\ncreated: 2026-09-27\nupdated: 2026-09-27\ndescription: x\n---\n")
+	tv.Write("wiki/concepts/Sources/Sources.md", "---\nid: are-rsrvd1\ntype: area\ncreated: 2026-09-27\nupdated: 2026-09-27\ndescription: x\n---\n")
 	tv.Page("repository", "p3-edge", map[string]any{"path": repo, "parent": "[[p3]]"}, "")
 	tv.Page("repository", "gone", map[string]any{"path": tv.Dir + "/nowhere"}, "")
 	tv.Page("concept", "Motion scoring", map[string]any{"scope": "[[Nowhere]]", "status": "shaky"}, "Links [[Missing page]] and `[[not a link]]`.\n")
@@ -53,7 +55,9 @@ func TestChecks(t *testing.T) {
 	tv.Write("threads/X/X — Spec.md", "---\nid: spc-aaaaaa\ntype: spec\nthread: \"[[X]]\"\nthread_id: thr-zzzzzz\ncreated: 2026-09-27\nupdated: 2026-09-27\n---\n")
 	f := run(t, tv, lint.Options{})
 	for _, want := range []struct{ check, title, text string }{
-		{"scope", "p3", "loops"},
+		{"layout", "Stray", "outside a folder of its own"},
+		{"layout", "Loose", "outside the concepts folder"},
+		{"layout", "Sources", "name of a type folder"},
 		{"repository-path", "gone", "is gone"},
 		{"scope", "Motion scoring", "[[Nowhere]] names no document"},
 		{"schema", "Motion scoring", `status: is "shaky"`},

@@ -8,7 +8,6 @@ import (
 	"errors"
 	"fmt"
 	"math"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -73,7 +72,10 @@ type planned struct {
 	Supersedes *doc.Doc
 	Ops        []*op
 	// Outside are the documents outside the wiki whose links the change rewrites.
-	Outside  []Rewrite
+	Outside []Rewrite
+	// Moves are the files that move with the folder of a scope; Folders sums them up.
+	Moves    []Move
+	Folders  []Move
 	Warnings []string
 }
 
@@ -207,11 +209,6 @@ func (o *op) label() string {
 	return fmt.Sprintf("%s %q (%s)", o.Kind, o.Title, o.ID)
 }
 
-// Route is where a new page of a type with a title lives.
-func Route(typ, title string) string {
-	return schema.Get(typ).Folder + "/" + title + ".md"
-}
-
 // modelTypes are the types a change may create.
 var modelTypes = []string{"area", "repository", "concept", "entity", "policy"}
 
@@ -306,6 +303,10 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 	if len(c.problems) > 0 {
 		return nil, &Refusal{Problems: c.problems}
 	}
+	out.Moves, out.Folders = c.place(out.Ops)
+	if len(c.problems) > 0 {
+		return nil, &Refusal{Problems: c.problems}
+	}
 	c.rewrites(out)
 	c.deadLinks(out)
 	out.Warnings = c.warnings
@@ -355,7 +356,6 @@ func (c *check) existing(w Write) *op {
 			return nil
 		}
 		o.NewTitle = title
-		o.NewPath = path.Dir(d.Path) + "/" + title + ".md"
 		c.gone[links.Key(o.Title)] = true
 		if links.Key(title) != links.Key(o.Title) {
 			c.takeTitle(o, title, d.Path)
@@ -388,7 +388,7 @@ func (c *check) create(w Write) *op {
 		c.refuse("%s: a create needs a title", o.label())
 		return nil
 	}
-	o.Path = Route(typ, title)
+	o.Path = vault.Route(vault.Wiki, typ, title)
 	o.ID = doc.NewID(schema.Get(typ).Prefix, func(id string) bool { return c.idx.ByID(id) != nil })
 	c.takeTitle(o, title, "")
 	return o
@@ -430,6 +430,11 @@ func (c *check) content(o *op, w Write, current *doc.Doc) {
 		content = doc.Render(list, normalizeBody(body))
 	} else {
 		content = current.Content
+		if f := placedField(o.Type); f != "" && strings.HasPrefix(current.Path, vault.Wiki+"/") && !c.idx.Legacy() {
+			if link := c.idx.ScopeLink(current); link != "" || current.Front.Has(f) {
+				content = doc.SetField(content, f, link)
+			}
+		}
 		keys := make([]string, 0, len(fields))
 		for k := range fields {
 			keys = append(keys, k)
@@ -665,6 +670,19 @@ func fieldOrder(t *schema.Type, k string) int {
 		}
 	}
 	return len(t.Fields)
+}
+
+// placedField is the field that says where a page of the wiki lives: a scope page's
+// parent, a knowledge page's scope. Its folder decides it; a change that sets it moves the
+// page.
+func placedField(typ string) string {
+	switch typ {
+	case "area", "repository":
+		return "parent"
+	case "concept", "entity", "policy", "source":
+		return "scope"
+	}
+	return ""
 }
 
 // skeleton is a new page's body when the plan gives none: the type's sections.

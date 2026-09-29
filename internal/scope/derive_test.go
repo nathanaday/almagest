@@ -27,13 +27,13 @@ func TestChainsCalloutsAndTheMap(t *testing.T) {
 	if len(synced.Scopes) != 6 {
 		t.Fatalf("sync reports the pages it wrote: %v", synced.Scopes)
 	}
-	if got := tv.Read("wiki/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3]]", "[[p3-edge]]"]`) {
+	if got := tv.Read("wiki/work/p3/p3-edge/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3]]", "[[p3-edge]]"]`) {
 		t.Fatalf("chain:\n%s", got)
 	}
 	if got := tv.Read("wiki/concepts/Vault wide.md"); !strings.Contains(got, "chain: []") {
 		t.Fatalf("a vault page has an empty chain:\n%s", got)
 	}
-	area := tv.Read("wiki/areas/p3.md")
+	area := tv.Read("wiki/work/p3/p3.md")
 	for _, want := range []string{`chain: ["[[work]]"]`, "> [!area] p3\n> [[Atlas|Work]] → [[work]] → **p3**", "> ```base\n> filters:", ">     - 'chain.contains(this.file.asLink())'", "The p3 product."} {
 		if !strings.Contains(area, want) {
 			t.Errorf("area lacks %q:\n%s", want, area)
@@ -67,15 +67,21 @@ func TestANewParentMovesThePagesBelowInOneCommit(t *testing.T) {
 	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := tv.Read("wiki/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3]]"]`) {
+	if tv.V.Exists("wiki/p3") {
+		t.Fatal("the old folder goes")
+	}
+	if got := tv.Read("wiki/work/p3/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3]]"]`) || !strings.Contains(got, `scope: "[[p3]]"`) {
 		t.Fatalf("the page below moves with its area:\n%s", got)
+	}
+	if got := tv.Read("wiki/work/p3/p3.md"); !strings.Contains(got, `parent: "[[work]]"`) {
+		t.Fatalf("the area moves into its parent's folder:\n%s", got)
 	}
 	tv.Clean()
 	pv, _ = change.Propose(tv.V, change.Plan{Title: "Rename p3", Writes: []change.Write{{Op: "rename", ID: tv.ID("p3"), Title: "p3 product"}}}, tv.Tick(time.Minute))
 	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err != nil {
 		t.Fatal(err)
 	}
-	if got := tv.Read("wiki/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3 product]]"]`) {
+	if got := tv.Read("wiki/work/p3 product/concepts/Motion scoring.md"); !strings.Contains(got, `chain: ["[[work]]", "[[p3 product]]"]`) {
 		t.Fatalf("a rename rewrites the chain:\n%s", got)
 	}
 	if !strings.Contains(tv.Read("Atlas.md"), ">     - [[p3 product]]") {
@@ -137,7 +143,7 @@ func TestAScopePageListsItsOpenThreads(t *testing.T) {
 	if _, err := core.Sync(tv.V, testvault.Now); err != nil {
 		t.Fatal(err)
 	}
-	area := tv.Read("wiki/areas/p3.md")
+	area := tv.Read("wiki/p3/p3.md")
 	for _, want := range []string{">     name: Threads", `>         - 'type == "stub"'`, ">         - file.inFolder(\"wiki\")"} {
 		if !strings.Contains(area, want) {
 			t.Errorf("area lacks %q:\n%s", want, area)

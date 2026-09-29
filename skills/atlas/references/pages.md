@@ -1,9 +1,11 @@
 # Wiki pages
 
 The wiki has two families of pages. Scope pages (area, repository) form the context
-graph. Knowledge pages (concept, entity, policy, source) hold what the vault knows. The
-folder follows the type; code routes a new page, so give a type and a title, never a
-path.
+graph. Knowledge pages (concept, entity, policy, source) hold what the vault knows. Each
+scope is a folder under `wiki/` that holds its page and its own `concepts/`, `entities/`,
+`policies/`, and `sources/`. Code routes a new page by its type and its scope, so give a
+type, a title, and a scope, never a path. Setting `scope` on a page, or `parent` on an
+area or repository, moves it and everything in its folder; the preview lists each move.
 
 ## Fields every knowledge page has
 

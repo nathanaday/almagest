@@ -22,9 +22,9 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 │   └── 2026-09/              one document per change, by month
 ├── wiki/
 │   ├── Wiki.base             every page by type and scope
-│   ├── areas/  repositories/                 scope pages
-│   ├── concepts/  entities/  policies/       knowledge pages
-│   └── sources/  sources/files/              source pages, and the captured originals
+│   ├── concepts/  entities/  policies/  sources/   knowledge pages scoped to the vault
+│   ├── sources/files/        the captured originals of every scope
+│   └── <Area>/<Area>.md      a scope: a folder with its page, laid out like wiki/ (see [[Wiki#Layout]])
 ├── .claude/settings.local.json   untracked; code lists the linked repositories here
 ├── .obsidian/                app settings and the Atlas plugin
 └── .git/                     the vault's history; apply's lock is .git/atlas.lock

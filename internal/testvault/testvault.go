@@ -4,6 +4,7 @@ package testvault
 
 import (
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -25,6 +26,7 @@ type T struct {
 	V     *vault.Vault
 	Code  string
 	ids   map[string]string
+	dirs  map[string]string // scope title → its folder
 	Clock time.Time
 }
 
@@ -53,7 +55,7 @@ func New(t *testing.T) *T {
 	if err := os.MkdirAll(code, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &T{t: t, Dir: dir, Home: h, V: v, Code: code, ids: map[string]string{}, Clock: Now}
+	return &T{t: t, Dir: dir, Home: h, V: v, Code: code, ids: map[string]string{}, dirs: map[string]string{}, Clock: Now}
 }
 
 // Tick moves the clock on and returns the new time.
@@ -117,10 +119,25 @@ func (tv *T) Read(rel string) string {
 }
 
 // Page writes a typed page straight to disk, the way a hand edit or an earlier change
-// would leave it, and returns its id. fields may name links by title.
+// would leave it, and returns its id. fields may name links by title. The page goes in
+// the folder of the scope or parent it names when Page wrote that page before, else at
+// the top of the wiki.
 func (tv *T) Page(typ, title string, fields map[string]any, body string) string {
 	tv.t.Helper()
-	folders := map[string]string{"area": "wiki/areas", "repository": "wiki/repositories", "concept": "wiki/concepts", "entity": "wiki/entities", "policy": "wiki/policies", "source": "wiki/sources"}
+	field := "scope"
+	if typ == "area" || typ == "repository" {
+		field = "parent"
+	}
+	dir := vault.Wiki
+	if s, ok := fields[field].(string); ok {
+		if d, ok := tv.dirs[doc.LinkTarget(s)]; ok {
+			dir = d
+		}
+	}
+	rel := vault.Route(dir, typ, title)
+	if typ == "area" || typ == "repository" {
+		tv.dirs[title] = path.Dir(rel)
+	}
 	prefix := map[string]string{"area": "are", "repository": "rep", "concept": "con", "entity": "ent", "policy": "pol", "source": "src"}
 	id := doc.NewID(prefix[typ], nil)
 	list := []doc.Field{{Key: "id", Value: id}, {Key: "type", Value: typ}, {Key: "created", Value: "2026-09-27"}, {Key: "updated", Value: "2026-09-27"}}
@@ -135,9 +152,19 @@ func (tv *T) Page(typ, title string, fields map[string]any, body string) string 
 	if _, ok := fields["description"]; !ok {
 		list = append(list, doc.Field{Key: "description", Value: "The " + title + " page."})
 	}
-	tv.Write(folders[typ]+"/"+title+".md", doc.Render(list, body))
+	tv.Write(rel, doc.Render(list, body))
 	tv.ids[title] = id
 	return id
+}
+
+// PathOf is the path Page gave a title, found on disk.
+func (tv *T) PathOf(title string) string {
+	tv.t.Helper()
+	d, err := tv.Index().Resolve(title)
+	if err != nil {
+		tv.t.Fatal(err)
+	}
+	return d.Path
 }
 
 // ID is the id Page gave a title.

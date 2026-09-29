@@ -116,7 +116,7 @@ func TestIndexResolvesIdsTitlesAndAliases(t *testing.T) {
 	if !idx.InScope(d, area) || idx.InScope(d, "are-zzzzzz") {
 		t.Fatal("in scope")
 	}
-	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "wiki/concepts/Self-supervised learning.md" {
+	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "wiki/p3/concepts/Self-supervised learning.md" {
 		t.Fatalf("ref %+v", ref)
 	}
 }

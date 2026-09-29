@@ -6,6 +6,7 @@ package vault
 import (
 	"errors"
 	"fmt"
+	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -37,11 +38,10 @@ const (
 const ThreadsCanvas = "threads/Threads.canvas"
 
 // Folders are every folder of the layout. EnsureFolders makes the ones a clone left out,
-// because git keeps no empty folder.
+// because git keeps no empty folder. A type folder of the wiki comes with its first page,
+// and goes with its last.
 var Folders = []string{
-	Inbox, Scratchpad, Sessions, Threads, Changes, Wiki,
-	"wiki/areas", "wiki/repositories", "wiki/concepts", "wiki/entities", "wiki/policies",
-	"wiki/sources", SourceFiles,
+	Inbox, Scratchpad, Sessions, Threads, Changes, Wiki, SourceFiles,
 }
 
 // Excluded are the patterns kept out of the vault's history on each machine: the
@@ -212,6 +212,16 @@ func (v *Vault) Remove(rel string) error {
 	return nil
 }
 
+// Prune removes the folders that paths gone from disk leave empty, up to the layout's
+// own folders.
+func (v *Vault) Prune(paths ...string) {
+	for _, p := range paths {
+		if !v.Exists(p) {
+			v.Remove(p)
+		}
+	}
+}
+
 // EnsureFolders makes every folder of the layout that is missing.
 func (v *Vault) EnsureFolders() error {
 	for _, f := range Folders {
@@ -228,6 +238,13 @@ func (v *Vault) EnsureFolders() error {
 	}
 	if err := upgradeBases(v); err != nil {
 		return err
+	}
+	if _, err := MigrateLayout(v); err != nil {
+		return fmt.Errorf("move the wiki into scope folders: %w", err)
+	}
+	// The layout once kept every type folder at the top of the wiki; an empty one goes.
+	for _, f := range []string{"wiki/concepts", "wiki/entities", "wiki/policies"} {
+		os.Remove(v.Abs(f))
 	}
 	g := v.Git()
 	if err := g.Exclude(Excluded...); err != nil {
@@ -348,18 +365,18 @@ type Repo struct {
 // Repositories reads the repository pages' frontmatter only, fast enough for a hook.
 func (v *Vault) Repositories() []Repo {
 	var out []Repo
-	for _, d := range v.readFolder("wiki/repositories") {
-		if d.Type() != "repository" {
+	for _, s := range v.scopePages() {
+		if s.d.Type() != "repository" {
 			continue
 		}
-		p := d.Str("path")
+		p := s.d.Str("path")
 		if p != "" {
 			p = Expand(p)
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(v.Root, p)
 			}
 		}
-		out = append(out, Repo{ID: d.ID(), Title: d.Title(), Path: p, Parent: doc.LinkTarget(d.Str("parent"))})
+		out = append(out, Repo{ID: s.d.ID(), Title: s.d.Title(), Path: p, Parent: s.parent})
 	}
 	return out
 }
@@ -368,10 +385,67 @@ func (v *Vault) Repositories() []Repo {
 // area pages' frontmatter only.
 func (v *Vault) AreaParents() map[string]string {
 	out := map[string]string{}
-	for _, d := range v.readFolder("wiki/areas") {
-		if d.Type() == "area" {
-			out[strings.ToLower(d.Title())] = doc.LinkTarget(d.Str("parent"))
+	for _, s := range v.scopePages() {
+		if s.d.Type() == "area" {
+			out[strings.ToLower(s.d.Title())] = s.parent
 		}
+	}
+	return out
+}
+
+type scopePage struct {
+	d      *doc.Doc
+	parent string // the parent's title, or ""
+}
+
+// scopePages reads the scope pages without the index: the page of each folder under the
+// wiki, whose parent is the nearest such folder above it, and a scope page that still
+// lies in a legacy folder, whose parent is its field.
+func (v *Vault) scopePages() []scopePage {
+	byDir := map[string]*doc.Doc{}
+	var legacy []*doc.Doc
+	filepath.WalkDir(v.Abs(Wiki), func(abs string, e fs.DirEntry, err error) error {
+		if err != nil || !e.IsDir() {
+			return nil
+		}
+		if strings.HasPrefix(e.Name(), ".") || abs == v.Abs(SourceFiles) {
+			return filepath.SkipDir
+		}
+		rel := v.Rel(abs)
+		if slices.Contains(legacyFolders, rel) {
+			for _, d := range v.readFolder(rel) {
+				if d.Type() == "area" || d.Type() == "repository" {
+					legacy = append(legacy, d)
+				}
+			}
+		}
+		if rel == Wiki {
+			return nil
+		}
+		page := rel + "/" + path.Base(rel) + ".md"
+		if d, err := cachedDoc(v, page); err == nil && (d.Type() == "area" || d.Type() == "repository") {
+			byDir[rel] = d
+		}
+		return nil
+	})
+	var out []scopePage
+	dirs := make([]string, 0, len(byDir))
+	for dir := range byDir {
+		dirs = append(dirs, dir)
+	}
+	slices.Sort(dirs)
+	for _, dir := range dirs {
+		s := scopePage{d: byDir[dir]}
+		for up := path.Dir(dir); up != Wiki && up != "."; up = path.Dir(up) {
+			if p := byDir[up]; p != nil {
+				s.parent = p.Title()
+				break
+			}
+		}
+		out = append(out, s)
+	}
+	for _, d := range legacy {
+		out = append(out, scopePage{d: d, parent: doc.LinkTarget(d.Str("parent"))})
 	}
 	return out
 }

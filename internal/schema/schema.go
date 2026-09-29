@@ -61,8 +61,9 @@ const (
 type Type struct {
 	Name   string
 	Prefix string
-	// Folder is where the type's documents live, relative to the vault. A thread document
-	// lives in its thread's folder under it; a session or change in a month folder.
+	// Folder is where the type's documents live, relative to the vault. A page of the wiki
+	// lives in the folder of its scope under it (vault.Route); a thread document in its
+	// thread's folder; a session or change in a month folder.
 	Folder   string
 	Family   Family
 	Fields   []Field
@@ -136,13 +137,13 @@ var Types = []*Type{
 		Field{Name: "wikify", Kind: List},
 		Field{Name: "stale_hours", Kind: Int},
 	)},
-	{Name: "area", Prefix: "are", Folder: "wiki/areas", Family: Scope, Fields: common(
+	{Name: "area", Prefix: "are", Folder: "wiki", Family: Scope, Fields: common(
 		Field{Name: "parent", Kind: Link, Targets: []string{"area"}},
 		Field{Name: "description", Kind: Text, Required: true},
 		Field{Name: "aliases", Kind: List},
 		Field{Name: "chain", Kind: Links, Owner: Code, Targets: []string{"area"}},
 	)},
-	{Name: "repository", Prefix: "rep", Folder: "wiki/repositories", Family: Scope, Fields: common(
+	{Name: "repository", Prefix: "rep", Folder: "wiki", Family: Scope, Fields: common(
 		Field{Name: "parent", Kind: Link, Targets: []string{"area"}},
 		Field{Name: "description", Kind: Text, Required: true},
 		Field{Name: "aliases", Kind: List},
@@ -152,15 +153,15 @@ var Types = []*Type{
 		Field{Name: "described", Kind: Text, Owner: Code},
 		Field{Name: "chain", Kind: Links, Owner: Code, Targets: []string{"area"}},
 	), Sections: []string{"What it is", "How it is built", "Layout", "Components", "Instructions"}},
-	{Name: "concept", Prefix: "con", Folder: "wiki/concepts", Family: Knowledge, Fields: knowledge(),
+	{Name: "concept", Prefix: "con", Folder: "wiki", Family: Knowledge, Fields: knowledge(),
 		Sections: []string{"Definition", "Explanation", "Related", "Sources"}},
-	{Name: "entity", Prefix: "ent", Folder: "wiki/entities", Family: Knowledge, Fields: knowledge(
+	{Name: "entity", Prefix: "ent", Folder: "wiki", Family: Knowledge, Fields: knowledge(
 		Field{Name: "kind", Kind: Enum, Values: []string{"person", "organization", "tool", "component", "service", "dataset", "document", "other"}},
 	), Sections: []string{"What it is", "Facts", "Related", "Sources"}},
-	{Name: "policy", Prefix: "pol", Folder: "wiki/policies", Family: Knowledge, Fields: knowledge(
+	{Name: "policy", Prefix: "pol", Folder: "wiki", Family: Knowledge, Fields: knowledge(
 		Field{Name: "strength", Kind: Enum, Values: []string{"must", "should", "may"}},
 	), Sections: []string{"Rule", "Why", "Applies when", "Exceptions", "Sources"}},
-	{Name: "source", Prefix: "src", Folder: "wiki/sources", Family: Knowledge, Fields: knowledge(
+	{Name: "source", Prefix: "src", Folder: "wiki", Family: Knowledge, Fields: knowledge(
 		Field{Name: "file", Kind: Text, Owner: Code, Required: true},
 		Field{Name: "sha256", Kind: Text, Owner: Code, Required: true},
 		Field{Name: "origin", Kind: Enum, Owner: Code, Values: []string{"inbox", "pasted", "url", "repository"}},

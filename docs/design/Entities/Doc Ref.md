@@ -7,7 +7,7 @@
 id: con-k3m9qa
 type: concept
 title: Self-supervised learning
-path: wiki/concepts/Self-supervised learning.md    # relative to the vault
+path: wiki/work/p3/concepts/Self-supervised learning.md    # relative to the vault
 scope: [are-w4q8ze]                                # the scope ids: one for a page, any number for a stub; [] for the vault
 description: "Training a model on data with no labels, from a signal in the data itself."
 state: {}                                          # the type's derived state, below

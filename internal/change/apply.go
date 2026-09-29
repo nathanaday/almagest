@@ -4,7 +4,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path"
 	"path/filepath"
 	"sort"
 	"strings"
@@ -28,10 +27,12 @@ type Preview struct {
 	Counts       Counts      `json:"counts"`
 	Writes       []WriteLine `json:"writes"`
 	LinkRewrites []vault.Ref `json:"link_rewrites"`
-	Absorbs      []vault.Ref `json:"absorbs"`
-	Warnings     []string    `json:"warnings"`
-	Commit       string      `json:"commit,omitempty"`
-	Reason       string      `json:"reason,omitempty"`
+	// Folders are the scope folders that move, each with the files it carries.
+	Folders  []Move      `json:"folders"`
+	Absorbs  []vault.Ref `json:"absorbs"`
+	Warnings []string    `json:"warnings"`
+	Commit   string      `json:"commit,omitempty"`
+	Reason   string      `json:"reason,omitempty"`
 }
 
 // WriteLine is one write of a preview.
@@ -71,6 +72,7 @@ func Recover(v *vault.Vault) error {
 			if err := g.RestoreFrom("HEAD", p); err != nil {
 				return fmt.Errorf("recover %s: %w", vault.Title(d), err)
 			}
+			v.Prune(p)
 		}
 		content := doc.RemoveField(setStatus(d.Content, Proposed), "paths")
 		if err := v.Write(d.Path, []byte(content)); err != nil {
@@ -116,7 +118,9 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	d := idx.ByPath(rel)
-	return preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx)), nil
+	pv := preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx))
+	pv.Folders = orEmpty(p.Folders)
+	return pv, nil
 }
 
 // freePath is the path of a new change document: the date and the title, with (2) and
@@ -173,7 +177,7 @@ func atParent(idx *vault.Index, sha string) before {
 
 // preview describes a change document and its ops.
 func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warnings []string, prior before) *Preview {
-	pv := &Preview{Ref: idx.Ref(d), Status: d.Str("status"), Counts: ParseCounts(d.Str("counts")), Writes: []WriteLine{}, LinkRewrites: outside, Absorbs: []vault.Ref{}, Warnings: warnings, Reason: d.Str("reason")}
+	pv := &Preview{Ref: idx.Ref(d), Status: d.Str("status"), Counts: ParseCounts(d.Str("counts")), Writes: []WriteLine{}, LinkRewrites: outside, Folders: []Move{}, Absorbs: []vault.Ref{}, Warnings: warnings, Reason: d.Str("reason")}
 	if pv.Warnings == nil {
 		pv.Warnings = []string{}
 	}
@@ -204,6 +208,11 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 			if r := idx.ByID(o.Redirect); r != nil {
 				w.Note = "links go to " + vault.Title(r)
 			}
+		}
+		if o.NewPath != "" && o.Kind != "remove" {
+			w.Note = strings.TrimSpace(w.Note + " · moves from " + w.Path)
+			w.Note = strings.TrimPrefix(w.Note, "· ")
+			w.Path = o.NewPath
 		}
 		pv.Writes = append(pv.Writes, w)
 	}
@@ -262,11 +271,16 @@ func Show(idx *vault.Index, key string) (*Preview, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", d.Path, err)
 	}
-	for _, o := range ops {
-		if cur := idx.ByID(o.ID); cur != nil && o.Kind != "create" {
-			o.Path = cur.Path
-		} else if o.Kind == "create" {
-			o.Path = Route(o.Type, o.Title)
+	var folders []Move
+	if d.Str("status") == Proposed {
+		folders = placeProposed(idx, ops)
+	} else {
+		for _, o := range ops {
+			if cur := idx.ByID(o.ID); cur != nil && o.Kind != "create" {
+				o.Path = cur.Path
+			} else if o.Kind == "create" {
+				o.Path = vault.Route(vault.Wiki, o.Type, o.Title)
+			}
 		}
 	}
 	var outside []vault.Ref
@@ -284,6 +298,9 @@ func Show(idx *vault.Index, key string) (*Preview, error) {
 		}
 	}
 	pv := preview(idx, d, ops, outside, nil, prior)
+	if folders != nil {
+		pv.Folders = folders
+	}
 	if d.Str("status") == Applied {
 		pv.Commit = sha
 	}
@@ -359,6 +376,10 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 			p.Absorbs = append(p.Absorbs, ad)
 		}
 	}
+	p.Moves, p.Folders = c.place(ops)
+	if len(c.problems) > 0 {
+		return nil, &Refusal{Problems: c.problems}
+	}
 	c.rewrites(p)
 	if len(c.problems) > 0 {
 		return nil, &Refusal{Problems: c.problems}
@@ -389,6 +410,9 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	for _, rw := range p.Outside {
 		paths = append(paths, rw.Path)
 	}
+	for _, m := range p.Moves {
+		paths = append(paths, m.From, m.To)
+	}
 	for rel := range derived {
 		paths = append(paths, rel)
 	}
@@ -404,7 +428,7 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	if err := healScopes(v, tx); err != nil {
 		return nil, err
 	}
-	final := replaceWrites(record, renderWrites(p.Ops, p.Outside))
+	final := replaceWrites(record, renderWrites(p.Ops, p.Outside, p.Folders))
 	final = doc.SetFields(final, []doc.Field{{Key: "counts", Value: counts.String()}, {Key: "applied", Value: vault.Stamp(now)}, {Key: "updated", Value: vault.Date(now)}})
 	final = doc.RemoveField(setStatus(final, Applied), "paths")
 	if err := tx.Write(d.Path, []byte(final)); err != nil {
@@ -421,6 +445,7 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	}
 	pv := preview(idx, idx.ByPath(d.Path), p.Ops, outsideRefs(idx, p.Outside), c.warnings, current(idx))
 	pv.Writes = lines
+	pv.Folders = orEmpty(p.Folders)
 	pv.Commit = sha
 	return pv, nil
 }
@@ -446,7 +471,6 @@ func (c *check) revalidate(ops []*op) error {
 		}
 		switch o.Kind {
 		case "rename":
-			o.NewPath = path.Dir(d.Path) + "/" + o.NewTitle + ".md"
 			c.gone[links.Key(vault.Title(d))] = true
 			if links.Key(o.NewTitle) != links.Key(vault.Title(d)) {
 				c.takeTitle(o, o.NewTitle, d.Path)
@@ -469,7 +493,7 @@ func (c *check) revalidate(ops []*op) error {
 				c.refuse("%s: a change creates an %s", o.label(), strings.Join(modelTypes, ", "))
 				continue
 			}
-			o.Path = Route(o.Type, o.Title)
+			o.Path = vault.Route(vault.Wiki, o.Type, o.Title)
 			c.takeTitle(o, o.Title, "")
 		}
 	}
@@ -539,8 +563,15 @@ func describedWrites(idx *vault.Index, p *planned, now time.Time) map[string]str
 	return out
 }
 
-// writeOps writes the pages of a change, its link rewrites, and the derived fields.
+// writeOps writes the pages of a change where the change puts them, moves the files that
+// go with a scope's folder, and writes the link rewrites and the derived fields.
 func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
+	written := map[string]bool{}
+	for _, o := range p.Ops {
+		if o.Kind == "create" || o.Kind == "modify" {
+			written[o.ID] = true
+		}
+	}
 	for _, o := range p.Ops {
 		switch o.Kind {
 		case "create":
@@ -549,12 +580,8 @@ func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
 			}
 		case "modify":
 			target := o.Path
-			for _, r := range p.Ops {
-				if r.ID == o.ID && r.Kind == "rename" {
-					target = r.NewPath
-				}
-			}
-			if target != o.Path {
+			if o.NewPath != "" {
+				target = o.NewPath
 				if err := tx.Remove(o.Path); err != nil {
 					return err
 				}
@@ -562,18 +589,8 @@ func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
 			if err := tx.Write(target, []byte(o.Content)); err != nil {
 				return err
 			}
-		}
-	}
-	for _, o := range p.Ops {
-		switch o.Kind {
 		case "rename":
-			modified := false
-			for _, m := range p.Ops {
-				if m.ID == o.ID && m.Kind == "modify" {
-					modified = true
-				}
-			}
-			if !modified {
+			if !written[o.ID] && o.NewPath != "" {
 				if err := tx.Move(o.Path, o.NewPath); err != nil {
 					return err
 				}
@@ -584,8 +601,19 @@ func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
 			}
 		}
 	}
+	for _, m := range p.Moves {
+		if err := tx.Move(m.From, m.To); err != nil {
+			return err
+		}
+	}
 	for _, rw := range p.Outside {
-		if err := tx.Write(rw.Path, []byte(rw.Content)); err != nil {
+		target := rw.Path
+		for _, m := range p.Moves {
+			if m.From == rw.Path {
+				target = m.To
+			}
+		}
+		if err := tx.Write(target, []byte(rw.Content)); err != nil {
 			return err
 		}
 	}
@@ -595,6 +623,39 @@ func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
 		}
 	}
 	return nil
+}
+
+func orEmpty(m []Move) []Move {
+	if m == nil {
+		return []Move{}
+	}
+	return m
+}
+
+// placeProposed sets where each write of a proposed change would land, for a preview. It
+// reports no problem; apply checks again.
+func placeProposed(idx *vault.Index, ops []*op) []Move {
+	c := &check{idx: idx, claimed: map[string]*op{}, gone: map[string]bool{}, byID: map[string][]*op{}}
+	for _, o := range ops {
+		if d := idx.ByID(o.ID); d != nil && o.Kind != "create" {
+			o.Path, o.Type = d.Path, d.Type()
+			if o.Kind == "rename" {
+				c.claimed[links.Key(o.NewTitle)] = o
+			}
+			c.byID[o.ID] = append(c.byID[o.ID], o)
+		} else if o.Kind == "create" {
+			o.Path = vault.Route(vault.Wiki, o.Type, o.Title)
+			c.claimed[links.Key(o.Title)] = o
+		}
+	}
+	var live []*op
+	for _, o := range ops {
+		if o.Kind == "create" || idx.ByID(o.ID) != nil {
+			live = append(live, o)
+		}
+	}
+	_, folders := c.place(live)
+	return orEmpty(folders)
 }
 
 // replaceWrites puts a new Writes section in a change document.
@@ -724,6 +785,7 @@ func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 	if err := g.RestoreFrom(g.Parent(sha), paths...); err != nil {
 		return nil, err
 	}
+	v.Prune(paths...)
 	tx.Mark(paths...)
 	// Apply rewrote the record's links to the titles the change gave; undo takes them back.
 	record := d.Content

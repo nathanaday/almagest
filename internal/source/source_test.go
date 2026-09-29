@@ -25,6 +25,9 @@ func TestCaptureFromTheInbox(t *testing.T) {
 	if pdf.Measure != "31 pages" || len(pdf.Chunks) != 2 || pdf.Chunks[1].Locator != "pages 21-31" {
 		t.Fatalf("pdf %+v", pdf)
 	}
+	if pdf.Ref.Path != "wiki/p3/sources/DINOv2.md" {
+		t.Fatalf("the page goes in its scope's folder: %s", pdf.Ref.Path)
+	}
 	page := tv.Read(pdf.Ref.Path)
 	for _, want := range []string{"origin: inbox", "authority: unknown", `scope: "[[p3]]"`, "locator: DINOv2.pdf", "![[" + pdf.Ref.ID + ".pdf]]"} {
 		if !strings.Contains(page, want) {
