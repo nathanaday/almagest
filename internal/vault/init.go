@@ -27,6 +27,9 @@ var Bases = map[string]string{
 	"Wiki.base":     "wiki/Wiki.base",
 }
 
+// EmptyCanvas is the threads canvas of a vault with no open thread, as sync writes it.
+const EmptyCanvas = "{\n\t\"nodes\": [],\n\t\"edges\": []\n}\n"
+
 // PluginFiles are the Obsidian plugin's files, as init installs them.
 var PluginFiles = []string{"manifest.json", "main.js", "styles.css"}
 
@@ -159,6 +162,12 @@ func writeLayout(v *Vault, name, description, areas, context string, now time.Ti
 			return nil, err
 		}
 		written = append(written, rel)
+	}
+	if !v.Exists(ThreadsCanvas) {
+		if err := v.Write(ThreadsCanvas, []byte(EmptyCanvas)); err != nil {
+			return nil, err
+		}
+		written = append(written, ThreadsCanvas)
 	}
 	plugin, err := InstallPlugin(v)
 	if err != nil {

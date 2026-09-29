@@ -5,6 +5,7 @@ import (
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -179,12 +180,20 @@ func (b *Board) chain(t *Thread, cur *doc.Doc) string {
 	return strings.Join([]string{stub, spec, tasks, receipt}, " → ")
 }
 
-// SyncVault loads the vault and syncs every thread, writing through the vault. The caller
-// holds the lock.
+// SyncVault loads the vault and syncs every thread, then each thread's chain and the
+// threads canvas, writing through the vault. The caller holds the lock.
 func SyncVault(v *vault.Vault) ([]string, error) {
 	idx, err := vault.Load(v)
 	if err != nil {
 		return nil, err
 	}
-	return Load(idx).Sync(v.WriteIfChanged)
+	wrote, err := Load(idx).Sync(v.WriteIfChanged)
+	if err != nil {
+		return wrote, err
+	}
+	if idx, err = vault.Load(v); err != nil {
+		return wrote, err
+	}
+	healed, err := scope.Heal(idx, v.WriteIfChanged)
+	return append(wrote, healed...), err
 }

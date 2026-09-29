@@ -12,6 +12,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/links"
+	"github.com/nathanaday/atlas-obsidian/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -90,6 +91,12 @@ func (w *write) finish(subject, threadID string) (*Result, error) {
 	}
 	b := Load(idx)
 	if _, err := b.Sync(w.tx.WriteIfChanged); err != nil {
+		return nil, err
+	}
+	if idx, err = vault.Load(w.v); err != nil {
+		return nil, err
+	}
+	if _, err := scope.Heal(idx, w.tx.WriteIfChanged); err != nil {
 		return nil, err
 	}
 	sha, err := w.tx.Commit("thread: "+subject, Trailer+": "+threadID)

@@ -64,6 +64,14 @@ The design pages are the spec. When the code departs from them, the reason is be
   rejected: each is a second record of scope that a rename or a new parent must rewrite.
   The view is inline, not a Base file, because a Base opened alone has no `this` and
   shows nothing; 0.1.0's `wiki/Scope.base` is removed by sync when unedited.
+- **Threads carry a chain, and the board has a canvas.** A stub's `chain` is each of
+  its scopes and the areas above each, so an area page and the By area view find a
+  thread scoped to a repository below the area. `threads/Threads.canvas` is a card per
+  open thread in a group per first scope. `scope.Derive` writes both, so every commit that
+  heals scopes (apply, undo, capture, and each `thread` call) keeps them current. Code
+  owns the cards on the grid; a card off the grid, a group's position, the user's nodes,
+  and edges between live nodes survive a sync. `Threads.base` of 0.1.0 is replaced by
+  sync when unedited (`vault.upgradeBases`).
 - **Titles also drop `[ ] # ^`**, which break a wikilink.
 - **The vault's name is not a link target.** Obsidian resolves `[[work]]` to a file named
   `work`, and the design's own example has an area `work` in a vault `Work`. The vault is

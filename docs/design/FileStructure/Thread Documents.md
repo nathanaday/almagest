@@ -32,6 +32,7 @@ A stage may be skipped. A small fix goes from stub to one task. A killed idea go
 ```text
 threads/
 ├── Threads.base
+├── Threads.canvas
 └── Filter vehicle false alarms/
     ├── Filter vehicle false alarms.md                    stub
     ├── Filter vehicle false alarms — Spec.md
@@ -62,6 +63,7 @@ stage: tasks                        # stub | spec | tasks | closed
 outcome: ""                         # completed | killed, from the receipt
 active: true                        # a running session works on this thread
 tasks: "1/2"                        # done over total, dropped tasks left out
+chain: ["[[work]]", "[[p3]]", "[[p3-edge]]"]   # each scope and the areas above it
 ---
 ```
 
@@ -149,10 +151,27 @@ A task's callout shows its order, status, repository, and dependencies. Sync rep
 
 ## Sync
 
-`threads.Sync` makes every derived part agree with the documents: the stub's `stage`, `outcome`, `active`, and `tasks`; each task's `active`; each lead callout. It writes a file only when its content differs and never changes `updated`. Every `thread` call ends in it, the session-start hook runs it, and the Obsidian plugin runs it when a thread document changes.
+`threads.Sync` makes every derived part agree with the documents: the stub's `stage`, `outcome`, `active`, and `tasks`; each task's `active`; each lead callout. Then `scope.Heal` brings each stub's `chain` and `Threads.canvas` up to date. It writes a file only when its content differs and never changes `updated`. Every `thread` call ends in it, the session-start hook runs it, and the Obsidian plugin runs it when a thread document changes.
 
 `active` comes from the session documents. A task is active while it is `open` and a session with status `running`, `waiting`, or `idle` lists it in `tasks`. A thread is active while such a session lists it in `threads`. So `active` changes when a session starts, ends, or is lost, not at every turn.
 
 ## Threads.base
 
-The board, shipped by `init`. Views: open threads grouped by stage, the most advanced first; active now (with the session); blocked; tasks by status; closed, with the outcome. Obsidian renders it live, so the board needs no generated page.
+The board, shipped by `init`. Views: open threads grouped by stage, the most advanced first; open threads by area (grouped by `chain`); active now (with the session); blocked; tasks by status; closed, with the outcome. Obsidian renders it live, so the board needs no generated page. Sync replaces a `Threads.base` of an earlier release with the current one when nobody edited it.
+
+## Areas
+
+A thread's `scope` names the areas and repositories the work touches. Code derives `chain` from it: each scope and every area above each, the first scope's path first. So a thread scoped to the repository `p3-edge` belongs to the area `p3` and to `work` above it. An area or repository page lists the open threads whose `chain` holds it, below the wiki pages in its lead callout. The first scope is the thread's home: the canvas puts its card there.
+
+## Threads.canvas
+
+The board as a canvas: one card for each open thread, in one group for each home scope, labeled with its path (`work / p3 / p3-edge`). Threads with no scope go in "No area". In a group, cards sit on a grid of two columns: the furthest stage first, then by priority; a new card follows the cards already there. A card's color is its stage.
+
+Code writes the file in the same places as `chain`: every `thread` call, `change` apply and undo, capture, and sync. Code owns which cards and groups exist, the labels, the sizes, and the cards on the grid. The user owns the rest, and sync keeps it:
+
+- where a group sits: drag a group and its cards go with it;
+- a card moved off the grid, or resized;
+- the user's own nodes;
+- every edge whose two ends are still on the canvas. Edges between cards are the way to show the order of work.
+
+A closed thread's card goes, with its edges. The guard refuses an agent's edit of the file.

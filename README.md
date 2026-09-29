@@ -73,8 +73,9 @@ atlas change show chg-r8m3tb     # a proposed change
 atlas lint                       # the health check
 ```
 
-In Obsidian, `threads/Threads.base` is the board, `sessions/Sessions.base` shows what
-runs now, and `changes/Changes.base` lists the changes that wait for you.
+In Obsidian, `threads/Threads.base` is the board, `threads/Threads.canvas` shows each open
+thread as a card grouped by area, `sessions/Sessions.base` shows what runs now, and
+`changes/Changes.base` lists the changes that wait for you.
 
 ## Patterns and conventions
 

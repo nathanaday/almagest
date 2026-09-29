@@ -15,6 +15,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 │   └── 2026-09/              one document per agent session, by month
 ├── threads/
 │   ├── Threads.base          the board
+│   ├── Threads.canvas        the board as a canvas: a card per open thread, grouped by area
 │   └── <Thread title>/       one folder per thread: stub, spec, tasks, receipt
 ├── changes/
 │   ├── Changes.base          proposed and applied changes

@@ -177,6 +177,7 @@ var Types = []*Type{
 		Field{Name: "outcome", Kind: Enum, Owner: Code, Values: []string{"completed", "killed"}},
 		Field{Name: "active", Kind: Bool, Owner: Code},
 		Field{Name: "tasks", Kind: Text, Owner: Code},
+		Field{Name: "chain", Kind: Links, Owner: Code, Targets: scopeTargets},
 	), Sections: []string{"Stub", "Notes"}},
 	{Name: "spec", Prefix: "spc", Folder: "threads", Family: Thread, Fields: threadDoc(),
 		Sections: []string{"Goal", "Done when", "Decisions", "Out of scope", "Conventions", "Open questions"}},

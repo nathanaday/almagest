@@ -46,7 +46,8 @@ thread-work; the guard refuses the edit without a thread anyway.
 These are small, so this skill does them itself.
 
 - **The board**: `thread` list. Show the threads by stage, the active ones first with
-  the session working on each. Link `threads/Threads.base` for the live view.
+  the session working on each. Link `threads/Threads.base` for the live view, and
+  `threads/Threads.canvas` for the cards grouped by area.
 - **One thread**: `thread` show. Say its stage, its tasks and their status, and `next`.
 - **A quick move**: `thread` set (priority, blocked, title, scope) or reopen. Say the
   result in one line.

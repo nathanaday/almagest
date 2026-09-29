@@ -32,6 +32,10 @@ const (
 	PluginDir   = ".obsidian/plugins/atlas"
 )
 
+// ThreadsCanvas is the board as a canvas: a card for each open thread, grouped by its
+// home scope. Sync derives it.
+const ThreadsCanvas = "threads/Threads.canvas"
+
 // Folders are every folder of the layout. EnsureFolders makes the ones a clone left out,
 // because git keeps no empty folder.
 var Folders = []string{
@@ -197,6 +201,9 @@ func (v *Vault) EnsureFolders() error {
 		if err := v.Remove(oldScopeBase); err != nil {
 			return err
 		}
+	}
+	if err := upgradeBases(v); err != nil {
+		return err
 	}
 	g := v.Git()
 	if err := g.Exclude(Excluded...); err != nil {

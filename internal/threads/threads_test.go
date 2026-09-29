@@ -182,8 +182,9 @@ func TestSyncFollowsAHandEdit(t *testing.T) {
 	if err := tv.V.Remove(r.View.Spec.Path); err != nil {
 		t.Fatal(err)
 	}
+	// The stub moves back a stage, and its card on the canvas takes the stub's color.
 	wrote, err := threads.SyncVault(tv.V)
-	if err != nil || len(wrote) != 1 {
+	if err != nil || strings.Join(wrote, " ") != r.View.Stub.Path+" threads/Threads.canvas" {
 		t.Fatalf("sync %v %v", wrote, err)
 	}
 	stub := tv.Read(r.View.Stub.Path)

@@ -92,6 +92,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a relative wiki path", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "wiki/concepts/X.md"}}, true},
 		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
 		{"a Base", edit(root+"/threads/Threads.base", "filters"), true},
+		{"the threads canvas", edit(root+"/threads/Threads.canvas", "nodes"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
 		{"a new thread document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/threads/T/T — Spec.md"}}, true},
 		{"a thread's frontmatter", edit(stub, "priority: normal"), true},

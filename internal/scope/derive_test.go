@@ -107,3 +107,40 @@ func TestSyncRemovesTheOldScopeBase(t *testing.T) {
 		t.Fatal("an edited Scope.base stays")
 	}
 }
+
+func TestSyncUpgradesAnUneditedThreadsBase(t *testing.T) {
+	tv := testvault.New(t)
+	current := tv.Read("threads/Threads.base")
+	if !strings.Contains(current, "name: By area") {
+		t.Fatal("init ships the By area view")
+	}
+	tv.Write("threads/Threads.base", vault.OldThreadsBase())
+	if _, err := core.Sync(tv.V, testvault.Now); err != nil {
+		t.Fatal(err)
+	}
+	if tv.Read("threads/Threads.base") != current {
+		t.Fatal("an untouched old Threads.base becomes the current one")
+	}
+	edited := strings.Replace(vault.OldThreadsBase(), "name: Blocked", "name: Stuck", 1)
+	tv.Write("threads/Threads.base", edited)
+	if _, err := core.Sync(tv.V, testvault.Now); err != nil {
+		t.Fatal(err)
+	}
+	if tv.Read("threads/Threads.base") != edited {
+		t.Fatal("an edited Threads.base stays")
+	}
+}
+
+func TestAScopePageListsItsOpenThreads(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Page("area", "p3", nil, "")
+	if _, err := core.Sync(tv.V, testvault.Now); err != nil {
+		t.Fatal(err)
+	}
+	area := tv.Read("wiki/areas/p3.md")
+	for _, want := range []string{">     name: Threads", `>         - 'type == "stub"'`, ">         - file.inFolder(\"wiki\")"} {
+		if !strings.Contains(area, want) {
+			t.Errorf("area lacks %q:\n%s", want, area)
+		}
+	}
+}

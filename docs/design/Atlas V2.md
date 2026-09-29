@@ -151,7 +151,7 @@ These decisions change or complete the first V2 brainstorm.
 1. **Repository paths across machines.** A vault synced by git to a second machine holds paths of the first. Proposal: `path` may name a path per host (`paths: {host: path}`), and `remote` identifies the repository.
 2. **Codex hooks.** Claude Code gives hooks the session id, and for a subagent its `agent_id` and the parent's id (verified in the docs, 2026-09-27). Codex hooks differ. [[Hooks]] lists what each host must supply.
 3. **Mentions.** `- [ ] @atlas …` task lines as requests to the agent. Designed in [[Obsidian Plugin#Mentions]]; built in phase 2.
-4. **Ordering threads.** Wire stubs together on a canvas to show the order of work. A canvas already works with no code; code reading its edges waits for the idea that replaces phases.
+4. **Ordering threads.** Wire cards together on `threads/Threads.canvas` to show the order of work; sync keeps the edges. Code reading the edges waits for the idea that replaces phases.
 5. **What is pending by default.** Sources, specs, and receipts. Adding `stub` or `task` to `wikify` in `Atlas.md` makes stubs, or done tasks, pending too.
 6. **Search quality.** BM25 over title, aliases, description, and body, computed per call. Measure before adding anything more.
 

@@ -12,40 +12,63 @@ import (
 type Writer func(rel string, content []byte) (bool, error)
 
 // scoped are the types that carry a chain.
-var scoped = []string{"area", "repository", "concept", "entity", "policy", "source"}
+var scoped = []string{"area", "repository", "concept", "entity", "policy", "source", "stub"}
 
 // Chain is the scopes a page belongs to, from the top of the graph down: for a
 // knowledge page its scope and every area above it; for an area or a repository the
-// areas above it. A Base that asks for "chain contains this scope" finds a scope's pages
-// and every page below it.
+// areas above it; for a thread each of its scopes and the areas above each, the first
+// scope's path first. A Base that asks for "chain contains this scope" finds a scope's
+// pages and threads, and every one below it.
 func ChainOf(idx *vault.Index, d *doc.Doc) []string {
-	var start *doc.Doc
-	var out []string
+	var starts []*doc.Doc
 	switch d.Type() {
 	case "area", "repository":
-		start = idx.Parent(d)
+		if p := idx.Parent(d); p != nil {
+			starts = []*doc.Doc{p}
+		}
+	case "stub":
+		for _, id := range idx.ScopeIDs(d) {
+			starts = append(starts, idx.ByID(id))
+		}
 	default:
 		if ids := idx.ScopeIDs(d); len(ids) > 0 {
-			start = idx.ByID(ids[0])
+			starts = []*doc.Doc{idx.ByID(ids[0])}
 		}
 	}
-	if start == nil {
-		return []string{}
-	}
-	list := append([]*doc.Doc{start}, idx.Ancestors(start)...)
-	for i := len(list) - 1; i >= 0; i-- {
-		out = append(out, doc.Link(vault.Title(list[i])))
+	out := []string{}
+	seen := map[string]bool{}
+	for _, start := range starts {
+		for _, s := range Path(idx, start) {
+			if !seen[s.ID()] {
+				seen[s.ID()] = true
+				out = append(out, doc.Link(vault.Title(s)))
+			}
+		}
 	}
 	return out
 }
 
-// Derive is each scoped page's content with its chain current and, for an area or a
-// repository, its lead callout; and Atlas.md's content with the map of the graph. It
-// returns only the contents that differ from the files.
+// Path is a scope page and the areas above it, from the top of the graph down.
+func Path(idx *vault.Index, d *doc.Doc) []*doc.Doc {
+	up := append([]*doc.Doc{d}, idx.Ancestors(d)...)
+	out := make([]*doc.Doc, 0, len(up))
+	for i := len(up) - 1; i >= 0; i-- {
+		out = append(out, up[i])
+	}
+	return out
+}
+
+// Derive is each scoped page's and each thread's content with its chain current and, for
+// an area or a repository, its lead callout; Atlas.md's content with the map of the
+// graph; and the threads canvas. It returns only the contents that differ from the files.
 func Derive(idx *vault.Index) map[string]string {
 	out := map[string]string{}
 	for _, d := range idx.Of(scoped...) {
-		if !strings.HasPrefix(d.Path, vault.Wiki+"/") || d.FrontErr != nil {
+		home := vault.Wiki
+		if d.Type() == "stub" {
+			home = vault.Threads
+		}
+		if !strings.HasPrefix(d.Path, home+"/") || d.FrontErr != nil {
 			continue
 		}
 		content := doc.SetField(d.Content, "chain", ChainOf(idx, d))
@@ -61,6 +84,10 @@ func Derive(idx *vault.Index) map[string]string {
 		if content != atlas.Content {
 			out[atlas.Path] = content
 		}
+	}
+	existing, _ := idx.V.Read(vault.ThreadsCanvas)
+	if content, changed := Canvas(idx, existing); changed {
+		out[vault.ThreadsCanvas] = content
 	}
 	return out
 }
@@ -87,17 +114,22 @@ func Heal(idx *vault.Index, write Writer) ([]string, error) {
 }
 
 // scopeView is the Base a scope page's lead callout holds: every wiki page whose chain
-// holds the page that shows it, grouped by type. Inline, it needs no file of its own.
+// holds the page that shows it, grouped by type, and every open thread whose chain holds
+// it. Inline, it needs no file of its own.
 var scopeView = []string{
 	"```base",
 	"filters:",
 	"  and:",
-	`    - file.inFolder("wiki")`,
 	`    - 'file.ext == "md"'`,
 	"    - 'chain.contains(this.file.asLink())'",
+	"formulas:",
+	`  stage_order: 'if(stage == "tasks", "1 · tasks", if(stage == "spec", "2 · spec", "3 · stub"))'`,
 	"views:",
 	"  - type: table",
 	"    name: In this scope",
+	"    filters:",
+	"      and:",
+	`        - file.inFolder("wiki")`,
 	"    groupBy:",
 	"      property: type",
 	"      direction: ASC",
@@ -109,6 +141,22 @@ var scopeView = []string{
 	"    sort:",
 	"      - property: file.name",
 	"        direction: ASC",
+	"  - type: table",
+	"    name: Threads",
+	"    filters:",
+	"      and:",
+	`        - 'type == "stub"'`,
+	`        - 'stage != "closed"'`,
+	"    groupBy:",
+	"      property: formula.stage_order",
+	"      direction: ASC",
+	"    order:",
+	"      - file.name",
+	"      - priority",
+	"      - tasks",
+	"      - active",
+	"      - scope",
+	"      - updated",
 	"```",
 }
 

@@ -34,6 +34,27 @@ views:
       - property: updated
         direction: DESC
   - type: table
+    name: By area
+    filters:
+      and:
+        - 'type == "stub"'
+        - 'stage != "closed"'
+    groupBy:
+      property: chain
+      direction: ASC
+    order:
+      - file.name
+      - formula.stage_order
+      - priority
+      - tasks
+      - active
+      - updated
+    sort:
+      - property: formula.priority_order
+        direction: ASC
+      - property: updated
+        direction: DESC
+  - type: table
     name: Active now
     filters:
       and:

@@ -271,7 +271,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 				fmt.Fprintln(w, "Nothing to heal.")
 				return
 			}
-			fmt.Fprintf(w, "Synced: %d thread documents, %d lost sessions, %d session callouts, %d wiki pages and the map", len(s.Threads), len(s.Lost), len(s.Sessions), len(s.Scopes))
+			fmt.Fprintf(w, "Synced: %d thread documents, %d lost sessions, %d session callouts, %d files from the scopes (chains, scope callouts, the map, the canvas)", len(s.Threads), len(s.Lost), len(s.Sessions), len(s.Scopes))
 			if s.Settings {
 				fmt.Fprint(w, ", the harness settings")
 			}

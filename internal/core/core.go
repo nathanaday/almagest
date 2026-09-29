@@ -333,7 +333,11 @@ func SyncLocked(v *vault.Vault, now time.Time) (*Synced, error) {
 		return nil, err
 	}
 	out.Lost = append(out.Lost, lost...)
-	wrote, err := threads.SyncVault(v)
+	idx, err := vault.Load(v)
+	if err != nil {
+		return nil, err
+	}
+	wrote, err := threads.Load(idx).Sync(v.WriteIfChanged)
 	if err != nil {
 		return nil, err
 	}

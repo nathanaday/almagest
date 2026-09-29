@@ -160,6 +160,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " is a change document; the change tool writes it. Edit a proposed page inside it only when the user asks"
 	case rel == vault.Marker:
 		return "Atlas.md is the user's; ask the user to edit it"
+	case rel == vault.ThreadsCanvas:
+		return rel + " is the board as a canvas, which sync derives from the threads; the user moves cards and draws edges in Obsidian"
 	case strings.HasSuffix(name, ".base"):
 		return rel + " is a Base that vault init ships; ask the user to change it in Obsidian"
 	case rel == vault.Settings:
