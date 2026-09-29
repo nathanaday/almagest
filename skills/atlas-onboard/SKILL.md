@@ -28,7 +28,7 @@ Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
    repositories: then list the git work trees one level below it (`ls` and a check for
    `.git`) and let the user pick. Hand the list to repo-link, which links them in one
    change.
-6. Tell the user to open the vault in Obsidian (`atlas open --register`) and to turn on
+6. Tell the user to open the vault in Obsidian (`atlas-obsidian open --register`) and to turn on
    the Atlas plugin under Community plugins once. The vault works without the plugin;
    the plugin adds colors, the sessions pane, and the Apply button.
 

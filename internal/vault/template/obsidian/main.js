@@ -125,7 +125,7 @@ var import_obsidian2 = require("obsidian");
 
 // src/helpers.ts
 function binaryCandidates(home) {
-  return [`${home}/.atlas/bin/atlas`, `${home}/go/bin/atlas`];
+  return [`${home}/.atlas/bin/atlas-obsidian`, `${home}/go/bin/atlas-obsidian`];
 }
 function chooseBinary(override, candidates, exists, home) {
   const set = override.trim();
@@ -427,7 +427,7 @@ async function runAtlas(bin, vault, args) {
   try {
     return JSON.parse(out);
   } catch {
-    throw new AtlasError(`atlas ${args[0]} did not print JSON`);
+    throw new AtlasError(`atlas-obsidian ${args[0]} did not print JSON`);
   }
 }
 async function binaryVersion(bin) {
@@ -984,7 +984,7 @@ var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const found = findBinary("");
-    const binary = new import_obsidian5.Setting(containerEl).setName("Path to the atlas binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
+    const binary = new import_obsidian5.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
       (text) => text.setPlaceholder(found ?? "Not found").setValue(this.plugin.settings.binaryPath).onChange(async (value) => {
         this.plugin.settings.binaryPath = value.trim();
         await this.plugin.saveSettings();
@@ -1005,7 +1005,7 @@ var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian5.Setting(containerEl).setName("Sync when a thread document changes").setDesc("Runs atlas vault sync after you edit a file under threads/, so the board and the callouts follow.").addToggle(
+    new import_obsidian5.Setting(containerEl).setName("Sync when a thread document changes").setDesc("Runs atlas-obsidian vault sync after you edit a file under threads/, so the board and the callouts follow.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();

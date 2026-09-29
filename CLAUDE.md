@@ -1,6 +1,6 @@
 # atlas-obsidian
 
-Atlas: the Go module `github.com/nathanaday/atlas-obsidian` (binary `atlas`), the agent
+Atlas: the Go module `github.com/nathanaday/atlas-obsidian` (binary `atlas-obsidian`), the agent
 plugin `atlas-obsidian` in the repository's own marketplace, and the Obsidian plugin in
 `obsidian/`. Read `README.md` first. This file holds what the code and the README do not
 say.
@@ -50,7 +50,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   thread rule. The touched hook adds a repository to the session's `repositories` when a
   Bash command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or
   names it. The skills tell the agent to change files with Edit and Write.
-- **The shell does not run `atlas change … apply` or `atlas hook`.** The guard refuses
+- **The shell does not run `atlas-obsidian change … apply` or `atlas-obsidian hook`.** The guard refuses
   both, in every folder: one skips the gate, the other forges a user's turn. It is no
   sandbox; a shell can still write any file. To try a hook or an apply by hand from a
   session, type the command with `!`.
@@ -93,9 +93,12 @@ The design pages are the spec. When the code departs from them, the reason is be
   an empty `scope` or `parent`.
 - **Match merges subjects that hit one page**, so one drafter writes each page.
 - **A dropped dependency does not block** a task's readiness.
-- **The wrapper and the Obsidian plugin never search PATH or the system folders** for
-  `atlas`: another tool installs a binary of that name there. They look at `$ATLAS_BIN`
-  (the wrapper only), `~/.atlas/bin/atlas`, and `~/go/bin/atlas`.
+- **The binary is `atlas-obsidian`, not `atlas`.** Other programs install a binary named
+  `atlas`, so that name could run the wrong program. 6.0 to 6.2 shipped `atlas`; the
+  guard's shell rule still refuses both names.
+- **The wrapper and the Obsidian plugin never search PATH or the system folders** for the
+  binary, so another tool's binary never runs in its place. They look at `$ATLAS_BIN`
+  (the wrapper only), `~/.atlas/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`.
 
 ## Host facts, verified live on Claude Code 2.1.283 (2026-09-28)
 
@@ -145,8 +148,8 @@ the app).
 ## Build, test, and try
 
 ```bash
-make build        # build/atlas
-make install      # ~/.atlas/bin/atlas, with the version of .claude-plugin/plugin.json
+make build        # build/atlas-obsidian
+make install      # ~/.atlas/bin/atlas-obsidian, with the version of .claude-plugin/plugin.json
 make test
 make obsidian     # build the Obsidian plugin and copy it into the binary's template
 ```
@@ -158,8 +161,8 @@ an older Obsidian plugin than `obsidian/dist`.
 End to end in a scratch vault, without touching the real machine folder:
 
 ```bash
-export ATLAS_HOME=/tmp/atlas-home ATLAS_BIN=$PWD/build/atlas ATLAS_HOOK_LOG=/tmp/hooks.log
-atlas vault init --path /tmp/work --name Work
+export ATLAS_HOME=/tmp/atlas-home ATLAS_BIN=$PWD/build/atlas-obsidian ATLAS_HOOK_LOG=/tmp/hooks.log
+atlas-obsidian vault init --path /tmp/work --name Work
 cd /tmp/work && claude -p "…" --plugin-dir /path/to/atlas-obsidian \
   --allowedTools "mcp__plugin_atlas-obsidian_atlas__*,Read,Grep,Glob,Skill,Edit,Agent"
 claude -p --continue "yes" --plugin-dir …     # the user's answer at a gate
@@ -179,7 +182,7 @@ make install
 ```
 
 A session started inside this checkout reports that the project MCP server
-`${CLAUDE_PLUGIN_ROOT}/scripts/atlas` failed to start: Claude Code reads the checkout's
+`${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian` failed to start: Claude Code reads the checkout's
 own `.mcp.json` as a project server, and that variable is set only for plugins. The
 message is noise.
 

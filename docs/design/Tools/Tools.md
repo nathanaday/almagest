@@ -33,17 +33,17 @@ Four read, four write. The writers are the only code paths that change the vault
 An action lives once, as a function in the core. The MCP tool, the CLI command, and the Obsidian plugin reach the same function. Every tool action has a CLI command of the same name:
 
 ```text
-atlas vault [status|init|sync|mention]
-atlas search TEXT [--type T]... [--scope S] [--state K=V]... [--limit N]
-atlas context [SCOPE] [--path P]
-atlas match --items FILE.json | --pages ID... [--within S] [--siblings]
-atlas source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--scope S]
-atlas source chunks DOC
-atlas source read DOC CHUNK
-atlas change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
-atlas thread [list] | show T | open TEXT... | attach T | file T PART | tasks T FILE.json | task ID DO | set T ... | reopen T
-atlas lint [SCOPE] [--json]
-atlas hook EVENT                        (the hooks; reads the event JSON on stdin)
+atlas-obsidian vault [status|init|sync|mention]
+atlas-obsidian search TEXT [--type T]... [--scope S] [--state K=V]... [--limit N]
+atlas-obsidian context [SCOPE] [--path P]
+atlas-obsidian match --items FILE.json | --pages ID... [--within S] [--siblings]
+atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--scope S]
+atlas-obsidian source chunks DOC
+atlas-obsidian source read DOC CHUNK
+atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
+atlas-obsidian thread [list] | show T | open TEXT... | attach T | file T PART | tasks T FILE.json | task ID DO | set T ... | reopen T
+atlas-obsidian lint [SCOPE] [--json]
+atlas-obsidian hook EVENT                        (the hooks; reads the event JSON on stdin)
 ```
 
 The CLI adds commands that no tool needs: `setup`, `doctor`, `version`, and `open` (open a vault or a document in Obsidian).

@@ -1,4 +1,4 @@
-// Package cli is the atlas command: one subcommand per tool action, the hooks, the MCP
+// Package cli is the atlas-obsidian command: one subcommand per tool action, the hooks, the MCP
 // server, and the commands no tool needs (setup, doctor, version, open). Every command
 // reaches the same function its tool does.
 package cli
@@ -47,23 +47,23 @@ func New() *CLI {
 	return &CLI{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Getenv: os.Getenv, Now: time.Now, Dir: dir}
 }
 
-const usage = `atlas: one vault for the wiki, the threads, the sessions, and the changes of your work.
+const usage = `atlas-obsidian: one vault for the wiki, the threads, the sessions, and the changes of your work.
 
 Usage:
-  atlas vault [status|init|sync|mention]      the state of the vault; make, heal, or answer
-  atlas search TEXT [--type T]... [--scope S] [--state K=V]... [--limit N]
-  atlas context [SCOPE] [--path P]            walk the context graph to a scope
-  atlas match --items FILE.json | --pages ID... [--within S] [--siblings]
-  atlas source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--scope S]
-  atlas source chunks DOC
-  atlas source read DOC CHUNK
-  atlas change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
-  atlas thread [list] | show T | open TEXT... | attach T | file T PART | tasks T FILE.json
-               | task ID DO | set T ... | reopen T
-  atlas lint [SCOPE]
-  atlas hook EVENT                            a hook; reads the event JSON on stdin
-  atlas mcp                                   the MCP server, over stdio
-  atlas setup | doctor | version | open [DOC]
+  atlas-obsidian vault [status|init|sync|mention]  the state of the vault; make, heal, or answer
+  atlas-obsidian search TEXT [--type T]... [--scope S] [--state K=V]... [--limit N]
+  atlas-obsidian context [SCOPE] [--path P]        walk the context graph to a scope
+  atlas-obsidian match --items FILE.json | --pages ID... [--within S] [--siblings]
+  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--scope S]
+  atlas-obsidian source chunks DOC
+  atlas-obsidian source read DOC CHUNK
+  atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
+  atlas-obsidian thread [list] | show T | open TEXT... | attach T | file T PART | tasks T FILE.json
+                        | task ID DO | set T ... | reopen T
+  atlas-obsidian lint [SCOPE]
+  atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
+  atlas-obsidian mcp                               the MCP server, over stdio
+  atlas-obsidian setup | doctor | version | open [DOC]
 
 Every command takes --vault (a path, or a name from ~/.atlas/config.json) and --json.
 `
@@ -102,13 +102,13 @@ func (c *CLI) Run(argv []string) int {
 	case "doctor":
 		return c.doctorCmd(rest)
 	case "version", "--version", "-v":
-		fmt.Fprintln(c.Out, "atlas "+Version)
+		fmt.Fprintln(c.Out, "atlas-obsidian "+Version)
 	case "open":
 		err = c.openCmd(rest)
 	case "help", "--help", "-h":
 		fmt.Fprint(c.Out, usage)
 	default:
-		err = fmt.Errorf("no command %q; atlas help lists them", cmd)
+		err = fmt.Errorf("no command %q; atlas-obsidian help lists them", cmd)
 	}
 	if err != nil {
 		fmt.Fprintln(c.Err, "atlas: "+err.Error())
@@ -254,7 +254,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"status": st}, func(w io.Writer) {
-			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas open) and turn on the Atlas plugin under Community plugins.\n", st.Vault.Name, st.Vault.Path)
+			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas-obsidian open) and turn on the Atlas plugin under Community plugins.\n", st.Vault.Name, st.Vault.Path)
 		})
 	case "sync":
 		v, err := c.open(a)
@@ -726,12 +726,12 @@ func (c *CLI) hookCmd(argv []string) int {
 			names = append(names, n)
 		}
 		sort.Strings(names)
-		fmt.Fprintln(c.Err, "atlas hook takes one of: "+strings.Join(names, ", "))
+		fmt.Fprintln(c.Err, "atlas-obsidian hook takes one of: "+strings.Join(names, ", "))
 		return 1
 	}
 	env := hooks.Env{Getenv: c.Getenv, Now: c.Now}
 	if err := hooks.Run(argv[0], c.In, c.Out, env); err != nil {
-		fmt.Fprintln(c.Err, "atlas hook "+argv[0]+": "+err.Error())
+		fmt.Fprintln(c.Err, "atlas-obsidian hook "+argv[0]+": "+err.Error())
 		return 1
 	}
 	return 0

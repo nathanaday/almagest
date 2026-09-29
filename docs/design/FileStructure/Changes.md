@@ -36,7 +36,7 @@ A change needs your yes. Two paths give it:
 
 A change with no writes (the model found nothing new) changes no page, so the gate lets it through at once.
 
-The gate holds against the tools, not against the shell. The guard refuses a Bash command that runs `atlas change apply` or `atlas hook`, but a shell can write any file, including the session document. The gate keeps an agent from applying by mistake or on instructions it read in a source; it is no sandbox.
+The gate holds against the tools, not against the shell. The guard refuses a Bash command that runs `atlas-obsidian change apply` or `atlas-obsidian hook`, but a shell can write any file, including the session document. The gate keeps an agent from applying by mistake or on instructions it read in a source; it is no sandbox.
 
 ## The change document
 

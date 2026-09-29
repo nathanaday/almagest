@@ -20,8 +20,8 @@ step in Obsidian.
 
 ## Quickstart
 
-Atlas is three parts that share one version: the `atlas` binary (Go, one static file),
-the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that `atlas vault
+Atlas is three parts that share one version: the `atlas-obsidian` binary (Go, one static file),
+the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that `atlas-obsidian vault
 init` puts in the vault.
 
 ### Prerequisites
@@ -32,9 +32,9 @@ init` puts in the vault.
 ### Build and install
 
 ```bash
-make install        # builds ~/.atlas/bin/atlas
-~/.atlas/bin/atlas setup                         # adds the agent plugin to Claude Code
-~/.atlas/bin/atlas setup --agent codex           # or to Codex
+make install        # builds ~/.atlas/bin/atlas-obsidian
+~/.atlas/bin/atlas-obsidian setup                         # adds the agent plugin to Claude Code
+~/.atlas/bin/atlas-obsidian setup --agent codex           # or to Codex
 ```
 
 To try a checkout without installing the plugin, start Claude Code with
@@ -45,9 +45,9 @@ To try a checkout without installing the plugin, start Claude Code with
 Start Claude Code in an empty folder and say "set up atlas". Or from a shell:
 
 ```bash
-atlas vault init --path ~/notes/work --name Work --areas few \
+atlas-obsidian vault init --path ~/notes/work --name Work --areas few \
   --description "Work notes: the p3 product and the tools around it."
-atlas open --register     # opens the vault in Obsidian; turn on the Atlas plugin once
+atlas-obsidian open --register     # opens the vault in Obsidian; turn on the Atlas plugin once
 ```
 
 ## Usage
@@ -68,11 +68,11 @@ request.
 The same actions work from a shell:
 
 ```bash
-atlas vault                      # the state of the vault
-atlas thread                     # the board
-atlas search "remote update" --scope p3
-atlas change show chg-r8m3tb     # a proposed change
-atlas lint                       # the health check
+atlas-obsidian vault                      # the state of the vault
+atlas-obsidian thread                     # the board
+atlas-obsidian search "remote update" --scope p3
+atlas-obsidian change show chg-r8m3tb     # a proposed change
+atlas-obsidian lint                       # the health check
 ```
 
 In Obsidian, `threads/Threads.base` is the board, `threads/Threads.canvas` shows each open
@@ -93,7 +93,7 @@ start with `Atlas V2.md`.
 
 ## Layout
 
-- The binary: `cmd/atlas/`, `internal/` (one package per part; `internal/mcpserver` serves
+- The binary: `cmd/atlas-obsidian/`, `internal/` (one package per part; `internal/mcpserver` serves
   the eight tools, `internal/hooks` the nine hooks, `internal/cli` every command).
 - The agent plugin: `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`,
   `.claude-plugin/`, `.codex-plugin/`.

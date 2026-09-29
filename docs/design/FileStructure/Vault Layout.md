@@ -30,7 +30,7 @@ The layout of a vault, the vault document, and the rules for ids, titles, links,
 └── .git/                     the vault's history; apply's lock is .git/atlas.lock
 ```
 
-`atlas vault init` writes this layout, the four Bases, and one `setup` commit. `EnsureFolders` rebuilds a folder that a clone left out, because git does not keep an empty folder.
+`atlas-obsidian vault init` writes this layout, the four Bases, and one `setup` commit. `EnsureFolders` rebuilds a folder that a clone left out, because git does not keep an empty folder.
 
 ## Who writes where
 
@@ -90,11 +90,11 @@ The body is yours: what this vault is for, and the context that every agent in i
 
 ## Git
 
-The vault is one git repository, on `main`. It never contains another repository: `atlas vault init` refuses a folder inside another repository's work tree, and `change` refuses a repository page whose path is inside the vault.
+The vault is one git repository, on `main`. It never contains another repository: `atlas-obsidian vault init` refuses a folder inside another repository's work tree, and `change` refuses a repository page whose path is inside the vault.
 
 | Commit | Made by | Holds |
 |---|---|---|
-| `setup: …` | `atlas vault init` | the layout |
+| `setup: …` | `atlas-obsidian vault init` | the layout |
 | `snapshot: N files edited by hand` | every write tool, before it writes, when the tree is dirty | your edits, the session documents, the model's prose edits |
 | `change: <title>` | `change` apply | the change's writes, its link rewrites, and the change document; trailer `Atlas-Change: chg-…` |
 | `undo: <title>` | `change` undo | the restored paths and the change document |

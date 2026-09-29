@@ -39,7 +39,7 @@ func HomeFrom(env func(string) string) Home {
 func (h Home) ConfigPath() string { return filepath.Join(h.Root, "config.json") }
 
 // BinPath is where setup installs the binary.
-func (h Home) BinPath() string { return filepath.Join(h.Root, "bin", "atlas") }
+func (h Home) BinPath() string { return filepath.Join(h.Root, "bin", "atlas-obsidian") }
 
 // Config is the machine file: the paths of this machine's vaults, and nothing else.
 type Config struct {

@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "atlas": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas",
+      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian",
       "args": ["mcp"]
     }
   }

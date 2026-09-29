@@ -1,4 +1,4 @@
-// Package hooks is every hook command: atlas hook <event> reads the event's JSON on stdin.
+// Package hooks is every hook command: atlas-obsidian hook <event> reads the event's JSON on stdin.
 // Hooks keep the rules that must hold (the guard) and the facts about sessions (every
 // session document and every link between a session and another document). A hook that
 // finds no vault for its session does nothing, so Atlas stays out of sessions that are

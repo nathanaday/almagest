@@ -6,7 +6,7 @@ A hook is code the harness runs on an event. Atlas uses hooks for two jobs that 
 1. **Rules that must hold.** The guard refuses a call that breaks a rule, whether or not the model read the skill.
 2. **Facts about sessions.** Hooks create and keep every session document and every link between a session and another document. The model does not need to remember.
 
-Every hook is one command, `atlas hook <event>`, which reads the event's JSON on stdin. A hook that finds no vault for the session exits at once and does nothing, so Atlas stays out of sessions that are not its own. Every hook that writes a document takes `.git/atlas.lock` for that write.
+Every hook is one command, `atlas-obsidian hook <event>`, which reads the event's JSON on stdin. A hook that finds no vault for the session exits at once and does nothing, so Atlas stays out of sessions that are not its own. Every hook that writes a document takes `.git/atlas.lock` for that write.
 
 ## The events
 
@@ -59,7 +59,7 @@ Sets `status: running` and `last_prompt`. Then it prints one line when Obsidian 
 | # | When | Refuses | Reason names |
 |---|---|---|---|
 | 1 | the caller is a read-only agent (`agent_type` is `wiki-extract`, `wiki-draft`, `wiki-audit`, or `thread-review`) | every write tool; every atlas write action (`change`, `thread` writes, `source` capture, `vault` init, sync, mention); every Bash command, except for `thread-review` a command that is exactly `git log`, `git diff`, or `git show`, with arguments that hold no shell operator (`;`, `&`, `\|`, `<`, `>`, `$`, a backquote) and none of `--output`, `-c`, `--ext-diff`, `--textconv` | "this agent is read-only" |
-| 2 | a Bash command runs the atlas binary with `change … apply` or `hook` | the command | the `change` tool, Apply in Obsidian, or `!` for the user |
+| 2 | a Bash command runs the binary (`atlas-obsidian`, or `atlas` of 6.0 to 6.2) with `change … apply` or `hook` | the command | the `change` tool, Apply in Obsidian, or `!` for the user |
 | 3 | the path is under `wiki/` | Write, Edit | `change` propose |
 | 4 | the path is under `changes/`, or is `Atlas.md`, a `.base` file, or `.claude/settings.local.json` | Write, Edit | the tool that owns it |
 | 5 | the path is under `sessions/` | Write; an Edit of another session's document; an Edit of the session's own document that touches the frontmatter, the lead callout, or `## Subagents` | "edit only Description, Progress, and Summary of your own document" |
@@ -70,7 +70,7 @@ Sets `status: running` and `last_prompt`. Then it prints one line when Obsidian 
 - Only the `thread` tool binds a session to a thread. An Edit of a thread document binds nothing, so editing some stub does not unlock a repository.
 - Rules 5 and 6 find the frontmatter and the lead callout by reading the file: an Edit whose `old_string` falls inside them is refused.
 - Rules 3 to 7 take the vault above the file, not the vault of the session's folder, so a session outside the vault gets the same refusals.
-- The gate is not a guard rule. The `change` tool keeps it, on the document it applies ([[Changes#The gate]]). Rule 2 only keeps the shell from skipping it through the CLI or from forging a user's turn through `atlas hook prompt`.
+- The gate is not a guard rule. The `change` tool keeps it, on the document it applies ([[Changes#The gate]]). Rule 2 only keeps the shell from skipping it through the CLI or from forging a user's turn through `atlas-obsidian hook prompt`.
 - Bash is guarded only by rules 1 and 2. A shell command can write anywhere, and no parse of shell is reliable. So the thread rule covers the edit tools, not the shell. The snapshot commit keeps a shell write in the vault recoverable, and the repository's own git keeps the rest.
 
 ## touched

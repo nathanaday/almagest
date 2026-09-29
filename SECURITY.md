@@ -12,7 +12,7 @@ Do not open a public issue for it.
 
 Atlas runs on your machine. It has three parts:
 
-- the `atlas` binary, which serves the agent's tools over stdio and runs the hooks;
+- the `atlas-obsidian` binary, which serves the agent's tools over stdio and runs the hooks;
 - the agent plugin, which holds the skills, the agents, and the hook configuration;
 - the Obsidian plugin.
 
@@ -49,7 +49,7 @@ and the change is applied after you answer.
   refused. You can still apply it with the Apply button in Obsidian.
 - Code cannot tell a yes from a no. The gate makes sure you had a turn with the preview in
   front of you, and the skill reads your answer.
-- Your own paths have no gate: `atlas change apply` in your terminal, and the Apply button
+- Your own paths have no gate: `atlas-obsidian change apply` in your terminal, and the Apply button
   in Obsidian.
 
 ### An agent edits files that code owns
@@ -78,7 +78,8 @@ refuses such a command when it holds a shell operator, `--output`, `-c`, `--ext-
 
 ### An agent uses the shell to skip the gate
 
-The guard refuses a Bash command that runs `atlas change … apply` or `atlas hook`. The first
+The guard refuses a Bash command that runs `atlas-obsidian change … apply` or
+`atlas-obsidian hook`. The first
 would apply a change without the gate. The second would send the binary a fake hook event,
 for example a fake prompt from you.
 
@@ -99,12 +100,13 @@ and a hex id.
 - Atlas commits with `--no-verify`, so the vault's own git hooks do not run.
 - The Obsidian plugin runs the binary with `execFile`, without a shell.
 
-### A different program named `atlas` runs
+### A different program runs in place of the binary
 
-The wrapper script and the Obsidian plugin never search `PATH` for the binary. The wrapper
-looks at `$ATLAS_BIN`, `$ATLAS_HOME/bin/atlas` (default `~/.atlas/bin/atlas`), and
-`~/go/bin/atlas`. The Obsidian plugin looks at its setting, `~/.atlas/bin/atlas`, and
-`~/go/bin/atlas`.
+The binary is named `atlas-obsidian` because other programs install a binary named
+`atlas`. The wrapper script and the Obsidian plugin never search `PATH` for the binary.
+The wrapper looks at `$ATLAS_BIN`, `$ATLAS_HOME/bin/atlas-obsidian` (default
+`~/.atlas/bin/atlas-obsidian`), and `~/go/bin/atlas-obsidian`. The Obsidian plugin looks
+at its setting, `~/.atlas/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`.
 
 ### Vault text runs as code in Obsidian
 

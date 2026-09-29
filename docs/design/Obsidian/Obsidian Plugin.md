@@ -1,7 +1,7 @@
 
 # Obsidian Plugin
 
-The Obsidian plugin makes the vault read like one product: colors and icons for each document type, a sessions sidebar, and buttons that approve a change or refresh the vault. It is thin. It reads the documents through Obsidian's own metadata cache, and it calls the `atlas` binary for every write. It holds no rule that the binary does not hold.
+The Obsidian plugin makes the vault read like one product: colors and icons for each document type, a sessions sidebar, and buttons that approve a change or refresh the vault. It is thin. It reads the documents through Obsidian's own metadata cache, and it calls the `atlas-obsidian` binary for every write. It holds no rule that the binary does not hold.
 
 The vault works without the plugin. The Bases render the board, the sessions, the changes, and the wiki in Obsidian's core, and the callouts render in Obsidian's default style. The plugin adds what core Obsidian cannot.
 
@@ -11,7 +11,7 @@ This page supersedes [[V2 Obsidian Plugin Brainstorm]] where the two differ. The
 
 - **Desktop only** (`isDesktopOnly: true`). The plugin runs the binary through `child_process`.
 - **Finding the binary.** Obsidian started from the macOS Dock does not get the shell's `PATH`. The plugin searches the same places as the agent plugin's wrapper (`~/.atlas/bin`, the npm global prefix, the Homebrew prefixes), and a setting overrides it.
-- **One version.** The binary, the agent plugin, and the Obsidian plugin share one version. `vault init` installs the Obsidian plugin into the vault, and `atlas doctor` reports a mismatch.
+- **One version.** The binary, the agent plugin, and the Obsidian plugin share one version. `vault init` installs the Obsidian plugin into the vault, and `atlas-obsidian doctor` reports a mismatch.
 - **Distribution.** A local install from `vault init` first; BRAT next; the community store last, because the store reviews plugins that spawn processes more closely.
 
 ## Phase 1
@@ -26,11 +26,11 @@ One stylesheet in the plugin, in place of V1's CSS snippet:
 
 ### Refresh
 
-A ribbon icon and a command: `atlas vault sync`, then a notice with what changed. Sync is safe at any time.
+A ribbon icon and a command: `atlas-obsidian vault sync`, then a notice with what changed. Sync is safe at any time.
 
 ### Review a change
 
-On a change document with `status: proposed`, a bar over the page with **Apply**, **Reject**, and the counts. Apply saves the open file first, so an edit you just typed goes in, then runs `atlas change apply <id>`; Reject asks for a reason and runs `atlas change reject`. A click on Apply is the user's yes, so a large ingest can be reviewed and approved entirely in Obsidian. The agent's next turn sees the change applied.
+On a change document with `status: proposed`, a bar over the page with **Apply**, **Reject**, and the counts. Apply saves the open file first, so an edit you just typed goes in, then runs `atlas-obsidian change apply <id>`; Reject asks for a reason and runs `atlas-obsidian change reject`. A click on Apply is the user's yes, so a large ingest can be reviewed and approved entirely in Obsidian. The agent's next turn sees the change applied.
 
 ## Phase 2
 
@@ -57,7 +57,7 @@ A button resumes a session in a terminal (`claude --resume <session id>` in the 
 
 ### Sync on change
 
-When a thread document changes, the plugin runs `atlas vault sync` after a short delay, so the board and the callouts follow a hand edit at once. Sync writes a file only when its derived content differs, so its own writes end the loop.
+When a thread document changes, the plugin runs `atlas-obsidian vault sync` after a short delay, so the board and the callouts follow a hand edit at once. Sync writes a file only when its derived content differs, so its own writes end the loop.
 
 ### Graph colors
 

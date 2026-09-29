@@ -5,7 +5,7 @@ Three parts, one version number:
 
 | Part | Is | Holds |
 |---|---|---|
-| the binary `atlas` | Go, one static file | the MCP server, the CLI, the hooks: every rule and every write |
+| the binary `atlas-obsidian` | Go, one static file | the MCP server, the CLI, the hooks: every rule and every write |
 | the agent plugin | files for Claude Code and Codex | `.mcp.json`, `hooks/hooks.json`, the skills, the agents, the references |
 | the Obsidian plugin | TypeScript, thin | styles, the change bar, the sessions pane, mentions ([[Obsidian Plugin]]) |
 
@@ -38,7 +38,7 @@ New in V2: the document model (types, schemas, ids, titles, links), `search` (BM
 ## Packages
 
 ```text
-cmd/atlas/            main
+cmd/atlas-obsidian/            main
 internal/doc/         a document: frontmatter, body, lead callout; read and write one field; ids; titles
 internal/schema/      the thirteen types: fields, owners, body sections, checks
 internal/vault/       the layout, Atlas.md, init, sync, the config file, finding the vault
@@ -68,11 +68,11 @@ Each tool is a thin layer over one package, and each CLI command over the same f
 npx atlas-obsidian setup
 ```
 
-- The npm package carries the binary for each platform as an optional dependency, the pattern esbuild uses. `setup` puts it at `~/.atlas/bin/atlas`.
+- The npm package carries the binary for each platform as an optional dependency, the pattern esbuild uses. `setup` puts it at `~/.atlas/bin/atlas-obsidian`.
 - `setup` adds the agent plugin to Claude Code (`claude plugin marketplace add`, then `claude plugin install`) or to Codex (`--agent codex`).
-- `setup` then runs [[atlas-onboard]] in a new session, or `atlas vault init` with `--yes`.
+- `setup` then runs [[atlas-onboard]] in a new session, or `atlas-obsidian vault init` with `--yes`.
 - `vault init` copies the Obsidian plugin into the vault's `.obsidian/plugins/atlas/`. You turn it on once in Obsidian.
-- `atlas doctor` checks the binary, both plugins, their versions, git, the config, and every vault.
+- `atlas-obsidian doctor` checks the binary, both plugins, their versions, git, the config, and every vault.
 
 ## Tests
 

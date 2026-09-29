@@ -76,13 +76,17 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 
 var shellSeparator = regexp.MustCompile("[;&|()\n`]")
 
-// atlasCommandRefusal is why a shell command may not run the atlas binary, or "": a
-// change apply, which would skip the gate, and a hook, which would forge an event.
+// binaryNames are the binary's name and the name it had in 6.0 to 6.2, which an older
+// install may still hold.
+var binaryNames = []string{"atlas-obsidian", "atlas"}
+
+// atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
+// a change apply, which would skip the gate, and a hook, which would forge an event.
 func atlasCommandRefusal(cmd string) string {
 	for _, part := range shellSeparator.Split(cmd, -1) {
 		words := strings.Fields(strings.NewReplacer(`"`, "", "'", "").Replace(part))
 		for i, word := range words {
-			if path.Base(word) != "atlas" {
+			if !slices.Contains(binaryNames, path.Base(word)) {
 				continue
 			}
 			rest := words[i+1:]
@@ -91,7 +95,7 @@ func atlasCommandRefusal(cmd string) string {
 			}
 			switch {
 			case len(rest) > 0 && rest[0] == "hook":
-				return "atlas hook runs only from the host; the shell does not send hook events"
+				return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
 			case len(rest) > 0 && rest[0] == "change" && slices.Contains(rest[1:], "apply"):
 				return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
 			}

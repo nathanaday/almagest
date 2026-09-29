@@ -86,9 +86,9 @@ func (c *CLI) setupCmd(argv []string) error {
 	fmt.Fprintln(c.Out, "")
 	fmt.Fprintln(c.Out, "Next:")
 	fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up atlas\": the atlas-onboard skill makes the vault\n", agent)
-	fmt.Fprintln(c.Out, "  or: atlas vault init --path ~/notes/work --name Work --areas few --description \"...\"")
-	fmt.Fprintln(c.Out, "  then: atlas open, and turn on the Atlas plugin in Obsidian")
-	fmt.Fprintln(c.Out, "  atlas doctor checks every part")
+	fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --areas few --description \"...\"")
+	fmt.Fprintln(c.Out, "  then: atlas-obsidian open, and turn on the Atlas plugin in Obsidian")
+	fmt.Fprintln(c.Out, "  atlas-obsidian doctor checks every part")
 	return nil
 }
 
@@ -138,7 +138,7 @@ func (c *CLI) doctorCmd(argv []string) int {
 		case err != nil:
 			line(false, agent+" plugin", err.Error())
 		case inst == nil:
-			note(agent+" plugin", "not installed: atlas setup --agent "+agent)
+			note(agent+" plugin", "not installed: atlas-obsidian setup --agent "+agent)
 		case inst.Version != Version && Version != "dev":
 			line(false, agent+" plugin", fmt.Sprintf("%s, but the binary is %s; update one so they match", inst.Version, Version))
 		default:
@@ -167,14 +167,14 @@ func (c *CLI) doctorCmd(argv []string) int {
 		detail := fmt.Sprintf("%s · %d documents", vault.Shorten(v.Root), len(idx.Docs))
 		ok := true
 		if f != nil && f.Counts[lint.Error] > 0 {
-			detail += fmt.Sprintf(" · %d errors (atlas lint)", f.Counts[lint.Error])
+			detail += fmt.Sprintf(" · %d errors (atlas-obsidian lint)", f.Counts[lint.Error])
 			ok = false
 		}
 		switch installed := v.InstalledPluginVersion(); {
 		case installed == "":
 			detail += " · no Obsidian plugin"
 		case installed != bundled:
-			detail += fmt.Sprintf(" · Obsidian plugin %s, the binary carries %s (atlas open --update-plugin)", installed, bundled)
+			detail += fmt.Sprintf(" · Obsidian plugin %s, the binary carries %s (atlas-obsidian open --update-plugin)", installed, bundled)
 			ok = false
 		}
 		line(ok, "vault "+v.Name(), detail)
@@ -218,7 +218,7 @@ func (c *CLI) openCmd(argv []string) error {
 	}
 	if !registered {
 		if !a.has("register") {
-			fmt.Fprintf(c.Out, "Obsidian does not know %s yet. Run atlas open --register (it restarts Obsidian on macOS), or use Open folder as vault.\n", v.Root)
+			fmt.Fprintf(c.Out, "Obsidian does not know %s yet. Run atlas-obsidian open --register (it restarts Obsidian on macOS), or use Open folder as vault.\n", v.Root)
 			return nil
 		}
 		if err := obsidian.RegisterAndOpen(v.Root); err != nil {

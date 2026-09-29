@@ -1,4 +1,4 @@
-BIN := atlas
+BIN := atlas-obsidian
 # The binary, the agent plugin, and the Obsidian plugin share one version: plugin.json's.
 VERSION ?= $(shell sed -n 's/.*"version": "\([^"]*\)".*/\1/p' .claude-plugin/plugin.json | head -1)
 LDFLAGS := -ldflags "-X github.com/nathanaday/atlas-obsidian/internal/cli.Version=$(VERSION)"
