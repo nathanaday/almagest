@@ -997,10 +997,20 @@ function repoProcessor(plugin) {
   return (source, el, ctx) => {
     const { id } = repoBlock(source);
     if (!id) return;
-    const file = plugin.app.vault.getFileByPath(ctx.sourcePath);
-    const fm = file ? plugin.app.metadataCache.getFileCache(file)?.frontmatter : void 0;
-    ctx.addChild(new RepoPanel(el, plugin, id, String(fm?.branch ?? "")));
+    ctx.addChild(new RepoPanel(el, plugin, id, String(repoFields(plugin, id, ctx.sourcePath)?.branch ?? "")));
   };
+}
+function repoFields(plugin, id, sourcePath) {
+  const cache = plugin.app.metadataCache;
+  const own = plugin.app.vault.getFileByPath(sourcePath);
+  const fm = own ? cache.getFileCache(own)?.frontmatter : void 0;
+  if (fm?.id === id) return fm;
+  for (const f of plugin.app.vault.getMarkdownFiles()) {
+    if (!f.path.startsWith("wiki/documents/")) continue;
+    const other = cache.getFileCache(f)?.frontmatter;
+    if (other?.id === id) return other;
+  }
+  return void 0;
 }
 
 // src/sessions.ts

@@ -12,6 +12,7 @@ views/
 ├── View · Work.md                    stubs, plans, to-do lines, mentions
 ├── View · Timeline.md                what happened, newest first, the last 30 days
 ├── View · Library.md                 the knowledge: topics, sources, repositories
+├── View · Repositories.md            every linked repository with its live git status
 ├── timeline/
 │   └── View · Timeline 2026-08.md    one per earlier month
 └── tags/                             the tag tree: a folder per tag, a note per folder
@@ -107,6 +108,17 @@ The note holds the last 30 days. Each earlier month has its own note under `view
 2. **Sources**: a Base with the media, the authority, and the status; pending first.
 3. **Repositories**: a Base with the path, the branch, the head, and `behind`.
 4. **Needs care**: Bases of the topics that are `draft` or `contested`, that have no sources, or whose `refreshed` is older than a document they cite.
+
+## Repositories
+
+`View · Repositories` shows every linked repository on one page, by title. Each gets a section with:
+
+1. a heading that links the repository document, and its description;
+2. its path, and its tags as links to their tag views, its own tag first;
+3. the open and started plans that name it;
+4. the `atlas-repo` block of its document, which the Obsidian plugin renders as the live status panel ([[Repository#Body]]).
+
+The unlinked repositories follow as a list of links.
 
 ## Freshness
 

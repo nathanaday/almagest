@@ -15,6 +15,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -27,6 +28,7 @@ const (
 	WorkView    = "View · Work"
 	Timeline    = "View · Timeline"
 	Library     = "View · Library"
+	Repos       = "View · Repositories"
 	TagFolder   = "tags"
 	TimeFolder  = "timeline"
 	TimelineAge = 30 * 24 * time.Hour
@@ -106,6 +108,7 @@ func Render(idx *vault.Index, now time.Time) map[string]string {
 		vault.Views + "/" + Home + ".md":     r.home(),
 		vault.Views + "/" + WorkView + ".md": r.workView(),
 		vault.Views + "/" + Library + ".md":  r.library(),
+		vault.Views + "/" + Repos + ".md":    r.repositories(),
 	}
 	main, months := r.timeline()
 	out[vault.Views+"/"+Timeline+".md"] = main
@@ -207,6 +210,7 @@ func (r *renderer) home() string {
 		"- " + doc.Link(WorkView) + ": stubs, plans, to-do lines, mentions",
 		"- " + doc.Link(Timeline) + ": what happened, newest first",
 		"- " + doc.Link(Library) + ": topics, sources, repositories",
+		"- " + doc.Link(Repos) + ": every linked repository, its tags, its work, and its git status",
 	}, "\n")
 	return r.note(Home, head,
 		section("Waiting for you", strings.Join(wait, "\n")),
@@ -345,6 +349,68 @@ func (r *renderer) library() string {
 	repos := base("Repositories", []string{`type == "repository"`}, []string{"file.name", "path", "branch", "head", "behind", "refreshed"}, "", "file.name ASC")
 	care := base("Needs care", []string{`type == "topic"`, `status == "draft" || status == "contested" || !sources || sources.length == 0`}, []string{"file.name", "kind", "status", "sources", "refreshed"}, "status")
 	return r.note(Library, section("Topics", topics), section("Sources", sources), section("Repositories", repos), section("Needs care", care))
+}
+
+// repositories lists each linked repository with its tags, its open plans, and its live
+// git status block; the unlinked ones follow as links.
+func (r *renderer) repositories() string {
+	repos := r.idx.Of("repository")
+	sort.Slice(repos, func(i, j int) bool {
+		return strings.ToLower(vault.Title(repos[i])) < strings.ToLower(vault.Title(repos[j]))
+	})
+	var linked, unlinked []string
+	for _, d := range repos {
+		if d.Str("unlinked") == "true" || d.Str("path") == "" {
+			unlinked = append(unlinked, "- "+doc.Link(vault.Title(d))+" · "+d.Str("description"))
+			continue
+		}
+		// A tag above another in the list says nothing more: #a/b already holds #a.
+		all := append([]string{d.Str("defines")}, d.List("tags")...)
+		var tagLinks []string
+		for _, t := range all {
+			below := false
+			for _, u := range all {
+				below = below || strings.HasPrefix(u, t+"/")
+			}
+			if t != "" && !below {
+				tagLinks = append(tagLinks, fmt.Sprintf("[[%s|#%s]]", TagTitle(t), t))
+			}
+		}
+		lines := []string{"## " + doc.Link(vault.Title(d))}
+		if desc := d.Str("description"); desc != "" {
+			lines = append(lines, desc)
+		}
+		facts := "`" + d.Str("path") + "`"
+		if len(tagLinks) > 0 {
+			facts += " · " + strings.Join(tagLinks, " ")
+		}
+		lines = append(lines, facts)
+		var plans []string
+		for _, s := range r.b.Specs {
+			if s.Str("kind") != work.Plan {
+				continue
+			}
+			st := r.b.Status(s)
+			if st != work.Open && st != work.Started {
+				continue
+			}
+			for _, rd := range r.idx.LinkedAll(s.List("repositories")) {
+				if rd.ID() == d.ID() {
+					plans = append(plans, doc.Link(s.Title())+" ("+string(st)+")")
+					break
+				}
+			}
+		}
+		if len(plans) > 0 {
+			lines = append(lines, "Work: "+strings.Join(plans, ", "))
+		}
+		lines = append(lines, derive.RepoBlock(d))
+		linked = append(linked, strings.Join(lines, "\n\n"))
+	}
+	if len(linked) == 0 {
+		linked = append(linked, "No repository is linked. The repo-link skill links one.")
+	}
+	return r.note(Repos, strings.Join(linked, "\n\n"), section("Unlinked", strings.Join(unlinked, "\n")))
 }
 
 // timelineEntry is one line of the timeline, at a time.
