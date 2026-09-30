@@ -80,8 +80,8 @@ The `tags` property holds the document's categories. It is Obsidian's own proper
 
 The tags that exist are the union of every document's `tags`. There is no list to keep. `vault` status returns each tag with its count, and the session-start context prints the most used.
 
-- In `tags: open` mode, the model may add a tag that no document holds. The preview of the write names each new tag.
-- In `tags: known` mode, `change` and `work` refuse a tag that no document holds, unless the call sets `new_tags: true`. The skills set it only after the user agrees in the chat.
+- In `tagging: open` mode, the model may add a tag that no document holds. The preview of the write names each new tag.
+- In `tagging: known` mode, `change` and `work` refuse a tag that no document holds, unless the call sets `new_tags: true`. The skills set it only after the user agrees in the chat.
 
 ### Tag pages
 

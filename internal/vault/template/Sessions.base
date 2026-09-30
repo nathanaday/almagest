@@ -17,8 +17,7 @@ views:
       - file.name
       - status
       - description
-      - threads
-      - tasks
+      - specs
       - repositories
       - updated
     sort:
@@ -35,22 +34,20 @@ views:
       - file.name
       - status
       - description
-      - threads
-      - tasks
+      - specs
       - changes
     sort:
       - property: started
         direction: DESC
   - type: table
-    name: By thread
+    name: By spec
     groupBy:
-      property: threads
+      property: specs
       direction: ASC
     order:
       - file.name
       - status
       - description
-      - tasks
     sort:
       - property: started
         direction: DESC
@@ -63,7 +60,7 @@ views:
       - file.name
       - status
       - description
-      - threads
+      - specs
     sort:
       - property: started
         direction: DESC
@@ -75,6 +72,5 @@ views:
     order:
       - file.name
       - description
-      - threads
-      - tasks
+      - specs
       - updated

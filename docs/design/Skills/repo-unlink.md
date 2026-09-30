@@ -12,7 +12,7 @@
 2. Ask one question with the counts and a recommended answer for each group:
    - open plans: keep them and drop the repository from `repositories` (recommended), or drop the plans;
    - the topics under its tag: keep them (recommended; they still describe the system, and the tag and its page remain), or remove the ones the user names.
-3. Build the change: a modify of the repository document with `unlinked: true` and an empty `path` ([[Repository#Rules]]). Add a remove for each topic the user chose to remove.
+3. Build the change: a modify of the repository document with `unlinked: true` ([[Repository#Rules]]). Code empties `path`. Add a remove for each topic the user chose to remove.
 4. For the plans: `work` set `repositories`, or `work` drop with the reason, per the answer.
 
 ## Gate

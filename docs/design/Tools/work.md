@@ -15,7 +15,7 @@
 | `reopen` | a stub or a plan, optional `reason` | [[Work View]] | a `reopened` event |
 | `block` | a plan, `reason` (one line) | [[Work View]] | a `blocked` event |
 | `unblock` | a plan | [[Work View]] | an `unblocked` event |
-| `resolve` | a stub, `became` (ids), optional `text` | [[Work View]] | `became` on the stub; a `resolved` event |
+| `resolve` | a stub, `became` (ids) | [[Work View]] | `became` on the stub; a `resolved` event |
 | `note` | any document, `text` | [[Work View]] of it | a `note` event |
 | `set` | a stub or a spec, and any of `title`, `description`, `tags`, `aliases`, `priority`, `parent`, `repositories`, `depends`, `order`, `implements`, `supersedes` | [[Work View]] | the fields; for a title, the file and every link |
 
@@ -28,4 +28,4 @@
 - `set` of `parent`, `depends`, or `repositories` is refused on a done or dropped plan. `set` of `blocked` or `status` does not exist: those come from events.
 - `list` and `show` bind nothing and write nothing, so a question can look at work freely.
 
-Refusals: every rule in [[Spec#Rules the work tool enforces]] and [[Stub#Rules]]; a title that collides with another document or begins with `Tag · ` or `View · `; a tag that breaks [[Documents#Form]], or a new tag in `tags: known` mode without `new_tags: true`; a promote of a document that is not an open stub; `note` on a document that is not typed.
+Refusals: every rule in [[Spec#Rules the work tool enforces]] and [[Stub#Rules]]; a title that collides with another document or begins with `Tag · ` or `View · `; a tag that breaks [[Documents#Form]], or a new tag in `tagging: known` mode without `new_tags: true`; a promote of a document that is not an open stub; `note` on a document that is not typed.

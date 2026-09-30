@@ -16,7 +16,7 @@
    - a note that asks to read something later that is not in the inbox → **stub**, resolved by the capture when the file comes;
    - unclear → ask.
    Give each item its tags: the tags that exist and fit its subject, from the tag list in the session-start context or `vault`. Name each new tag.
-3. Show the triage as one table, with the destination and the tags of each item, and wait for one yes. In `tags: known` mode, the yes covers the new tags it names.
+3. Show the triage as one table, with the destination and the tags of each item, and wait for one yes. In `tagging: known` mode, the yes covers the new tags it names.
 4. Call `source` capture once for every wiki item, with `new_tags` when the user agreed to one. When an open stub asked for the source, set `resolves`.
 5. Call `work` stub for every stub item, with `inbox` set, so the note leaves the inbox in the same commit.
 6. Tell the plan in one line: the sources, their size, the chunks, and the workers. Ask first only when the total is past about 600 pages.

@@ -19,7 +19,7 @@
    - every drafted write;
    - for each source: a modify of the source, with its description, tags, authority, `## Summary`, and `## Structure` (from the chunk summaries);
    - `absorbs`: the document ids; `work`: the plan or stub, when every document serves one;
-   - `new_tags` when a write adds a tag that no document holds, and the user agreed in `tags: known` mode;
+   - `new_tags` when a write adds a tag that no document holds, and the user agreed in `tagging: known` mode;
    - `title`: a short name ("Ingest the DINOv2 paper"); `notes`: what the change does, and every skipped subject with its reason.
    Past 25 new topics, keep the ones the most claims support and list the rest for a later run.
 9. **Propose** the change.

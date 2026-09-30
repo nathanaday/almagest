@@ -18,8 +18,9 @@ atlas-obsidian vault migrate               # writes the plan as one commit
 The migration refuses, and names what to do, when:
 
 - a change is `proposed` or `applying`: apply or reject it first, since its writes use the 6.x schemas;
-- another session is live (`running` or `waiting`): its threads are about to become specs;
 - two documents would take one title after the rules below.
+
+A live session (`running` or `waiting`) does not stop it. The report warns about each one, since its threads and tasks become the work and specs of the new layout.
 
 Then it takes the lock, recovers, and commits a dirty tree as a snapshot, as every write does.
 
@@ -43,7 +44,7 @@ Each area and repository gets a tag: the names on its chain from the top, normal
 | 6.x | 7.0 |
 |---|---|
 | a thread at stage `stub` | a stub; `## Stub` becomes `## Idea`; `priority` stays; its scopes become `tags` |
-| a thread past `stub` | the stub becomes the root plan, in place (id, title, and links kept); the spec document's sections move into it; `## Stub` becomes `## Origin`; its repository scopes become `repositories`, its area scopes `tags` |
+| a thread past `stub` | the stub becomes the root plan, in place (id, title, and links kept); the spec document's sections move into it; `## Stub` becomes `## Origin`; its repository scopes become `repositories`, and the tag of every scope, area or repository, goes into `tags` |
 | the spec document | removed; every link to `<Thread> — Spec` is rewritten to `<Thread>` |
 | a task | a leaf plan, `parent` the root; `repository` becomes `repositories`; `depends` and `order` stay; `## What` becomes `## Goal`; `## Where`, `## Verify`, `## Conventions`, `## Progress` stay |
 | a task title `<Thread> — T2 Tune the threshold` | `Tune the threshold`, when no other document holds it; else the old title stays |
@@ -81,7 +82,8 @@ Every document keeps its id, since an id never changes. A migrated concept keeps
 
 ### Settings
 
-- `Atlas.md`: `areas: manual` becomes `tags: known`; `few` and `many` become `tags: open`. In `wikify`, `receipt` becomes `event`, and `task` goes. `layout: 3`.
+- `.obsidian/plugins/atlas/`: the vault gets the Obsidian plugin that the binary carries, since a 6.x plugin cannot read the new layout. Reload Obsidian after the migration.
+- `Atlas.md`: `areas: manual` becomes `tagging: known`; `few` and `many` become `tagging: open`. In `wikify`, `receipt` becomes `event`, and `task` goes. `layout: 3`.
 - `.obsidian/app.json`: the attachment folder becomes `wiki/assets`; `views/` is added to the excluded files.
 - `.git/info/exclude`: `views/` is added.
 

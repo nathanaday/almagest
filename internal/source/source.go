@@ -1,6 +1,6 @@
 // Package source brings outside documents into the vault and reads any document in
-// chunks. Capture copies a file into wiki/sources/files/, never to be edited again, and
-// writes its source page; the page stays pending until a change absorbs it.
+// chunks. Capture copies a file into wiki/assets/, never to be edited again, and writes
+// its source document; the source stays pending until a change absorbs it.
 package source
 
 import (
@@ -12,12 +12,13 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/core"
+	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	graph "github.com/nathanaday/atlas-obsidian/internal/scope"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // MaxFileSize bounds a file capture takes.
@@ -28,9 +29,11 @@ type Request struct {
 	Inbox      []string `json:"inbox,omitempty" jsonschema:"names of files waiting in inbox/"`
 	Text       string   `json:"text,omitempty" jsonschema:"text pasted in the conversation, or a passage to keep"`
 	Title      string   `json:"title,omitempty" jsonschema:"the title of pasted text"`
-	Locator    string   `json:"locator,omitempty" jsonschema:"for text: where it came from, such as this session's document"`
-	Repository string   `json:"repository,omitempty" jsonschema:"a repository page (id or title): capture a snapshot of it at its head"`
-	Scope      string   `json:"scope,omitempty" jsonschema:"the area or repository the sources belong to, by id or title"`
+	Locator    string   `json:"locator,omitempty" jsonschema:"for text: where it came from, such as this session's document or a URL"`
+	Repository string   `json:"repository,omitempty" jsonschema:"a repository document (id or title): capture a snapshot of it at its head"`
+	Tags       []string `json:"tags,omitempty" jsonschema:"the categories of the sources"`
+	Resolves   string   `json:"resolves,omitempty" jsonschema:"an open stub that asked for this source; it closes as resolved"`
+	NewTags    bool     `json:"new_tags,omitempty" jsonschema:"allow a tag no document holds, in tagging: known; set it only after the user agreed"`
 }
 
 // Captured is one source capture made or found.
@@ -45,8 +48,9 @@ type Captured struct {
 
 // Result is the output of capture.
 type Result struct {
-	Captured []Captured `json:"captured"`
-	Commit   string     `json:"commit,omitempty"`
+	Captured []Captured  `json:"captured"`
+	Events   []vault.Ref `json:"events"`
+	Commit   string      `json:"commit,omitempty"`
 }
 
 // item is one file to capture.
@@ -57,12 +61,32 @@ type item struct {
 	origin  string
 	locator string
 	inbox   string
-	scope   string
-	folder  string // the folder of the scope: where the source page goes
+	tags    []string
+}
+
+// Media is what a file is, by its extension.
+func Media(name string) string {
+	switch strings.ToLower(path.Ext(name)) {
+	case ".pdf":
+		return "pdf"
+	case ".md", ".markdown":
+		return "markdown"
+	case ".txt", ".text", ".csv", ".tsv", ".json", ".yaml", ".yml", ".html", ".htm", ".xml", ".log":
+		return "text"
+	case ".png", ".jpg", ".jpeg", ".gif", ".webp", ".svg", ".bmp", ".tif", ".tiff":
+		return "image"
+	case ".doc", ".docx", ".xls", ".xlsx", ".ppt", ".pptx", ".odt", ".ods", ".odp", ".rtf", ".pages", ".key", ".numbers":
+		return "office"
+	case ".mp3", ".wav", ".m4a", ".ogg", ".flac":
+		return "audio"
+	case ".mp4", ".mov", ".webm", ".mkv":
+		return "video"
+	}
+	return "other"
 }
 
 // Capture brings the requested documents into the vault as one commit.
-func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
+func Capture(v *vault.Vault, req Request, o work.Opts) (*Result, error) {
 	n := 0
 	if len(req.Inbox) > 0 {
 		n++
@@ -76,7 +100,8 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 	if n != 1 {
 		return nil, errors.New("capture takes one of inbox, text, or repository")
 	}
-	tx, err := change.Begin(v)
+	now := o.Now.Truncate(time.Second)
+	tx, err := vault.BeginWrite(v)
 	if err != nil {
 		return nil, err
 	}
@@ -85,22 +110,29 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	scope, folder := "", vault.Wiki
-	if req.Scope != "" {
-		s, err := idx.ResolveType(req.Scope, "area", "repository")
-		if err != nil {
-			return nil, fmt.Errorf("scope: %w", err)
+	tagList, err := tags.NormalizeAll(req.Tags)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tagList {
+		if v.Tagging() == "known" && !req.NewTags && !idx.TagExists(t) {
+			return nil, fmt.Errorf("the tag %q is new, and this vault uses known tags; use a tag that exists, or ask the user and call again with new_tags: true", t)
 		}
-		if folder, err = scopeFolder(idx, s); err != nil {
-			return nil, err
+	}
+	var stub *doc.Doc
+	if req.Resolves != "" {
+		if stub, err = idx.ResolveType(req.Resolves, "stub"); err != nil {
+			return nil, fmt.Errorf("resolves: %w", err)
 		}
-		scope = doc.Link(vault.Title(s))
+		if s := work.Load(idx).Status(stub); s != work.Open {
+			return nil, fmt.Errorf("resolves: %s is %s; only an open stub resolves", stub.Title(), s)
+		}
 	}
 	var items []item
 	switch {
 	case len(req.Inbox) > 0:
 		for _, name := range req.Inbox {
-			rel := path.Join(vault.Inbox, strings.TrimPrefix(path.Clean("/"+name), "/"))
+			rel := path.Join(vault.Inbox, strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(name, vault.Inbox+"/")), "/"))
 			st, err := os.Stat(v.Abs(rel))
 			if err != nil || st.IsDir() {
 				return nil, fmt.Errorf("inbox: %s is not a file in inbox/; vault status lists what waits there", name)
@@ -114,32 +146,38 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 			}
 			base := path.Base(rel)
 			ext := strings.ToLower(path.Ext(base))
-			items = append(items, item{title: doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, scope: scope, folder: folder})
+			items = append(items, item{title: doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, tags: tagList})
 		}
 	case strings.TrimSpace(req.Text) != "":
 		title := doc.CleanTitle(req.Title)
 		if title == "" {
 			return nil, errors.New("captured text needs a title")
 		}
-		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: "pasted", locator: req.Locator, scope: scope, folder: folder})
+		origin := "pasted"
+		if strings.HasPrefix(req.Locator, "http://") || strings.HasPrefix(req.Locator, "https://") {
+			origin = "url"
+		}
+		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: origin, locator: req.Locator, tags: tagList})
 	default:
 		repo, err := idx.ResolveType(req.Repository, "repository")
 		if err != nil {
 			return nil, err
 		}
+		if repo.Front.Bool("unlinked") {
+			return nil, fmt.Errorf("%s is unlinked; there is no repository to snapshot", repo.Title())
+		}
 		snap, err := Snapshot(repo)
 		if err != nil {
 			return nil, err
 		}
-		folder, err := scopeFolder(idx, repo)
-		if err != nil {
-			return nil, err
+		tg := tagList
+		if def := repo.Str("defines"); def != "" && len(tg) == 0 {
+			tg = []string{def}
 		}
-		items = append(items, item{title: fmt.Sprintf("%s @ %s", vault.Title(repo), snap.Commit[:7]), ext: ".md", data: snap.Content, origin: "repository", locator: repo.ID() + "@" + snap.Commit, scope: doc.Link(vault.Title(repo)), folder: folder})
+		items = append(items, item{title: fmt.Sprintf("%s @ %s", vault.Title(repo), snap.Commit[:7]), ext: ".md", data: snap.Content, origin: "repository", locator: repo.ID() + "@" + snap.Commit, tags: tg})
 	}
-	out := &Result{Captured: []Captured{}}
-	var titles []string
-	var created []string
+	out := &Result{Captured: []Captured{}, Events: []vault.Ref{}}
+	var titles, created []string
 	taken := map[string]bool{}
 	for _, it := range items {
 		sum := doc.FileHash(it.data)
@@ -152,10 +190,13 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 			}
 			continue
 		}
-		id := doc.NewID("src", func(s string) bool { return idx.ByID(s) != nil || taken[s] })
+		id := doc.NewID(schema.DocPrefix, func(s string) bool { return idx.ByID(s) != nil || taken[s] })
 		taken[id] = true
 		title := it.title
 		held := func(title string) bool {
+			if vault.ReservedTitle(title) {
+				return true
+			}
 			for _, p := range idx.TitleHolders(title) {
 				if p != it.inbox {
 					return true
@@ -168,30 +209,36 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 		}
 		taken["t:"+strings.ToLower(title)] = true
 		file := id + it.ext
-		m := measure(core.Kind(file), it.data)
-		if err := tx.Write(path.Join(vault.SourceFiles, file), it.data); err != nil {
+		media := Media(file)
+		m := measure(media, it.data)
+		if err := tx.Write(path.Join(vault.Assets, file), it.data); err != nil {
 			return nil, err
 		}
-		page := doc.Render([]doc.Field{
+		stamp := vault.Stamp(now)
+		fields := []doc.Field{
 			{Key: "id", Value: id},
 			{Key: "type", Value: "source"},
-			{Key: "created", Value: vault.Date(now)},
-			{Key: "updated", Value: vault.Date(now)},
-			{Key: "scope", Value: it.scope},
 			{Key: "description", Value: "Captured, not yet ingested."},
+			{Key: "tags", Value: nonNil(it.tags)},
 			{Key: "aliases", Value: []string{}},
-			{Key: "tags", Value: []string{}},
-			{Key: "sources", Value: []string{}},
+			{Key: "created", Value: stamp},
+			{Key: "updated", Value: stamp},
+			{Key: "refreshed", Value: stamp},
+			{Key: "authority", Value: "unknown"},
+			{Key: "status", Value: "pending"},
 			{Key: "file", Value: doc.Link(file)},
+			{Key: "media", Value: media},
 			{Key: "sha256", Value: sum},
 			{Key: "origin", Value: it.origin},
 			{Key: "locator", Value: it.locator},
 			{Key: "measure", Value: m.String()},
-			{Key: "captured", Value: vault.Date(now)},
-			{Key: "authority", Value: "unknown"},
-		}, "!"+doc.Link(file)+"\n")
-		rel := vault.Route(it.folder, "source", title)
-		if err := tx.Write(rel, []byte(page)); err != nil {
+			{Key: "captured", Value: stamp},
+		}
+		if stub != nil {
+			fields = append(fields, doc.Field{Key: "from", Value: doc.Link(stub.Title())})
+		}
+		rel := vault.DocPath(title)
+		if err := tx.Write(rel, []byte(doc.Render(fields, ""))); err != nil {
 			return nil, err
 		}
 		if it.inbox != "" {
@@ -202,8 +249,21 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 		titles = append(titles, title)
 		created = append(created, rel)
 	}
-	if healed, err := vault.Load(v); err == nil {
-		if _, err := graph.Heal(healed, tx.WriteIfChanged); err != nil {
+	var eventID string
+	if stub != nil && len(titles) > 0 {
+		idx2, err := vault.Load(v)
+		if err != nil {
+			return nil, err
+		}
+		if eventID, err = work.ResolveInTx(tx, idx2, idx2.ByID(stub.ID()), titles, work.Opts{Now: now, By: o.By}); err != nil {
+			return nil, err
+		}
+	}
+	if idx2, err := vault.Load(v); err == nil {
+		if _, err := derive.Sync(idx2, tx.WriteIfChanged); err != nil {
+			return nil, err
+		}
+		if _, err := work.Load(idx2).Sync(tx.WriteIfChanged); err != nil {
 			return nil, err
 		}
 	}
@@ -224,6 +284,9 @@ func Capture(v *vault.Vault, req Request, now time.Time) (*Result, error) {
 		d := idx.ByPath(rel)
 		chunks, _ := Chunks(idx, d.ID())
 		out.Captured = append(out.Captured, Captured{Ref: idx.Ref(d), SHA256: d.Str("sha256"), Measure: d.Str("measure"), Chunks: chunks})
+	}
+	if e := idx.ByID(eventID); e != nil {
+		out.Events = append(out.Events, idx.Ref(e))
 	}
 	return out, nil
 }
@@ -253,8 +316,8 @@ func (m Measure) String() string {
 	return ""
 }
 
-func measure(kind string, data []byte) Measure {
-	switch kind {
+func measure(media string, data []byte) Measure {
+	switch media {
 	case "pdf":
 		return Measure{Pages: PDFPages(data)}
 	case "markdown", "text":
@@ -280,7 +343,7 @@ func lineCount(s string) int {
 	return strings.Count(s, "\n") + 1
 }
 
-// repoFacts is a repository's head, for a snapshot.
+// repoHead is a repository's head, for a snapshot.
 func repoHead(root string) (string, error) {
 	g := gitx.Repo{Dir: root}
 	if !g.HasHead() {
@@ -289,10 +352,9 @@ func repoHead(root string) (string, error) {
 	return g.Head()
 }
 
-// scopeFolder is the folder of a scope a source page goes in.
-func scopeFolder(idx *vault.Index, s *doc.Doc) (string, error) {
-	if f := idx.Folder(s); f != "" {
-		return f, nil
+func nonNil(list []string) []string {
+	if list == nil {
+		return []string{}
 	}
-	return "", fmt.Errorf("scope: the page of %s lies at %s, outside a folder of its own; move it to …/%s/%s.md first", vault.Title(s), s.Path, vault.Title(s), vault.Title(s))
+	return list
 }

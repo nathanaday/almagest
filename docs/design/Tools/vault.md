@@ -5,7 +5,7 @@
 | Action | Takes | Returns | Writes |
 |---|---|---|---|
 | `status` (default) | nothing | [[Vault Status]] | nothing |
-| `init` | `name`, `path`, `tags` (`open` or `known`), `description` | [[Vault Status]] | the layout, `Atlas.md`, the two Bases, the views, `.obsidian/` with the plugin and its settings, `git init` when the folder is no repository, one `setup` commit; adds the path to `~/.atlas/config.json` |
+| `init` | `name`, `path`, `tagging` (`open` or `known`), `description` | [[Vault Status]] | the layout, `Atlas.md`, the two Bases, the views, `.obsidian/` with the plugin and its settings, `git init` when the folder is no repository, one `setup` commit; adds the path to `~/.atlas/config.json` |
 | `sync` | optional `views: true` (the views alone) | what it changed | derived fields and the views, with no commit ([[#sync]]) |
 | `mention` | a mention (`path` and `line`) and a `link` | the closed mention | checks the mention's box and appends ` → [[link]]` ([[Obsidian Plugin#Mentions]]) |
 

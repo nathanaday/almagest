@@ -17,6 +17,12 @@ func TestRewriteKeepsFragmentAliasAndFolder(t *testing.T) {
 	if out != want || n != 4 {
 		t.Fatalf("got %q (%d)", out, n)
 	}
+	if out, _ := Rewrite(`| [[Old\|x]] |`, Rename{"Old": "New"}); out != `| [[New\|x]] |` {
+		t.Fatalf("a link in a table keeps its escaped pipe: %q", out)
+	}
+	if l := Parse(`Old#H\|x`); l.Target != "Old" || l.Fragment != "#H" || l.Alias != "x" {
+		t.Fatalf("%+v", l)
+	}
 	if out, n := Rewrite(in, nil); out != in || n != 0 {
 		t.Fatal("no rename, no change")
 	}

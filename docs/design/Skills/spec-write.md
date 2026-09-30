@@ -15,7 +15,7 @@
 5. Decide what the research decides. Ask only what it cannot answer and a wrong guess would change, in one message, each question with a recommended answer. Ask no fixed number of questions.
 6. **The conventions step**: for each candidate policy, decide whether it binds this work. Keep the ones that do, each with one line on why.
 7. Write the spec:
-   - a plan: `## Goal`, `## Done when` (a list a reviewer can check), `## Decisions` (each with its reason), `## Out of scope`, `## Conventions`, `## Open questions`; `repositories`, `tags`, `priority`;
+   - a plan: `## Goal`, `## Done when` (a list a reviewer can check), `## Decisions` (each with its reason), `## Out of scope`, `## Conventions`, `## Open questions`, and, for a plan with no parts to come, `## Where` and `## Verify`; `repositories`, `tags`, `priority`;
    - a design: `## Purpose`, `## Behavior`, `## Interfaces`, `## Constraints`, `## Decisions`, `## Open questions`; `repositories`, `tags`.
 8. File it:
    - the stub becomes this one spec → `work promote` (in place; the stub's words stay as `## Origin`);

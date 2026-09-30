@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -12,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -28,7 +28,7 @@ func deny(w io.Writer, reason string) error {
 // writeActions are, per atlas tool, the actions that write.
 var writeActions = map[string]map[string]bool{
 	"change": {"propose": true, "apply": true, "reject": true, "undo": true},
-	"thread": {"open": true, "attach": true, "file": true, "tasks": true, "task": true, "set": true, "reopen": true},
+	"work":   {"stub": true, "spec": true, "promote": true, "start": true, "done": true, "drop": true, "reopen": true, "block": true, "unblock": true, "resolve": true, "note": true, "set": true},
 	"source": {"capture": true},
 	"vault":  {"init": true, "sync": true, "mention": true},
 }
@@ -48,6 +48,12 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	// gate, and the prompt hook records the user's turns.
 	if in.ToolName == "Bash" {
 		if reason := atlasCommandRefusal(in.tool().Command); reason != "" {
+			return deny(w, reason)
+		}
+		return nil
+	}
+	if tool == "work" && in.tool().Action == "start" {
+		if reason := restartRefusal(in, env); reason != "" {
 			return deny(w, reason)
 		}
 		return nil
@@ -98,6 +104,8 @@ func atlasCommandRefusal(cmd string) string {
 				return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
 			case len(rest) > 0 && rest[0] == "change" && slices.Contains(rest[1:], "apply"):
 				return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
+			case len(rest) > 1 && rest[0] == "vault" && rest[1] == "migrate":
+				return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
 			}
 		}
 	}
@@ -119,16 +127,16 @@ func readOnlyRefusal(in Input, tool string) string {
 		return fmt.Sprintf("%s is read-only; %s %s writes, so the skill that sent it makes that call", agent, tool, in.tool().Action)
 	case in.ToolName == "Bash":
 		cmd := strings.TrimSpace(in.tool().Command)
-		if agent == "thread-review" && gitRead.MatchString(cmd) && !shellOperator.MatchString(cmd) {
+		if agent == "spec-review" && gitRead.MatchString(cmd) && !shellOperator.MatchString(cmd) {
 			for _, f := range strings.Fields(cmd) {
 				if f == "-c" || strings.HasPrefix(f, "--output") || f == "--ext-diff" || f == "--textconv" {
-					return "thread-review may run git log, git diff, and git show without " + f
+					return "spec-review may run git log, git diff, and git show without " + f
 				}
 			}
 			return ""
 		}
-		if agent == "thread-review" {
-			return "thread-review may run only git log, git diff, and git show (git -C <repository> log …), with no shell operator"
+		if agent == "spec-review" {
+			return "spec-review may run only git log, git diff, and git show (git -C <repository> log …), with no shell operator"
 		}
 		return agent + " is read-only and runs no shell command"
 	}
@@ -143,22 +151,55 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	}
 	name := path.Base(rel)
 	switch {
+	case path.Dir(rel) == vault.Documents:
+		return documentRefusal(v, in, f, rel)
+	case strings.HasPrefix(rel, vault.Assets+"/"):
+		return rel + " is a captured original or an attachment; source capture writes the originals, and you add attachments in Obsidian"
 	case strings.HasPrefix(rel, vault.Wiki+"/"):
-		return rel + " is in the wiki, which changes only through a change: build a plan, call change propose, show the preview, and apply after the user's yes"
+		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from the work tool, change propose, or source capture"
 	case strings.HasPrefix(rel, vault.Changes+"/"):
-		return rel + " is a change document; the change tool writes it. Edit a proposed page inside it only when the user asks"
+		return rel + " is a change document; the change tool writes it. Edit a proposed document inside it only when the user asks"
+	case strings.HasPrefix(rel, vault.Views+"/"):
+		return rel + " is a view, which code writes from the documents; change the documents instead"
 	case rel == vault.Marker:
 		return "Atlas.md is the user's; ask the user to edit it"
-	case rel == vault.ThreadsCanvas:
-		return rel + " is the board as a canvas, which sync derives from the threads; the user moves cards and draws edges in Obsidian"
 	case strings.HasSuffix(name, ".base"):
 		return rel + " is a Base that vault init ships; ask the user to change it in Obsidian"
 	case rel == vault.Settings:
 		return rel + " lists the linked repositories; vault sync keeps it"
 	case strings.HasPrefix(rel, vault.Sessions+"/"):
 		return sessionRefusal(v, in, f, rel)
-	case strings.HasPrefix(rel, vault.Threads+"/"):
-		return threadRefusal(v, in, f, rel)
+	}
+	return ""
+}
+
+// documentRefusal keeps the documents of wiki/documents to their writers: a new file
+// comes from a tool; knowledge changes through a change; a work document's prose is the
+// model's, and its frontmatter, lead callout, and code sections are code's.
+func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
+	data, err := v.Read(rel)
+	if err != nil {
+		if f.Op == "delete" {
+			return ""
+		}
+		return rel + " would be a new document; a stub or a spec comes from the work tool, a topic or a repository from change propose, a source from source capture"
+	}
+	d := doc.Parse(rel, data)
+	t := schema.Get(d.Type())
+	switch {
+	case t == nil || d.Front == nil:
+		return ""
+	case t.Family == schema.Knowledge:
+		return rel + " is a " + d.Type() + ", which changes only through a change: build a plan, call change propose, show the preview, and apply after the user's yes"
+	case f.Op != "update" || in.ToolName == "Write":
+		return rel + " is a " + d.Type() + "; revise its prose with Edit, and its fields with work set"
+	case touchesPrefix(in, f, d):
+		return "the frontmatter and the lead callout of " + d.Title() + " are code's; use work set, or the work action that fits"
+	}
+	for _, s := range t.CodeSections {
+		if start, end := sectionBounds(d.Content, s); start >= 0 && touchesRange(in, f, d.Content, start, end) {
+			return "## " + s + " is code's; it follows the documents and the events"
+		}
 	}
 	return ""
 }
@@ -183,22 +224,6 @@ func sessionRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 	}
 	if start, end := sectionBounds(d.Content, "Subagents"); start >= 0 && touchesRange(in, f, d.Content, start, end) {
 		return "Subagents is the hooks'; " + allowed
-	}
-	return ""
-}
-
-// threadRefusal lets the model write a thread document's prose and nothing else.
-func threadRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
-	if f.Op != "update" {
-		return "a thread document comes from the thread tool (open, file, tasks); revise its prose with Edit after"
-	}
-	data, err := v.Read(rel)
-	if err != nil {
-		return ""
-	}
-	d := doc.Parse(rel, data)
-	if touchesPrefix(in, f, d) {
-		return "a thread document's frontmatter and lead callout are the thread tool's; use thread set, task set, or task done"
 	}
 	return ""
 }
@@ -275,8 +300,8 @@ func sectionBounds(content, title string) (int, int) {
 	return -1, -1
 }
 
-// repositoryRefusal is the thread rule: an edit inside a linked repository needs an open
-// thread of this session that covers the repository.
+// repositoryRefusal is the edit rule: an edit inside a linked repository needs a plan
+// this session started, still started, that names the repository.
 func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 	var repo *vault.Repo
 	for _, r := range v.Repositories() {
@@ -294,62 +319,60 @@ func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 	if s == nil && in.AgentID != "" {
 		s = sessions.Find(v, in.event().SessionID)
 	}
-	var threads []string
 	if s != nil {
-		threads = s.List("threads")
-	}
-	chain := map[string]bool{strings.ToLower(repo.Title): true}
-	parents := v.AreaParents()
-	for p := strings.ToLower(repo.Parent); p != "" && !chain[p]; p = strings.ToLower(parents[p]) {
-		chain[p] = true
-	}
-	for _, t := range threads {
-		if covers(v, doc.LinkTarget(t), repo.Title, chain) {
-			return ""
+		for _, title := range s.List("specs") {
+			if covers(v, doc.LinkTarget(title), repo.Title) {
+				return ""
+			}
 		}
 	}
-	return fmt.Sprintf("an edit in %s needs an open thread that covers it. Find or open one with the thread-work skill (thread open or thread attach), then edit", repo.Title)
+	return fmt.Sprintf("an edit in %s needs a started plan that names it. Find or write one with the spec-work skill, then call work start on it, and edit", repo.Title)
 }
 
-// covers reports whether an open thread holds the repository: in its scope, through an
-// area above it, or as a task's repository.
-func covers(v *vault.Vault, title, repo string, chain map[string]bool) bool {
-	rel := v.FindThreadFile(title)
-	if rel == "" {
+// covers reports whether a plan is started and names the repository.
+func covers(v *vault.Vault, title, repo string) bool {
+	spec := sessions.SpecDoc(v, title)
+	if spec == nil || spec.Type() != "spec" || spec.Str("status") != "started" {
 		return false
 	}
-	data, err := v.Read(rel)
-	if err != nil {
-		return false
-	}
-	stub := doc.Parse("", data)
-	if stub.Type() != "stub" || stub.Str("stage") == "closed" {
-		return false
-	}
-	for _, s := range stub.List("scope") {
-		if chain[strings.ToLower(doc.LinkTarget(s))] {
-			return true
-		}
-	}
-	// The folder the thread lies in stands for its home scope, which a hand move may have
-	// changed before sync writes it into the field.
-	folder := v.Abs(path.Dir(rel))
-	if home := path.Dir(path.Dir(rel)); home != vault.Threads && chain[strings.ToLower(path.Base(home))] {
-		return true
-	}
-	entries, _ := os.ReadDir(folder)
-	for _, e := range entries {
-		if !strings.Contains(e.Name(), " — T") {
-			continue
-		}
-		data, err := os.ReadFile(filepath.Join(folder, e.Name()))
-		if err != nil {
-			continue
-		}
-		task := doc.Parse("", data)
-		if task.Type() == "task" && strings.EqualFold(doc.LinkTarget(task.Str("repository")), repo) {
+	for _, r := range spec.List("repositories") {
+		if strings.EqualFold(doc.LinkTarget(r), repo) {
 			return true
 		}
 	}
 	return false
+}
+
+// restartRefusal refuses a second start of a plan this session already started and that
+// is still started: one continued event per session, and the session is bound already.
+func restartRefusal(in Input, env Env) string {
+	key := strings.TrimSpace(in.tool().Spec)
+	if key == "" {
+		return ""
+	}
+	v := findVault(in, env)
+	if v == nil {
+		return ""
+	}
+	s := sessions.Find(v, in.event().Key())
+	if s == nil {
+		return ""
+	}
+	spec := sessions.SpecDoc(v, doc.LinkTarget(key))
+	if spec == nil {
+		if idx, err := vault.Load(v); err == nil {
+			if d := idx.ByID(key); d != nil {
+				spec = d
+			}
+		}
+	}
+	if spec == nil || spec.Str("status") != "started" {
+		return ""
+	}
+	for _, l := range s.List("specs") {
+		if strings.EqualFold(doc.LinkTarget(l), spec.Title()) {
+			return spec.Title() + " is started in this session already; go on with the work, and add a line to its ## Progress"
+		}
+	}
+	return ""
 }

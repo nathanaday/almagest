@@ -161,3 +161,21 @@ func TestIDsAndTitles(t *testing.T) {
 		t.Fatal("link target")
 	}
 }
+
+func TestPutSection(t *testing.T) {
+	order := []string{"Goal", "Parts", "Progress", "Notes"}
+	body := "## Goal\n\nx\n\n## Notes\n\nmine\n"
+	got := PutSection(body, "Parts", "| a |", order)
+	if got != "## Goal\n\nx\n\n## Parts\n\n| a |\n\n## Notes\n\nmine\n" {
+		t.Fatalf("%q", got)
+	}
+	if again := PutSection(got, "Parts", "| b |", order); !strings.Contains(again, "| b |") || strings.Count(again, "## Parts") != 1 {
+		t.Fatalf("%q", again)
+	}
+	if gone := PutSection(got, "Parts", "", order); gone != body {
+		t.Fatalf("%q", gone)
+	}
+	if end := PutSection("## Goal\n\nx\n", "Notes", "n", order); end != "## Goal\n\nx\n\n## Notes\n\nn\n" {
+		t.Fatalf("%q", end)
+	}
+}

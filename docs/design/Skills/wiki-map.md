@@ -16,7 +16,7 @@
    - **related subjects** → bridge: a concept under the parent tag that explains how they relate, linked from both;
    - **a policy** that holds under every child tag → widen its tags to the parent;
    - **different subjects under one name** → rename one, so no reader confuses them.
-   In `tags: open` mode, also propose a new child tag when a cluster of documents under this tag shares much and no child tag holds it.
+   In `tagging: open` mode, also propose a new child tag when a cluster of documents under this tag shares much and no child tag holds it.
 5. **The overview.** Write the tag's overview topic (`kind: overview`, `defines: <tag>`), or modify it: `## Summary` for a reader, `## Context` for an agent, `## Related`. Leave out a tag with few documents and nothing to say.
 6. Send [[wiki-draft]] with the pairs when there are more than eight groups.
 7. Build one change for the tag.

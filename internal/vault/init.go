@@ -19,17 +19,6 @@ import (
 //go:embed template
 var templates embed.FS
 
-// Bases maps each Base init ships to its path in the vault.
-var Bases = map[string]string{
-	"Threads.base":  "threads/Threads.base",
-	"Sessions.base": "sessions/Sessions.base",
-	"Changes.base":  "changes/Changes.base",
-	"Wiki.base":     "wiki/Wiki.base",
-}
-
-// EmptyCanvas is the threads canvas of a vault with no open thread, as sync writes it.
-const EmptyCanvas = "{\n\t\"nodes\": [],\n\t\"edges\": []\n}\n"
-
 // PluginFiles are the Obsidian plugin's files, as init installs them.
 var PluginFiles = []string{"manifest.json", "main.js", "styles.css"}
 
@@ -38,13 +27,13 @@ type InitOptions struct {
 	Path        string
 	Name        string
 	Description string
-	// Areas is many, few, or manual.
-	Areas string
+	// Tagging is open or known.
+	Tagging string
 	// Context is the body of Atlas.md; the description when empty.
 	Context string
 }
 
-// Init makes a folder a vault: the layout, Atlas.md, the four Bases, the Obsidian plugin,
+// Init makes a folder a vault: the layout, Atlas.md, the two Bases, the Obsidian plugin,
 // git init when the folder is no repository, and one setup commit; then it lists the
 // folder in the machine file. A folder that holds notes, or that is already the root of a
 // repository, is adopted: init adds its files and never moves or edits one that is there.
@@ -56,12 +45,12 @@ func Init(opts InitOptions, h Home, now time.Time) (*Vault, error) {
 	if name == "" {
 		return nil, errors.New("init needs the vault's name")
 	}
-	areas := opts.Areas
-	if areas == "" {
-		areas = "manual"
+	tagging := opts.Tagging
+	if tagging == "" {
+		tagging = "open"
 	}
-	if !slices.Contains(AreaSettings, areas) {
-		return nil, fmt.Errorf("areas is %q; it must be many, few, or manual", areas)
+	if !slices.Contains(TaggingModes, tagging) {
+		return nil, fmt.Errorf("tagging is %q; it must be open or known", tagging)
 	}
 	root, err := filepath.Abs(Expand(opts.Path))
 	if err != nil {
@@ -101,7 +90,7 @@ func Init(opts InitOptions, h Home, now time.Time) (*Vault, error) {
 			return nil, err
 		}
 	}
-	written, err := writeLayout(v, name, strings.TrimSpace(opts.Description), areas, opts.Context, now)
+	written, err := writeLayout(v, name, strings.TrimSpace(opts.Description), tagging, opts.Context, now)
 	if err != nil {
 		return nil, err
 	}
@@ -123,7 +112,7 @@ func Init(opts InitOptions, h Home, now time.Time) (*Vault, error) {
 	return Open(root)
 }
 
-func writeLayout(v *Vault, name, description, areas, context string, now time.Time) ([]string, error) {
+func writeLayout(v *Vault, name, description, tagging, context string, now time.Time) ([]string, error) {
 	if err := v.EnsureFolders(); err != nil {
 		return nil, err
 	}
@@ -140,9 +129,9 @@ func writeLayout(v *Vault, name, description, areas, context string, now time.Ti
 		{Key: "type", Value: "vault"},
 		{Key: "name", Value: name},
 		{Key: "description", Value: description},
-		{Key: "created", Value: Date(now)},
-		{Key: "updated", Value: Date(now)},
-		{Key: "areas", Value: areas},
+		{Key: "created", Value: Stamp(now)},
+		{Key: "updated", Value: Stamp(now)},
+		{Key: "tagging", Value: tagging},
 		{Key: "wikify", Value: DefaultWikify},
 		{Key: "stale_hours", Value: DefaultStaleHours},
 		{Key: "layout", Value: Layout},
@@ -164,11 +153,10 @@ func writeLayout(v *Vault, name, description, areas, context string, now time.Ti
 		}
 		written = append(written, rel)
 	}
-	if !v.Exists(ThreadsCanvas) {
-		if err := v.Write(ThreadsCanvas, []byte(EmptyCanvas)); err != nil {
-			return nil, err
-		}
-		written = append(written, ThreadsCanvas)
+	if wrote, err := ObsidianSettings(v); err != nil {
+		return nil, err
+	} else if wrote {
+		written = append(written, AppJSON)
 	}
 	plugin, err := InstallPlugin(v)
 	if err != nil {

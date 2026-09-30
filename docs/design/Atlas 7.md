@@ -112,7 +112,7 @@ document → chunks → Text Blob → (wiki-extract) → Item Map → match → 
 | `thread` tool | `work` tool | the documents are no longer a thread |
 | `Threads.base`, `Threads.canvas`, `Wiki.base` | `views/`: tag tree, work, timeline, documents | navigation apart from storage |
 | scope folders in the file explorer | `views/tags/`: a folder per tag, a view note per folder | the tree is derived, so a document never moves |
-| `areas: many \| few \| manual` | `tags: open \| known` | the setting governs what now categorizes |
+| `areas: many \| few \| manual` | `tagging: open \| known` | the setting governs what now categorizes |
 
 Kept: the change document and its gate; the one ingest pipeline; unique titles and link rewrites; code-owned lead callouts; the immutable captured copy; session documents and the hooks; the read-only workers; the guard; lint; the graph colors.
 

@@ -24,10 +24,10 @@ const root = "../.."
 
 // Skills are the skills of the design's map, by noun.
 var Skills = map[string][]string{
-	"atlas":  {"atlas", "atlas-onboard"},
-	"repo":   {"repo-link", "repo-unlink", "repo-ingest"},
-	"wiki":   {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-rollup", "wiki-review"},
-	"thread": {"thread-work", "thread-stub", "thread-spec", "thread-plan", "thread-run", "thread-receipt"},
+	"atlas": {"atlas", "atlas-onboard"},
+	"repo":  {"repo-link", "repo-unlink", "repo-ingest"},
+	"wiki":  {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review", "wiki-stub"},
+	"spec":  {"spec-work", "spec-write", "spec-split", "spec-run", "spec-close"},
 }
 
 func allSkills() []string {
@@ -158,7 +158,7 @@ func TestSkillsNameOnlyWhatExists(t *testing.T) {
 	for _, n := range mcpserver.ToolNames() {
 		tools[n] = true
 	}
-	name := regexp.MustCompile(`\[((?:atlas|repo|wiki|thread)-[a-z]+)\]\(`)
+	name := regexp.MustCompile(`\[((?:atlas|repo|wiki|spec)-[a-z]+)\]\(`)
 	toolsLine := regexp.MustCompile("(?m)^Tools: (.*)$")
 	for _, s := range allSkills() {
 		text := read(t, "skills/"+s+"/SKILL.md")

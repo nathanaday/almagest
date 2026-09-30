@@ -15,7 +15,7 @@ views:
       - file.name
       - counts
       - absorbs
-      - thread
+      - work
       - session
       - proposed
     sort:
@@ -30,18 +30,18 @@ views:
       - file.name
       - counts
       - absorbs
-      - thread
+      - work
       - applied
     sort:
       - property: applied
         direction: DESC
   - type: table
-    name: By thread
+    name: By work
     filters:
       and:
-        - 'thread && thread != ""'
+        - 'work && work != ""'
     groupBy:
-      property: thread
+      property: work
       direction: ASC
     order:
       - file.name

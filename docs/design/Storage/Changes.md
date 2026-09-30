@@ -146,7 +146,7 @@ A source is created only by capture, and a stub, spec, or event only by `work`. 
 2. A modify, promote, rename, remove, or confirm names a document by id, of a type the op allows.
 3. The document matches its type's schema: the required fields exist and hold allowed values; `sources` name documents that exist or that the same change creates; a repository's `path` is the root of a git work tree outside the vault, and no other document holds it; `defines` is unique.
 4. The model sets no field that code owns. Code drops such a field and reports it as a warning.
-5. Every tag is valid ([[Documents#Form]]). In `tags: known` mode, a tag that no document holds needs `new_tags: true` on the plan.
+5. Every tag is valid ([[Documents#Form]]). In `tagging: known` mode, a tag that no document holds needs `new_tags: true` on the plan.
 6. A modify, promote, or confirm carries `base`, the hash the model read; when the model gives none, code records the hash at propose time. Apply refuses when the file changed since.
 7. `absorbs` names documents of a type in `wikify` ([[Vault Layout#Atlas.md]]).
 8. At most 100 writes from the model. Link and tag rewrites do not count.

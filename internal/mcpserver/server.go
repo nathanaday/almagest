@@ -1,6 +1,6 @@
 // Package mcpserver serves the eight tools, each a thin layer over one package. A tool
 // takes ids or titles and returns entities; every rule is the package's, and the
-// refusals come from there.
+// refusals come from there. After a write, the server writes the views.
 package mcpserver
 
 import (
@@ -13,16 +13,16 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nathanaday/atlas-obsidian/internal/brief"
 	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/match"
-	"github.com/nathanaday/atlas-obsidian/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/internal/search"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Name is the server's name; hosts name its tools mcp__plugin_<plugin>_atlas__<tool>.
@@ -58,7 +58,7 @@ func New(opts Options) *Server {
 
 // ToolNames are the tools, in the order the server lists them.
 func ToolNames() []string {
-	return []string{"vault", "search", "context", "match", "source", "change", "thread", "lint"}
+	return []string{"vault", "search", "context", "match", "source", "change", "work", "lint"}
 }
 
 // open resolves the vault a call acts on.
@@ -75,7 +75,9 @@ func (s *Server) index(name string) (*vault.Index, error) {
 	return vault.Load(v)
 }
 
-const vaultArg = "the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"
+// views writes the views after a write. A view that fails to write fails no call: the
+// next sync writes it.
+func (s *Server) views(v *vault.Vault) { core.Views(v, s.opts.Now()) }
 
 // VaultIn is the vault tool's input.
 type VaultIn struct {
@@ -83,8 +85,9 @@ type VaultIn struct {
 	Vault       string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
 	Name        string `json:"name,omitempty" jsonschema:"init: the vault's name"`
 	Path        string `json:"path,omitempty" jsonschema:"init: the folder that becomes the vault"`
-	Areas       string `json:"areas,omitempty" jsonschema:"init: many, few, or manual (the default): how readily areas are proposed"`
+	Tagging     string `json:"tagging,omitempty" jsonschema:"init: open (the default; the agent adds tags freely) or known (only tags that exist, unless the user agrees)"`
 	Description string `json:"description,omitempty" jsonschema:"init: one or two sentences on what the vault is for; the body of Atlas.md"`
+	Views       bool   `json:"views,omitempty" jsonschema:"sync: the statuses, callouts, and views only, with no git"`
 	Note        string `json:"note,omitempty" jsonschema:"mention: the path of the note that holds the mention"`
 	Line        int    `json:"line,omitempty" jsonschema:"mention: the mention's line"`
 	Link        string `json:"link,omitempty" jsonschema:"mention: the document that answers it (id or title)"`
@@ -113,7 +116,7 @@ func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in Vau
 		if path == "" {
 			path = s.opts.Dir
 		}
-		st, err := core.Init(vault.InitOptions{Path: path, Name: in.Name, Description: in.Description, Areas: in.Areas}, vault.HomeFrom(s.opts.Getenv), now)
+		st, err := core.Init(vault.InitOptions{Path: path, Name: in.Name, Description: in.Description, Tagging: in.Tagging}, vault.HomeFrom(s.opts.Getenv), now)
 		if err != nil {
 			return nil, VaultOut{}, err
 		}
@@ -123,7 +126,7 @@ func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in Vau
 		if err != nil {
 			return nil, VaultOut{}, err
 		}
-		synced, err := core.Sync(v, now)
+		synced, err := core.Sync(v, now, core.SyncOptions{Views: in.Views})
 		if err != nil {
 			return nil, VaultOut{}, err
 		}
@@ -137,6 +140,7 @@ func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in Vau
 		if err != nil {
 			return nil, VaultOut{}, err
 		}
+		s.views(v)
 		return nil, VaultOut{Mention: m}, nil
 	}
 	return nil, VaultOut{}, fmt.Errorf("vault takes action status, init, sync, or mention, not %q", in.Action)
@@ -160,26 +164,22 @@ func (s *Server) searchTool(ctx context.Context, req *mcp.CallToolRequest, in Se
 // ContextIn is the context tool's input.
 type ContextIn struct {
 	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
-	Scope string `json:"scope,omitempty" jsonschema:"an area or repository by id or title; the vault when empty"`
-	Path  string `json:"path,omitempty" jsonschema:"a path inside a linked repository, in place of scope"`
+	brief.Input
 }
 
-func (s *Server) contextTool(ctx context.Context, req *mcp.CallToolRequest, in ContextIn) (*mcp.CallToolResult, *scope.Chain, error) {
+func (s *Server) contextTool(ctx context.Context, req *mcp.CallToolRequest, in ContextIn) (*mcp.CallToolResult, *brief.Brief, error) {
 	idx, err := s.index(in.Vault)
 	if err != nil {
 		return nil, nil, err
 	}
-	c, err := scope.Context(idx, in.Scope, in.Path)
-	return nil, c, err
+	b, err := brief.Of(idx, in.Input)
+	return nil, b, err
 }
 
 // MatchIn is the match tool's input.
 type MatchIn struct {
-	Vault    string          `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
-	Items    []match.ItemMap `json:"items,omitempty" jsonschema:"the Item Maps the extract workers returned, every one at once"`
-	Pages    []string        `json:"pages,omitempty" jsonschema:"page ids to compare, in place of items (wiki-rollup)"`
-	Siblings bool            `json:"siblings,omitempty" jsonschema:"with pages: compare each page only with the pages of its sibling scopes"`
-	Within   string          `json:"within,omitempty" jsonschema:"limit the candidate pages to this scope and the scopes below it"`
+	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	match.Input
 }
 
 func (s *Server) matchTool(ctx context.Context, req *mcp.CallToolRequest, in MatchIn) (*mcp.CallToolResult, *match.Map, error) {
@@ -187,7 +187,7 @@ func (s *Server) matchTool(ctx context.Context, req *mcp.CallToolRequest, in Mat
 	if err != nil {
 		return nil, nil, err
 	}
-	m, err := match.Run(idx, match.Input{Items: in.Items, Pages: in.Pages, Siblings: in.Siblings, Within: in.Within})
+	m, err := match.Run(idx, in.Input)
 	return nil, m, err
 }
 
@@ -203,6 +203,7 @@ type SourceIn struct {
 // SourceOut is the source tool's output.
 type SourceOut struct {
 	Captured []source.Captured `json:"captured,omitempty"`
+	Events   []vault.Ref       `json:"events,omitempty"`
 	Commit   string            `json:"commit,omitempty"`
 	Chunks   []source.Chunk    `json:"chunks,omitempty"`
 	Blob     *source.TextBlob  `json:"blob,omitempty"`
@@ -215,11 +216,12 @@ func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in So
 		if err != nil {
 			return nil, SourceOut{}, err
 		}
-		res, err := source.Capture(v, in.Request, s.opts.Now())
+		res, err := source.Capture(v, in.Request, work.Opts{Now: s.opts.Now(), By: work.ByAgent})
 		if err != nil {
 			return nil, SourceOut{}, err
 		}
-		return nil, SourceOut{Captured: res.Captured, Commit: res.Commit}, nil
+		s.views(v)
+		return nil, SourceOut{Captured: res.Captured, Events: res.Events, Commit: res.Commit}, nil
 	case "chunks":
 		idx, err := s.index(in.Vault)
 		if err != nil {
@@ -247,9 +249,10 @@ type ChangeIn struct {
 	Title      string         `json:"title,omitempty" jsonschema:"propose: a short name; the file name and the commit subject"`
 	Notes      string         `json:"notes,omitempty" jsonschema:"propose: what the change does and why, and each skipped subject with its reason"`
 	Absorbs    []string       `json:"absorbs,omitempty" jsonschema:"propose: ids of the documents the change absorbs into the wiki"`
-	Thread     string         `json:"thread,omitempty" jsonschema:"propose: the thread the change serves, if any"`
+	Work       string         `json:"work,omitempty" jsonschema:"propose: the stub or spec the change serves, if any"`
 	Supersedes string         `json:"supersedes,omitempty" jsonschema:"propose: a proposed change this one replaces"`
-	Writes     []change.Write `json:"writes,omitempty" jsonschema:"propose: the writes: create (type, title, fields, body), modify (id, fields, body, base), rename (id, title), remove (id, redirect)"`
+	NewTags    bool           `json:"new_tags,omitempty" jsonschema:"propose: allow tags no document holds, in tagging: known, after the user agreed"`
+	Writes     []change.Write `json:"writes,omitempty" jsonschema:"propose: the writes: create (type topic or repository, kind, title, fields, body), modify (id, fields, body, base), promote (id of an open stub, kind, fields, body, title), rename (id, title), remove (id, redirect), confirm (id), retag (from, to)"`
 }
 
 func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in ChangeIn) (*mcp.CallToolResult, *change.Preview, error) {
@@ -258,6 +261,12 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 		return nil, nil, err
 	}
 	now := s.opts.Now()
+	done := func(pv *change.Preview, err error) (*mcp.CallToolResult, *change.Preview, error) {
+		if err == nil {
+			s.views(v)
+		}
+		return nil, pv, err
+	}
 	switch in.Action {
 	case "", "show":
 		idx, err := vault.Load(v)
@@ -267,116 +276,129 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 		pv, err := change.Show(idx, in.ID)
 		return nil, pv, err
 	case "propose":
-		pv, err := change.Propose(v, change.Plan{Title: in.Title, Notes: in.Notes, Absorbs: in.Absorbs, Thread: in.Thread, Supersedes: in.Supersedes, Writes: in.Writes}, now)
-		return nil, pv, err
+		return done(change.Propose(v, change.Plan{Title: in.Title, Notes: in.Notes, Absorbs: in.Absorbs, Work: in.Work, Supersedes: in.Supersedes, NewTags: in.NewTags, Writes: in.Writes}, now))
 	case "apply":
-		pv, err := change.Apply(v, in.ID, now, sessions.UserAnswered(v))
-		return nil, pv, err
+		return done(change.Apply(v, in.ID, now, sessions.UserAnswered(v)))
 	case "reject":
-		pv, err := change.Reject(v, in.ID, in.Reason, now)
-		return nil, pv, err
+		return done(change.Reject(v, in.ID, in.Reason, now))
 	case "undo":
-		pv, err := change.Undo(v, in.ID, now)
-		return nil, pv, err
+		return done(change.Undo(v, in.ID, now))
 	}
 	return nil, nil, fmt.Errorf("change takes action show, propose, apply, reject, or undo, not %q", in.Action)
 }
 
-// ThreadIn is the thread tool's input.
-type ThreadIn struct {
-	Action     string           `json:"action,omitempty" jsonschema:"list (the default), show, open, attach, file, tasks, task, set, or reopen"`
-	Vault      string           `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
-	Thread     string           `json:"thread,omitempty" jsonschema:"the thread: its id or title, or any of its documents"`
-	Text       string           `json:"text,omitempty" jsonschema:"open: the user's words; file: the document's sections"`
-	Title      *string          `json:"title,omitempty" jsonschema:"open: a short name for the work; set, task set: the new title"`
-	Scope      []string         `json:"scope,omitempty" jsonschema:"open, set: the repositories and areas the work touches"`
-	Priority   string           `json:"priority,omitempty" jsonschema:"open, set: high, normal, low, or someday"`
-	Inbox      string           `json:"inbox,omitempty" jsonschema:"open: a note in inbox/ that the stub replaces"`
-	Blocked    *string          `json:"blocked,omitempty" jsonschema:"set, task set: what the work waits on, in one line; empty unblocks"`
-	Part       string           `json:"part,omitempty" jsonschema:"file: spec or receipt"`
-	Outcome    string           `json:"outcome,omitempty" jsonschema:"file receipt: completed or killed"`
-	Tasks      []threads.TaskIn `json:"tasks,omitempty" jsonschema:"tasks: the new tasks"`
-	Task       string           `json:"task,omitempty" jsonschema:"task: the task, by id, title, or T<n> with thread"`
-	Do         string           `json:"do,omitempty" jsonschema:"task: start, done, drop, reopen, or set"`
-	Result     string           `json:"result,omitempty" jsonschema:"task done: what changed, the commits, how it was verified"`
-	Take       bool             `json:"take,omitempty" jsonschema:"task start: take a task another live session holds"`
-	Repository *string          `json:"repository,omitempty" jsonschema:"task set: the task's repository"`
-	Depends    *[]string        `json:"depends,omitempty" jsonschema:"task set: the tasks it waits for"`
-	Order      *int             `json:"order,omitempty" jsonschema:"task set: the task's number"`
+// WorkIn is the work tool's input.
+type WorkIn struct {
+	Action string `json:"action,omitempty" jsonschema:"list (the default), show, stub, spec, promote, start, done, drop, reopen, block, unblock, resolve, note, or set"`
+	Vault  string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	// The document an action acts on.
+	Doc  string `json:"doc,omitempty" jsonschema:"show, drop, reopen, note: the stub or spec (a note: any document), by id or title"`
+	Spec string `json:"spec,omitempty" jsonschema:"start, done, block, unblock: the plan, by id or title"`
+	Stub string `json:"stub,omitempty" jsonschema:"promote, resolve: the open stub, by id or title"`
+	// stub and promote.
+	Text        string   `json:"text,omitempty" jsonschema:"stub: the user's words, as given; promote: the spec's sections; note: the note"`
+	Title       string   `json:"title,omitempty" jsonschema:"stub, promote: a short title"`
+	Description string   `json:"description,omitempty" jsonschema:"stub, promote: one sentence"`
+	Tags        []string `json:"tags,omitempty" jsonschema:"stub, promote: the categories; list: only work that holds every one"`
+	Priority    string   `json:"priority,omitempty" jsonschema:"stub, promote: high, normal, low, or someday"`
+	Inbox       string   `json:"inbox,omitempty" jsonschema:"stub: a note in inbox/ that the stub replaces"`
+	NewTags     bool     `json:"new_tags,omitempty" jsonschema:"stub, spec, promote: allow a tag no document holds, in tagging: known, after the user agreed"`
+	// spec.
+	Specs   []work.SpecIn `json:"specs,omitempty" jsonschema:"spec: the specs to write in one commit (a plan and its parts, or one spec)"`
+	Resolve bool          `json:"resolve,omitempty" jsonschema:"spec: close the from stub as resolved, with the specs in its became"`
+	// promote.
+	Kind         string   `json:"kind,omitempty" jsonschema:"promote: plan or design"`
+	Repositories []string `json:"repositories,omitempty" jsonschema:"promote: the repositories the work touches"`
+	Parent       string   `json:"parent,omitempty" jsonschema:"promote: the plan this is a part of"`
+	Repository   string   `json:"repository,omitempty" jsonschema:"list: only plans that name this repository"`
+	// start, done, drop, reopen, block, resolve.
+	Take   bool           `json:"take,omitempty" jsonschema:"start: take a plan another live session started"`
+	Result *work.ResultIn `json:"result,omitempty" jsonschema:"done: the result: delivered and verified, and follow_ups and learned"`
+	Reason string         `json:"reason,omitempty" jsonschema:"drop: why; reopen: why, optional; block: what the plan waits on, in one line"`
+	Became []string       `json:"became,omitempty" jsonschema:"resolve: the documents the stub became"`
+	// set.
+	Set *work.SetIn `json:"set,omitempty" jsonschema:"set: the stub or spec (doc) and the fields to change; a field left out stays"`
 }
 
-// ThreadOut is the thread tool's output: the board, or one thread.
-type ThreadOut struct {
-	Board  *threads.BoardView `json:"board,omitempty"`
-	View   *threads.View      `json:"view,omitempty"`
-	Commit string             `json:"commit,omitempty"`
+// WorkOut is the work tool's output: the board, or one document with what the call wrote.
+type WorkOut struct {
+	Board   *work.BoardView `json:"board,omitempty"`
+	View    *work.View      `json:"view,omitempty"`
+	Commit  string          `json:"commit,omitempty"`
+	Wrote   []vault.Ref     `json:"wrote,omitempty"`
+	Events  []vault.Ref     `json:"events,omitempty"`
+	Started string          `json:"started,omitempty"`
 }
 
-func (s *Server) threadTool(ctx context.Context, req *mcp.CallToolRequest, in ThreadIn) (*mcp.CallToolResult, ThreadOut, error) {
+func (s *Server) workTool(ctx context.Context, req *mcp.CallToolRequest, in WorkIn) (*mcp.CallToolResult, WorkOut, error) {
 	v, err := s.open(in.Vault)
 	if err != nil {
-		return nil, ThreadOut{}, err
+		return nil, WorkOut{}, err
 	}
-	now := s.opts.Now()
-	out := func(r *threads.Result, err error) (*mcp.CallToolResult, ThreadOut, error) {
+	o := work.Opts{Now: s.opts.Now(), By: work.ByAgent}
+	out := func(r *work.Result, err error) (*mcp.CallToolResult, WorkOut, error) {
 		if err != nil {
-			return nil, ThreadOut{}, err
+			return nil, WorkOut{}, err
 		}
-		return nil, ThreadOut{View: r.View, Commit: r.Commit}, nil
-	}
-	str := func(p *string) string {
-		if p == nil {
-			return ""
-		}
-		return *p
+		s.views(v)
+		return nil, WorkOut{View: r.View, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events, Started: r.Started}, nil
 	}
 	switch in.Action {
 	case "", "list":
 		idx, err := vault.Load(v)
 		if err != nil {
-			return nil, ThreadOut{}, err
+			return nil, WorkOut{}, err
 		}
-		return nil, ThreadOut{Board: threads.List(idx)}, nil
-	case "show", "attach":
+		return nil, WorkOut{Board: work.Load(idx).BoardView(work.Filter{Tags: in.Tags, Repository: in.Repository})}, nil
+	case "show":
 		idx, err := vault.Load(v)
 		if err != nil {
-			return nil, ThreadOut{}, err
+			return nil, WorkOut{}, err
 		}
-		view, err := threads.Show(idx, in.Thread)
-		if in.Action == "attach" {
-			view, err = threads.Attach(idx, in.Thread)
-		}
+		view, err := work.Show(idx, in.Doc)
 		if err != nil {
-			return nil, ThreadOut{}, err
+			return nil, WorkOut{}, err
 		}
-		return nil, ThreadOut{View: view}, nil
-	case "open":
-		return out(threads.Open(v, threads.OpenIn{Text: in.Text, Title: str(in.Title), Scope: in.Scope, Priority: in.Priority, Inbox: in.Inbox}, now))
-	case "file":
-		return out(threads.File(v, in.Thread, in.Part, in.Text, in.Outcome, now))
-	case "tasks":
-		return out(threads.Tasks(v, in.Thread, in.Tasks, now))
-	case "task":
-		return out(threads.Task(v, in.Task, in.Thread, threads.TaskDo{Do: in.Do, Result: in.Result, Take: in.Take, Title: in.Title, Repository: in.Repository, Depends: in.Depends, Order: in.Order, Blocked: in.Blocked}, now))
-	case "set":
-		set := threads.SetIn{Title: in.Title, Blocked: in.Blocked}
-		if in.Priority != "" {
-			set.Priority = &in.Priority
+		return nil, WorkOut{View: view}, nil
+	case "stub":
+		return out(work.Stub(v, work.StubIn{Text: in.Text, Title: in.Title, Description: in.Description, Tags: in.Tags, Priority: in.Priority, Inbox: in.Inbox, NewTags: in.NewTags}, o))
+	case "spec":
+		return out(work.Specs(v, work.SpecsIn{Specs: in.Specs, Resolve: in.Resolve, NewTags: in.NewTags}, o))
+	case "promote":
+		return out(work.Promote(v, work.PromoteIn{Stub: in.Stub, Kind: in.Kind, Text: in.Text, Title: in.Title, Description: in.Description, Tags: in.Tags, Repositories: in.Repositories, Parent: in.Parent, Priority: in.Priority, NewTags: in.NewTags}, o))
+	case "start":
+		return out(work.Start(v, in.Spec, in.Take, o))
+	case "done":
+		var r work.ResultIn
+		if in.Result != nil {
+			r = *in.Result
 		}
-		if in.Scope != nil {
-			set.Scope = &in.Scope
-		}
-		return out(threads.Set(v, in.Thread, set, now))
+		return out(work.Complete(v, in.Spec, r, o))
+	case "drop":
+		return out(work.Drop(v, in.Doc, in.Reason, o))
 	case "reopen":
-		return out(threads.Reopen(v, in.Thread, now))
+		return out(work.Reopen(v, in.Doc, in.Reason, o))
+	case "block":
+		return out(work.Block(v, in.Spec, in.Reason, o))
+	case "unblock":
+		return out(work.Unblock(v, in.Spec, o))
+	case "resolve":
+		return out(work.Resolve(v, in.Stub, in.Became, o))
+	case "note":
+		return out(work.Note(v, in.Doc, in.Text, o))
+	case "set":
+		if in.Set == nil {
+			return nil, WorkOut{}, errors.New("set takes set: {doc, and the fields to change}")
+		}
+		return out(work.Set(v, *in.Set, o))
 	}
-	return nil, ThreadOut{}, fmt.Errorf("thread takes action list, show, open, attach, file, tasks, task, set, or reopen, not %q", in.Action)
+	return nil, WorkOut{}, fmt.Errorf("work takes action list, show, stub, spec, promote, start, done, drop, reopen, block, unblock, resolve, note, or set, not %q", in.Action)
 }
 
 // LintIn is the lint tool's input.
 type LintIn struct {
-	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
-	Scope string `json:"scope,omitempty" jsonschema:"an area or repository: check it and the scopes below it"`
+	Vault string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Tags  []string `json:"tags,omitempty" jsonschema:"check only the documents that hold every one of these tags"`
 }
 
 func (s *Server) lintTool(ctx context.Context, req *mcp.CallToolRequest, in LintIn) (*mcp.CallToolResult, *lint.Findings, error) {
@@ -384,7 +406,7 @@ func (s *Server) lintTool(ctx context.Context, req *mcp.CallToolRequest, in Lint
 	if err != nil {
 		return nil, nil, err
 	}
-	f, err := lint.Run(idx, lint.Options{Scope: in.Scope, Now: s.opts.Now()})
+	f, err := lint.Run(idx, lint.Options{Tags: in.Tags, Now: s.opts.Now()})
 	return nil, f, err
 }
 
@@ -394,21 +416,21 @@ func readOnly() *mcp.ToolAnnotations { return &mcp.ToolAnnotations{ReadOnlyHint:
 func (s *Server) MCP() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Atlas", Version: s.opts.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "vault",
-		Description: "The state of the vault in one read (status: scopes, wiki counts, open threads, live sessions, inbox, pending documents, proposed and recent changes, @atlas mentions, problems); init makes a vault; sync heals derived fields; mention closes an @atlas mention with a link to its answer."}, s.vaultTool)
+		Description: "The state of the vault in one read (status: documents by type, tags with counts, open work, live sessions, inbox, pending documents, proposed and recent changes, recent events, @atlas mentions, problems); init makes a vault; sync heals derived fields and writes the views; mention closes an @atlas mention with a link to its answer."}, s.vaultTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "search", Annotations: readOnly(),
-		Description: "Ranked search (BM25 over title, aliases, description, body) over every typed document. Filter by types, a scope and the scopes below it, and state (e.g. types [stub] with state {stage: [stub, spec, tasks]} finds open threads). Returns Doc Refs with snippets."}, s.searchTool)
+		Description: "Ranked search (BM25 over title, aliases, tags, description, body) over the documents of wiki/documents (source, repository, topic, stub, spec, event). Filter by types, kinds, tags (a document must hold every one), status, and repository. Returns Doc Refs with snippets, and facets: the counts of the tags, types, and statuses of every match, to narrow a broad query."}, s.searchTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "context", Annotations: readOnly(),
-		Description: "Walk the context graph to a scope (area or repository, or a path inside a linked repository; the vault when empty): the chain from the vault down with each body, the children, the repositories below, the policies on the chain nearest first, the open threads, and for a repository its AGENTS.md and CLAUDE.md and git facts (head, dirty, behind its page)."}, s.contextTool)
+		Description: "Everything an agent needs to work in a repository (by id or title, or a path inside it) or under tags: the tag pages from the top down with their Context, the repositories, the policies that apply (most specific first), the open work, and for a repository its AGENTS.md and CLAUDE.md and git facts now (branch, head, dirty files, ahead and behind, recent commits, commits past its description)."}, s.contextTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "match", Annotations: readOnly(),
-		Description: "Join the subjects of Item Maps across chunks and match each against the wiki: hit (a page holds its name or alias), near (neighbors above the threshold), or new. With pages and siblings, compare pages with the pages of sibling scopes, for a rollup."}, s.matchTool)
+		Description: "Join the subjects of Item Maps across chunks and match each against the topics and sources: hit (a document holds its name or alias), near (neighbors above the threshold), or new. With docs, or one tag and across, compare topics with topics under a different child tag of that tag, for wiki-map."}, s.matchTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "source",
-		Description: "capture brings inbox files, pasted text, or a snapshot of a linked repository into wiki/sources/ as one commit (the source is pending until a change absorbs it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, s.sourceTool)
+		Description: "capture brings inbox files, pasted text, or a snapshot of a linked repository into wiki/documents as sources, with the originals in wiki/assets, as one commit (a source is pending until a change absorbs it; resolves closes the stub that asked for it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, s.sourceTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "change",
-		Description: "The only way the wiki changes. propose validates a Wiki Change Plan and writes a change document (no commit) for the user to review; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, s.changeTool)
-	mcp.AddTool(server, &mcp.Tool{Name: "thread",
-		Description: "Every write to a thread, and the reads. list is the board; show is one thread with its next step. open makes a stub in the user's words; attach binds this session to a thread; file writes the spec or the receipt; tasks adds tasks; task starts, finishes, drops, reopens, or sets one; set changes priority, blocked, scope, or title; reopen takes up a closed thread. The stage is the furthest document; each write is one commit."}, s.threadTool)
+		Description: "The only way knowledge changes: sources, repositories, and topics. propose validates a Wiki Change Plan (create, modify, promote a stub to a topic, rename, remove, confirm, retag) and writes a change document (no commit) for the user to review; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, s.changeTool)
+	mcp.AddTool(server, &mcp.Tool{Name: "work",
+		Description: "Every write to stubs, specs, and events, and the reads of work. list is the board; show is a stub or spec with its parts, events, and next step. stub plants an idea in the user's words; spec writes a plan and its parts, or a design; promote makes a stub a spec in place; start binds this session to a plan with no parts (an edit in a repository needs one); done completes it with the result; drop, reopen, block, unblock, resolve, note, and set do what they say. Each write is one commit, and writes its events."}, s.workTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Annotations: readOnly(),
-		Description: "The health check over every typed document, optionally one scope: schema, duplicate titles, dead links, scope loops, repository paths, thread rules; orphans and uncited pages; repositories behind, stale pending documents and proposals, lost sessions. Each finding names its fix. Reads only."}, s.lintTool)
+		Description: "The health check over every typed document, optionally the documents under tags: schema, duplicate titles, dead links, tag pages, repository paths, spec and event rules, misplaced and untyped files; orphans, uncited and stale topics; near-duplicate tags, repositories behind, old pending documents and proposals, lost sessions. Each finding names its fix. Reads only."}, s.lintTool)
 	return server
 }
 

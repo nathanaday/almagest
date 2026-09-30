@@ -3,18 +3,17 @@ package change
 import (
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"time"
 
+	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Trailer names the change a commit applied.
@@ -22,14 +21,16 @@ const Trailer = "Atlas-Change"
 
 // Preview is what a change does, enough to show it in the chat.
 type Preview struct {
-	Ref          vault.Ref   `json:"ref"`
-	Status       string      `json:"status"`
-	Counts       Counts      `json:"counts"`
-	Writes       []WriteLine `json:"writes"`
-	LinkRewrites []vault.Ref `json:"link_rewrites"`
-	// Folders are the scope folders that move, each with the files it carries.
-	Folders  []Move      `json:"folders"`
+	Ref    vault.Ref   `json:"ref"`
+	Status string      `json:"status"`
+	Counts Counts      `json:"counts"`
+	Writes []WriteLine `json:"writes"`
+	// Rewrites are the files outside the writes whose links or tags the change rewrites.
+	Rewrites []vault.Ref `json:"rewrites"`
+	NewTags  []string    `json:"new_tags"`
 	Absorbs  []vault.Ref `json:"absorbs"`
+	// Events are the events apply wrote: the promoted events of its promotes.
+	Events   []vault.Ref `json:"events,omitempty"`
 	Warnings []string    `json:"warnings"`
 	Commit   string      `json:"commit,omitempty"`
 	Reason   string      `json:"reason,omitempty"`
@@ -37,54 +38,30 @@ type Preview struct {
 
 // WriteLine is one write of a preview.
 type WriteLine struct {
-	Op    string `json:"op"`
-	Title string `json:"title"`
-	Path  string `json:"path"`
-	Lines string `json:"lines,omitempty"`
-	Note  string `json:"note,omitempty"`
+	Op    string   `json:"op"`
+	Title string   `json:"title"`
+	Type  string   `json:"type,omitempty"`
+	Kind  string   `json:"kind,omitempty"`
+	Tags  []string `json:"tags,omitempty"`
+	Path  string   `json:"path,omitempty"`
+	Lines string   `json:"lines,omitempty"`
+	Note  string   `json:"note,omitempty"`
 }
 
-// Begin starts a write that ends in one commit: the lock, the repair of a change a crash
-// left applying, and the snapshot of hand edits. Every write tool starts with it.
-func Begin(v *vault.Vault) (*vault.Tx, error) {
-	return vault.Begin(v, func() error { return Recover(v) })
-}
+// Begin starts a write that ends in one commit: the layout check, the lock, the repair
+// of a change a crash left applying, and the snapshot of hand edits.
+func Begin(v *vault.Vault) (*vault.Tx, error) { return vault.BeginWrite(v) }
 
-// Recover finds each change a crash left applying, puts back every path it may have
-// written, and sets it to proposed. It skips a path that is no local document: the field
-// is frontmatter, which a pull or a shell can write. The caller holds the lock.
-func Recover(v *vault.Vault) error {
-	files, _ := filepath.Glob(v.Abs(vault.Changes + "/*/*.md"))
-	g := v.Git()
-	for _, abs := range files {
-		data, err := os.ReadFile(abs)
-		if err != nil || !strings.Contains(string(data), "status: "+Applying) {
-			continue
-		}
-		d := doc.Parse(v.Rel(abs), data)
-		if d.Str("status") != Applying {
-			continue
-		}
-		for _, p := range d.List("paths") {
-			if !v.Local(p) {
-				continue
-			}
-			if err := g.RestoreFrom("HEAD", p); err != nil {
-				return fmt.Errorf("recover %s: %w", vault.Title(d), err)
-			}
-			v.Prune(p)
-		}
-		content := doc.RemoveField(setStatus(d.Content, Proposed), "paths")
-		if err := v.Write(d.Path, []byte(content)); err != nil {
-			return err
-		}
-	}
-	return nil
-}
+// Recover repairs a change a crash left applying. The caller holds the lock.
+func Recover(v *vault.Vault) error { return vault.Recover(v) }
 
 // Propose validates a plan and writes its change document. It commits nothing; the next
 // commit of any kind keeps the document.
 func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
+	if err := v.CheckLayout(); err != nil {
+		return nil, err
+	}
+	now = now.Truncate(time.Second)
 	unlock, err := v.Lock()
 	if err != nil {
 		return nil, err
@@ -108,7 +85,7 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	if p.Supersedes != nil {
-		old := setStatus(p.Supersedes.Content, Superseded, doc.Field{Key: "updated", Value: vault.Date(now)})
+		old := setStatus(p.Supersedes.Content, Superseded, doc.Field{Key: "updated", Value: vault.Stamp(now)})
 		if err := v.Write(p.Supersedes.Path, []byte(old)); err != nil {
 			return nil, err
 		}
@@ -118,9 +95,7 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	d := idx.ByPath(rel)
-	pv := preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx))
-	pv.Folders = orEmpty(p.Folders)
-	return pv, nil
+	return preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx)), nil
 }
 
 // freePath is the path of a new change document: the date and the title, with (2) and
@@ -128,61 +103,63 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 func freePath(idx *vault.Index, now time.Time, title string) string {
 	base := vault.Date(now) + " " + title
 	name := base
-	for n := 2; ; n++ {
-		if len(idx.TitleHolders(name)) == 0 {
-			break
-		}
+	for n := 2; len(idx.TitleHolders(name)) > 0; n++ {
 		name = fmt.Sprintf("%s (%d)", base, n)
 	}
 	return fmt.Sprintf("%s/%s/%s.md", vault.Changes, now.Format("2006-01"), name)
 }
 
-func outsideRefs(idx *vault.Index, outside []Rewrite) []vault.Ref {
+func outsideRefs(idx *vault.Index, outside []vault.Rewrite) []vault.Ref {
 	out := []vault.Ref{}
 	for _, rw := range outside {
 		if d := idx.ByPath(rw.Path); d != nil {
-			out = append(out, idx.Ref(d))
+			ref := idx.Ref(d)
+			if ref.Type == "" {
+				ref = vault.Ref{Title: vault.Title(d), Path: d.Path, Tags: []string{}}
+			}
+			out = append(out, ref)
 		}
 	}
 	return out
 }
 
-// before gives a page's content before a change wrote it, and the page's path then.
-type before func(o *op) (content, path string)
+// before gives a document's content before a change wrote it.
+type before func(o *op) string
 
-// current reads a page as the vault holds it now: the before of a change not yet applied.
+// current reads a document as the vault holds it now: the before of a change not yet
+// applied.
 func current(idx *vault.Index) before {
-	return func(o *op) (string, string) {
+	return func(o *op) string {
 		if cur := idx.ByID(o.ID); cur != nil {
-			return cur.Content, cur.Path
+			return cur.Content
 		}
-		return "", o.Path
+		return ""
 	}
 }
 
-// atParent reads a page as the parent of a change's commit held it: the before of an
+// atParent reads a document as the parent of a change's commit held it: the before of an
 // applied change.
 func atParent(idx *vault.Index, sha string) before {
 	g := idx.V.Git()
 	parent := g.Parent(sha)
-	return func(o *op) (string, string) {
+	return func(o *op) string {
 		if parent != "" {
 			if data, err := g.ShowFile(parent, o.Path); err == nil {
-				return string(data), o.Path
+				return string(data)
 			}
 		}
-		return "", o.Path
+		return ""
 	}
 }
 
 // preview describes a change document and its ops.
 func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warnings []string, prior before) *Preview {
-	pv := &Preview{Ref: idx.Ref(d), Status: d.Str("status"), Counts: ParseCounts(d.Str("counts")), Writes: []WriteLine{}, LinkRewrites: outside, Folders: []Move{}, Absorbs: []vault.Ref{}, Warnings: warnings, Reason: d.Str("reason")}
+	pv := &Preview{Ref: idx.Ref(d), Status: d.Str("status"), Counts: ParseCounts(d.Str("counts")), Writes: []WriteLine{}, Rewrites: outside, NewTags: nonNil(d.List("new_tags")), Absorbs: []vault.Ref{}, Warnings: warnings, Reason: d.Str("reason")}
 	if pv.Warnings == nil {
 		pv.Warnings = []string{}
 	}
-	if pv.LinkRewrites == nil {
-		pv.LinkRewrites = []vault.Ref{}
+	if pv.Rewrites == nil {
+		pv.Rewrites = []vault.Ref{}
 	}
 	for _, a := range d.List("absorbs") {
 		if ad := idx.Linked(a); ad != nil {
@@ -190,29 +167,39 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 		}
 	}
 	for _, o := range ops {
-		w := WriteLine{Op: o.Kind, Title: o.Title, Path: o.Path}
+		w := WriteLine{Op: o.Kind, Title: o.Title, Type: o.Type, Kind: o.TopicKind, Path: o.finalPath()}
+		if o.writesContent() {
+			nd := doc.Parse(o.Path, []byte(o.Content))
+			w.Tags = nd.List("tags")
+			if w.Kind == "" {
+				w.Kind = nd.Str("kind")
+			}
+		}
 		switch o.Kind {
-		case "create":
+		case OpCreate:
 			w.Lines = fmt.Sprintf("+%d", lineCount(o.Content))
-		case "modify":
-			var was string
-			was, w.Path = prior(o)
-			added, removed := diffLines(was, o.Content)
+		case OpModify, OpPromote:
+			added, removed := diffLines(prior(o), o.Content)
 			w.Lines = fmt.Sprintf("+%d −%d", added, removed)
 			if o.Rewrite {
-				w.Note = "link rewrite"
+				w.Note = "rewrite"
 			}
-		case "rename":
-			w.Note = "→ " + o.NewTitle
-		case "remove":
+			if o.Kind == OpPromote {
+				w.Note = "stub → topic " + o.TopicKind
+			}
+		case OpRemove:
 			if r := idx.ByID(o.Redirect); r != nil {
 				w.Note = "links go to " + vault.Title(r)
 			}
+		case OpConfirm:
+			w.Note = "refreshed, no edit"
+		case OpRetag:
+			w.Title = o.From + " → " + o.To
+			w.Note = fmt.Sprintf("%d %s", o.Files, plural(o.Files, "file", "files"))
+			w.Path = ""
 		}
-		if o.NewPath != "" && o.Kind != "remove" {
-			w.Note = strings.TrimSpace(w.Note + " · moves from " + w.Path)
-			w.Note = strings.TrimPrefix(w.Note, "· ")
-			w.Path = o.NewPath
+		if o.NewTitle != "" && o.Kind != OpRemove {
+			w.Note = strings.TrimPrefix(strings.TrimSpace(w.Note+" · → "+o.NewTitle), "· ")
 		}
 		pv.Writes = append(pv.Writes, w)
 	}
@@ -271,22 +258,22 @@ func Show(idx *vault.Index, key string) (*Preview, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%s: %w", d.Path, err)
 	}
-	var folders []Move
-	if d.Str("status") == Proposed {
-		folders = placeProposed(idx, ops)
-	} else {
-		for _, o := range ops {
-			if cur := idx.ByID(o.ID); cur != nil && o.Kind != "create" {
-				o.Path = cur.Path
-			} else if o.Kind == "create" {
-				o.Path = vault.Route(vault.Wiki, o.Type, o.Title)
+	for _, o := range ops {
+		if cur := idx.ByID(o.ID); cur != nil && o.Kind != OpCreate {
+			o.Path = cur.Path
+			if o.Type == "" {
+				o.Type = cur.Type()
 			}
+		} else if o.Kind == OpCreate {
+			o.Path = vault.DocPath(o.Title)
 		}
 	}
 	var outside []vault.Ref
 	for _, t := range listedRewrites(d.Body) {
 		if od, err := idx.Resolve(t); err == nil {
 			outside = append(outside, idx.Ref(od))
+		} else if paths := idx.LinkPaths(t); len(paths) == 1 {
+			outside = append(outside, vault.Ref{Title: t, Path: paths[0], Tags: []string{}})
 		}
 	}
 	prior := current(idx)
@@ -298,23 +285,21 @@ func Show(idx *vault.Index, key string) (*Preview, error) {
 		}
 	}
 	pv := preview(idx, d, ops, outside, nil, prior)
-	if folders != nil {
-		pv.Folders = folders
-	}
 	if d.Str("status") == Applied {
 		pv.Commit = sha
 	}
 	return pv, nil
 }
 
-// listedRewrites are the titles under "### link rewrites".
+// listedRewrites are the titles under "### link rewrites" and "### tag rewrites".
 func listedRewrites(body string) []string {
 	var out []string
 	in := false
 	for _, line := range strings.Split(body, "\n") {
 		switch {
 		case strings.HasPrefix(line, "### "):
-			in = strings.TrimSpace(strings.TrimPrefix(line, "### ")) == "link rewrites"
+			t := strings.TrimSpace(strings.TrimPrefix(line, "### "))
+			in = t == "link rewrites" || t == "tag rewrites"
 		case strings.HasPrefix(line, "## "):
 			in = false
 		case in && strings.HasPrefix(line, "- "):
@@ -325,22 +310,28 @@ func listedRewrites(body string) []string {
 	return out
 }
 
-// Conflict is an apply that found a page changed since the change read it.
+// Conflict is an apply that found a document changed since the change read it.
 type Conflict struct {
 	Paths []string
 }
 
 func (c *Conflict) Error() string {
-	return fmt.Sprintf("conflict: %s changed since the change read it. Read the page again and propose a change that supersedes this one", strings.Join(c.Paths, ", "))
+	return fmt.Sprintf("conflict: %s changed since the change read it. Read the document again and propose a change that supersedes this one", strings.Join(c.Paths, ", "))
 }
 
 // Gate refuses to apply a change document with this many writes, or returns nil.
 type Gate func(d *doc.Doc, writes int) error
 
-// Apply reads a proposed change document again, validates it again, writes its pages,
-// and makes one commit. A gate, when given, judges the document Apply resolved, under the
-// lock, before anything is written.
+// newEvent is an event apply writes, with its path known before it writes.
+type newEvent struct {
+	rel, content, id string
+}
+
+// Apply reads a proposed change document again, validates it again, writes its
+// documents, and makes one commit. A gate, when given, judges the document Apply
+// resolved, under the lock, before anything is written.
 func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, error) {
+	now = now.Truncate(time.Second)
 	tx, err := Begin(v)
 	if err != nil {
 		return nil, err
@@ -366,27 +357,22 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 			return nil, err
 		}
 	}
-	c := &check{idx: idx, now: now, claimed: map[string]*op{}, gone: map[string]bool{}, byID: map[string][]*op{}}
+	c := newCheck(idx, now, true)
 	if err := c.revalidate(ops); err != nil {
 		return nil, err
 	}
-	p := &planned{Title: strings.TrimPrefix(vault.Title(d), d.Str("created")+" "), Ops: ops}
+	p := &planned{Title: strings.TrimPrefix(vault.Title(d), vault.Date(createdOf(d))+" "), Ops: ops}
 	for _, a := range d.List("absorbs") {
 		if ad := idx.Linked(a); ad != nil {
 			p.Absorbs = append(p.Absorbs, ad)
 		}
 	}
-	p.Moves, p.Folders = c.place(ops)
-	if len(c.problems) > 0 {
-		return nil, &Refusal{Problems: c.problems}
-	}
 	c.rewrites(p)
 	if len(c.problems) > 0 {
 		return nil, &Refusal{Problems: c.problems}
 	}
-	// The change's own document may link a page it renames, in its absorbs, its Absorbed
-	// table, or its notes. Its record starts from the rewritten text, and is no outside
-	// rewrite of its own.
+	// The change's own document may link a document it renames. Its record starts from
+	// the rewritten text, and is no outside rewrite of its own.
 	record := d.Content
 	for i, rw := range p.Outside {
 		if rw.Path == d.Path {
@@ -396,42 +382,68 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 		}
 	}
 	derived := describedWrites(idx, p, now)
+	titles := work.NewTitles(idx)
+	for _, o := range p.Ops {
+		titles.Take(o.Title)
+		if o.NewTitle != "" {
+			titles.Take(o.NewTitle)
+		}
+	}
+	var events []newEvent
+	for _, o := range p.Ops {
+		if o.Kind != OpPromote {
+			continue
+		}
+		title := o.Title
+		if o.NewTitle != "" {
+			title = o.NewTitle
+		}
+		nd := doc.Parse(o.Path, []byte(o.Content))
+		rel, content, id := work.NewEvent(titles, work.EventIn{Kind: "promoted", SubjectTitle: title, SubjectID: o.ID, SubjectTags: nd.List("tags"), At: now, By: work.ByAgent, FromType: "stub", ToType: "topic", Change: vault.Title(d)})
+		events = append(events, newEvent{rel: rel, content: content, id: id})
+	}
 	before := repoPaths(idx)
 	lines := preview(idx, d, p.Ops, nil, nil, current(idx)).Writes
 
 	// Record every path the apply may write, so a crash can put them back.
 	var paths []string
 	for _, o := range p.Ops {
-		paths = append(paths, o.Path)
-		if o.NewPath != "" {
-			paths = append(paths, o.NewPath)
-		}
+		paths = append(paths, o.Path, o.finalPath())
 	}
 	for _, rw := range p.Outside {
 		paths = append(paths, rw.Path)
 	}
-	for _, m := range p.Moves {
-		paths = append(paths, m.From, m.To)
-	}
 	for rel := range derived {
 		paths = append(paths, rel)
+	}
+	for _, e := range events {
+		paths = append(paths, e.rel)
 	}
 	paths = uniqueSorted(paths)
 	applying := doc.SetField(setStatus(d.Content, Applying), "paths", paths)
 	if err := tx.Write(d.Path, []byte(applying)); err != nil {
 		return nil, err
 	}
-	if err := writeOps(tx, p, derived); err != nil {
+	if err := writeOps(tx, idx, p, derived, now); err != nil {
 		return nil, err
 	}
-	counts := countOps(p.Ops, len(p.Outside))
-	if err := healScopes(v, tx); err != nil {
-		return nil, err
+	var eventIDs []string
+	for _, e := range events {
+		if err := tx.Write(e.rel, []byte(e.content)); err != nil {
+			return nil, err
+		}
+		eventIDs = append(eventIDs, e.id)
 	}
-	final := replaceWrites(record, renderWrites(p.Ops, p.Outside, p.Folders))
-	final = doc.SetFields(final, []doc.Field{{Key: "counts", Value: counts.String()}, {Key: "applied", Value: vault.Stamp(now)}, {Key: "updated", Value: vault.Date(now)}})
+	counts := countOps(p.Ops, p.Outside)
+	final := replaceWrites(record, renderWrites(p.Ops, p.Outside))
+	final = doc.SetFields(final, []doc.Field{{Key: "counts", Value: counts.String()}, {Key: "applied", Value: vault.Stamp(now)}, {Key: "updated", Value: vault.Stamp(now)}})
 	final = doc.RemoveField(setStatus(final, Applied), "paths")
 	if err := tx.Write(d.Path, []byte(final)); err != nil {
+		return nil, err
+	}
+	// The derived parts read the change as applied: a source it absorbs is no longer
+	// pending.
+	if err := syncDerived(v, tx); err != nil {
 		return nil, err
 	}
 	sha, err := tx.Commit("change: "+p.Title, Trailer+": "+d.ID())
@@ -445,42 +457,72 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	}
 	pv := preview(idx, idx.ByPath(d.Path), p.Ops, outsideRefs(idx, p.Outside), c.warnings, current(idx))
 	pv.Writes = lines
-	pv.Folders = orEmpty(p.Folders)
 	pv.Commit = sha
+	for _, id := range eventIDs {
+		if e := idx.ByID(id); e != nil {
+			pv.Events = append(pv.Events, idx.Ref(e))
+		}
+	}
 	return pv, nil
 }
 
+func createdOf(d *doc.Doc) time.Time {
+	t, _ := vault.ParseTime(d.Str("created"))
+	return t
+}
+
+// syncDerived brings the derived parts of every document the writes touch up to date,
+// in the same commit: statuses, lead callouts, and the sections code writes.
+func syncDerived(v *vault.Vault, tx *vault.Tx) error {
+	idx, err := vault.Load(v)
+	if err != nil {
+		return err
+	}
+	if _, err := derive.Sync(idx, tx.WriteIfChanged); err != nil {
+		return err
+	}
+	if idx, err = vault.Load(v); err != nil {
+		return err
+	}
+	_, err = work.Load(idx).Sync(tx.WriteIfChanged)
+	return err
+}
+
 // revalidate checks the ops a change document holds against the vault as it is now: the
-// pages still exist and did not change since, the titles are free, and each page's
-// content, which the user may have edited, still fits its type.
+// documents still exist and did not change since, the titles are free, and each
+// document's content, which the user may have edited, still fits its type.
 func (c *check) revalidate(ops []*op) error {
 	var conflicts []string
 	for _, o := range ops {
-		if o.Kind == "create" {
+		if o.Kind == OpCreate || o.Kind == OpRetag {
 			continue
 		}
 		d := c.idx.ByID(o.ID)
 		if d == nil {
-			c.refuse("%s: the page %s is gone", o.label(), o.ID)
+			c.refuse("%s: the document %s is gone", o.label(), o.ID)
 			continue
 		}
-		o.Path, o.Type = d.Path, d.Type()
+		o.Path = d.Path
+		if o.Kind != OpPromote {
+			o.Type = d.Type()
+		}
 		if o.Base != "" && !doc.SameHash(o.Base, doc.FileHash([]byte(d.Content))) {
 			conflicts = append(conflicts, d.Path)
 			continue
 		}
+		o.Title = vault.Title(d)
 		switch o.Kind {
-		case "rename":
-			c.gone[links.Key(vault.Title(d))] = true
-			if links.Key(o.NewTitle) != links.Key(vault.Title(d)) {
-				c.takeTitle(o, o.NewTitle, d.Path)
-			} else {
-				c.claimed[links.Key(o.NewTitle)] = o
+		case OpRename, OpPromote:
+			if o.NewTitle != "" {
+				c.gone[links.Key(o.Title)] = true
+				if links.Key(o.NewTitle) != links.Key(o.Title) {
+					c.takeTitle(o, o.NewTitle, d.Path)
+				} else {
+					c.claimed[links.Key(o.NewTitle)] = o
+				}
 			}
-			o.Title = vault.Title(d)
-		case "remove":
-			c.gone[links.Key(vault.Title(d))] = true
-			o.Title = vault.Title(d)
+		case OpRemove:
+			c.gone[links.Key(o.Title)] = true
 		}
 		c.byID[o.ID] = append(c.byID[o.ID], o)
 	}
@@ -488,24 +530,30 @@ func (c *check) revalidate(ops []*op) error {
 		return &Conflict{Paths: conflicts}
 	}
 	for _, o := range ops {
-		if o.Kind == "create" {
-			if !contains(modelTypes, o.Type) {
-				c.refuse("%s: a change creates an %s", o.label(), strings.Join(modelTypes, ", "))
+		switch o.Kind {
+		case OpCreate:
+			if !slices.Contains(createTypes, o.Type) {
+				c.refuse("%s: a change creates a topic or a repository", o.label())
 				continue
 			}
-			o.Path = vault.Route(vault.Wiki, o.Type, o.Title)
+			o.Path = vault.DocPath(o.Title)
 			c.takeTitle(o, o.Title, "")
+		case OpRetag:
+			if !c.idx.TagExists(o.From) {
+				c.refuse("%s: no document holds %s now", o.label(), o.From)
+			}
 		}
 	}
 	for _, o := range ops {
 		switch o.Kind {
-		case "create":
-			o.Content = forceCode(o.Content, o, "", c.now)
+		case OpCreate, OpModify, OpPromote:
+			created := ""
+			if cur := c.idx.ByID(o.ID); cur != nil {
+				created = cur.Str("created")
+			}
+			o.Content = forceCode(o.Content, o, created, c.now)
 			c.checkPage(o, o.Content)
-		case "modify":
-			o.Content = forceCode(o.Content, o, c.idx.ByID(o.ID).Str("created"), c.now)
-			c.checkPage(o, o.Content)
-		case "remove":
+		case OpRemove:
 			if o.Redirect != "" {
 				if r := c.idx.ByID(o.Redirect); r == nil || c.removed(r.ID()) {
 					c.refuse("%s: the redirect %s is gone", o.label(), o.Redirect)
@@ -519,69 +567,86 @@ func (c *check) revalidate(ops []*op) error {
 	return nil
 }
 
-// forceCode writes the fields code owns into a page the user may have edited: its id and
-// type from the heading, its created date, and updated today.
+// forceCode writes the fields code owns into a document the user may have edited: its id
+// and type from the heading, its created time, and updated and refreshed now.
 func forceCode(content string, o *op, created string, now time.Time) string {
 	content = doc.SetField(content, "id", o.ID)
 	content = doc.SetField(content, "type", o.Type)
 	if created != "" {
 		content = doc.SetField(content, "created", created)
 	} else if d := doc.Parse("", []byte(content)); d.Str("created") == "" {
-		content = doc.SetField(content, "created", vault.Date(now))
+		content = doc.SetField(content, "created", vault.Stamp(now))
 	}
-	return doc.SetField(content, "updated", vault.Date(now))
+	return doc.SetFields(content, []doc.Field{{Key: "updated", Value: vault.Stamp(now)}, {Key: "refreshed", Value: vault.Stamp(now)}})
 }
 
-// describedWrites sets described on each repository page whose snapshot the change
-// absorbs. A page the change also modifies takes the field in its content.
+// describedWrites sets described on each repository whose snapshot the change absorbs,
+// with behind at zero. A repository the change also writes takes the fields in its
+// content.
 func describedWrites(idx *vault.Index, p *planned, now time.Time) map[string]string {
 	out := map[string]string{}
 	for _, a := range p.Absorbs {
 		if a.Type() != "source" || a.Str("origin") != "repository" {
 			continue
 		}
-		repoID, commit, ok := strings.Cut(a.Str("locator"), "@")
+		repoKey, commit, ok := strings.Cut(a.Str("locator"), "@")
 		if !ok {
 			continue
 		}
 		short := commit[:min(7, len(commit))]
-		repo := idx.ByID(repoID)
+		repo := idx.ByID(repoKey)
+		if repo == nil {
+			repo, _ = idx.ResolveType(repoKey, "repository")
+		}
 		if repo == nil {
 			continue
 		}
+		set := []doc.Field{{Key: "described", Value: short}, {Key: "behind", Value: 0}, {Key: "refreshed", Value: vault.Stamp(now)}}
 		done := false
 		for _, o := range p.Ops {
 			if o.ID == repo.ID() && o.writesContent() {
-				o.Content = doc.SetField(o.Content, "described", short)
+				o.Content = doc.SetFields(o.Content, set)
 				done = true
 			}
 		}
 		if !done {
-			out[repo.Path] = doc.SetFields(repo.Content, []doc.Field{{Key: "described", Value: short}, {Key: "updated", Value: vault.Date(now)}})
+			if n, err := (gitx.Repo{Dir: vault.Expand(repo.Str("path"))}).Behind(commit); err == nil {
+				set[1].Value = n
+			}
+			out[repo.Path] = doc.SetFields(repo.Content, append(set, doc.Field{Key: "updated", Value: vault.Stamp(now)}))
 		}
 	}
 	return out
 }
 
-// writeOps writes the pages of a change where the change puts them, moves the files that
-// go with a scope's folder, and writes the link rewrites and the derived fields.
-func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
-	written := map[string]bool{}
+// writeOps writes the documents of a change where they land, and the rewrites and the
+// derived fields.
+func writeOps(tx *vault.Tx, idx *vault.Index, p *planned, derived map[string]string, now time.Time) error {
+	final := map[string]string{} // id → where its document lands
+	hasContent := map[string]bool{}
 	for _, o := range p.Ops {
-		if o.Kind == "create" || o.Kind == "modify" {
-			written[o.ID] = true
+		if o.ID == "" {
+			continue
+		}
+		if _, ok := final[o.ID]; !ok {
+			final[o.ID] = o.Path
+		}
+		if o.NewTitle != "" && o.Kind != OpRemove {
+			final[o.ID] = vault.DocPath(o.NewTitle)
+		}
+		if o.writesContent() {
+			hasContent[o.ID] = true
 		}
 	}
 	for _, o := range p.Ops {
 		switch o.Kind {
-		case "create":
+		case OpCreate:
 			if err := tx.Write(o.Path, []byte(o.Content)); err != nil {
 				return err
 			}
-		case "modify":
-			target := o.Path
-			if o.NewPath != "" {
-				target = o.NewPath
+		case OpModify, OpPromote:
+			target := final[o.ID]
+			if target != o.Path {
 				if err := tx.Remove(o.Path); err != nil {
 					return err
 				}
@@ -589,31 +654,31 @@ func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
 			if err := tx.Write(target, []byte(o.Content)); err != nil {
 				return err
 			}
-		case "rename":
-			if !written[o.ID] && o.NewPath != "" {
-				if err := tx.Move(o.Path, o.NewPath); err != nil {
+		case OpRename:
+			if !hasContent[o.ID] {
+				if err := tx.Move(o.Path, final[o.ID]); err != nil {
 					return err
 				}
 			}
-		case "remove":
+		case OpRemove:
 			if err := tx.Remove(o.Path); err != nil {
+				return err
+			}
+		case OpConfirm:
+			if hasContent[o.ID] {
+				continue
+			}
+			cur := idx.ByID(o.ID)
+			if cur == nil {
+				continue
+			}
+			if err := tx.Write(final[o.ID], []byte(doc.SetField(cur.Content, "refreshed", vault.Stamp(now)))); err != nil {
 				return err
 			}
 		}
 	}
-	for _, m := range p.Moves {
-		if err := tx.Move(m.From, m.To); err != nil {
-			return err
-		}
-	}
 	for _, rw := range p.Outside {
-		target := rw.Path
-		for _, m := range p.Moves {
-			if m.From == rw.Path {
-				target = m.To
-			}
-		}
-		if err := tx.Write(target, []byte(rw.Content)); err != nil {
+		if err := tx.Write(rw.Path, []byte(rw.Content)); err != nil {
 			return err
 		}
 	}
@@ -623,39 +688,6 @@ func writeOps(tx *vault.Tx, p *planned, derived map[string]string) error {
 		}
 	}
 	return nil
-}
-
-func orEmpty(m []Move) []Move {
-	if m == nil {
-		return []Move{}
-	}
-	return m
-}
-
-// placeProposed sets where each write of a proposed change would land, for a preview. It
-// reports no problem; apply checks again.
-func placeProposed(idx *vault.Index, ops []*op) []Move {
-	c := &check{idx: idx, claimed: map[string]*op{}, gone: map[string]bool{}, byID: map[string][]*op{}}
-	for _, o := range ops {
-		if d := idx.ByID(o.ID); d != nil && o.Kind != "create" {
-			o.Path, o.Type = d.Path, d.Type()
-			if o.Kind == "rename" {
-				c.claimed[links.Key(o.NewTitle)] = o
-			}
-			c.byID[o.ID] = append(c.byID[o.ID], o)
-		} else if o.Kind == "create" {
-			o.Path = vault.Route(vault.Wiki, o.Type, o.Title)
-			c.claimed[links.Key(o.Title)] = o
-		}
-	}
-	var live []*op
-	for _, o := range ops {
-		if o.Kind == "create" || idx.ByID(o.ID) != nil {
-			live = append(live, o)
-		}
-	}
-	_, folders := c.place(live)
-	return orEmpty(folders)
 }
 
 // replaceWrites puts a new Writes section in a change document.
@@ -684,7 +716,7 @@ func uniqueSorted(in []string) []string {
 	return out
 }
 
-// repoPaths are the paths the repository pages name.
+// repoPaths are the paths the repository documents name.
 func repoPaths(idx *vault.Index) []string {
 	var out []string
 	for _, r := range idx.Of("repository") {
@@ -719,7 +751,7 @@ func Reject(v *vault.Vault, key, reason string, now time.Time) (*Preview, error)
 	if s := d.Str("status"); s != Proposed {
 		return nil, fmt.Errorf("%s is %s; only a proposed change can be rejected", vault.Title(d), s)
 	}
-	content := setStatus(d.Content, Rejected, doc.Field{Key: "reason", Value: strings.TrimSpace(reason)}, doc.Field{Key: "updated", Value: vault.Date(now)})
+	content := setStatus(d.Content, Rejected, doc.Field{Key: "reason", Value: strings.TrimSpace(reason)}, doc.Field{Key: "updated", Value: vault.Stamp(now)})
 	if err := v.Write(d.Path, []byte(content)); err != nil {
 		return nil, err
 	}
@@ -792,22 +824,22 @@ func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 	if ops, err := parseWrites(d.Body); err == nil {
 		back := links.Rename{}
 		for _, o := range ops {
-			if o.Kind == "rename" {
+			if o.NewTitle != "" {
 				back[o.NewTitle] = o.Title
 			}
 		}
 		if len(back) > 0 {
-			record, _, _ = rewriteContent(d, record, back, nil)
+			record, _, _ = vault.RewriteContent(d, record, back, nil)
 		}
 	}
-	content := setStatus(record, Undone, doc.Field{Key: "updated", Value: vault.Date(now)})
+	content := setStatus(record, Undone, doc.Field{Key: "updated", Value: vault.Stamp(now)})
 	if err := tx.Write(d.Path, []byte(content)); err != nil {
 		return nil, err
 	}
-	if err := healScopes(v, tx); err != nil {
+	if err := syncDerived(v, tx); err != nil {
 		return nil, err
 	}
-	title := strings.TrimSpace(strings.TrimPrefix(vault.Title(d), d.Str("created")))
+	title := strings.TrimSpace(strings.TrimPrefix(vault.Title(d), vault.Date(createdOf(d))))
 	undo, err := tx.Commit("undo: "+title, "Atlas-Undo: "+d.ID())
 	if err != nil {
 		return nil, err
@@ -835,22 +867,4 @@ func idAt(g gitx.Repo, rev, p string) string {
 		return ""
 	}
 	return doc.Parse(p, data).ID()
-}
-
-// healScopes brings every page's chain, the scope callouts, and the map in Atlas.md up
-// to date with the writes, in the same commit: a new area or a new parent moves the pages
-// below it.
-func healScopes(v *vault.Vault, tx *vault.Tx) error {
-	idx, err := vault.Load(v)
-	if err != nil {
-		return err
-	}
-	_, err = scope.Heal(idx, tx.WriteIfChanged)
-	return err
-}
-
-// Wiki reports whether a type's documents are pages a change writes.
-func Wiki(typ string) bool {
-	t := schema.Get(typ)
-	return t != nil && t.Wiki()
 }

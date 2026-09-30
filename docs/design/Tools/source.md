@@ -29,4 +29,4 @@ A captured source is [[Changes#Pending documents|pending]] until a change absorb
 
 `read` takes any document, not only a source. That is how a spec, a completion event, or a session's summary enters the wiki pipeline.
 
-Refusals: an inbox name that is not in `inbox/`; a file over 200 MB; a repository id that is not a repository document; `resolves` on a document that is not an open stub; a tag that breaks [[Documents#Form]], or a new tag in `tags: known` mode without `new_tags: true`.
+Refusals: an inbox name that is not in `inbox/`; a file over 200 MB; a repository id that is not a repository document; `resolves` on a document that is not an open stub; a tag that breaks [[Documents#Form]], or a new tag in `tagging: known` mode without `new_tags: true`.

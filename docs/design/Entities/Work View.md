@@ -39,6 +39,7 @@ board:
   started: [{Doc Ref}]                 # by priority, then the last event
   ready: [{Doc Ref}]                   # open plans with every dependency done
   blocked: [{Doc Ref}]
+  waiting: [{Doc Ref}]                 # open plans with a dependency not done
   stubs: [{Doc Ref}]                   # open, by priority
-done: [{Doc Ref}]                      # the last ten completed or dropped plans
+  done: [{Doc Ref}]                    # the last ten completed or dropped plans
 ```

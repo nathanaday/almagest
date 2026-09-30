@@ -59,7 +59,7 @@ name: Work
 description: "Work notes: the p3 product and the tools around it."   # one line; agents read it first
 created: 2026-09-27T10:02:11
 updated: 2026-09-29T09:15:40
-tags: known                        # open | known: how freely the agent adds a tag
+tagging: known                     # open | known: how freely the agent adds a tag
 wikify: [source, spec, event]      # the types that are pending until a change absorbs them
 stale_hours: 12                    # a live session with no hook event for this long is lost
 layout: 3                          # code's: 3 is the flat layout of 7.0; sync refuses an older vault

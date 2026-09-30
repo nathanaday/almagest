@@ -17,7 +17,7 @@ repository: doc-h6t2vc
 
 # on any form
 resolves: doc-c7v2kq          # a stub that asked for this source ("read the DINOv2 paper")
-new_tags: false               # true: allow a tag no document holds, in tags: known mode
+new_tags: false               # true: allow a tag no document holds, in tagging: known mode
 ```
 
 The output is a list of captured sources:

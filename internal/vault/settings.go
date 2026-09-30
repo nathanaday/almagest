@@ -144,3 +144,42 @@ func NoteTitle(rel string) string {
 	base := path.Base(filepath.ToSlash(rel))
 	return strings.TrimSuffix(base, path.Ext(base))
 }
+
+// ObsidianSettings sets the two app settings a vault needs in .obsidian/app.json, and
+// keeps every other key: new attachments go to wiki/assets, unless the user chose a
+// folder, and views/ is among the excluded files, so views stay out of the graph and
+// search. It reports whether it wrote.
+func ObsidianSettings(v *Vault) (bool, error) {
+	file := v.Abs(AppJSON)
+	settings := map[string]any{}
+	data, err := os.ReadFile(file)
+	switch {
+	case err == nil:
+		if err := json.Unmarshal(data, &settings); err != nil {
+			return false, errors.New(AppJSON + " is not valid JSON; fix it and sync again")
+		}
+	case !errors.Is(err, os.ErrNotExist):
+		return false, err
+	}
+	changed := false
+	if a, _ := settings["attachmentFolderPath"].(string); a == "" || a == "/" || a == "./" {
+		settings["attachmentFolderPath"] = Assets
+		changed = true
+	}
+	var filters []any
+	if list, ok := settings["userIgnoreFilters"].([]any); ok {
+		filters = list
+	}
+	if !slices.ContainsFunc(filters, func(x any) bool { s, _ := x.(string); return strings.TrimSuffix(s, "/") == Views }) {
+		settings["userIgnoreFilters"] = append(filters, Views+"/")
+		changed = true
+	}
+	if !changed {
+		return false, nil
+	}
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return false, err
+	}
+	return true, writeAtomic(file, append(out, '\n'))
+}

@@ -4,7 +4,6 @@ package testvault
 
 import (
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -26,7 +25,6 @@ type T struct {
 	V     *vault.Vault
 	Code  string
 	ids   map[string]string
-	dirs  map[string]string // scope title → its folder
 	Clock time.Time
 }
 
@@ -47,7 +45,7 @@ func New(t *testing.T) *T {
 	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 	t.Setenv("GIT_COMMITTER_NAME", "test")
 	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
-	v, err := vault.Init(vault.InitOptions{Path: filepath.Join(dir, "work"), Name: "Work", Description: "Work notes: the p3 product.", Areas: "few"}, h, Now)
+	v, err := vault.Init(vault.InitOptions{Path: filepath.Join(dir, "work"), Name: "Work", Description: "Work notes: the p3 product.", Tagging: "open"}, h, Now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -55,7 +53,7 @@ func New(t *testing.T) *T {
 	if err := os.MkdirAll(code, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	return &T{t: t, Dir: dir, Home: h, V: v, Code: code, ids: map[string]string{}, dirs: map[string]string{}, Clock: Now}
+	return &T{t: t, Dir: dir, Home: h, V: v, Code: code, ids: map[string]string{}, Clock: Now}
 }
 
 // Tick moves the clock on and returns the new time.
@@ -118,41 +116,32 @@ func (tv *T) Read(rel string) string {
 	return string(data)
 }
 
-// Page writes a typed page straight to disk, the way a hand edit or an earlier change
-// would leave it, and returns its id. fields may name links by title. The page goes in
-// the folder of the scope or parent it names when Page wrote that page before, else at
-// the top of the wiki.
-func (tv *T) Page(typ, title string, fields map[string]any, body string) string {
+// Doc writes a typed document straight to wiki/documents, the way a hand edit or an
+// earlier write would leave it, and returns its id. fields may name links by title; a
+// field set to nil is left out. A document without a description gets one.
+func (tv *T) Doc(typ, title string, fields map[string]any, body string) string {
 	tv.t.Helper()
-	field := "scope"
-	if typ == "area" || typ == "repository" {
-		field = "parent"
+	id := doc.NewID("doc", nil)
+	if s, ok := fields["id"].(string); ok {
+		id = s
 	}
-	dir := vault.Wiki
-	if s, ok := fields[field].(string); ok {
-		if d, ok := tv.dirs[doc.LinkTarget(s)]; ok {
-			dir = d
-		}
+	stamp := vault.Stamp(Now)
+	list := []doc.Field{{Key: "id", Value: id}, {Key: "type", Value: typ}}
+	if _, ok := fields["description"]; !ok {
+		list = append(list, doc.Field{Key: "description", Value: "The " + title + " document."})
 	}
-	rel := vault.Route(dir, typ, title)
-	if typ == "area" || typ == "repository" {
-		tv.dirs[title] = path.Dir(rel)
-	}
-	prefix := map[string]string{"area": "are", "repository": "rep", "concept": "con", "entity": "ent", "policy": "pol", "source": "src"}
-	id := doc.NewID(prefix[typ], nil)
-	list := []doc.Field{{Key: "id", Value: id}, {Key: "type", Value: typ}, {Key: "created", Value: "2026-09-27"}, {Key: "updated", Value: "2026-09-27"}}
+	list = append(list, doc.Field{Key: "created", Value: stamp}, doc.Field{Key: "updated", Value: stamp})
 	keys := make([]string, 0, len(fields))
 	for k := range fields {
-		keys = append(keys, k)
+		if k != "id" && fields[k] != nil {
+			keys = append(keys, k)
+		}
 	}
 	sortStrings(keys)
 	for _, k := range keys {
 		list = append(list, doc.Field{Key: k, Value: fields[k]})
 	}
-	if _, ok := fields["description"]; !ok {
-		list = append(list, doc.Field{Key: "description", Value: "The " + title + " page."})
-	}
-	tv.Write(rel, doc.Render(list, body))
+	tv.Write(vault.DocPath(title), doc.Render(list, body))
 	tv.ids[title] = id
 	return id
 }

@@ -19,7 +19,7 @@ Each feature below says whether 6.5 has it (kept), has it in another form (chang
 
 One stylesheet:
 
-- a callout color and icon for each lead type: `source`, `repository`, `repository-missing`, `concept`, `entity`, `policy`, `overview`, `stub`, `stub-resolved`, `spec`, `spec-done`, `design`, each event kind, `session`, `change`, `view`, and `tag`;
+- a callout color and icon for each lead type: `source`, `repository`, `repository-missing`, `concept`, `entity`, `policy`, `overview`, `stub`, `stub-resolved`, `stub-dropped`, `spec`, `spec-done`, `spec-dropped`, `design`, `design-superseded`, `event-<kind>` for each event kind, `session`, `change`, `atlas`, `view`, and `tag`;
 - a badge in the file explorer for the status of a stub or a plan, and an icon for each event kind, so the flat `wiki/documents/` reads at a glance;
 - a color for each top folder: `inbox`, `scratchpad`, `wiki`, `sessions`, `changes`, `views`.
 
@@ -140,7 +140,7 @@ The plugin colors the nodes of Obsidian's graph in one of four modes. Buttons ov
 | Mode | Groups |
 |---|---|
 | Tag | One color for each top-level tag. A document takes the top segment of its first tag; an event takes its subject's; a session or a change takes that of its first spec or first absorbed document. The eight top-level tags that some document held first (by the earliest `created`) get the eight colors, so a new tag never repaints the others. The tags after the eighth share one gray group, and a document with no tag is uncolored. |
-| Type | Sources, repositories, concepts, entities, policies, overviews, stubs, plans, designs, events, and sessions with changes. |
+| Type | Sources, repositories, concepts, entities, policies, overviews, stubs and specs, events, and sessions with changes. |
 | Work | Open work, done work, and no work (gray). A stub or a plan takes its own state (open or started is open; done, dropped, or resolved is done). An event takes its subject's. Another document takes the state of each plan or stub it shares a link with, in either direction. Open wins over done. |
 | Activity | Four quarters of the markdown files, newest first. The sort key is the day of `updated`, then the file's modification time. |
 

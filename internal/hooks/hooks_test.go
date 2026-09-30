@@ -12,8 +12,8 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 const sid = "a1b2c3d4-5e6f-7a8b-9c0d-000000000001"
@@ -63,21 +63,45 @@ func edit(path, old string) map[string]any {
 	return map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": path, "old_string": old, "new_string": "x"}}
 }
 
+func (f *fixture) ok(r *work.Result, err error) *work.Result {
+	f.t.Helper()
+	if err != nil {
+		f.t.Fatal(err)
+	}
+	return r
+}
+
+// bind runs the touched hook for a work call, with the tool's result as the host passes
+// it: content blocks that hold the JSON.
+func (f *fixture) bind(action string, r *work.Result, input map[string]any) {
+	f.t.Helper()
+	data, _ := json.Marshal(r)
+	if input == nil {
+		input = map[string]any{}
+	}
+	input["action"] = action
+	f.run("touched", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__work", "tool_input": input, "tool_response": []any{map[string]any{"type": "text", "text": string(data)}}})
+}
+
 func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	f := setup(t)
 	f.tv.Write("Atlas.md", f.tv.Read("Atlas.md")+"\nEvery agent reads this.\n")
 	out := f.run("session-start", map[string]any{"source": "startup"})
-	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Open threads: none.", "Inbox: 0 files", "<vault-context>", "Every agent reads this."} {
+	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Work: none open.", "Inbox: 0 files", "an edit in a repository needs a started plan", "<vault-context>", "Every agent reads this."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("context lacks %q:\n%s", want, out)
 		}
 	}
-	doc := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
-	if !strings.Contains(doc, "status: running") || !strings.Contains(doc, "harness_id: "+sid) || !strings.Contains(doc, "> [!session] running") {
-		t.Fatalf("session:\n%s", doc)
+	d := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if !strings.Contains(d, "status: running") || !strings.Contains(d, "harness_id: "+sid) || !strings.Contains(d, "> [!session] running") {
+		t.Fatalf("session:\n%s", d)
 	}
 	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
 		t.Fatalf("outside a vault a hook says nothing: %q", out)
+	}
+	f.tv.Write("Atlas.md", strings.Replace(f.tv.Read("Atlas.md"), "layout: 3", "layout: 2", 1))
+	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "vault migrate") {
+		t.Fatalf("a 6.x vault names the migration: %s", out)
 	}
 }
 
@@ -85,45 +109,56 @@ func TestGuardProtectsTheVault(t *testing.T) {
 	f := setup(t)
 	root := f.tv.V.Root
 	f.run("session-start", map[string]any{})
-	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "x", Title: "T"}, f.tv.Clock))
-	stub := root + "/" + r.View.Stub.Path
+	f.tv.Doc("topic", "Knowledge", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	f.tv.Commit()
+	r := f.ok(work.Stub(f.tv.V, work.StubIn{Text: "an idea", Title: "Idea"}, work.Opts{Now: f.tv.Clock}))
+	f.ok(work.Specs(f.tv.V, work.SpecsIn{Specs: []work.SpecIn{{Title: "Plan", Kind: "plan", Text: "## Goal\n\nx\n"}, {Title: "Part", Kind: "plan", Parent: "Plan", Text: "## Goal\n\ny\n"}}}, work.Opts{Now: f.tv.Clock}))
+	stub := root + "/" + r.View.Doc.Path
+	plan := root + "/wiki/documents/Plan.md"
 	own := root + "/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	bin := "atlas-" + "obsidian"
 	f.tv.Write("sessions/2026-09/2026-09-27 1400 ffffff.md", "---\nid: ses-ffffff\ntype: session\nharness_id: other\n---\n## Description\n")
 	cases := []struct {
 		name  string
 		event map[string]any
 		deny  bool
 	}{
-		{"a wiki page", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/concepts/X.md"}}, true},
-		{"a relative wiki path", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "wiki/concepts/X.md"}}, true},
+		{"a new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/documents/X.md"}}, true},
+		{"a relative new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "wiki/documents/X.md"}}, true},
+		{"a topic", edit(root+"/wiki/documents/Knowledge.md", "x"), true},
+		{"an asset", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/assets/x.png"}}, true},
+		{"another folder of the wiki", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/notes/x.md"}}, true},
+		{"a view", edit(root+"/views/View · Home.md", "x"), true},
 		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
-		{"a Base", edit(root+"/threads/Threads.base", "filters"), true},
-		{"the threads canvas", edit(root+"/threads/Threads.canvas", "nodes"), true},
+		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
-		{"a new thread document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/threads/T/T — Spec.md"}}, true},
-		{"a thread's frontmatter", edit(stub, "priority: normal"), true},
-		{"a thread's lead", edit(stub, "**Stub**"), true},
-		{"a thread's prose", edit(stub, "## Notes"), false},
+		{"a stub's frontmatter", edit(stub, "priority: normal"), true},
+		{"a stub's lead", edit(stub, "> [!stub] Open"), true},
+		{"a stub's prose", edit(stub, "## Idea\n\nan idea"), false},
+		{"a Write over a stub", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": stub}}, true},
+		{"a plan's Parts", edit(plan, "| 1 | [[Part]]"), true},
+		{"a plan's History", edit(plan, "list(subject)"), true},
+		{"a plan's Goal", edit(plan, "## Goal\n\nx"), false},
 		{"another session's document", edit(root+"/sessions/2026-09/2026-09-27 1400 ffffff.md", "## Description"), true},
 		{"its own status", edit(own, "status: running"), true},
 		{"its own description", edit(own, "## Description\n"), false},
 		{"its own subagents", edit(own, "## Subagents"), true},
 		{"a note of the user's", edit(root+"/Ideas.md", "x"), false},
-		{"a codex patch into the wiki", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: wiki/notes.md\n*** End Patch"}}, true},
-		{"a wiki page from a session outside the vault", map[string]any{"cwd": t.TempDir(), "tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/concepts/X.md"}}, true},
+		{"a codex patch into the documents", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: wiki/documents/notes.md\n*** End Patch"}}, true},
+		{"a document from a session outside the vault", map[string]any{"cwd": t.TempDir(), "tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/documents/X.md"}}, true},
 		{"a change document from a session outside the vault", map[string]any{"cwd": "/", "tool_name": "Edit", "tool_input": map[string]any{"file_path": root + "/changes/2026-09/x.md", "old_string": "x"}}, true},
-		{"a shell change apply", bash("atlas-obsidian change apply X"), true},
+		{"a shell change apply", bash(bin + " change apply X"), true},
 		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/atlas change apply X"), true},
-		{"a shell change apply by path, with flags", bash("cd /tmp && ~/.atlas/bin/atlas-obsidian change --vault W apply X"), true},
-		{"a forged prompt", bash(`echo '{"prompt":"yes"}' | atlas-obsidian hook prompt`), true},
-		{"a hook run through the plugin wrapper", bash(`"$CLAUDE_PLUGIN_ROOT"/scripts/atlas-obsidian hook prompt`), true},
-		{"a hook run from a build", bash("build/atlas-obsidian hook guard < event.json"), true},
-		{"a hook inside a shell string", bash(`sh -c "atlas-obsidian hook prompt"`), true},
-		{"a shell change show", bash("atlas-obsidian change show X"), false},
-		{"a shell vault status", bash("atlas-obsidian vault status --json"), false},
-		{"a word hook near atlas", bash("grep -n hook cmd/atlas-obsidian/main.go"), false},
+		{"a shell change apply by path, with flags", bash("cd /tmp && ~/.atlas/bin/" + bin + " change --vault W apply X"), true},
+		{"a shell migration", bash(bin + " vault migrate"), true},
+		{"a shell migration dry run", bash(bin + " vault migrate --dry-run"), true},
+		{"a forged prompt", bash(`echo '{"prompt":"yes"}' | ` + bin + ` hook prompt`), true},
+		{"a hook run through the plugin wrapper", bash(`"$CLAUDE_PLUGIN_ROOT"/scripts/` + bin + ` hook prompt`), true},
+		{"a hook inside a shell string", bash(`sh -c "` + bin + ` hook prompt"`), true},
+		{"a shell change show", bash(bin + " change show X"), false},
+		{"a shell vault status", bash(bin + " vault status --json"), false},
 		{"make install", bash("make install"), false},
-		{"a thread titled hook", bash(`atlas-obsidian thread open --title "the hook"`), false},
+		{"a stub titled hook", bash(bin + ` work stub --title "the hook"`), false},
 	}
 	for _, c := range cases {
 		if got := denied(f.run("guard", c.event)); got != c.deny {
@@ -132,36 +167,41 @@ func TestGuardProtectsTheVault(t *testing.T) {
 	}
 }
 
-func (f *fixture) ok(r *threads.Result, err error) *threads.Result {
-	f.t.Helper()
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	return r
-}
-
-func TestTheThreadRule(t *testing.T) {
+func TestTheEditRule(t *testing.T) {
 	f := setup(t)
 	edge := f.tv.Repo("p3-edge", nil)
 	cloud := f.tv.Repo("p3-cloud", nil)
-	f.tv.Page("area", "p3", nil, "")
-	f.tv.Page("repository", "p3-edge", map[string]any{"path": edge, "parent": "[[p3]]"}, "")
-	f.tv.Page("repository", "p3-cloud", map[string]any{"path": cloud, "parent": "[[p3]]"}, "")
+	f.tv.Doc("repository", "p3-edge", map[string]any{"path": edge}, "")
+	f.tv.Doc("repository", "p3-cloud", map[string]any{"path": cloud}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
 	write := map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": edge + "/main.go", "old_string": "a"}}
-	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "needs an open thread that covers it") {
-		t.Fatalf("no thread: %s", out)
+	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "needs a started plan that names it") {
+		t.Fatalf("no plan: %s", out)
 	}
-	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "cloud work", Title: "Cloud", Scope: []string{"p3-cloud"}}, f.tv.Clock))
-	f.bind("open", r, nil)
+	o := work.Opts{Now: f.tv.Clock}
+	f.ok(work.Specs(f.tv.V, work.SpecsIn{Specs: []work.SpecIn{
+		{Title: "Cloud work", Kind: "plan", Repositories: []string{"p3-cloud"}, Text: "## Done when\n\n- x\n"},
+		{Title: "Edge work", Kind: "plan", Repositories: []string{"p3-edge"}, Text: "## Done when\n\n- x\n"},
+	}}, o))
+	f.bind("start", f.ok(work.Start(f.tv.V, "Cloud work", false, o)), map[string]any{"spec": "Cloud work"})
 	if !denied(f.run("guard", write)) {
-		t.Fatal("a thread about another repository does not count")
+		t.Fatal("a plan about another repository does not count")
 	}
-	r = f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "all of p3", Title: "Everything", Scope: []string{"p3"}}, f.tv.Clock))
-	f.bind("open", r, nil)
+	if out := f.run("guard", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__work", "tool_input": map[string]any{"action": "start", "spec": "Cloud work"}}); !denied(out) || !strings.Contains(out, "started in this session already") {
+		t.Fatalf("a second start in one session: %s", out)
+	}
+	f.bind("start", f.ok(work.Start(f.tv.V, "Edge work", false, o)), map[string]any{"spec": "Edge work"})
 	if denied(f.run("guard", write)) {
-		t.Fatal("a thread scoped to an area above the repository covers it")
+		t.Fatal("a started plan that names the repository covers it")
+	}
+	session := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if !strings.Contains(session, `specs: ["[[Cloud work]]", "[[Edge work]]"]`) || !strings.Contains(session, "events: 2") {
+		t.Fatalf("session:\n%s", session)
+	}
+	edgeDoc := f.tv.Read("wiki/documents/Edge work.md")
+	if !strings.Contains(edgeDoc, "active: true") || !strings.Contains(edgeDoc, "active in [[2026-09-27 1432 a1b2c3]]") {
+		t.Fatalf("the plan is active:\n%s", edgeDoc)
 	}
 	f.run("touched", map[string]any{"tool_name": "Bash", "cwd": cloud, "tool_input": map[string]any{"command": "git log --oneline"}})
 	if strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-cloud]]") {
@@ -171,44 +211,28 @@ func TestTheThreadRule(t *testing.T) {
 	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-cloud]]") {
 		t.Fatal("a shell write in a repository lands in the session's record")
 	}
-	f.run("touched", write)
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-edge]]") {
-		t.Fatal("the session lists the repository it edited")
-	}
-	f.ok(threads.File(f.tv.V, r.View.Stub.ID, "receipt", "done", "completed", f.tv.Clock))
+	f.ok(work.Complete(f.tv.V, "Edge work", work.ResultIn{Delivered: "d", Verified: "v"}, o))
 	if !denied(f.run("guard", write)) {
-		t.Fatal("a closed thread does not count")
+		t.Fatal("a done plan does not count")
 	}
 }
 
-// bind runs the touched hook for a thread call, with the tool's result as the host
-// passes it: content blocks that hold the JSON.
-func (f *fixture) bind(action string, r *threads.Result, input map[string]any) {
-	f.t.Helper()
-	data, _ := json.Marshal(r.View)
-	if input == nil {
-		input = map[string]any{}
-	}
-	input["action"] = action
-	f.run("touched", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__thread", "tool_input": input, "tool_response": []any{map[string]any{"type": "text", "text": string(data)}}})
-}
-
-func TestTouchedBindsTasksAndChanges(t *testing.T) {
+func TestTouchedBindsWorkEventsAndChanges(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
-	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "x", Title: "Work"}, f.tv.Clock))
-	r = f.ok(threads.Tasks(f.tv.V, r.View.Stub.ID, []threads.TaskIn{{Title: "First", Text: "x"}}, f.tv.Clock))
-	r = f.ok(threads.Task(f.tv.V, "T1", r.View.Stub.ID, threads.TaskDo{Do: "start"}, f.tv.Clock))
-	f.bind("task", r, map[string]any{"task": "T1", "thread": r.View.Stub.ID, "do": "start"})
+	r := f.ok(work.Stub(f.tv.V, work.StubIn{Text: "x", Title: "Idea"}, work.Opts{Now: f.tv.Clock}))
+	f.bind("stub", r, nil)
+	p := f.ok(work.Promote(f.tv.V, work.PromoteIn{Stub: "Idea", Kind: "plan", Text: "## Done when\n\n- y\n"}, work.Opts{Now: f.tv.Clock}))
+	f.bind("promote", p, nil)
 	session := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
-	if !strings.Contains(session, `threads: ["[[Work]]"]`) || !strings.Contains(session, `tasks: ["[[Work — T1 First]]"]`) {
+	if !strings.Contains(session, `work: ["[[Idea]]"]`) || !strings.Contains(session, "events: 1") {
 		t.Fatalf("session:\n%s", session)
 	}
-	if !strings.Contains(f.tv.Read("threads/Work/Work — T1 First.md"), "active: true") {
-		t.Fatal("the task is active")
+	event := f.tv.Read(p.Events[0].Path)
+	if !strings.Contains(event, `session: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(event, "By the agent in [[2026-09-27 1432 a1b2c3]]") {
+		t.Fatalf("the event names its session:\n%s", event)
 	}
-
-	pv, err := change.Propose(f.tv.V, change.Plan{Title: "Add A", Writes: []change.Write{{Op: "create", Type: "concept", Title: "A", Fields: map[string]any{"description": "a"}}}}, f.tv.Tick(time.Minute))
+	pv, err := change.Propose(f.tv.V, change.Plan{Title: "Add A", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "A", Fields: map[string]any{"description": "a"}}}}, f.tv.Tick(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -227,7 +251,7 @@ func TestTheGate(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
 	propose := func(title string) *change.Preview {
-		pv, err := change.Propose(f.tv.V, change.Plan{Title: title, Writes: []change.Write{{Op: "create", Type: "concept", Title: title, Fields: map[string]any{"description": "a"}}}}, f.tv.Tick(time.Minute))
+		pv, err := change.Propose(f.tv.V, change.Plan{Title: title, Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: title, Fields: map[string]any{"description": "a"}}}}, f.tv.Tick(time.Minute))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -288,9 +312,6 @@ func TestReadOnlyAgents(t *testing.T) {
 		event["agent_type"] = "atlas-obsidian:" + typ
 		return event
 	}
-	bash := func(cmd string) map[string]any {
-		return map[string]any{"tool_name": "Bash", "tool_input": map[string]any{"command": cmd}}
-	}
 	cases := []struct {
 		name  string
 		event map[string]any
@@ -298,14 +319,16 @@ func TestReadOnlyAgents(t *testing.T) {
 	}{
 		{"extract writes", agent("wiki-extract", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "/tmp/x"}}), true},
 		{"draft proposes", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "propose"}}), true},
+		{"draft plants a stub", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__work", "tool_input": map[string]any{"action": "stub"}}), true},
 		{"draft searches", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__search", "tool_input": map[string]any{"text": "x"}}), false},
+		{"review shows work", agent("spec-review", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__work", "tool_input": map[string]any{"action": "show"}}), false},
 		{"audit runs a shell", agent("wiki-audit", bash("ls")), true},
-		{"review reads the log", agent("thread-review", bash("git log --oneline -5")), false},
-		{"review reads another repository", agent("thread-review", bash(`git -C "/code/p3 edge" show abc123`)), false},
-		{"review chains a command", agent("thread-review", bash("git -C /x log && rm -rf /")), true},
-		{"review pipes", agent("thread-review", bash("git log | head")), true},
-		{"review writes a file", agent("thread-review", bash("git diff --output=/tmp/x")), true},
-		{"review runs other git", agent("thread-review", bash("git commit -m x")), true},
+		{"review reads the log", agent("spec-review", bash("git log --oneline -5")), false},
+		{"review reads another repository", agent("spec-review", bash(`git -C "/code/p3 edge" show abc123`)), false},
+		{"review chains a command", agent("spec-review", bash("git -C /x log && rm -rf /")), true},
+		{"review pipes", agent("spec-review", bash("git log | head")), true},
+		{"review writes a file", agent("spec-review", bash("git diff --output=/tmp/x")), true},
+		{"review runs other git", agent("spec-review", bash("git commit -m x")), true},
 	}
 	for _, c := range cases {
 		if got := denied(f.run("guard", c.event)); got != c.deny {
@@ -316,9 +339,13 @@ func TestReadOnlyAgents(t *testing.T) {
 
 func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	f := setup(t)
+	repo := f.tv.Repo("p3-edge", nil)
+	f.tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
+	f.tv.Commit()
 	f.run("session-start", map[string]any{})
-	r := f.ok(threads.Open(f.tv.V, threads.OpenIn{Text: "x", Title: "Work"}, f.tv.Clock))
-	f.bind("open", r, nil)
+	o := work.Opts{Now: f.tv.Clock}
+	f.ok(work.Specs(f.tv.V, work.SpecsIn{Specs: []work.SpecIn{{Title: "Plan", Kind: "plan", Repositories: []string{"p3-edge"}, Text: "## Done when\n\n- x\n"}}}, o))
+	f.bind("start", f.ok(work.Start(f.tv.V, "Plan", false, o)), map[string]any{"spec": "Plan"})
 	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
 	f.run("touched", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract", "tool_name": "Read"})
 	f.run("subagent-stop", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
@@ -328,30 +355,31 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	}
 	f.run("subagent-start", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
 	child := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md")
-	if !strings.Contains(child, `parent: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(child, `threads: ["[[Work]]"]`) {
-		t.Fatalf("a writing subagent inherits the thread:\n%s", child)
+	if !strings.Contains(child, `parent: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(child, `specs: ["[[Plan]]"]`) {
+		t.Fatalf("a writing subagent inherits the started plans:\n%s", child)
+	}
+	write := map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose", "tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/main.go", "old_string": "a"}}
+	if denied(f.run("guard", write)) {
+		t.Fatal("the subagent may edit the repository its parent's plan names")
 	}
 	f.run("notify", map[string]any{"notification_type": "permission_prompt"})
 	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: waiting") {
 		t.Fatal("waiting")
 	}
 	f.run("subagent-stop", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md"), "status: ended") {
-		t.Fatal("the subagent's document ends")
-	}
 	f.run("session-end", map[string]any{"reason": "exit"})
 	if s := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"); !strings.Contains(s, "status: ended") {
 		t.Fatalf("ended:\n%s", s)
 	}
-	if !strings.Contains(f.tv.Read(r.View.Stub.Path), "active: false") {
-		t.Fatal("an ended session lets the thread go")
+	if !strings.Contains(f.tv.Read("wiki/documents/Plan.md"), "active: false") {
+		t.Fatal("an ended session lets the plan go")
 	}
 }
 
 func TestStopRemindsOnce(t *testing.T) {
 	f := setup(t)
 	repo := f.tv.Repo("p3-edge", nil)
-	f.tv.Page("repository", "p3-edge", map[string]any{"path": repo}, "")
+	f.tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
 	f.run("session-start", map[string]any{})
 	f.run("touched", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/x.go"}})
 	out := f.run("stop", map[string]any{})

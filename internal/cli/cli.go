@@ -1,6 +1,6 @@
 // Package cli is the atlas-obsidian command: one subcommand per tool action, the hooks, the MCP
-// server, and the commands no tool needs (setup, doctor, version, open). Every command
-// reaches the same function its tool does.
+// server, and the commands no tool needs (setup, doctor, version, open, vault migrate).
+// Every command reaches the same function its tool does.
 package cli
 
 import (
@@ -15,17 +15,18 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nathanaday/atlas-obsidian/internal/brief"
 	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/match"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
-	"github.com/nathanaday/atlas-obsidian/internal/scope"
+	"github.com/nathanaday/atlas-obsidian/internal/migrate"
 	"github.com/nathanaday/atlas-obsidian/internal/search"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Version is the binary's version; the build stamps it.
@@ -47,20 +48,22 @@ func New() *CLI {
 	return &CLI{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Getenv: os.Getenv, Now: time.Now, Dir: dir}
 }
 
-const usage = `atlas-obsidian: one vault for the wiki, the threads, the sessions, and the changes of your work.
+const usage = `atlas-obsidian: one vault for what you know, what you plan and do, and what happened.
 
 Usage:
-  atlas-obsidian vault [status|init|sync|mention]  the state of the vault; make, heal, or answer
-  atlas-obsidian search TEXT [--type T]... [--scope S] [--state K=V]... [--limit N]
-  atlas-obsidian context [SCOPE] [--path P]        walk the context graph to a scope
-  atlas-obsidian match --items FILE.json | --pages ID... [--within S] [--siblings]
-  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--scope S]
+  atlas-obsidian vault [status|init|sync [--views]|mention|migrate [--dry-run]]
+  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
+  atlas-obsidian context [REPOSITORY] [--tag T]... [--path P]
+  atlas-obsidian match --items FILE.json | --docs ID... [--tag T]... [--across]
+  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--tag T]... [--resolves STUB]
   atlas-obsidian source chunks DOC
   atlas-obsidian source read DOC CHUNK
   atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
-  atlas-obsidian thread [list] | show T | open TEXT... | attach T | file T PART | tasks T FILE.json
-                        | task ID DO | set T ... | reopen T
-  atlas-obsidian lint [SCOPE]
+  atlas-obsidian work [list] | show DOC | stub TEXT... | spec FILE.json | promote STUB FILE.md --kind K
+                      | start SPEC [--take] | done SPEC FILE.json | drop DOC --reason R | reopen DOC
+                      | block SPEC --reason R | unblock SPEC | resolve STUB --became DOC... | note DOC --text T
+                      | set DOC [--title T] [--priority P] [--tag T]... [--parent P] [--repository R]...
+  atlas-obsidian lint [--tag T]...
   atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
   atlas-obsidian mcp                               the MCP server, over stdio
   atlas-obsidian setup | doctor | version | open [DOC]
@@ -89,8 +92,8 @@ func (c *CLI) Run(argv []string) int {
 		err = c.sourceCmd(rest)
 	case "change":
 		err = c.changeCmd(rest)
-	case "thread":
-		err = c.threadCmd(rest)
+	case "work":
+		err = c.workCmd(rest)
 	case "lint":
 		err = c.lintCmd(rest)
 	case "hook":
@@ -174,6 +177,14 @@ func (a args) ptr(name string) *string {
 	return &v
 }
 
+func (a args) listPtr(name string) *[]string {
+	if !a.has(name) {
+		return nil
+	}
+	l := a.list(name)
+	return &l
+}
+
 func (a args) arg(i int) string {
 	if i < len(a.pos) {
 		return a.pos[i]
@@ -229,8 +240,11 @@ func (c *CLI) readText(file string) (string, error) {
 	return string(data), err
 }
 
+// user is how the CLI acts: as the user, now.
+func (c *CLI) user() work.Opts { return work.Opts{Now: c.Now(), By: work.ByUser} }
+
 func (c *CLI) vaultCmd(argv []string) error {
-	a := parse(argv)
+	a := parse(argv, "views", "dry-run")
 	now := c.Now()
 	switch a.arg(0) {
 	case "", "status":
@@ -249,7 +263,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 		if p == "" {
 			p = c.Dir
 		}
-		st, err := core.Init(vault.InitOptions{Path: p, Name: a.get("name"), Description: a.get("description"), Areas: a.get("areas")}, c.home(), now)
+		st, err := core.Init(vault.InitOptions{Path: p, Name: a.get("name"), Description: a.get("description"), Tagging: a.get("tagging")}, c.home(), now)
 		if err != nil {
 			return err
 		}
@@ -261,17 +275,12 @@ func (c *CLI) vaultCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		s, err := core.Sync(v, now)
+		s, err := core.Sync(v, now, core.SyncOptions{Views: a.has("views")})
 		if err != nil {
 			return err
 		}
 		return c.emit(a, map[string]any{"synced": s}, func(w io.Writer) {
-			n := len(s.Threads) + len(s.Lost) + len(s.Sessions) + len(s.Scopes)
-			if n == 0 && !s.Settings {
-				fmt.Fprintln(w, "Nothing to heal.")
-				return
-			}
-			fmt.Fprintf(w, "Synced: %d thread documents, %d lost sessions, %d session callouts, %d files from the scopes (chains, scope callouts, the map, the canvas)", len(s.Threads), len(s.Lost), len(s.Sessions), len(s.Scopes))
+			fmt.Fprintf(w, "Synced: %d work documents, %d knowledge documents, %d moved back, %d lost sessions, %d session callouts, %d views", len(s.Work), len(s.Knowledge), len(s.Moved), len(s.Lost), len(s.Sessions), s.Views)
 			if s.Settings {
 				fmt.Fprint(w, ", the harness settings")
 			}
@@ -287,10 +296,60 @@ func (c *CLI) vaultCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
+		core.Views(v, now)
 		return c.emit(a, map[string]any{"mention": m}, func(w io.Writer) { fmt.Fprintf(w, "Closed: %s\n", m.Text) })
+	case "migrate":
+		v, err := c.open(a)
+		if err != nil {
+			return err
+		}
+		if a.has("dry-run") {
+			r, err := migrate.Plan(v, now)
+			if err != nil {
+				return err
+			}
+			return c.emit(a, r, func(w io.Writer) { printMigration(w, r, false) })
+		}
+		r, err := migrate.Run(v, now)
+		if err != nil {
+			return err
+		}
+		return c.emit(a, r, func(w io.Writer) { printMigration(w, r, true) })
 	}
-	return fmt.Errorf("vault takes status, init, sync, or mention, not %q", a.arg(0))
+	return fmt.Errorf("vault takes status, init, sync, mention, or migrate, not %q", a.arg(0))
 }
+
+func printMigration(w io.Writer, r *migrate.Report, done bool) {
+	if done {
+		fmt.Fprintf(w, "Migrated %s to the 7.0 layout in one commit, %s.\n", r.Vault, short(r.Commit))
+	} else {
+		fmt.Fprintf(w, "The migration of %s to the 7.0 layout would make these moves; run it without --dry-run to write them.\n", r.Vault)
+	}
+	fmt.Fprintf(w, "Documents: %d to wiki/documents · %d events written · %d titles changed · %d originals to wiki/assets\n", r.Documents, r.Events, len(r.Retitles), r.Assets)
+	for _, t := range r.Tags {
+		fmt.Fprintf(w, "  tag  %s ← %s\n", t.Tag, t.Scope)
+	}
+	for _, rt := range r.Retitles {
+		fmt.Fprintf(w, "  title  %s → %s\n", rt.Old, rt.New)
+	}
+	for _, p := range r.Inbox {
+		fmt.Fprintf(w, "  to the inbox  %s\n", p)
+	}
+	for _, p := range r.Scratchpad {
+		fmt.Fprintf(w, "  to the scratchpad  %s\n", p)
+	}
+	for _, x := range r.Warnings {
+		fmt.Fprintf(w, "  warning: %s\n", x)
+	}
+	if r.Plugin != "" {
+		fmt.Fprintf(w, "Obsidian plugin: updated to %s; reload Obsidian to use it.\n", r.Plugin)
+	}
+	if done && r.Problems > 0 {
+		fmt.Fprintf(w, "Lint finds %d errors after the move: atlas-obsidian lint lists them.\n", r.Problems)
+	}
+}
+
+func short(sha string) string { return sha[:min(10, len(sha))] }
 
 // count is a number and its noun, singular for one.
 func count(n int, one, many string) string {
@@ -301,15 +360,24 @@ func count(n int, one, many string) string {
 }
 
 func printStatus(w io.Writer, st *core.Status) {
-	fmt.Fprintf(w, "%s · %s · %s\n", st.Vault.Name, st.Vault.Path, st.Vault.ID)
-	fmt.Fprintf(w, "Scopes: %s, %s\n", count(st.Scopes.Areas, "area", "areas"), count(st.Scopes.Repositories, "repository", "repositories"))
-	var pages []string
-	for _, t := range []string{"concept", "entity", "policy", "source"} {
-		pages = append(pages, fmt.Sprintf("%d %s", st.Wiki.Pages[t], t))
+	fmt.Fprintf(w, "%s · %s · %s · tagging %s\n", st.Vault.Name, st.Vault.Path, st.Vault.ID, st.Vault.Tagging)
+	var docs []string
+	for _, t := range []string{"topic", "source", "repository", "spec", "stub", "event"} {
+		docs = append(docs, fmt.Sprintf("%d %s", st.Documents[t], t))
 	}
-	fmt.Fprintf(w, "Wiki: %s · %d draft · %d contested\n", strings.Join(pages, ", "), st.Wiki.Draft, st.Wiki.Contested)
-	o := st.Threads.Open
-	fmt.Fprintf(w, "Threads: %d open (tasks %d, spec %d, stub %d) · %d active\n", o["tasks"]+o["spec"]+o["stub"], o["tasks"], o["spec"], o["stub"], len(st.Threads.Active))
+	fmt.Fprintf(w, "Documents: %s · %d draft · %d contested\n", strings.Join(docs, ", "), st.Topics.Draft, st.Topics.Contested)
+	var tagList []string
+	for i, t := range st.Tags {
+		if i == 12 {
+			tagList = append(tagList, "…")
+			break
+		}
+		tagList = append(tagList, fmt.Sprintf("%s %d", t.Tag, t.Count))
+	}
+	if len(tagList) > 0 {
+		fmt.Fprintf(w, "Tags: %s\n", strings.Join(tagList, " · "))
+	}
+	fmt.Fprintf(w, "Work: %d started · %d open · %d blocked · %s · %d active\n", st.Work.Started, st.Work.Open, st.Work.Blocked, count(st.Work.Stubs, "stub", "stubs"), len(st.Work.Active))
 	fmt.Fprintf(w, "Sessions: %d running · %d waiting · %d idle\n", len(st.Sessions.Running), len(st.Sessions.Waiting), len(st.Sessions.Idle))
 	for _, s := range st.Sessions.Waiting {
 		fmt.Fprintf(w, "  waits for you: %s %s\n", s.Title, s.Description)
@@ -329,14 +397,7 @@ func (c *CLI) searchCmd(argv []string) error {
 	if err != nil {
 		return err
 	}
-	q := search.Query{Text: strings.Join(a.pos, " "), Types: a.list("type"), Scope: a.get("scope"), State: map[string][]string{}}
-	for _, kv := range a.list("state") {
-		k, v, ok := strings.Cut(kv, "=")
-		if !ok {
-			return fmt.Errorf("--state takes key=value, not %q", kv)
-		}
-		q.State[k] = append(q.State[k], strings.Split(v, ",")...)
-	}
+	q := search.Query{Text: strings.Join(a.pos, " "), Types: a.list("type"), Kinds: a.list("kind"), Tags: a.list("tag"), Status: a.list("status"), Repository: a.get("repository")}
 	q.Limit, _ = strconv.Atoi(a.get("limit"))
 	hits, err := search.Search(idx, q)
 	if err != nil {
@@ -344,12 +405,24 @@ func (c *CLI) searchCmd(argv []string) error {
 	}
 	return c.emit(a, hits, func(w io.Writer) {
 		for _, h := range hits.Hits {
-			fmt.Fprintf(w, "%6.2f  %-10s %s  (%s)\n", h.Score, h.Ref.Type, h.Ref.Title, h.Ref.ID)
+			kind := h.Ref.Type
+			if h.Ref.Kind != "" {
+				kind += " " + h.Ref.Kind
+			}
+			fmt.Fprintf(w, "%6.2f  %-16s %s  (%s)\n", h.Score, kind, h.Ref.Title, h.Ref.ID)
 			if h.Snippet != "" {
 				fmt.Fprintf(w, "        %s\n", h.Snippet)
 			}
 		}
 		fmt.Fprintf(w, "%d of %d\n", len(hits.Hits), hits.Total)
+		if len(hits.Facets.Tags) > 0 {
+			var list []string
+			for t, n := range hits.Facets.Tags {
+				list = append(list, fmt.Sprintf("%s %d", t, n))
+			}
+			sort.Strings(list)
+			fmt.Fprintf(w, "with: %s\n", strings.Join(list, " · "))
+		}
 	})
 }
 
@@ -359,39 +432,39 @@ func (c *CLI) contextCmd(argv []string) error {
 	if err != nil {
 		return err
 	}
-	ch, err := scope.Context(idx, a.arg(0), a.get("path"))
+	b, err := brief.Of(idx, brief.Input{Repository: a.arg(0), Tags: a.list("tag"), Path: a.get("path")})
 	if err != nil {
 		return err
 	}
-	return c.emit(a, ch, func(w io.Writer) {
-		var chain []string
-		for _, n := range ch.Chain {
-			chain = append(chain, n.Ref.Title)
+	return c.emit(a, b, func(w io.Writer) {
+		var tagList []string
+		for _, t := range b.Tags {
+			tagList = append(tagList, fmt.Sprintf("%s %d", t.Tag, t.Count))
 		}
-		fmt.Fprintln(w, strings.Join(chain, " → "))
-		list := func(label string, refs []vault.Ref) {
-			if len(refs) == 0 {
-				return
-			}
-			var names []string
-			for _, r := range refs {
-				names = append(names, r.Title)
-			}
-			fmt.Fprintf(w, "%s: %s\n", label, strings.Join(names, ", "))
+		fmt.Fprintf(w, "Tags: %s\n", strings.Join(tagList, " · "))
+		for _, p := range b.Pages {
+			fmt.Fprintf(w, "Page of %s: %s\n", p.Tag, p.Ref.Title)
 		}
-		list("Children", ch.Children)
-		list("Repositories", ch.Repositories)
-		for _, p := range ch.Policies {
-			fmt.Fprintf(w, "Policy (%s): %s\n", orDash(p.Strength), p.Ref.Title)
+		var repos []string
+		for _, r := range b.Repositories {
+			repos = append(repos, r.Title)
 		}
-		list("Open threads", ch.Threads)
-		for _, in := range ch.Instructions {
+		if len(repos) > 0 {
+			fmt.Fprintf(w, "Repositories: %s\n", strings.Join(repos, ", "))
+		}
+		for _, p := range b.Policies {
+			fmt.Fprintf(w, "Policy (%s): %s · %s\n", orDash(p.Strength), p.Ref.Title, strings.Join(p.Via, ", "))
+		}
+		for _, wk := range b.Work {
+			fmt.Fprintf(w, "Work: %s · %s %s\n", wk.Title, wk.Type, wk.Status)
+		}
+		for _, in := range b.Instructions {
 			fmt.Fprintf(w, "Instructions: %s\n", in.Path)
 		}
-		if r := ch.Repository; r != nil {
-			fmt.Fprintf(w, "Repository: %s · %s · head %s · %d dirty", r.Path, r.Branch, r.Head, r.Dirty)
+		if r := b.Repository; r != nil {
+			fmt.Fprintf(w, "Repository: %s · %s · head %s · %d dirty · %d ahead, %d behind the remote", r.Path, r.Branch, r.Head, len(r.Dirty), r.Ahead, r.BehindRemote)
 			if r.Behind >= 0 {
-				fmt.Fprintf(w, " · %d commits past its page", r.Behind)
+				fmt.Fprintf(w, " · %d commits past its description", r.Behind)
 			}
 			fmt.Fprintln(w)
 		}
@@ -406,17 +479,17 @@ func orDash(s string) string {
 }
 
 func (c *CLI) matchCmd(argv []string) error {
-	a := parse(argv, "siblings")
+	a := parse(argv, "across")
 	idx, err := c.index(a)
 	if err != nil {
 		return err
 	}
-	in := match.Input{Pages: append(a.list("pages"), a.pos...), Siblings: a.has("siblings"), Within: a.get("within")}
+	in := match.Input{Docs: append(a.list("docs"), a.pos...), Tags: a.list("tag"), Across: a.has("across")}
 	if file := a.get("items"); file != "" {
 		if err := c.readJSON(file, &in.Items); err != nil {
 			return fmt.Errorf("--items: %w", err)
 		}
-		in.Pages = nil
+		in.Docs = nil
 	}
 	m, err := match.Run(idx, in)
 	if err != nil {
@@ -426,14 +499,14 @@ func (c *CLI) matchCmd(argv []string) error {
 }
 
 func (c *CLI) sourceCmd(argv []string) error {
-	a := parse(argv)
+	a := parse(argv, "new-tags")
 	switch a.arg(0) {
 	case "capture":
 		v, err := c.open(a)
 		if err != nil {
 			return err
 		}
-		req := source.Request{Inbox: a.list("inbox"), Title: a.get("title"), Repository: a.get("repository"), Scope: a.get("scope"), Locator: a.get("locator")}
+		req := source.Request{Inbox: a.list("inbox"), Title: a.get("title"), Repository: a.get("repository"), Tags: a.list("tag"), Locator: a.get("locator"), Resolves: a.get("resolves"), NewTags: a.has("new-tags")}
 		if a.has("text") {
 			text, err := c.readText(a.get("text"))
 			if err != nil {
@@ -441,10 +514,11 @@ func (c *CLI) sourceCmd(argv []string) error {
 			}
 			req.Text = text
 		}
-		res, err := source.Capture(v, req, c.Now())
+		res, err := source.Capture(v, req, c.user())
 		if err != nil {
 			return err
 		}
+		core.Views(v, c.Now())
 		return c.emit(a, res, func(w io.Writer) {
 			for _, cp := range res.Captured {
 				if cp.Duplicate != "" {
@@ -522,6 +596,9 @@ func (c *CLI) changeCmd(argv []string) error {
 	if err != nil {
 		return err
 	}
+	if a.arg(0) != "show" && a.arg(0) != "" {
+		core.Views(v, now)
+	}
 	return c.emit(a, pv, func(w io.Writer) { printPreview(w, pv) })
 }
 
@@ -530,16 +607,22 @@ func printPreview(w io.Writer, pv *change.Preview) {
 	fmt.Fprintf(w, "  %s\n", pv.Ref.Path)
 	for _, wl := range pv.Writes {
 		line := fmt.Sprintf("  %-7s %s", wl.Op, wl.Title)
+		if wl.Kind != "" {
+			line += " (" + wl.Kind + ")"
+		}
 		if wl.Lines != "" {
 			line += "  " + wl.Lines
 		}
 		if wl.Note != "" {
-			line += "  (" + wl.Note + ")"
+			line += "  · " + wl.Note
 		}
 		fmt.Fprintln(w, line)
 	}
-	for _, r := range pv.LinkRewrites {
-		fmt.Fprintf(w, "  links   %s\n", r.Title)
+	for _, r := range pv.Rewrites {
+		fmt.Fprintf(w, "  rewrite %s\n", r.Title)
+	}
+	if len(pv.NewTags) > 0 {
+		fmt.Fprintf(w, "  new tags: %s\n", strings.Join(pv.NewTags, ", "))
 	}
 	for _, warn := range pv.Warnings {
 		fmt.Fprintf(w, "  warning: %s\n", warn)
@@ -548,22 +631,23 @@ func printPreview(w io.Writer, pv *change.Preview) {
 		fmt.Fprintf(w, "  reason: %s\n", pv.Reason)
 	}
 	if pv.Commit != "" {
-		fmt.Fprintf(w, "  commit %s\n", pv.Commit[:min(10, len(pv.Commit))])
+		fmt.Fprintf(w, "  commit %s\n", short(pv.Commit))
 	}
 }
 
-func (c *CLI) threadCmd(argv []string) error {
-	a := parse(argv, "take")
+func (c *CLI) workCmd(argv []string) error {
+	a := parse(argv, "take", "new-tags", "resolve")
 	v, err := c.open(a)
 	if err != nil {
 		return err
 	}
-	now := c.Now()
-	show := func(r *threads.Result, err error) error {
+	o := c.user()
+	show := func(r *work.Result, err error) error {
 		if err != nil {
 			return err
 		}
-		return c.emit(a, map[string]any{"view": r.View, "commit": r.Commit}, func(w io.Writer) { printView(w, r.View) })
+		core.Views(v, c.Now())
+		return c.emit(a, r, func(w io.Writer) { printView(w, r.View) })
 	}
 	switch a.arg(0) {
 	case "", "list":
@@ -571,116 +655,133 @@ func (c *CLI) threadCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		b := threads.List(idx)
+		b := work.Load(idx).BoardView(work.Filter{Tags: a.list("tag"), Repository: a.get("repository")})
 		return c.emit(a, map[string]any{"board": b}, func(w io.Writer) { printBoard(w, b) })
-	case "show", "attach":
+	case "show":
 		idx, err := vault.Load(v)
 		if err != nil {
 			return err
 		}
-		view, err := threads.Show(idx, a.arg(1))
+		view, err := work.Show(idx, a.arg(1))
 		if err != nil {
 			return err
 		}
 		return c.emit(a, map[string]any{"view": view}, func(w io.Writer) { printView(w, view) })
-	case "open":
+	case "stub":
 		text := strings.Join(a.pos[1:], " ")
 		if text == "" || text == "-" {
 			if text, err = c.readText("-"); err != nil {
 				return err
 			}
 		}
-		return show(threads.Open(v, threads.OpenIn{Text: text, Title: a.get("title"), Scope: a.list("scope"), Priority: a.get("priority"), Inbox: a.get("inbox")}, now))
-	case "file":
-		text, err := c.readText(a.get("text"))
+		return show(work.Stub(v, work.StubIn{Text: text, Title: a.get("title"), Description: a.get("description"), Tags: a.list("tag"), Priority: a.get("priority"), Inbox: a.get("inbox"), NewTags: a.has("new-tags")}, o))
+	case "spec":
+		var in work.SpecsIn
+		if err := c.readJSON(a.arg(1), &in); err != nil {
+			return fmt.Errorf("the specs: %w", err)
+		}
+		return show(work.Specs(v, in, o))
+	case "promote":
+		text, err := c.readText(a.arg(2))
 		if err != nil {
 			return err
 		}
-		return show(threads.File(v, a.arg(1), a.arg(2), text, a.get("outcome"), now))
-	case "tasks":
-		var tasks []threads.TaskIn
-		if err := c.readJSON(a.arg(2), &tasks); err != nil {
-			return fmt.Errorf("the tasks: %w", err)
+		return show(work.Promote(v, work.PromoteIn{Stub: a.arg(1), Kind: a.get("kind"), Text: text, Title: a.get("title"), Repositories: a.list("repository"), Parent: a.get("parent"), NewTags: a.has("new-tags")}, o))
+	case "start":
+		return show(work.Start(v, a.arg(1), a.has("take"), o))
+	case "done":
+		var r work.ResultIn
+		if err := c.readJSON(a.arg(2), &r); err != nil {
+			return fmt.Errorf("the result: %w", err)
 		}
-		return show(threads.Tasks(v, a.arg(1), tasks, now))
-	case "task":
-		do := threads.TaskDo{Do: a.arg(2), Result: a.get("result"), Take: a.has("take"), Title: a.ptr("title"), Repository: a.ptr("repository"), Blocked: a.ptr("blocked")}
-		if a.has("depends") {
-			deps := a.list("depends")
-			do.Depends = &deps
-		}
+		return show(work.Complete(v, a.arg(1), r, o))
+	case "drop":
+		return show(work.Drop(v, a.arg(1), a.get("reason"), o))
+	case "reopen":
+		return show(work.Reopen(v, a.arg(1), a.get("reason"), o))
+	case "block":
+		return show(work.Block(v, a.arg(1), a.get("reason"), o))
+	case "unblock":
+		return show(work.Unblock(v, a.arg(1), o))
+	case "resolve":
+		return show(work.Resolve(v, a.arg(1), a.list("became"), o))
+	case "note":
+		return show(work.Note(v, a.arg(1), a.get("text"), o))
+	case "set":
+		set := work.SetIn{Doc: a.arg(1), Title: a.ptr("title"), Description: a.ptr("description"), Priority: a.ptr("priority"), Parent: a.ptr("parent"), Supersedes: a.ptr("supersedes"), Tags: a.listPtr("tag"), Aliases: a.listPtr("alias"), Repositories: a.listPtr("repository"), Depends: a.listPtr("depends"), Implements: a.listPtr("implements"), NewTags: a.has("new-tags")}
 		if a.has("order") {
 			n, err := strconv.Atoi(a.get("order"))
 			if err != nil {
 				return errors.New("--order takes a number")
 			}
-			do.Order = &n
+			set.Order = &n
 		}
-		return show(threads.Task(v, a.arg(1), a.get("thread"), do, now))
-	case "set":
-		set := threads.SetIn{Title: a.ptr("title"), Priority: a.ptr("priority"), Blocked: a.ptr("blocked")}
-		if a.has("scope") {
-			s := a.list("scope")
-			set.Scope = &s
-		}
-		return show(threads.Set(v, a.arg(1), set, now))
-	case "reopen":
-		return show(threads.Reopen(v, a.arg(1), now))
+		return show(work.Set(v, set, o))
 	}
-	return fmt.Errorf("thread takes list, show, open, attach, file, tasks, task, set, or reopen, not %q", a.arg(0))
+	return fmt.Errorf("work takes list, show, stub, spec, promote, start, done, drop, reopen, block, unblock, resolve, note, or set, not %q", a.arg(0))
 }
 
-func printBoard(w io.Writer, b *threads.BoardView) {
-	for _, col := range b.Board {
-		if len(col.Threads) == 0 {
-			continue
+func printBoard(w io.Writer, b *work.BoardView) {
+	group := func(label string, refs []vault.Ref) {
+		if len(refs) == 0 {
+			return
 		}
-		fmt.Fprintf(w, "%s (%d)\n", col.Stage, len(col.Threads))
-		for _, t := range col.Threads {
-			line := "  " + t.Title
-			if p, _ := t.State["priority"].(string); p != "normal" && p != "" {
+		fmt.Fprintf(w, "%s (%d)\n", label, len(refs))
+		for _, r := range refs {
+			line := "  " + r.Title
+			if root, _ := r.State["root"].(string); root != "" && root != r.Title {
+				line += " · part of " + root
+			}
+			if p, _ := r.State["priority"].(string); p != "normal" && p != "" {
 				line += " · " + p
 			}
-			if n, _ := t.State["tasks"].(string); col.Stage == "tasks" {
-				line += " · " + n
+			if n, _ := r.State["parts"].(string); n != "" {
+				line += " · parts " + n
 			}
-			if a, _ := t.State["active"].(bool); a {
-				line += " · active"
-			}
-			if bl, _ := t.State["blocked"].(string); bl != "" {
+			if bl, _ := r.State["blocked"].(string); bl != "" {
 				line += " · blocked: " + bl
 			}
 			fmt.Fprintln(w, line)
 		}
 	}
-	if len(b.Closed) > 0 {
-		fmt.Fprintf(w, "closed (last %d)\n", len(b.Closed))
-		for _, t := range b.Closed {
-			fmt.Fprintf(w, "  %s · %v\n", t.Title, t.State["outcome"])
-		}
-	}
+	group("active", b.Active)
+	group("started", b.Started)
+	group("ready", b.Ready)
+	group("blocked", b.Blocked)
+	group("waiting on other plans", b.Waiting)
+	group("stubs", b.Stubs)
+	group("done lately", b.Done)
 }
 
-func printView(w io.Writer, v *threads.View) {
+func printView(w io.Writer, v *work.View) {
 	if v == nil {
 		return
 	}
-	fmt.Fprintf(w, "%s (%s) · %v · next: %s\n", v.Stub.Title, v.Stub.ID, v.Stub.State["stage"], v.Next)
-	if v.Spec != nil {
-		fmt.Fprintf(w, "  spec     %s\n", v.Spec.Title)
+	d := v.Doc
+	kind := d.Type
+	if d.Kind != "" {
+		kind += " " + d.Kind
 	}
-	for _, t := range v.Tasks {
+	fmt.Fprintf(w, "%s (%s) · %s · %s · next: %s\n", d.Title, d.ID, kind, d.Status, v.Next)
+	for _, p := range v.Parts {
 		ready := ""
-		if t.Ready {
+		if p.Ready {
 			ready = " · ready"
 		}
-		fmt.Fprintf(w, "  task     %s · %v%s\n", t.Ref.Title, t.Ref.State["status"], ready)
+		fmt.Fprintf(w, "  part     %s · %s%s\n", p.Ref.Title, p.Ref.Status, ready)
 	}
-	if v.Receipt != nil {
-		fmt.Fprintf(w, "  receipt  %s\n", v.Receipt.Title)
+	for i, e := range v.Events {
+		if i == 5 {
+			fmt.Fprintf(w, "  …        %d more events\n", len(v.Events)-i)
+			break
+		}
+		fmt.Fprintf(w, "  event    %s\n", e.Title)
+	}
+	if v.Result != nil {
+		fmt.Fprintf(w, "  result   %s\n", v.Result.Title)
 	}
 	for _, s := range v.Sessions {
-		fmt.Fprintf(w, "  session  %s · %v\n", s.Title, s.State["status"])
+		fmt.Fprintf(w, "  session  %s · %v\n", s.Title, s.Status)
 	}
 }
 
@@ -690,7 +791,7 @@ func (c *CLI) lintCmd(argv []string) error {
 	if err != nil {
 		return err
 	}
-	f, err := lint.Run(idx, lint.Options{Scope: a.arg(0), Now: c.Now()})
+	f, err := lint.Run(idx, lint.Options{Tags: append(a.list("tag"), a.pos...), Now: c.Now()})
 	if err != nil {
 		return err
 	}

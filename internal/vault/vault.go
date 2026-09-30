@@ -4,6 +4,8 @@
 package vault
 
 import (
+	"bufio"
+	"bytes"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -16,46 +18,62 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 )
 
 // The layout, relative to the vault.
 const (
-	Marker      = "Atlas.md"
-	Inbox       = "inbox"
-	Scratchpad  = "scratchpad"
-	Sessions    = "sessions"
-	Threads     = "threads"
-	Changes     = "changes"
-	Wiki        = "wiki"
-	SourceFiles = "wiki/sources/files"
-	Settings    = ".claude/settings.local.json"
-	Obsidian    = ".obsidian"
-	PluginDir   = ".obsidian/plugins/atlas"
+	Marker     = "Atlas.md"
+	Inbox      = "inbox"
+	Scratchpad = "scratchpad"
+	Sessions   = "sessions"
+	Changes    = "changes"
+	Wiki       = "wiki"
+	Documents  = "wiki/documents"
+	Assets     = "wiki/assets"
+	Views      = "views"
+	Settings   = ".claude/settings.local.json"
+	Obsidian   = ".obsidian"
+	PluginDir  = ".obsidian/plugins/atlas"
+	AppJSON    = ".obsidian/app.json"
 )
 
-// ThreadsCanvas is the board as a canvas: a card for each open thread, grouped by its
-// home scope. Sync derives it.
-const ThreadsCanvas = "threads/Threads.canvas"
+// Layout is the layout version this binary reads and writes, kept in Atlas.md's layout
+// field: 3 is the flat wiki/documents of 7.0. A vault below it is a 6.x vault, which only
+// `atlas-obsidian vault migrate` writes.
+const Layout = 3
 
 // Folders are every folder of the layout. EnsureFolders makes the ones a clone left out,
-// because git keeps no empty folder. A type folder of the wiki comes with its first page,
-// and goes with its last.
-var Folders = []string{
-	Inbox, Scratchpad, Sessions, Threads, Changes, Wiki, SourceFiles,
-}
+// because git keeps no empty folder.
+var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Wiki, Documents, Assets, Views}
 
-// Excluded are the patterns kept out of the vault's history on each machine: the
-// harness settings hold this machine's paths, Obsidian rewrites its workspace on every
-// click and its graph settings on every zoom, and the Obsidian plugin rewrites the
-// graph's color groups when a document changes.
-var Excluded = []string{"/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store"}
+// Excluded are the patterns kept out of the vault's history on each machine: the views,
+// which code derives; the harness settings, which hold this machine's paths; and the
+// Obsidian files it rewrites on every click and zoom, and the plugin on every change.
+var Excluded = []string{"/views/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store"}
 
 // Defaults of the vault document.
 var (
-	DefaultWikify     = []string{"source", "spec", "receipt"}
+	DefaultWikify     = []string{"source", "spec", "event"}
 	DefaultStaleHours = 12
-	AreaSettings      = []string{"many", "few", "manual"}
+	TaggingModes      = []string{"open", "known"}
 )
+
+// Reserved title prefixes belong to the view notes; no document takes one.
+var ReservedPrefixes = []string{"Tag · ", "View · "}
+
+// ReservedTitle reports whether a title begins with a prefix the views own.
+func ReservedTitle(title string) bool {
+	for _, p := range ReservedPrefixes {
+		if strings.HasPrefix(strings.TrimSpace(title), p) {
+			return true
+		}
+	}
+	return false
+}
+
+// DocPath is where a document of wiki/documents with a title lives.
+func DocPath(title string) string { return Documents + "/" + title + ".md" }
 
 // Vault is one vault: its folder and the settings of its vault document.
 type Vault struct {
@@ -100,12 +118,28 @@ func (v *Vault) Name() string {
 // Description is the vault's one line.
 func (v *Vault) Description() string { return v.Doc.Str("description") }
 
-// Areas is how readily the agent proposes areas: many, few, or manual.
-func (v *Vault) Areas() string {
-	if a := v.Doc.Str("areas"); slices.Contains(AreaSettings, a) {
-		return a
+// Tagging is how freely the agent adds a tag: open, or known (only tags some document
+// holds, unless the user agreed to a new one).
+func (v *Vault) Tagging() string {
+	if t := v.Doc.Str("tagging"); slices.Contains(TaggingModes, t) {
+		return t
 	}
-	return "few"
+	return "open"
+}
+
+// LayoutVersion is the layout the vault document records; a vault without the field is
+// a vault of the 6.x layouts.
+func (v *Vault) LayoutVersion() int { return v.Doc.Front.Int("layout") }
+
+// ErrLegacy is the refusal of every write on a vault of an older layout.
+var ErrLegacy = errors.New("this vault has the 6.x layout; run `atlas-obsidian vault migrate --dry-run` to see the move to 7.0, then `atlas-obsidian vault migrate` (type it yourself, or with ! in a session)")
+
+// CheckLayout refuses a vault whose layout this binary does not write.
+func (v *Vault) CheckLayout() error {
+	if v.LayoutVersion() < Layout {
+		return ErrLegacy
+	}
+	return nil
 }
 
 // Wikify lists the types that are pending until a change absorbs them.
@@ -222,29 +256,16 @@ func (v *Vault) Prune(paths ...string) {
 	}
 }
 
-// EnsureFolders makes every folder of the layout that is missing.
+// EnsureFolders makes every folder of the layout that is missing, replaces a Base of an
+// earlier release that nobody edited, and keeps the machine files out of git.
 func (v *Vault) EnsureFolders() error {
 	for _, f := range Folders {
 		if err := os.MkdirAll(v.Abs(f), 0o755); err != nil {
 			return err
 		}
 	}
-	// The scope callouts once embedded a Base file; they hold the view inline now. The
-	// file goes when nobody edited it.
-	if data, err := v.Read(oldScopeBase); err == nil && sameYAML(string(data), oldScopeBaseContent) {
-		if err := v.Remove(oldScopeBase); err != nil {
-			return err
-		}
-	}
 	if err := upgradeBases(v); err != nil {
 		return err
-	}
-	if _, err := MigrateLayout(v); err != nil {
-		return fmt.Errorf("move the wiki into scope folders: %w", err)
-	}
-	// The layout once kept every type folder at the top of the wiki; an empty one goes.
-	for _, f := range []string{"wiki/concepts", "wiki/entities", "wiki/policies"} {
-		os.Remove(v.Abs(f))
 	}
 	g := v.Git()
 	if err := g.Exclude(Excluded...); err != nil {
@@ -259,7 +280,7 @@ func untrackExcluded(g gitx.Repo) error {
 	var files []string
 	for _, p := range Excluded {
 		if rel, ok := strings.CutPrefix(p, "/"); ok {
-			files = append(files, rel)
+			files = append(files, strings.TrimSuffix(rel, "/"))
 		}
 	}
 	removed, err := g.Untrack(files...)
@@ -290,20 +311,12 @@ func FindAbove(dir string) string {
 
 // isVaultDoc reads just enough of a file to say whether it is a vault document.
 func isVaultDoc(file string) bool {
-	data, err := os.ReadFile(file)
-	if err != nil {
-		return false
-	}
-	front, _, ok := doc.Split(string(data))
-	if !ok {
-		return false
-	}
-	f, err := doc.ParseFront(front)
+	f, err := ReadFront(file)
 	return err == nil && f.Str("type") == "vault"
 }
 
 // Find resolves the vault of a session: the nearest vault at or above dir; else the one
-// vault in the machine file whose repository page holds dir.
+// vault in the machine file whose repository document holds dir.
 func Find(dir string, h Home) (*Vault, error) {
 	if root := FindAbove(dir); root != "" {
 		return Open(root)
@@ -354,139 +367,90 @@ func Resolve(name, dir string, h Home) (*Vault, error) {
 	return nil, fmt.Errorf("%w named %q; the machine file lists: %s", ErrNoVault, name, strings.Join(names, ", "))
 }
 
-// Repo is what the fast reader knows of one repository page.
+// Repo is what the fast reader knows of one repository document.
 type Repo struct {
-	ID     string
-	Title  string
-	Path   string // absolute
-	Parent string // the parent's title, or ""
+	ID      string
+	Title   string
+	Path    string // absolute; "" when the repository is unlinked
+	Defines string
+	Tags    []string
 }
 
-// Repositories reads the repository pages' frontmatter only, fast enough for a hook.
+// Repositories reads the frontmatter of the repository documents only, fast enough for a
+// hook. It reads every markdown file under wiki/, so a 6.x vault, whose repository pages
+// lie in folders, is read the same way.
 func (v *Vault) Repositories() []Repo {
 	var out []Repo
-	for _, s := range v.scopePages() {
-		if s.d.Type() != "repository" {
-			continue
+	filepath.WalkDir(v.Abs(Wiki), func(abs string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
 		}
-		p := s.d.Str("path")
+		if e.IsDir() {
+			if strings.HasPrefix(e.Name(), ".") || abs == v.Abs(Assets) || abs == v.Abs("wiki/sources/files") {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if !strings.HasSuffix(strings.ToLower(e.Name()), ".md") {
+			return nil
+		}
+		f, err := ReadFront(abs)
+		if err != nil || f.Str("type") != "repository" {
+			return nil
+		}
+		p := f.Str("path")
+		if f.Bool("unlinked") {
+			p = ""
+		}
 		if p != "" {
 			p = Expand(p)
 			if !filepath.IsAbs(p) {
 				p = filepath.Join(v.Root, p)
 			}
 		}
-		out = append(out, Repo{ID: s.d.ID(), Title: s.d.Title(), Path: p, Parent: s.parent})
-	}
-	return out
-}
-
-// AreaParents maps each area's title, without case, to its parent's title, read from the
-// area pages' frontmatter only.
-func (v *Vault) AreaParents() map[string]string {
-	out := map[string]string{}
-	for _, s := range v.scopePages() {
-		if s.d.Type() == "area" {
-			out[strings.ToLower(s.d.Title())] = s.parent
-		}
-	}
-	return out
-}
-
-type scopePage struct {
-	d      *doc.Doc
-	parent string // the parent's title, or ""
-}
-
-// scopePages reads the scope pages without the index: the page of each folder under the
-// wiki, whose parent is the nearest such folder above it, and a scope page that still
-// lies in a legacy folder, whose parent is its field.
-func (v *Vault) scopePages() []scopePage {
-	byDir := map[string]*doc.Doc{}
-	var legacy []*doc.Doc
-	filepath.WalkDir(v.Abs(Wiki), func(abs string, e fs.DirEntry, err error) error {
-		if err != nil || !e.IsDir() {
-			return nil
-		}
-		if strings.HasPrefix(e.Name(), ".") || abs == v.Abs(SourceFiles) {
-			return filepath.SkipDir
-		}
-		rel := v.Rel(abs)
-		if slices.Contains(legacyFolders, rel) {
-			for _, d := range v.readFolder(rel) {
-				if d.Type() == "area" || d.Type() == "repository" {
-					legacy = append(legacy, d)
-				}
-			}
-		}
-		if rel == Wiki {
-			return nil
-		}
-		page := rel + "/" + path.Base(rel) + ".md"
-		if d, err := cachedDoc(v, page); err == nil && (d.Type() == "area" || d.Type() == "repository") {
-			byDir[rel] = d
-		}
+		out = append(out, Repo{ID: f.Str("id"), Title: doc.TitleOf(e.Name()), Path: p, Defines: f.Str("defines"), Tags: f.List("tags")})
 		return nil
 	})
-	var out []scopePage
-	dirs := make([]string, 0, len(byDir))
-	for dir := range byDir {
-		dirs = append(dirs, dir)
-	}
-	slices.Sort(dirs)
-	for _, dir := range dirs {
-		s := scopePage{d: byDir[dir]}
-		for up := path.Dir(dir); up != Wiki && up != "."; up = path.Dir(up) {
-			if p := byDir[up]; p != nil {
-				s.parent = p.Title()
-				break
-			}
-		}
-		out = append(out, s)
-	}
-	for _, d := range legacy {
-		out = append(out, scopePage{d: d, parent: doc.LinkTarget(d.Str("parent"))})
-	}
 	return out
 }
 
-// readFolder parses the markdown files directly in a folder.
-func (v *Vault) readFolder(rel string) []*doc.Doc {
-	entries, err := os.ReadDir(v.Abs(rel))
+// ReadFront reads a file's frontmatter only: the lines up to the closing fence.
+func ReadFront(file string) (*doc.Front, error) {
+	fh, err := os.Open(file)
 	if err != nil {
-		return nil
+		return nil, err
 	}
-	var out []*doc.Doc
-	for _, e := range entries {
-		if e.IsDir() || !strings.HasSuffix(strings.ToLower(e.Name()), ".md") {
-			continue
+	defer fh.Close()
+	r := bufio.NewReader(fh)
+	first, err := r.ReadString('\n')
+	if strings.TrimRight(first, "\r\n") != "---" {
+		return nil, errors.New("no frontmatter")
+	}
+	var b bytes.Buffer
+	for {
+		line, err := r.ReadString('\n')
+		t := strings.TrimRight(line, "\r\n")
+		if t == "---" || t == "..." {
+			return doc.ParseFront(b.String())
 		}
-		p := rel + "/" + e.Name()
-		if d, err := cachedDoc(v, p); err == nil {
-			out = append(out, d)
+		b.WriteString(line)
+		if err != nil {
+			return nil, errors.New("frontmatter does not close")
 		}
 	}
-	return out
 }
 
-// Now is the time format of code-owned times.
+// TimeFormat is the format of code-owned times.
 const TimeFormat = "2006-01-02T15:04:05"
 
-// DateFormat is the format of created and updated dates.
+// DateFormat is the format of a day.
 const DateFormat = "2006-01-02"
 
 // Stamp is t as a code-owned time.
 func Stamp(t time.Time) string { return t.Format(TimeFormat) }
 
-// Date is t as a date.
+// Date is t as a day.
 func Date(t time.Time) string { return t.Format(DateFormat) }
 
 // ParseTime reads a code-owned time, a date, or a time without seconds.
-func ParseTime(s string) (time.Time, bool) {
-	for _, layout := range []string{TimeFormat, "2006-01-02T15:04", DateFormat, time.RFC3339} {
-		if t, err := time.ParseInLocation(layout, strings.TrimSpace(s), time.Local); err == nil {
-			return t, true
-		}
-	}
-	return time.Time{}, false
-}
+func ParseTime(s string) (time.Time, bool) { return schema.ParseTime(s) }

@@ -8,7 +8,7 @@ notes: "…"                            # what the change does and why; the skip
 absorbs: [doc-p2x7nd]                 # the documents this change absorbs
 work: ""                              # the stub or spec it serves, if any
 supersedes: ""                        # a proposed change this one replaces
-new_tags: false                       # true: allow tags no document holds, in tags: known mode
+new_tags: false                       # true: allow tags no document holds, in tagging: known mode
 writes:
   - op: create
     type: topic

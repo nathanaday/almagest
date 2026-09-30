@@ -62,11 +62,11 @@ change: ""                          # promoted through a change: the change docu
 ## Lead callout
 
 ```markdown
-> [!completed] Completed · [[Score boxes by motion]] · 2026-09-30 11:02:45
+> [!event-completed] Completed · [[Score boxes by motion]] · 2026-09-30 11:02:45
 > By the agent in [[2026-09-30 1040 f3e9a1]] · part of [[Filter vehicle false alarms]]
 ```
 
-The callout type is the kind. A promotion reads `Promoted from stub to spec`; a resolution lists what the stub became.
+The callout type is `event-` and the kind, so no event callout shares a name with another callout. A promotion reads `Promoted from stub to spec`; a resolution lists what the stub became.
 
 ## Body
 

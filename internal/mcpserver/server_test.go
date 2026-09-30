@@ -112,8 +112,8 @@ func TestEveryToolAndAction(t *testing.T) {
 
 	// Link the repository through a change.
 	pv, _ := c.call("change", map[string]any{"action": "propose", "title": "Link p3-edge", "writes": []any{
-		map[string]any{"op": "create", "type": "area", "title": "p3", "fields": map[string]any{"description": "The p3 product."}},
-		map[string]any{"op": "create", "type": "repository", "title": "p3-edge", "fields": map[string]any{"description": "The edge service.", "path": repo, "parent": "p3"}},
+		map[string]any{"op": "create", "type": "topic", "kind": "overview", "title": "P3", "fields": map[string]any{"description": "The p3 product.", "defines": "work/p3", "tags": []any{"work"}}},
+		map[string]any{"op": "create", "type": "repository", "title": "p3-edge", "fields": map[string]any{"description": "The edge service.", "path": repo, "defines": "work/p3/p3-edge", "tags": []any{"work/p3"}}},
 	}}, false)
 	id := dig(pv, "ref", "id").(string)
 	if dig(pv, "status") != "proposed" {
@@ -135,46 +135,61 @@ func TestEveryToolAndAction(t *testing.T) {
 	if dig(applied, "commit") == "" || dig(applied, "status") != "applied" {
 		t.Fatalf("apply %v", applied)
 	}
+	if !tv.V.Exists("views/tags/work/p3/Tag · work › p3.md") {
+		t.Fatal("a write refreshes the views")
+	}
 
-	ctxOut, _ := c.call("context", map[string]any{"scope": "p3-edge"}, false)
-	if dig(ctxOut, "repository", "branch") != "main" || len(dig(ctxOut, "instructions").([]any)) != 1 {
+	ctxOut, _ := c.call("context", map[string]any{"repository": "p3-edge"}, false)
+	if dig(ctxOut, "repository", "branch") != "main" || len(dig(ctxOut, "instructions").([]any)) != 1 || len(dig(ctxOut, "pages").([]any)) != 1 {
 		t.Fatalf("context %v", ctxOut)
 	}
+	c.call("context", map[string]any{"tags": []any{"work"}}, false)
 	c.call("context", map[string]any{}, false)
 	hits, _ := c.call("search", map[string]any{"text": "edge service", "types": []any{"repository"}}, false)
 	if dig(hits, "total").(float64) != 1 {
 		t.Fatalf("search %v", hits)
 	}
+	hits, _ = c.call("search", map[string]any{"tags": []any{"work"}}, false)
+	if dig(hits, "total").(float64) != 2 || dig(hits, "facets", "tags", "work/p3/p3-edge") == nil {
+		t.Fatalf("search by tag %v", hits)
+	}
 
-	// A thread from stub to tasks.
-	board, _ := c.call("thread", map[string]any{}, false)
+	// Work from a stub to a completed plan.
+	board, _ := c.call("work", map[string]any{}, false)
 	if dig(board, "board") == nil {
 		t.Fatalf("board %v", board)
 	}
-	opened, _ := c.call("thread", map[string]any{"action": "open", "text": "Cut the false alarms.", "title": "Filter alarms", "scope": []any{"p3-edge"}}, false)
-	thread := dig(opened, "view", "stub", "id").(string)
-	c.call("thread", map[string]any{"action": "attach", "thread": thread}, false)
-	c.call("thread", map[string]any{"action": "file", "thread": thread, "part": "spec", "text": "## Goal\n\nFewer alarms."}, false)
-	c.call("thread", map[string]any{"action": "tasks", "thread": thread, "tasks": []any{map[string]any{"title": "Score boxes", "text": "## What\n\nScore.", "repository": "p3-edge"}}}, false)
-	started, _ := c.call("thread", map[string]any{"action": "task", "thread": thread, "task": "T1", "do": "start"}, false)
-	if dig(started, "commit") != nil {
-		t.Fatal("start writes nothing")
+	stubbed, _ := c.call("work", map[string]any{"action": "stub", "text": "Cut the false alarms.", "title": "Filter alarms", "tags": []any{"work/p3/p3-edge"}}, false)
+	stub := dig(stubbed, "view", "doc", "id").(string)
+	if len(dig(stubbed, "wrote").([]any)) != 1 {
+		t.Fatalf("stub %v", stubbed)
 	}
-	c.call("thread", map[string]any{"action": "task", "thread": thread, "task": "T1", "do": "done", "result": "Done; commit abc."}, false)
-	c.call("thread", map[string]any{"action": "set", "thread": thread, "priority": "high", "blocked": "waiting on data"}, false)
-	shown, _ := c.call("thread", map[string]any{"action": "show", "thread": thread}, false)
-	if dig(shown, "view", "next") != "receipt" || dig(shown, "view", "stub", "state", "priority") != "high" {
+	c.call("work", map[string]any{"action": "promote", "stub": stub, "kind": "plan", "text": "## Goal\n\nFewer alarms.\n\n## Done when\n\n- half as many\n"}, false)
+	c.call("work", map[string]any{"action": "spec", "specs": []any{map[string]any{"title": "Score boxes", "kind": "plan", "parent": stub, "repositories": []any{"p3-edge"}, "text": "## Done when\n\n- scored\n"}}}, false)
+	started, _ := c.call("work", map[string]any{"action": "start", "spec": "Score boxes"}, false)
+	if dig(started, "started") != "Score boxes" || len(dig(started, "events").([]any)) != 2 {
+		t.Fatalf("start %v", started)
+	}
+	c.call("work", map[string]any{"action": "block", "spec": "Score boxes", "reason": "waiting on data"}, false)
+	c.call("work", map[string]any{"action": "unblock", "spec": "Score boxes"}, false)
+	c.call("work", map[string]any{"action": "done", "spec": "Score boxes", "result": map[string]any{"delivered": "Scoring in abc.", "verified": "go test ./..."}}, false)
+	c.call("work", map[string]any{"action": "set", "set": map[string]any{"doc": stub, "priority": "high"}}, false)
+	shown, _ := c.call("work", map[string]any{"action": "show", "doc": stub}, false)
+	if dig(shown, "view", "next") != "done" || dig(shown, "view", "doc", "state", "priority") != "high" {
 		t.Fatalf("show %v", shown)
 	}
-	c.call("thread", map[string]any{"action": "file", "thread": thread, "part": "receipt", "outcome": "completed", "text": "## Delivered\n\nScoring."}, false)
-	c.call("thread", map[string]any{"action": "reopen", "thread": thread}, false)
-	_, msg := c.call("thread", map[string]any{"action": "file", "thread": thread, "part": "plan", "text": "x"}, true)
-	if !strings.Contains(msg, "file takes spec or receipt") {
+	c.call("work", map[string]any{"action": "done", "spec": stub, "result": map[string]any{"delivered": "Fewer alarms.", "verified": "Checked the log."}}, false)
+	c.call("work", map[string]any{"action": "reopen", "doc": stub, "reason": "They came back."}, false)
+	c.call("work", map[string]any{"action": "note", "doc": stub, "text": "A vendor call."}, false)
+	idea, _ := c.call("work", map[string]any{"action": "stub", "text": "Read the OTA paper", "title": "OTA paper"}, false)
+	c.call("work", map[string]any{"action": "drop", "doc": dig(idea, "view", "doc", "id"), "reason": "Not now."}, false)
+	_, msg := c.call("work", map[string]any{"action": "start", "spec": stub}, true)
+	if !strings.Contains(msg, "start a part") {
 		t.Fatalf("a refusal teaches: %s", msg)
 	}
 
 	// The pipeline's tools.
-	captured, _ := c.call("source", map[string]any{"action": "capture", "inbox": []any{"notes.md"}, "scope": "p3-edge"}, false)
+	captured, _ := c.call("source", map[string]any{"action": "capture", "inbox": []any{"notes.md"}, "tags": []any{"work/p3/p3-edge"}}, false)
 	src := dig(captured, "captured").([]any)[0].(map[string]any)
 	srcID := dig(src, "ref", "id").(string)
 	chunks, _ := c.call("source", map[string]any{"action": "chunks", "doc": srcID}, false)
@@ -185,11 +200,12 @@ func TestEveryToolAndAction(t *testing.T) {
 	if !strings.Contains(dig(blob, "blob", "content").(string), "Motion scoring") {
 		t.Fatalf("read %v", blob)
 	}
-	m, _ := c.call("match", map[string]any{"items": []any{map[string]any{"doc": srcID, "chunk": 1, "items": []any{map[string]any{"type": "concept", "name": "Motion scoring", "claims": []any{map[string]any{"text": "cuts false alarms", "locator": "line 3"}}}}}}}, false)
+	m, _ := c.call("match", map[string]any{"items": []any{map[string]any{"doc": srcID, "chunk": 1, "items": []any{map[string]any{"kind": "concept", "name": "Motion scoring", "claims": []any{map[string]any{"text": "cuts false alarms", "locator": "line 3"}}}}}}}, false)
 	if dig(m, "subjects").([]any)[0].(map[string]any)["match"] != "new" {
 		t.Fatalf("match %v", m)
 	}
-	f, _ := c.call("lint", map[string]any{}, false)
+	c.call("match", map[string]any{"tags": []any{"work"}, "across": true}, false)
+	f, _ := c.call("lint", map[string]any{"tags": []any{"work"}}, false)
 	if dig(f, "counts") == nil {
 		t.Fatalf("lint %v", f)
 	}
@@ -197,10 +213,12 @@ func TestEveryToolAndAction(t *testing.T) {
 	if dig(synced, "synced") == nil {
 		t.Fatalf("sync %v", synced)
 	}
+	c.call("vault", map[string]any{"action": "sync", "views": true}, false)
 
 	// An unknown action and a missing document come back as tool errors.
 	c.call("change", map[string]any{"action": "merge"}, true)
 	c.call("change", map[string]any{"id": "chg-zzzzzz"}, true)
+	c.call("work", map[string]any{"action": "file"}, true)
 }
 
 func TestMentionsAndInitFromTheServer(t *testing.T) {
@@ -212,8 +230,7 @@ func TestMentionsAndInitFromTheServer(t *testing.T) {
 	if len(mentions) != 1 || dig(mentions[0].(map[string]any), "line").(float64) != 1 {
 		t.Fatalf("mentions %v", mentions)
 	}
-	opened, _ := c.call("thread", map[string]any{"action": "open", "text": "add these papers to the wiki", "title": "Papers"}, false)
-	_ = opened
+	c.call("work", map[string]any{"action": "stub", "text": "add these papers to the wiki", "title": "Papers"}, false)
 	c.call("vault", map[string]any{"action": "mention", "note": "Ideas.md", "line": 1, "link": "Papers"}, false)
 	if got := tv.Read("Ideas.md"); !strings.HasPrefix(got, "- [x] @atlas add these papers to the wiki → [[Papers]]") {
 		t.Fatalf("closed: %q", got)

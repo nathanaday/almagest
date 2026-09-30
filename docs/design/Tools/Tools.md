@@ -55,7 +55,7 @@ atlas-obsidian lint [--tag T]... [--json]
 atlas-obsidian hook EVENT                        (the hooks; reads the event JSON on stdin)
 ```
 
-The CLI adds commands that no tool needs: `setup`, `doctor`, `version`, `vault migrate`, and `open` (open a vault or a document in Obsidian). The guard refuses `change … apply`, `vault migrate`, and `hook` from an agent's shell ([[Hooks#guard]]).
+The CLI adds commands that no tool needs: `setup`, `doctor`, `version`, `vault migrate`, and `open` (open a vault or a document in Obsidian; `--register` adds a vault that Obsidian does not know). The guard refuses `change … apply`, `vault migrate`, and `hook` from an agent's shell ([[Hooks#guard]]).
 
 ## What is not a tool
 

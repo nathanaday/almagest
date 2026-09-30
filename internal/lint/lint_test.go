@@ -37,35 +37,51 @@ func TestNewVaultLintsClean(t *testing.T) {
 	if f.Checked != 1 {
 		t.Fatalf("checked %d; Atlas.md is the one document", f.Checked)
 	}
+	tv.Write("views/View · Home.md", "[[Nothing]]\n")
+	if f := run(t, tv, lint.Options{}); len(f.Findings) != 0 {
+		t.Fatalf("lint never reads the views: %+v", f.Findings)
+	}
 }
 
 func TestChecks(t *testing.T) {
 	tv := testvault.New(t)
 	repo := tv.Repo("p3-edge", nil)
-	tv.Page("area", "p3", nil, "")
-	tv.Write("wiki/concepts/Stray.md", "---\nid: are-stray1\ntype: area\ncreated: 2026-09-27\nupdated: 2026-09-27\ndescription: x\n---\n")
-	tv.Write("wiki/p3/Loose.md", "---\nid: con-loose1\ntype: concept\ncreated: 2026-09-27\nupdated: 2026-09-27\ndescription: x\n---\n")
-	tv.Write("wiki/concepts/Sources/Sources.md", "---\nid: are-rsrvd1\ntype: area\ncreated: 2026-09-27\nupdated: 2026-09-27\ndescription: x\n---\n")
-	tv.Page("repository", "p3-edge", map[string]any{"path": repo, "parent": "[[p3]]"}, "")
-	tv.Page("repository", "gone", map[string]any{"path": tv.Dir + "/nowhere"}, "")
-	tv.Page("concept", "Motion scoring", map[string]any{"scope": "[[Nowhere]]", "status": "shaky"}, "Links [[Missing page]] and `[[not a link]]`.\n")
-	tv.Page("concept", "Lonely", map[string]any{"sources": []string{"[[Motion scoring]]"}}, "")
-	tv.Page("entity", "Motion", nil, "see [[Motion scoring]]\n")
+	tv.Doc("repository", "p3-edge", map[string]any{"path": repo, "defines": "work/p3/p3-edge", "tags": []string{"work/p3"}}, "")
+	tv.Doc("repository", "gone", map[string]any{"path": tv.Dir + "/nowhere"}, "")
+	tv.Doc("topic", "Motion scoring", map[string]any{"kind": "concept", "status": "shaky", "sources": []string{"[[Nowhere]]"}}, "Links [[Missing page]] and `[[not a link]]`.\n")
+	tv.Doc("topic", "Lonely", map[string]any{"kind": "concept", "sources": []string{"[[Motion scoring]]"}}, "")
+	tv.Doc("topic", "Motion", map[string]any{"kind": "entity"}, "see [[Motion scoring]]\n")
+	tv.Doc("topic", "Also p3-edge", map[string]any{"kind": "overview", "defines": "work/p3/p3-edge"}, "")
+	tv.Doc("topic", "Defines wrong", map[string]any{"kind": "concept", "defines": "x"}, "")
+	tv.Doc("spec", "Loop A", map[string]any{"kind": "plan", "parent": "[[Loop B]]"}, "")
+	tv.Doc("spec", "Loop B", map[string]any{"kind": "plan", "parent": "[[Loop A]]"}, "")
+	tv.Doc("spec", "Wide", map[string]any{"kind": "plan", "repositories": []string{"[[p3-edge]]", "[[gone]]"}}, "")
+	tv.Doc("event", "Ghost · started", map[string]any{"kind": "started", "subject": "[[Ghost]]"}, "")
+	tv.Doc("event", "Wrong · resolved", map[string]any{"kind": "resolved", "subject": "[[Wide]]"}, "")
+	tv.Doc("topic", "View · Mine", map[string]any{"kind": "concept"}, "")
 	tv.Write("scratchpad/Motion scoring.md", "a scratch note with the same title\n")
-	tv.Write("threads/X/X — Spec.md", "---\nid: spc-aaaaaa\ntype: spec\nthread: \"[[X]]\"\nthread_id: thr-zzzzzz\ncreated: 2026-09-27\nupdated: 2026-09-27\n---\n")
+	tv.Write("wiki/documents/Loose note.md", "no frontmatter\n")
+	tv.Write("notes/Stray.md", "---\nid: doc-stray1\ntype: topic\nkind: concept\ndescription: x\n---\n")
+	tv.Doc("topic", "Papers", map[string]any{"kind": "concept", "tags": []string{"paper", "papers"}}, "")
 	f := run(t, tv, lint.Options{})
 	for _, want := range []struct{ check, title, text string }{
-		{"layout", "Stray", "outside a folder of its own"},
-		{"layout", "Loose", "outside the concepts folder"},
-		{"layout", "Sources", "name of a type folder"},
 		{"repository-path", "gone", "is gone"},
-		{"scope", "Motion scoring", "[[Nowhere]] names no document"},
+		{"dead-link", "Motion scoring", "[[Nowhere]] names no document"},
 		{"schema", "Motion scoring", `status: is "shaky"`},
 		{"dead-link", "Motion scoring", "[[Missing page]]"},
 		{"duplicate-title", "Motion scoring", "scratchpad/Motion scoring.md"},
+		{"duplicate-title", "View · Mine", "view's title"},
 		{"uncited", "Motion", "sources are empty"},
 		{"orphan", "Lonely", "no other document"},
-		{"thread", "X — Spec", "not a stub"},
+		{"tag", "p3-edge", "2 documents define work/p3/p3-edge"},
+		{"tag", "Defines wrong", "only an overview or a repository"},
+		{"spec", "Loop A", "parents loop"},
+		{"leaf-repositories", "Wide", "names 2 repositories"},
+		{"event", "Ghost · started", "subject [[Ghost]] is gone"},
+		{"event", "Wrong · resolved", "fits a stub"},
+		{"misplaced", "Stray", "tools do not see it"},
+		{"untyped", "Loose note", "no type"},
+		{"tag-near", "Work", "paper, papers"},
 	} {
 		if !has(f, want.check, want.title, want.text) {
 			t.Errorf("no %s finding on %s with %q", want.check, want.title, want.text)
@@ -85,29 +101,31 @@ func TestChecks(t *testing.T) {
 	}
 }
 
-func TestScopeLimitsTheRun(t *testing.T) {
+func TestTagsLimitTheRun(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Page("area", "p3", nil, "")
-	tv.Page("area", "home", nil, "")
-	tv.Page("concept", "In p3", map[string]any{"scope": "[[p3]]"}, "")
-	tv.Page("concept", "At home", map[string]any{"scope": "[[home]]"}, "")
-	f := run(t, tv, lint.Options{Scope: "p3"})
+	tv.Doc("topic", "In p3", map[string]any{"kind": "concept", "tags": []string{"work/p3"}}, "")
+	tv.Doc("topic", "At home", map[string]any{"kind": "concept", "tags": []string{"home"}}, "")
+	f := run(t, tv, lint.Options{Tags: []string{"work"}})
 	for _, x := range f.Findings {
-		if x.Doc.Title == "At home" || x.Doc.Title == "home" {
-			t.Fatalf("a scoped run checks only its scope: %+v", x)
+		if x.Doc.Title == "At home" {
+			t.Fatalf("a run with tags checks only what holds them: %+v", x)
 		}
 	}
 	if !has(f, "uncited", "In p3", "") {
-		t.Fatal("the scope's own pages are checked")
+		t.Fatal("the documents under the tag are checked")
 	}
 }
 
-func TestPendingAndStaleChanges(t *testing.T) {
+func TestPendingAndStale(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Page("source", "Old paper", map[string]any{"sha256": "abcdef0123456789", "file": "[[x.pdf]]", "created": "2026-09-01"}, "")
+	tv.Doc("source", "Old paper", map[string]any{"sha256": "abcdef0123456789", "file": "[[x.pdf]]", "refreshed": "2026-09-28T10:00:00"}, "")
+	tv.Doc("topic", "Idea", map[string]any{"kind": "concept", "sources": []string{"[[Old paper]]"}, "refreshed": "2026-09-20T10:00:00"}, "")
 	tv.Write("changes/2026-09/2026-09-25 Waiting.md", "---\nid: chg-bbbbbb\ntype: change\ncreated: 2026-09-25\nupdated: 2026-09-25\nstatus: proposed\nproposed: 2026-09-25T10:00:00\n---\n")
 	f := run(t, tv, lint.Options{Now: testvault.Now.Add(time.Hour)})
 	if !has(f, "change-stale", "2026-09-25 Waiting", "proposed") {
 		t.Error("a change proposed two days ago is stale")
+	}
+	if !has(f, "stale", "Idea", "changed after it was refreshed") {
+		t.Error("a topic older than what it cites is stale")
 	}
 }

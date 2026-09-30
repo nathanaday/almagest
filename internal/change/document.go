@@ -3,50 +3,69 @@ package change
 import (
 	"fmt"
 	"regexp"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // Statuses of a change document.
 const (
 	Proposed   = "proposed"
-	Applying   = "applying"
+	Applying   = vault.Applying
 	Applied    = "applied"
 	Rejected   = "rejected"
 	Superseded = "superseded"
 	Undone     = "undone"
 )
 
-// rewriteNote marks a modify the link rewrite pass made.
-const rewriteNote = "Link rewrite only."
+// rewriteNote marks a modify the link or tag rewrite pass made.
+const rewriteNote = "Rewrite only."
 
-// Counts are the writes of a change by kind.
+// Counts are the writes of a change by op, and the files its rewrites reach.
 type Counts struct {
 	Create       int `json:"create"`
 	Modify       int `json:"modify"`
+	Promote      int `json:"promote"`
 	Rename       int `json:"rename"`
 	Remove       int `json:"remove"`
+	Confirm      int `json:"confirm"`
+	Retag        int `json:"retag"`
 	LinkRewrites int `json:"link_rewrites"`
+	TagRewrites  int `json:"tag_rewrites"`
 }
 
-// Writes is the number of writes that change a page of the wiki.
-func (c Counts) Writes() int { return c.Create + c.Modify + c.Rename + c.Remove }
+// Writes is the number of writes that change a document.
+func (c Counts) Writes() int {
+	return c.Create + c.Modify + c.Promote + c.Rename + c.Remove + c.Confirm + c.Retag
+}
+
+func (c Counts) pairs() []struct {
+	n    int
+	name string
+} {
+	return []struct {
+		n    int
+		name string
+	}{{c.Create, "create"}, {c.Modify, "modify"}, {c.Promote, "promote"}, {c.Rename, "rename"}, {c.Remove, "remove"}, {c.Confirm, "confirm"}, {c.Retag, "retag"}, {c.LinkRewrites, "link rewrites"}, {c.TagRewrites, "tag rewrites"}}
+}
 
 // String is the counts as the frontmatter holds them.
 func (c Counts) String() string {
-	return fmt.Sprintf("%d create, %d modify, %d rename, %d remove, %d link rewrites", c.Create, c.Modify, c.Rename, c.Remove, c.LinkRewrites)
+	var parts []string
+	for _, p := range c.pairs() {
+		parts = append(parts, fmt.Sprintf("%d %s", p.n, p.name))
+	}
+	return strings.Join(parts, ", ")
 }
 
 // short is the counts that are not zero, for the callout.
 func (c Counts) short() string {
 	var parts []string
-	for _, p := range []struct {
-		n    int
-		name string
-	}{{c.Create, "create"}, {c.Modify, "modify"}, {c.Rename, "rename"}, {c.Remove, "remove"}, {c.LinkRewrites, "link rewrites"}} {
+	for _, p := range c.pairs() {
 		if p.n > 0 {
 			parts = append(parts, fmt.Sprintf("%d %s", p.n, p.name))
 		}
@@ -57,45 +76,75 @@ func (c Counts) short() string {
 	return strings.Join(parts, ", ")
 }
 
-var countsPattern = regexp.MustCompile(`(\d+) (create|modify|rename|remove|link rewrites)`)
+var countsPattern = regexp.MustCompile(`(\d+) (create|modify|promote|rename|remove|confirm|retag|link rewrites|tag rewrites)`)
 
 // ParseCounts reads the counts field.
 func ParseCounts(s string) Counts {
 	var c Counts
 	for _, m := range countsPattern.FindAllStringSubmatch(s, -1) {
-		n := 0
-		fmt.Sscanf(m[1], "%d", &n)
+		n, _ := strconv.Atoi(m[1])
 		switch m[2] {
 		case "create":
 			c.Create = n
 		case "modify":
 			c.Modify = n
+		case "promote":
+			c.Promote = n
 		case "rename":
 			c.Rename = n
 		case "remove":
 			c.Remove = n
+		case "confirm":
+			c.Confirm = n
+		case "retag":
+			c.Retag = n
 		case "link rewrites":
 			c.LinkRewrites = n
+		case "tag rewrites":
+			c.TagRewrites = n
 		}
 	}
 	return c
 }
 
-func countOps(ops []*op, outside int) Counts {
-	c := Counts{LinkRewrites: outside}
+func countOps(ops []*op, outside []vault.Rewrite) Counts {
+	var c Counts
 	for _, o := range ops {
 		switch o.Kind {
-		case "create":
+		case OpCreate:
 			c.Create++
-		case "modify":
+		case OpModify:
 			c.Modify++
-		case "rename":
+		case OpPromote:
+			c.Promote++
+		case OpRename:
 			c.Rename++
-		case "remove":
+		case OpRemove:
 			c.Remove++
+		case OpConfirm:
+			c.Confirm++
+		case OpRetag:
+			c.Retag++
+		}
+	}
+	for _, rw := range outside {
+		if isTagRewrite(rw) {
+			c.TagRewrites++
+		} else {
+			c.LinkRewrites++
 		}
 	}
 	return c
+}
+
+// isTagRewrite reports whether a rewrite came from a retag: its links name a tag.
+func isTagRewrite(rw vault.Rewrite) bool {
+	for _, l := range rw.Links {
+		if !strings.HasPrefix(l, "#") {
+			return false
+		}
+	}
+	return len(rw.Links) > 0
 }
 
 // lead is the change document's lead callout for its status.
@@ -107,17 +156,17 @@ func lead(status string, counts Counts, absorbs []string, applied, reason string
 	var line string
 	switch status {
 	case Proposed:
-		line = "Review the pages below. Edit any of them here if you want. Then say yes in the chat, or press Apply."
+		line = "Review the documents below. Edit any of them here if you want. Then say yes in the chat, or press Apply."
 	case Applying:
-		line = "Apply stopped halfway. The next write of any kind puts the pages back and sets this change to proposed."
+		line = "Apply stopped halfway. The next write of any kind puts the documents back and sets this change to proposed."
 	case Applied:
-		line = "Applied " + applied + ". Undo takes it back while none of its pages changed since."
+		line = "Applied " + applied + ". Undo takes it back while none of its documents changed since."
 	case Rejected:
 		line = "Rejected: " + reason
 	case Superseded:
 		line = "A later change replaced this one."
 	case Undone:
-		line = "Undone. The pages are back as they were before it."
+		line = "Undone. The documents are back as they were before it."
 	}
 	return doc.Callout("change", title, line)
 }
@@ -137,24 +186,45 @@ func fence(content string) string {
 	return strings.Repeat("`", max(5, longest+1))
 }
 
-// heading is the Writes heading of an op. It names the page by id and holds no wikilink,
-// so a page renamed or removed later leaves no dead link in the record.
+// heading is the Writes heading of an op. It names the document by id and holds no
+// wikilink, so a document renamed or removed later leaves no dead link in the record.
 func (o *op) heading() string {
 	switch o.Kind {
-	case "create":
-		return fmt.Sprintf("### create · %s · %s · %s", o.Type, o.Title, o.ID)
-	case "modify":
+	case OpCreate:
+		typ := o.Type
+		if o.TopicKind != "" {
+			typ += " " + o.TopicKind
+		}
+		return fmt.Sprintf("### create · %s · %s · %s", typ, o.Title, o.ID)
+	case OpModify:
 		return fmt.Sprintf("### modify · %s · %s · base %s", o.Title, o.ID, doc.Short(o.Base))
-	case "rename":
+	case OpPromote:
+		to := "topic " + o.TopicKind
+		if o.NewTitle != "" {
+			return fmt.Sprintf("### promote · %s → %s · %s · %s · base %s", o.Title, o.NewTitle, to, o.ID, doc.Short(o.Base))
+		}
+		return fmt.Sprintf("### promote · %s · %s · %s · base %s", o.Title, to, o.ID, doc.Short(o.Base))
+	case OpRename:
 		return fmt.Sprintf("### rename · %s → %s · %s · base %s", o.Title, o.NewTitle, o.ID, doc.Short(o.Base))
-	case "remove":
+	case OpRemove:
 		h := fmt.Sprintf("### remove · %s · %s · base %s", o.Title, o.ID, doc.Short(o.Base))
 		if o.Redirect != "" {
 			h += " · redirect " + o.Redirect
 		}
 		return h
+	case OpConfirm:
+		return fmt.Sprintf("### confirm · %s · %s · base %s", o.Title, o.ID, doc.Short(o.Base))
+	case OpRetag:
+		return fmt.Sprintf("### retag · %s → %s · %d %s", o.From, o.To, o.Files, plural(o.Files, "file", "files"))
 	}
 	return ""
+}
+
+func plural(n int, one, many string) string {
+	if n == 1 {
+		return one
+	}
+	return many
 }
 
 // renderDocument writes a change document.
@@ -163,25 +233,27 @@ func renderDocument(p *planned, id string, now time.Time) string {
 	for i, d := range p.Absorbs {
 		titles[i] = vault.Title(d)
 	}
-	thread, supersedes := "", ""
-	if p.Thread != nil {
-		thread = doc.Link(vault.Title(p.Thread))
+	work, supersedes := "", ""
+	if p.Work != nil {
+		work = doc.Link(vault.Title(p.Work))
 	}
 	if p.Supersedes != nil {
 		supersedes = doc.Link(vault.Title(p.Supersedes))
 	}
-	counts := countOps(p.Ops, len(p.Outside))
+	counts := countOps(p.Ops, p.Outside)
+	stamp := vault.Stamp(now)
 	fields := []doc.Field{
 		{Key: "id", Value: id},
 		{Key: "type", Value: "change"},
-		{Key: "created", Value: vault.Date(now)},
-		{Key: "updated", Value: vault.Date(now)},
+		{Key: "created", Value: stamp},
+		{Key: "updated", Value: stamp},
 		{Key: "status", Value: Proposed},
 		{Key: "absorbs", Value: doc.Links(titles)},
-		{Key: "thread", Value: thread},
-		{Key: "proposed", Value: vault.Stamp(now)},
+		{Key: "work", Value: work},
+		{Key: "proposed", Value: stamp},
 		{Key: "session", Value: ""},
 		{Key: "counts", Value: counts.String()},
+		{Key: "new_tags", Value: nonNil(p.NewTags)},
 		{Key: "applied", Value: ""},
 		{Key: "supersedes", Value: supersedes},
 		{Key: "reason", Value: ""},
@@ -201,17 +273,13 @@ func renderDocument(p *planned, id string, now time.Time) string {
 		b.WriteString("\n")
 	}
 	b.WriteString("## Writes\n")
-	b.WriteString(renderWrites(p.Ops, p.Outside, p.Folders))
+	b.WriteString(renderWrites(p.Ops, p.Outside))
 	return doc.Render(fields, b.String())
 }
 
-// movesHeading lists the scope folders a change moves. Apply works the moves out again
-// from the pages, so the list is a record for the reader.
-const movesHeading = "folder moves"
-
-// renderWrites is the Writes section's body: one heading per op, then the link rewrites
-// and the folder moves.
-func renderWrites(ops []*op, outside []Rewrite, folders []Move) string {
+// renderWrites is the Writes section's body: one heading per op, then the files the link
+// and tag rewrites reach.
+func renderWrites(ops []*op, outside []vault.Rewrite) string {
 	var b strings.Builder
 	for _, o := range ops {
 		b.WriteString("\n" + o.heading() + "\n")
@@ -223,9 +291,17 @@ func renderWrites(ops []*op, outside []Rewrite, folders []Move) string {
 			b.WriteString("\n" + f + "markdown\n" + strings.TrimRight(o.Content, "\n") + "\n" + f + "\n")
 		}
 	}
-	if len(outside) > 0 {
+	var linkRW, tagRW []vault.Rewrite
+	for _, rw := range outside {
+		if isTagRewrite(rw) {
+			tagRW = append(tagRW, rw)
+		} else {
+			linkRW = append(linkRW, rw)
+		}
+	}
+	if len(linkRW) > 0 {
 		b.WriteString("\n### link rewrites\n\n")
-		for _, rw := range outside {
+		for _, rw := range linkRW {
 			var pairs []string
 			for _, l := range rw.Links {
 				pairs = append(pairs, "`[["+l+"]]`")
@@ -233,17 +309,18 @@ func renderWrites(ops []*op, outside []Rewrite, folders []Move) string {
 			fmt.Fprintf(&b, "- %s: %s\n", rw.Title, strings.Join(pairs, ", "))
 		}
 	}
-	if len(folders) > 0 {
-		b.WriteString("\n### " + movesHeading + "\n\n")
-		for _, m := range folders {
-			fmt.Fprintf(&b, "- `%s` → `%s`: %d files\n", m.From, m.To, m.Files)
+	if len(tagRW) > 0 {
+		b.WriteString("\n### tag rewrites\n\n")
+		for _, rw := range tagRW {
+			fmt.Fprintf(&b, "- %s\n", rw.Title)
 		}
 	}
 	return b.String()
 }
 
 // parseWrites reads the ops of a change document's Writes section. The content of a
-// create or a modify is the text inside its fence, which the user may have edited.
+// create, a modify, or a promote is the text inside its fence, which the user may have
+// edited.
 func parseWrites(body string) ([]*op, error) {
 	var section string
 	for _, h := range doc.Headings(body) {
@@ -263,7 +340,7 @@ func parseWrites(body string) ([]*op, error) {
 		}
 		if h, ok := strings.CutPrefix(line, "### "); ok {
 			cur = nil
-			if t := strings.TrimSpace(h); t == "link rewrites" || t == movesHeading {
+			if t := strings.TrimSpace(h); t == "link rewrites" || t == "tag rewrites" {
 				continue
 			}
 			o, err := parseHeading(h)
@@ -312,10 +389,21 @@ var fenceOpen = regexp.MustCompile("^(`{3,})markdown\\s*$")
 // parseHeading reads one Writes heading.
 func parseHeading(h string) (*op, error) {
 	parts := strings.Split(strings.TrimSpace(h), " · ")
-	if len(parts) < 3 {
+	if len(parts) < 2 {
 		return nil, fmt.Errorf("the heading %q is not a write", h)
 	}
 	o := &op{Kind: parts[0]}
+	if o.Kind == OpRetag {
+		from, to, ok := strings.Cut(parts[1], " → ")
+		if !ok {
+			return nil, fmt.Errorf("the heading %q names no tags", h)
+		}
+		o.From, o.To = strings.TrimSpace(from), strings.TrimSpace(to)
+		if len(parts) > 2 {
+			fmt.Sscanf(parts[2], "%d", &o.Files)
+		}
+		return o, nil
+	}
 	rest := parts[1:]
 	// Tokens at the end: redirect, base, then the id.
 	for len(rest) > 0 {
@@ -329,21 +417,40 @@ func parseHeading(h string) (*op, error) {
 		}
 		rest = rest[:len(rest)-1]
 	}
-	if len(rest) < 2 || !doc.IDPattern.MatchString(rest[len(rest)-1]) {
-		return nil, fmt.Errorf("the heading %q names no page id", h)
+	if len(rest) < 2 || !schema.IDPattern.MatchString(rest[len(rest)-1]) {
+		return nil, fmt.Errorf("the heading %q names no document id", h)
 	}
 	o.ID = rest[len(rest)-1]
 	rest = rest[:len(rest)-1]
 	switch o.Kind {
-	case "create":
+	case OpCreate:
 		if len(rest) < 2 {
 			return nil, fmt.Errorf("the heading %q names no type and title", h)
 		}
-		o.Type = rest[0]
+		typ := strings.Fields(rest[0])
+		o.Type = typ[0]
+		if len(typ) > 1 {
+			o.TopicKind = typ[1]
+		}
 		o.Title = strings.Join(rest[1:], " · ")
-	case "modify", "remove":
+	case OpModify, OpRemove, OpConfirm:
 		o.Title = strings.Join(rest, " · ")
-	case "rename":
+	case OpPromote:
+		if len(rest) < 2 {
+			return nil, fmt.Errorf("the heading %q names no kind", h)
+		}
+		kind := strings.Fields(rest[len(rest)-1])
+		if len(kind) != 2 || kind[0] != "topic" {
+			return nil, fmt.Errorf("the heading %q names no topic kind", h)
+		}
+		o.Type, o.TopicKind = "topic", kind[1]
+		titles := strings.Join(rest[:len(rest)-1], " · ")
+		if i := strings.LastIndex(titles, " → "); i >= 0 {
+			o.Title, o.NewTitle = titles[:i], titles[i+len(" → "):]
+		} else {
+			o.Title = titles
+		}
+	case OpRename:
 		titles := strings.Join(rest, " · ")
 		i := strings.LastIndex(titles, " → ")
 		if i < 0 {
@@ -351,17 +458,16 @@ func parseHeading(h string) (*op, error) {
 		}
 		o.Title, o.NewTitle = titles[:i], titles[i+len(" → "):]
 	default:
-		return nil, fmt.Errorf("the heading %q is not a create, modify, rename, or remove", h)
+		return nil, fmt.Errorf("the heading %q is not a create, modify, promote, rename, remove, confirm, or retag", h)
 	}
 	return o, nil
 }
 
 // setStatus rewrites a change document's status, its lead callout, and extra fields.
 func setStatus(content, status string, extra ...doc.Field) string {
-	d := doc.Parse("", []byte(content))
 	content = doc.SetField(content, "status", status)
 	content = doc.SetFields(content, extra)
-	d = doc.Parse("", []byte(content))
+	d := doc.Parse("", []byte(content))
 	var absorbs []string
 	for _, a := range d.List("absorbs") {
 		absorbs = append(absorbs, doc.LinkTarget(a))

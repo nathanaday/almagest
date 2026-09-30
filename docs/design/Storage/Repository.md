@@ -70,9 +70,9 @@ A path that is gone or is no git work tree turns the callout into a warning: `> 
 
 ## Rules
 
-- `path` must be the root of a git work tree, outside the vault, and no other repository document may hold it. `change` refuses a path that breaks a rule, and names it.
+- `path` must be absolute or start with `~/`, and must be the root of a git work tree, outside the vault, and no other repository document may hold it. `change` refuses a path that breaks a rule, and names it.
 - The model never writes `remote`, `branch`, `head`, `head_time`, `described`, or `behind`.
 - `defines` is unique, like every tag page's.
 - `vault sync` lists every repository's path in `.claude/settings.local.json` ([[Vault Layout#Settings for the harness]]).
-- Unlinking ([[repo-unlink]]) keeps the document, so the plans that name it keep a live link: a change sets `unlinked: true` and empties `path`. Code then drops the git facts, sync takes the path out of the harness settings, the callout reads `> [!repository-missing] Unlinked`, and the guard no longer treats the old folder as a linked repository. `change` refuses to remove a repository document while any spec names it.
+- Unlinking ([[repo-unlink]]) keeps the document, so the plans that name it keep a live link: a change sets `unlinked: true`. Code then empties `path`, drops the git facts, sync takes the path out of the harness settings, the callout reads `> [!repository-missing] Unlinked`, and the guard no longer treats the old folder as a linked repository. `change` refuses to remove a repository document while any spec names it.
 - Unlinking never touches the repository on disk.

@@ -4,19 +4,18 @@ import (
 	"encoding/json"
 	"io"
 	"regexp"
-	"strconv"
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Touched links the session to what a call touched: the repository an edit landed in,
-// the thread and task a thread call acted on, the change a proposal wrote. It copies the
-// session's own description into its frontmatter, and dates a thread document an edit
-// changed.
+// the stubs and specs a work call wrote and the plan it started, the events a call wrote,
+// the change a proposal wrote. It copies the session's own description into its
+// frontmatter, and dates a work document an edit changed.
 func Touched(r io.Reader, env Env) error {
 	in := readInput(r)
 	now := env.now()
@@ -26,7 +25,7 @@ func Touched(r io.Reader, env Env) error {
 	}
 	return locked(in, env, func(v *vault.Vault) error {
 		var edits []func(string) string
-		syncThreads := false
+		syncWork := false
 		link := func(field, title string) {
 			edits = append(edits, func(c string) string { return sessions.AddLink(c, field, title) })
 		}
@@ -37,6 +36,7 @@ func Touched(r io.Reader, env Env) error {
 				link("repositories", repo)
 			}
 		}
+		var eventPaths []string
 		switch {
 		case editTools[in.ToolName]:
 			for _, f := range in.paths() {
@@ -60,61 +60,122 @@ func Touched(r io.Reader, env Env) error {
 							return doc.SetField(c, "description", sessions.DescriptionLine(body))
 						})
 					}
-				case strings.HasPrefix(rel, vault.Threads+"/"):
+				case strings.HasPrefix(rel, vault.Documents+"/"):
 					if data, err := v.Read(rel); err == nil {
 						d := doc.Parse(rel, data)
-						if d.Type() != "" && d.Str("updated") != vault.Date(now) {
-							v.WriteIfChanged(rel, []byte(doc.SetField(d.Content, "updated", vault.Date(now))))
+						switch d.Type() {
+						case "stub", "spec", "event":
+							v.WriteIfChanged(rel, []byte(doc.SetField(d.Content, "updated", vault.Stamp(now))))
 						}
 					}
 				}
 			}
-		case tool == "thread" && !failed(resp):
-			t := in.tool()
-			switch t.Action {
-			case "open", "attach", "file", "tasks", "task":
-				stub := findObject(resp, "stub")
-				title, _ := stub["title"].(string)
-				if title == "" {
-					break
-				}
-				link("threads", title)
-				if t.Action == "task" && t.Do == "start" {
-					if task := findTask(resp, t.Task); task != "" {
-						link("tasks", task)
+		case (tool == "work" || tool == "change" || tool == "source") && !failed(resp):
+			if tool == "change" && in.tool().Action == "propose" {
+				ref := findObject(resp, "ref")
+				title, _ := ref["title"].(string)
+				p, _ := ref["path"].(string)
+				if title != "" && p != "" {
+					link("changes", title)
+					if s := sessions.Find(v, e.Key()); s != nil {
+						if data, err := v.Read(p); err == nil {
+							v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(s.Title()))))
+						}
 					}
 				}
-				syncThreads = true
 			}
-		case tool == "change" && in.tool().Action == "propose" && !failed(resp):
-			ref := findObject(resp, "ref")
-			title, _ := ref["title"].(string)
-			p, _ := ref["path"].(string)
-			if title == "" || p == "" {
-				break
-			}
-			link("changes", title)
-			if s := sessions.Find(v, e.Key()); s != nil {
-				if data, err := v.Read(p); err == nil {
-					v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(s.Title()))))
+			if tool == "work" {
+				for _, ref := range refList(resp, "wrote") {
+					if title, _ := ref["title"].(string); title != "" {
+						link("work", title)
+					}
+				}
+				if started := findString(resp, "started"); started != "" {
+					link("specs", started)
 				}
 			}
+			for _, ref := range refList(resp, "events") {
+				if p, _ := ref["path"].(string); p != "" {
+					eventPaths = append(eventPaths, p)
+				}
+			}
+			syncWork = true
 		}
-		_, err := sessions.Touch(v, e, now, func(c string) string {
+		d, err := sessions.Touch(v, e, now, func(c string) string {
 			c = doc.SetField(c, "status", sessions.Running)
 			for _, edit := range edits {
 				c = edit(c)
+			}
+			if len(eventPaths) > 0 {
+				n := doc.Parse("", []byte(c)).Front.Int("events")
+				c = doc.SetField(c, "events", n+len(eventPaths))
 			}
 			return c
 		})
 		if err != nil {
 			return err
 		}
-		if syncThreads {
-			_, err = threads.SyncVault(v)
+		if d != nil {
+			for _, p := range eventPaths {
+				if data, err := v.Read(p); err == nil {
+					v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(d.Title()))))
+				}
+			}
 		}
-		return err
+		if syncWork {
+			return syncWorkDocs(v)
+		}
+		return nil
 	})
+}
+
+// syncWorkDocs brings the work documents' derived parts up to date after a hook changed a
+// session's links: the active flags, and the callouts that name a session.
+func syncWorkDocs(v *vault.Vault) error {
+	idx, err := vault.Load(v)
+	if err != nil {
+		return err
+	}
+	_, err = work.Load(idx).Sync(v.WriteIfChanged)
+	return err
+}
+
+// refList is the list of document references a tool response holds under key.
+func refList(values []any, key string) []map[string]any {
+	var out []map[string]any
+	for _, x := range values {
+		m, ok := x.(map[string]any)
+		if !ok {
+			continue
+		}
+		list, ok := m[key].([]any)
+		if !ok {
+			continue
+		}
+		for _, item := range list {
+			if ref, ok := item.(map[string]any); ok {
+				if _, ok := ref["id"]; ok {
+					out = append(out, ref)
+				}
+			}
+		}
+		if len(out) > 0 {
+			return out
+		}
+	}
+	return out
+}
+
+// findString is the first string a tool response holds under key.
+func findString(values []any, key string) string {
+	for _, x := range values {
+		if m, ok := x.(map[string]any); ok {
+			if s, ok := m[key].(string); ok && s != "" {
+				return s
+			}
+		}
+	}
+	return ""
 }
 
 // shellWrites are the marks of a shell command that writes a file.
@@ -206,38 +267,4 @@ func findObject(values []any, key string) map[string]any {
 		}
 	}
 	return nil
-}
-
-// findTask is the title of the task a thread view lists that a key names: its id, its
-// title, its label, or its order.
-func findTask(values []any, key string) string {
-	key = strings.TrimSpace(key)
-	for _, x := range values {
-		m, ok := x.(map[string]any)
-		if !ok {
-			continue
-		}
-		list, ok := m["tasks"].([]any)
-		if !ok {
-			continue
-		}
-		for _, item := range list {
-			t, _ := item.(map[string]any)
-			ref, _ := t["ref"].(map[string]any)
-			if ref == nil {
-				continue
-			}
-			id, _ := ref["id"].(string)
-			title, _ := ref["title"].(string)
-			state, _ := ref["state"].(map[string]any)
-			order := ""
-			if o, ok := state["order"].(float64); ok {
-				order = strconv.Itoa(int(o))
-			}
-			if key == id || strings.EqualFold(key, title) || strings.EqualFold(key, "T"+order) || key == order || strings.HasSuffix(strings.ToLower(title), " "+strings.ToLower(key)) {
-				return title
-			}
-		}
-	}
-	return ""
 }

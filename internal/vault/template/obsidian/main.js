@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian7 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 
 // src/badges.ts
 var import_obsidian = require("obsidian");
@@ -33,7 +33,10 @@ function badgeFor(app, path) {
   if (!(file instanceof import_obsidian.TFile) || file.extension !== "md") return null;
   const fm = app.metadataCache.getFileCache(file)?.frontmatter;
   if (!fm) return null;
-  if (fm.type === "stub" && typeof fm.stage === "string") return { kind: "stage", value: fm.stage };
+  if ((fm.type === "stub" || fm.type === "spec" && fm.kind === "plan") && typeof fm.status === "string") {
+    return { kind: "status", value: fm.blocked ? "blocked" : fm.status };
+  }
+  if (fm.type === "event" && typeof fm.kind === "string") return { kind: "event", value: fm.kind };
   if (fm.type === "session" && typeof fm.status === "string") return { kind: "status", value: fm.status };
   return null;
 }
@@ -149,20 +152,22 @@ function plural(n, one, many) {
 }
 function syncSummary(s) {
   const parts = [];
-  const threads = s.threads?.length ?? 0;
-  const lost = s.lost?.length ?? 0;
-  const sessions = s.sessions?.length ?? 0;
-  if (threads) parts.push(plural(threads, "thread document", "thread documents"));
-  if (lost) parts.push(plural(lost, "lost session", "lost sessions"));
-  if (sessions) parts.push(plural(sessions, "session callout", "session callouts"));
-  const scopes = s.scopes?.length ?? 0;
-  if (scopes) parts.push(plural(scopes, "wiki page", "wiki pages"));
+  const add = (list, one, many) => {
+    const n = list?.length ?? 0;
+    if (n) parts.push(plural(n, one, many));
+  };
+  add(s.work, "work document", "work documents");
+  add(s.knowledge, "knowledge document", "knowledge documents");
+  add(s.moved, "document moved back", "documents moved back");
+  add(s.lost, "lost session", "lost sessions");
+  add(s.sessions, "session callout", "session callouts");
   if (s.settings) parts.push("the harness settings");
+  if (s.views) parts.push(plural(s.views, "view", "views"));
   if (parts.length === 0) return "Nothing to heal.";
   return `Synced ${parts.join(", ")}.`;
 }
 function syncedPaths(s) {
-  return [...s.threads ?? [], ...s.lost ?? [], ...s.sessions ?? [], ...s.scopes ?? []];
+  return [...s.work ?? [], ...s.knowledge ?? [], ...s.moved ?? [], ...s.lost ?? [], ...s.sessions ?? []];
 }
 function countsLine(counts) {
   if (typeof counts === "string") {
@@ -172,9 +177,13 @@ function countsLine(counts) {
     const names = {
       create: "create",
       modify: "modify",
+      promote: "promote",
       rename: "rename",
       remove: "remove",
-      link_rewrites: "link rewrites"
+      confirm: "confirm",
+      retag: "retag",
+      link_rewrites: "link rewrites",
+      tag_rewrites: "tag rewrites"
     };
     return Object.entries(names).map(([key, name]) => [counts[key], name]).filter(([n]) => typeof n === "number" && n > 0).map(([n, name]) => `${n} ${name}`).join(", ");
   }
@@ -259,48 +268,95 @@ function textMentions(text) {
   }
   return out;
 }
-function isThreadPath(path) {
-  return path.startsWith("threads/") && path.endsWith(".md");
+function isWatchedPath(path) {
+  return path.endsWith(".md") && !path.startsWith("views/") && !path.startsWith(".");
 }
 function waitingLabel(n) {
   return n === 1 ? "Atlas: 1 session waits" : `Atlas: ${n} sessions wait`;
 }
-function baseName(path) {
-  return path.slice(path.lastIndexOf("/") + 1);
-}
-function dirName(path) {
-  const i = path.lastIndexOf("/");
-  return i < 0 ? "" : path.slice(0, i);
-}
-function folderPagePath(folder) {
-  if (!folder.startsWith("wiki/")) return null;
-  return `${folder}/${baseName(folder)}.md`;
-}
-function isFolderPage(path) {
-  return folderPagePath(dirName(path)) === path;
-}
-function companionRename(isFolder, path, oldPath) {
-  if (!path.startsWith("wiki/")) return null;
-  if (isFolder) {
-    const oldName = baseName(oldPath);
-    const name2 = baseName(path);
-    if (oldName === name2) return null;
-    return { from: `${path}/${oldName}.md`, to: `${path}/${name2}.md` };
-  }
-  if (!isFolderPage(oldPath) || dirName(path) !== dirName(oldPath) || !path.endsWith(".md")) return null;
-  const folder = dirName(path);
-  const name = baseName(path).slice(0, -3);
-  if (name === "" || name === baseName(folder)) return null;
-  return { from: folder, to: `${dirName(folder)}/${name}` };
-}
 function cssString(s) {
   return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ")}"`;
 }
-function mirrorOf(wikiFolder) {
-  return "threads" + wikiFolder.slice("wiki".length);
+var TAG_FOLDER = "views/tags/";
+function tagTitle(tag) {
+  return "Tag \xB7 " + tag.split("/").join(" \u203A ");
 }
-function wikiFolderOf(folder) {
-  return folder.startsWith("threads/") ? "wiki" + folder.slice("threads".length) : folder;
+function tagOfFolder(folder) {
+  if (!folder.startsWith(TAG_FOLDER)) return null;
+  const tag = folder.slice(TAG_FOLDER.length);
+  return tag === "" ? null : tag;
+}
+function tagViewPath(tag) {
+  return `${TAG_FOLDER}${tag}/${tagTitle(tag)}.md`;
+}
+function isTagView(path) {
+  const i = path.lastIndexOf("/");
+  if (i < 0) return false;
+  const tag = tagOfFolder(path.slice(0, i));
+  return tag !== null && tagViewPath(tag) === path;
+}
+function normalTag(t) {
+  return t.trim().replace(/^#/, "").toLowerCase();
+}
+function holds(list, t) {
+  return list.some((x) => x === t || x.startsWith(t + "/"));
+}
+function expandTags(list) {
+  const out = /* @__PURE__ */ new Set();
+  for (const t of list) {
+    const parts = t.split("/");
+    for (let i = 1; i <= parts.length; i++) out.add(parts.slice(0, i).join("/"));
+  }
+  return [...out];
+}
+function narrow(docs, chosen) {
+  const matches = docs.filter((d) => chosen.every((t) => holds(d.tags, t)));
+  const counts = /* @__PURE__ */ new Map();
+  const skip = new Set(expandTags(chosen));
+  for (const d of matches) {
+    for (const t of expandTags(d.tags)) {
+      if (skip.has(t)) continue;
+      counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+  }
+  const withTags = [...counts.entries()].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+  return { matches, with: withTags };
+}
+function topTags(docs) {
+  const counts = /* @__PURE__ */ new Map();
+  for (const d of docs) {
+    for (const t of expandTags(d.tags)) {
+      if (!t.includes("/")) counts.set(t, (counts.get(t) ?? 0) + 1);
+    }
+  }
+  return [...counts.entries()].map(([tag, count]) => ({ tag, count })).sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag));
+}
+var CLOSED = /* @__PURE__ */ new Set(["done", "dropped", "resolved"]);
+var NAV_GROUPS = [
+  { name: "Open work", test: (d) => (d.type === "stub" || d.type === "spec" && d.kind === "plan") && !CLOSED.has(d.status) },
+  { name: "Topics", test: (d) => d.type === "topic" },
+  { name: "Designs", test: (d) => d.type === "spec" && d.kind === "design" },
+  { name: "Sources", test: (d) => d.type === "source" },
+  { name: "Repositories", test: (d) => d.type === "repository" },
+  { name: "Closed work", test: (d) => d.type === "stub" || d.type === "spec" },
+  { name: "Events", test: (d) => d.type === "event" }
+];
+function groupDocs(docs) {
+  const out = NAV_GROUPS.map((g) => ({ name: g.name, docs: [] }));
+  for (const d of docs) {
+    const i = NAV_GROUPS.findIndex((g) => g.test(d));
+    if (i >= 0) out[i].docs.push(d);
+  }
+  for (const g of out) g.docs.sort((a, b) => a.title.localeCompare(b.title));
+  return out.filter((g) => g.docs.length > 0);
+}
+function repoBlock(source) {
+  const [id, path] = source.trim().split(" \xB7 ");
+  return { id: (id ?? "").trim(), path: (path ?? "").trim() };
+}
+function layoutOf(fields) {
+  const n = Number(fields?.layout ?? 0);
+  return Number.isFinite(n) ? n : 0;
 }
 
 // src/changebar.ts
@@ -474,138 +530,15 @@ function runProgram(bin, args) {
   return exec(bin, args, void 0);
 }
 
-// src/folders.ts
-var import_obsidian3 = require("obsidian");
-var SCOPE_TYPES = /* @__PURE__ */ new Set(["area", "repository"]);
-var wait = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
-var ScopeFolders = class extends import_obsidian3.Component {
-  constructor(app, onMove) {
-    super();
-    this.app = app;
-    this.onMove = onMove;
-  }
-  app;
-  onMove;
-  style = null;
-  enabled = false;
-  scopes = /* @__PURE__ */ new Set();
-  refresh = (0, import_obsidian3.debounce)(() => this.apply(), 300, true);
-  onload() {
-    this.style = document.head.createEl("style", { attr: { id: "atlas-scope-folders" } });
-    this.registerEvent(this.app.metadataCache.on("changed", () => this.refresh()));
-    this.registerEvent(this.app.metadataCache.on("resolved", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
-    this.registerEvent(
-      this.app.vault.on("rename", (file, oldPath) => {
-        this.refresh();
-        const moved = (p) => p.startsWith("wiki/") || p.startsWith("threads/");
-        if (!moved(file.path) && !moved(oldPath)) return;
-        void this.follow(file instanceof import_obsidian3.TFolder, file.path, oldPath).finally(() => this.onMove());
-      })
-    );
-    this.registerDomEvent(document, "click", (evt) => this.onClick(evt), { capture: true });
-    this.app.workspace.onLayoutReady(() => this.refresh());
-  }
-  onunload() {
-    this.style?.remove();
-    this.style = null;
-  }
-  setEnabled(on) {
-    this.enabled = on;
-    this.apply();
-  }
-  isScopePage(file) {
-    const type = this.app.metadataCache.getFileCache(file)?.frontmatter?.type;
-    return typeof type === "string" && SCOPE_TYPES.has(type);
-  }
-  /** The page that makes a folder a scope, or null. A folder of threads/ stands for the
-   * scope folder of the wiki at the same place. */
-  pageOf(folder) {
-    const path = folderPagePath(wikiFolderOf(folder));
-    const file = path ? this.app.vault.getAbstractFileByPath(path) : null;
-    return file instanceof import_obsidian3.TFile && this.isScopePage(file) ? file : null;
-  }
-  apply() {
-    this.scopes.clear();
-    for (const file of this.app.vault.getMarkdownFiles()) {
-      if (!isFolderPage(file.path) || !this.isScopePage(file)) continue;
-      const folder = file.parent?.path ?? "";
-      this.scopes.add(folder);
-      const mirror = mirrorOf(folder);
-      if (this.app.vault.getAbstractFileByPath(mirror) instanceof import_obsidian3.TFolder) this.scopes.add(mirror);
-    }
-    if (!this.style) return;
-    const rules = [];
-    for (const folder of this.scopes) {
-      rules.push(`.nav-folder-title[data-path=${cssString(folder)}] .nav-folder-title-content { font-weight: var(--font-semibold); }`);
-      if (this.enabled) {
-        rules.push(`.nav-folder-title[data-path=${cssString(folder)}] { cursor: pointer; }`);
-        if (folder.startsWith("wiki/")) rules.push(`.nav-file-title[data-path=${cssString(folderPagePath(folder) ?? "")}] { display: none; }`);
-      }
-    }
-    this.style.textContent = rules.join("\n");
-  }
-  onClick(evt) {
-    if (!this.enabled || !(evt.target instanceof Element)) return;
-    if (evt.target.closest(".nav-folder-collapse-indicator")) return;
-    const title = evt.target.closest(".nav-folder-title");
-    const folder = title?.getAttribute("data-path") ?? "";
-    if (!this.scopes.has(folder)) return;
-    const page = this.pageOf(folder);
-    if (page) void this.app.workspace.getLeaf(import_obsidian3.Keymap.isModEvent(evt)).openFile(page);
-  }
-  /** Renames the folder or the page that must follow the user's rename. */
-  async readsAsScopePage(file) {
-    if (this.isScopePage(file)) return true;
-    const info = (0, import_obsidian3.getFrontMatterInfo)(await this.app.vault.cachedRead(file));
-    if (!info.exists) return false;
-    try {
-      const type = (0, import_obsidian3.parseYaml)(info.frontmatter)?.type;
-      return typeof type === "string" && SCOPE_TYPES.has(type);
-    } catch {
-      return false;
-    }
-  }
-  async follow(isFolder, path, oldPath) {
-    const next = companionRename(isFolder, path, oldPath);
-    if (!next) return;
-    let from = this.app.vault.getAbstractFileByPath(next.from);
-    for (let i = 0; !from && i < 20; i++) {
-      await wait(50);
-      from = this.app.vault.getAbstractFileByPath(next.from);
-    }
-    if (!from || this.app.vault.getAbstractFileByPath(next.to)) return;
-    const page = isFolder ? from : this.app.vault.getAbstractFileByPath(path);
-    if (!(page instanceof import_obsidian3.TFile) || !isFolder && !(from instanceof import_obsidian3.TFolder)) return;
-    if (!await this.readsAsScopePage(page)) return;
-    await this.renameKeepingLinks(from, next.to);
-  }
-  /**
-   * Renames a file or folder and updates the links to it, whatever the user's setting for
-   * links says: a link names a title, so a title that changes without its links breaks
-   * them. The setting is not public API; without it the rename follows the setting.
-   */
-  async renameKeepingLinks(file, to) {
-    const vault = this.app.vault;
-    const was = vault.getConfig?.("alwaysUpdateLinks");
-    if (was === false) vault.setConfig?.("alwaysUpdateLinks", true);
-    try {
-      await this.app.fileManager.renameFile(file, to);
-    } finally {
-      if (was === false) vault.setConfig?.("alwaysUpdateLinks", false);
-    }
-  }
-};
-
 // src/graphcolors.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian3 = require("obsidian");
 
 // src/graphgroups.ts
 var GRAPH_MODES = [
   { mode: "off", label: "Off" },
-  { mode: "area", label: "Area" },
+  { mode: "tag", label: "Tag" },
   { mode: "type", label: "Type" },
-  { mode: "threads", label: "Threads" },
+  { mode: "work", label: "Work" },
   { mode: "activity", label: "Activity" }
 ];
 function isGraphMode(value) {
@@ -620,30 +553,30 @@ var RECENCY = {
   dark: ["#b7d3f6", "#6da7ec", "#2a78d6", "#1c5cab"]
 };
 var MUTED = "#898781";
-var THREAD_TYPES = ["stub", "spec", "task", "receipt"];
+var WORK_TYPES = ["stub", "spec"];
 var TYPE_GROUPS = [
-  { name: "Areas", types: ["area"] },
-  { name: "Repositories", types: ["repository"] },
-  { name: "Concepts", types: ["concept"] },
-  { name: "Entities", types: ["entity"] },
-  { name: "Policies", types: ["policy"] },
-  { name: "Sources", types: ["source"] },
-  { name: "Threads", types: THREAD_TYPES },
-  { name: "Sessions and changes", types: ["session", "change"] }
+  { name: "Sources", test: (f) => f.type === "source" },
+  { name: "Repositories", test: (f) => f.type === "repository" },
+  { name: "Concepts", test: (f) => f.type === "topic" && f.kind === "concept" },
+  { name: "Entities", test: (f) => f.type === "topic" && f.kind === "entity" },
+  { name: "Policies", test: (f) => f.type === "topic" && f.kind === "policy" },
+  { name: "Overviews", test: (f) => f.type === "topic" && f.kind === "overview" },
+  { name: "Stubs and specs", test: (f) => f.type === "stub" || f.type === "spec" },
+  { name: "Events", test: (f) => f.type === "event" }
 ];
 var QUARTERS = ["Newest 25%", "25\u201350%", "50\u201375%", "Oldest 25%"];
 function graphGroups(mode, docs, resolve, theme) {
   const vault = new Vault(docs, resolve);
   let groups;
   switch (mode) {
-    case "area":
-      groups = vault.byArea(theme);
+    case "tag":
+      groups = vault.byTag(theme);
       break;
     case "type":
       groups = vault.byType(theme);
       break;
-    case "threads":
-      groups = vault.byThreads(theme);
+    case "work":
+      groups = vault.byWork(theme);
       break;
     case "activity":
       groups = byActivity(docs, theme);
@@ -652,6 +585,12 @@ function graphGroups(mode, docs, resolve, theme) {
       groups = [];
   }
   return groups.filter((g) => g.paths.length > 0);
+}
+function topTag(fields) {
+  const list = asList(fields.tags);
+  if (typeof fields.defines === "string" && fields.defines) list.push(fields.defines);
+  const first = list.map((t) => t.trim().replace(/^#/, "").toLowerCase()).find((t) => t !== "");
+  return first ? first.split("/")[0] : null;
 }
 var Vault = class {
   constructor(docs, resolve) {
@@ -670,7 +609,6 @@ var Vault = class {
   resolve;
   byPath = /* @__PURE__ */ new Map();
   backlinks = /* @__PURE__ */ new Map();
-  areas = /* @__PURE__ */ new Map();
   type(path) {
     const t = path === null ? void 0 : this.byPath.get(path)?.fields.type;
     return typeof t === "string" ? t : "";
@@ -678,128 +616,106 @@ var Vault = class {
   links(doc, field) {
     return asList(doc.fields[field]).map((l) => this.resolve(linkTitle(l), doc.path)).filter((p) => p !== null && this.byPath.has(p));
   }
-  byArea(theme) {
-    const members = /* @__PURE__ */ new Map();
-    for (const d of this.docs) {
-      const area = this.areaOf(d.path);
-      if (area === null) continue;
-      members.set(area, [...members.get(area) ?? [], d.path]);
-    }
-    const order = [...members.keys()].sort((a, b) => {
-      const ca = String(this.byPath.get(a)?.fields.created ?? "");
-      const cb = String(this.byPath.get(b)?.fields.created ?? "");
-      return ca.localeCompare(cb) || basename(a).localeCompare(basename(b));
-    });
-    const palette = CATEGORICAL[theme];
-    const groups = order.slice(0, palette.length).map((area, i) => ({
-      name: basename(area),
-      color: palette[i],
-      paths: members.get(area) ?? []
-    }));
-    const rest = order.slice(palette.length).flatMap((area) => members.get(area) ?? []);
-    if (rest.length > 0) groups.push({ name: "Other areas", color: MUTED, paths: rest });
-    return groups;
-  }
-  /** The nearest area of a document: the area it is about, or the area of its scope or thread. */
-  areaOf(path, seen = /* @__PURE__ */ new Set()) {
-    if (this.areas.has(path)) return this.areas.get(path) ?? null;
-    if (seen.has(path)) return null;
-    seen.add(path);
-    const area = this.findArea(path, seen);
-    this.areas.set(path, area);
-    return area;
-  }
-  findArea(path, seen) {
-    const doc = this.byPath.get(path);
-    if (!doc) return null;
-    const first = (paths) => {
-      for (const p of paths) {
-        const a = this.areaOf(p, seen);
-        if (a !== null) return a;
+  /** The top tag a document belongs to: its own; an event's subject's; a session's or a change's first document's. */
+  tagOf(doc, depth = 0) {
+    if (depth > 3) return null;
+    const own = topTag(doc.fields);
+    if (own) return own;
+    const via = (field) => {
+      for (const p of this.links(doc, field)) {
+        const t = this.tagOf(this.byPath.get(p), depth + 1);
+        if (t) return t;
       }
       return null;
     };
-    switch (this.type(path)) {
-      case "area":
-        return path;
-      case "repository":
-      case "concept":
-      case "entity":
-      case "policy":
-      case "source": {
-        const chain = this.links(doc, "chain").filter((p) => this.type(p) === "area");
-        if (chain.length > 0) return chain[chain.length - 1];
-        return first([...this.links(doc, "parent"), ...this.links(doc, "scope")]);
-      }
-      case "stub":
-        return first(this.links(doc, "scope"));
-      case "spec":
-      case "task":
-      case "receipt":
-      case "change":
-        return first(this.links(doc, "thread"));
+    switch (this.type(doc.path)) {
+      case "event":
+        return via("subject");
       case "session":
-        return first([...this.links(doc, "threads"), ...this.links(doc, "repositories")]);
+        return via("specs") ?? via("work");
+      case "change":
+        return via("absorbs") ?? via("work");
     }
     return null;
   }
+  byTag(theme) {
+    const members = /* @__PURE__ */ new Map();
+    const first = /* @__PURE__ */ new Map();
+    for (const d of this.docs) {
+      const tag = this.tagOf(d);
+      if (tag === null) continue;
+      members.set(tag, [...members.get(tag) ?? [], d.path]);
+      const created = String(d.fields.created ?? "9999");
+      if (!first.has(tag) || created < (first.get(tag) ?? "")) first.set(tag, created);
+    }
+    const order = [...members.keys()].sort((a, b) => (first.get(a) ?? "").localeCompare(first.get(b) ?? "") || a.localeCompare(b));
+    const palette = CATEGORICAL[theme];
+    const groups = order.slice(0, palette.length).map((tag, i) => ({ name: "#" + tag, color: palette[i], paths: members.get(tag) ?? [] }));
+    const rest = order.slice(palette.length).flatMap((tag) => members.get(tag) ?? []);
+    if (rest.length > 0) groups.push({ name: "Other tags", color: MUTED, paths: rest });
+    return groups;
+  }
   byType(theme) {
     const palette = CATEGORICAL[theme];
-    return TYPE_GROUPS.map((g, i) => ({
+    const groups = TYPE_GROUPS.map((g, i) => ({
       name: g.name,
       color: palette[i],
-      paths: this.docs.filter((d) => g.types.includes(this.type(d.path))).map((d) => d.path)
+      paths: this.docs.filter((d) => g.test(d.fields)).map((d) => d.path)
     }));
+    groups.push({ name: "Sessions and changes", color: MUTED, paths: this.docs.filter((d) => this.type(d.path) === "session" || this.type(d.path) === "change").map((d) => d.path) });
+    return groups;
   }
-  byThreads(theme) {
+  byWork(theme) {
     const open = [];
-    const closed = [];
+    const done = [];
     const none = [];
     for (const d of this.docs) {
-      const states = this.threadStates(d);
+      const states = this.workStates(d);
       if (states.has("open")) open.push(d.path);
-      else if (states.has("closed")) closed.push(d.path);
+      else if (states.has("done")) done.push(d.path);
       else none.push(d.path);
     }
     const palette = CATEGORICAL[theme];
     return [
-      { name: "Open threads", color: palette[1], paths: open },
-      { name: "Closed threads", color: palette[0], paths: closed },
-      { name: "No threads", color: MUTED, paths: none }
+      { name: "Open work", color: palette[1], paths: open },
+      { name: "Done work", color: palette[0], paths: done },
+      { name: "No work", color: MUTED, paths: none }
     ];
   }
-  /** The stubs a document belongs to. */
-  threadsOf(doc) {
-    switch (this.type(doc.path)) {
-      case "stub":
-        return [doc.path];
-      case "spec":
-      case "task":
-      case "receipt":
-      case "change":
-        return this.links(doc, "thread");
-      case "session":
-        return this.links(doc, "threads");
+  /** A stub's or a plan's own state, or null for any other document. */
+  stateOf(path) {
+    const d = this.byPath.get(path);
+    if (!d) return null;
+    const t = this.type(path);
+    if (t === "stub" || t === "spec" && d.fields.kind === "plan") {
+      const s = String(d.fields.status ?? "open");
+      return s === "done" || s === "dropped" || s === "resolved" ? "done" : "open";
     }
-    return [];
+    return null;
   }
   /**
-   * The states of the threads a document belongs to or shares a link with. A thread
-   * document takes only its own thread's state.
+   * The states of the work a document belongs to or shares a link with. A stub or a plan
+   * takes only its own state; an event takes its subject's.
    */
-  threadStates(doc) {
-    const stubs = new Set(this.threadsOf(doc));
-    if (!THREAD_TYPES.includes(this.type(doc.path))) {
-      const near = [...doc.links, ...this.backlinks.get(doc.path) ?? []];
-      for (const p of near) {
-        const other = this.byPath.get(p);
-        if (other && THREAD_TYPES.includes(this.type(p))) this.threadsOf(other).forEach((s) => stubs.add(s));
-      }
-    }
+  workStates(doc) {
     const states = /* @__PURE__ */ new Set();
-    for (const s of stubs) {
-      if (this.type(s) !== "stub") continue;
-      states.add(this.byPath.get(s)?.fields.stage === "closed" ? "closed" : "open");
+    const own = this.stateOf(doc.path);
+    if (own) {
+      states.add(own);
+      return states;
+    }
+    if (this.type(doc.path) === "event") {
+      for (const p of this.links(doc, "subject")) {
+        const s = this.stateOf(p);
+        if (s) states.add(s);
+      }
+      return states;
+    }
+    const near = [...doc.links, ...this.backlinks.get(doc.path) ?? []];
+    for (const p of near) {
+      if (!WORK_TYPES.includes(this.type(p))) continue;
+      const s = this.stateOf(p);
+      if (s) states.add(s);
     }
     return states;
   }
@@ -818,9 +734,6 @@ function localDate(ms) {
   const t = new Date(ms);
   const pad = (n) => String(n).padStart(2, "0");
   return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
-}
-function basename(path) {
-  return path.slice(path.lastIndexOf("/") + 1).replace(/\.md$/, "");
 }
 function pathQuery(paths) {
   const alternatives = paths.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "\\/"));
@@ -855,14 +768,14 @@ function engineOf(view) {
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
-var GraphColors = class extends import_obsidian4.Component {
+var GraphColors = class extends import_obsidian3.Component {
   constructor(host) {
     super();
     this.host = host;
   }
   host;
   groups = [];
-  refresh = (0, import_obsidian4.debounce)(() => this.apply(), 1e3, true);
+  refresh = (0, import_obsidian3.debounce)(() => this.apply(), 1e3, true);
   get app() {
     return this.host.app;
   }
@@ -1008,6 +921,88 @@ function wrap(node) {
   node.replaceWith(frag);
 }
 
+// src/repo.ts
+var import_obsidian4 = require("obsidian");
+var RepoPanel = class extends import_obsidian4.MarkdownRenderChild {
+  constructor(containerEl, plugin, id, branch) {
+    super(containerEl);
+    this.plugin = plugin;
+    this.id = id;
+    this.branch = branch;
+  }
+  plugin;
+  id;
+  branch;
+  onload() {
+    void this.refresh();
+  }
+  async refresh() {
+    const el = this.containerEl;
+    el.empty();
+    el.addClass("atlas-repo");
+    el.createDiv({ cls: "atlas-repo-loading", text: "Reading git\u2026" });
+    try {
+      const b = await this.plugin.atlas(["context", this.id]);
+      this.render(b.repository);
+    } catch (e) {
+      el.empty();
+      el.createDiv({ cls: "atlas-repo-error", text: `Atlas: ${e.message}` });
+      this.refreshButton(el);
+    }
+  }
+  render(f) {
+    const el = this.containerEl;
+    el.empty();
+    if (!f || !f.exists) {
+      el.createDiv({ cls: "atlas-repo-error", text: `${f?.path ?? "The path"} is gone, or is no git work tree.` });
+      this.refreshButton(el);
+      return;
+    }
+    const head = el.createDiv({ cls: "atlas-repo-head" });
+    head.createSpan({ cls: "atlas-repo-branch", text: f.branch ?? "?" });
+    if (this.branch && f.branch && f.branch !== this.branch) {
+      head.createSpan({ cls: "atlas-repo-note", text: `not ${this.branch}` });
+    }
+    head.createSpan({ cls: "atlas-repo-sha", text: f.head ?? "" });
+    if (f.upstream) {
+      head.createSpan({ cls: "atlas-repo-sync", text: `${f.ahead ?? 0} ahead \xB7 ${f.behind_remote ?? 0} behind the remote` });
+    }
+    this.refreshButton(head);
+    const dirty = f.dirty ?? [];
+    if (dirty.length === 0) {
+      el.createDiv({ cls: "atlas-repo-clean", text: "No uncommitted changes." });
+    } else {
+      const d = el.createEl("details", { cls: "atlas-repo-dirty" });
+      d.createEl("summary", { text: `${dirty.length} ${dirty.length === 1 ? "file" : "files"} changed and not committed` });
+      const ul = d.createEl("ul");
+      for (const p of dirty) ul.createEl("li", { text: p });
+    }
+    const now = /* @__PURE__ */ new Date();
+    for (const c of f.recent ?? []) {
+      const row = el.createDiv({ cls: "atlas-repo-commit" });
+      row.createSpan({ cls: "atlas-repo-sha", text: c.commit });
+      row.createSpan({ cls: "atlas-repo-subject", text: c.subject });
+      row.createSpan({ cls: "atlas-repo-ago", text: formatAgo(c.time, now) });
+    }
+    if (f.described && (f.behind ?? 0) > 0) {
+      el.createDiv({ cls: "atlas-repo-note", text: `The description is ${f.behind} commits behind (repo-ingest).` });
+    }
+  }
+  refreshButton(parent) {
+    const b = parent.createEl("button", { cls: "atlas-repo-refresh", text: "Refresh" });
+    b.onclick = () => void this.refresh();
+  }
+};
+function repoProcessor(plugin) {
+  return (source, el, ctx) => {
+    const { id } = repoBlock(source);
+    if (!id) return;
+    const file = plugin.app.vault.getFileByPath(ctx.sourcePath);
+    const fm = file ? plugin.app.metadataCache.getFileCache(file)?.frontmatter : void 0;
+    ctx.addChild(new RepoPanel(el, plugin, id, String(fm?.branch ?? "")));
+  };
+}
+
 // src/sessions.ts
 var import_obsidian5 = require("obsidian");
 var import_os2 = require("os");
@@ -1019,13 +1014,13 @@ function activeSessions(app) {
     const fm = app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || fm.type !== "session") continue;
     if (fm.status !== "running" && fm.status !== "waiting") continue;
-    const threads = asList(fm.threads);
+    const work = asList(fm.work);
     out.push({
       file,
       status: fm.status,
       description: typeof fm.description === "string" && fm.description.trim() ? fm.description : file.basename,
-      thread: linkTitle(threads[threads.length - 1]),
-      tasks: asList(fm.tasks),
+      work: linkTitle(work[work.length - 1]),
+      specs: asList(fm.specs),
       updated: String(fm.updated ?? ""),
       harness: String(fm.harness ?? "claude"),
       harness_id: String(fm.harness_id ?? ""),
@@ -1034,15 +1029,15 @@ function activeSessions(app) {
   }
   return out.sort(compareSessions);
 }
-function currentTask(app, s) {
+function currentPlan(app, s) {
   let fallback = null;
-  for (let i = s.tasks.length - 1; i >= 0; i--) {
-    const title = linkTitle(s.tasks[i]);
+  for (let i = s.specs.length - 1; i >= 0; i--) {
+    const title = linkTitle(s.specs[i]);
     if (!title) continue;
     const file = app.metadataCache.getFirstLinkpathDest(title, s.file.path);
     const entry = { title, file };
     fallback ??= entry;
-    if (file && app.metadataCache.getFileCache(file)?.frontmatter?.status === "open") return entry;
+    if (file && app.metadataCache.getFileCache(file)?.frontmatter?.status === "started") return entry;
   }
   return fallback;
 }
@@ -1105,8 +1100,8 @@ var SessionsView = class extends import_obsidian5.ItemView {
       const head = card.createDiv({ cls: "atlas-session-head" });
       head.createSpan({ cls: "atlas-session-status", text: s.status });
       head.createSpan({ cls: "atlas-session-title", text: s.description });
-      const task = currentTask(this.app, s);
-      const where = [s.thread, task?.title].filter((t) => t).join(" \xB7 ");
+      const task = currentPlan(this.app, s);
+      const where = (task?.title ?? s.work) || "";
       if (where) card.createDiv({ cls: "atlas-session-where", text: where });
       const progress = card.createDiv({ cls: "atlas-session-progress" });
       if (task?.file) {
@@ -1132,8 +1127,9 @@ var DEFAULT_SETTINGS = {
   binaryPath: "",
   syncOnChange: true,
   badges: true,
-  folderPages: true,
-  graphColors: "area"
+  viewFolders: true,
+  tagClick: false,
+  graphColors: "tag"
 };
 var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
   constructor(app, plugin) {
@@ -1166,40 +1162,360 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian6.Setting(containerEl).setName("Sync when a thread document changes or a wiki page moves").setDesc("Runs atlas-obsidian vault sync after you edit a file under threads/ or move a file in wiki/, so the board, the callouts, and each page's scope follow.").addToggle(
+    new import_obsidian6.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian6.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the stage of each stub and the status of each session.").addToggle(
+    new import_obsidian6.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the status of each stub, plan, and session, and the kind of each event.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.badges).onChange(async (value) => {
         this.plugin.settings.badges = value;
         await this.plugin.saveSettings();
         this.plugin.badges.setEnabled(value);
       })
     );
-    new import_obsidian6.Setting(containerEl).setName("Open a scope folder's page from the folder").setDesc("In the file explorer, a click on an area's or a repository's folder opens its page, and the page itself is hidden inside the folder.").addToggle(
-      (toggle) => toggle.setValue(this.plugin.settings.folderPages).onChange(async (value) => {
-        this.plugin.settings.folderPages = value;
+    new import_obsidian6.Setting(containerEl).setName("Open a tag's view from its folder").setDesc("In the file explorer, a click on a folder under views/tags opens the tag's view, and the view itself is hidden inside the folder.").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.viewFolders).onChange(async (value) => {
+        this.plugin.settings.viewFolders = value;
         await this.plugin.saveSettings();
-        this.plugin.scopeFolders.setEnabled(value);
+        this.plugin.viewFolders.setEnabled(value);
       })
     );
-    new import_obsidian6.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by area, by type, by the state of their threads, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
+    new import_obsidian6.Setting(containerEl).setName("Open a tag in the tag navigator").setDesc("A click on a #tag in a note opens the tag navigator at that tag, in place of Obsidian's search.").addToggle(
+      (toggle) => toggle.setValue(this.plugin.settings.tagClick).onChange(async (value) => {
+        this.plugin.settings.tagClick = value;
+        await this.plugin.saveSettings();
+      })
+    );
+    new import_obsidian6.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by top tag, by type, by the state of their work, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
       for (const { mode, label } of GRAPH_MODES) dropdown.addOption(mode, label);
       dropdown.setValue(this.plugin.settings.graphColors).onChange((value) => void this.plugin.graphColors.setMode(value));
     });
   }
 };
 
+// src/tagnav.ts
+var import_obsidian7 = require("obsidian");
+var TAG_NAV_VIEW = "atlas-tag-navigator";
+var DOC_TYPES = /* @__PURE__ */ new Set(["source", "repository", "topic", "stub", "spec", "event"]);
+var MAX_WITH = 30;
+function tagDocs(app) {
+  const out = [];
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (!file.path.startsWith("wiki/documents/")) continue;
+    const fm = app.metadataCache.getFileCache(file)?.frontmatter;
+    if (!fm || !DOC_TYPES.has(String(fm.type))) continue;
+    const own = asList(fm.tags).map(normalTag);
+    if (typeof fm.defines === "string" && fm.defines) own.push(normalTag(fm.defines));
+    out.push({
+      path: file.path,
+      title: file.basename,
+      type: String(fm.type),
+      kind: String(fm.kind ?? ""),
+      status: String(fm.status ?? ""),
+      description: String(fm.description ?? ""),
+      tags: own
+    });
+  }
+  return out;
+}
+var TagNavigator = class extends import_obsidian7.ItemView {
+  chosen = [];
+  rerender = (0, import_obsidian7.debounce)(() => this.render(), 500, true);
+  constructor(leaf) {
+    super(leaf);
+  }
+  getViewType() {
+    return TAG_NAV_VIEW;
+  }
+  getDisplayText() {
+    return "Atlas tags";
+  }
+  getIcon() {
+    return "tags";
+  }
+  getState() {
+    return { chosen: this.chosen };
+  }
+  async setState(state, result) {
+    const s = state;
+    if (s && Array.isArray(s.chosen)) this.chosen = s.chosen.filter((t) => typeof t === "string");
+    this.render();
+    await super.setState(state, result);
+  }
+  async onOpen() {
+    this.registerEvent(this.app.metadataCache.on("resolved", () => this.rerender()));
+    this.registerEvent(this.app.vault.on("rename", () => this.rerender()));
+    this.render();
+  }
+  /** Starts again at one tag. */
+  show(tag) {
+    this.chosen = [normalTag(tag)];
+    this.render();
+  }
+  add(tag) {
+    if (!this.chosen.includes(tag)) this.chosen.push(tag);
+    this.render();
+  }
+  drop(tag) {
+    this.chosen = this.chosen.filter((t) => t !== tag);
+    this.render();
+  }
+  render() {
+    const root = this.contentEl;
+    root.empty();
+    root.addClass("atlas-tagnav");
+    const docs = tagDocs(this.app);
+    const path = root.createDiv({ cls: "atlas-tagnav-path" });
+    const home = path.createEl("button", { cls: "atlas-tagnav-home", text: "Tags" });
+    home.onclick = () => {
+      this.chosen = [];
+      this.render();
+    };
+    for (const t of this.chosen) {
+      const chip = path.createSpan({ cls: "atlas-tagnav-chip" });
+      chip.createSpan({ text: "#" + t });
+      const x = chip.createEl("button", { cls: "atlas-tagnav-x", text: "\xD7", attr: { "aria-label": `Remove ${t}` } });
+      x.onclick = () => this.drop(t);
+    }
+    if (this.chosen.length === 0) {
+      const list = root.createDiv({ cls: "atlas-tagnav-tags" });
+      for (const f of topTags(docs)) this.tagButton(list, f.tag, f.count);
+      if (docs.length === 0) root.createDiv({ cls: "atlas-tagnav-empty", text: "No document holds a tag yet." });
+      return;
+    }
+    const { matches, with: facets } = narrow(docs, this.chosen);
+    const actions = root.createDiv({ cls: "atlas-tagnav-actions" });
+    actions.createSpan({ cls: "atlas-tagnav-count", text: `${matches.length} ${matches.length === 1 ? "document" : "documents"}` });
+    const search = actions.createEl("button", { text: "Search" });
+    search.onclick = () => this.openSearch();
+    const view = actions.createEl("button", { text: "Tag view" });
+    view.setAttr("aria-label", "Open the view of " + this.chosen[0]);
+    view.onclick = () => void this.openView(this.chosen[0]);
+    if (facets.length > 0) {
+      const withEl = root.createDiv({ cls: "atlas-tagnav-with" });
+      withEl.createSpan({ cls: "atlas-tagnav-label", text: "With" });
+      for (const f of facets.slice(0, MAX_WITH)) this.tagButton(withEl, f.tag, f.count);
+    }
+    for (const group of groupDocs(matches)) {
+      const g = root.createDiv({ cls: "atlas-tagnav-group" });
+      g.createDiv({ cls: "atlas-tagnav-group-name", text: `${group.name} (${group.docs.length})` });
+      for (const d of group.docs) {
+        const row = g.createDiv({ cls: "atlas-tagnav-doc" });
+        row.dataset.type = d.type;
+        row.setAttr("title", d.description);
+        row.createSpan({ cls: "atlas-tagnav-doc-title", text: d.title });
+        const meta = [d.kind || d.type, d.status].filter((x) => x).join(" \xB7 ");
+        row.createSpan({ cls: "atlas-tagnav-doc-meta", text: meta });
+        row.onclick = (evt) => {
+          const file = this.app.vault.getAbstractFileByPath(d.path);
+          if (file instanceof import_obsidian7.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
+        };
+      }
+    }
+  }
+  tagButton(parent, tag, count) {
+    const b = parent.createEl("button", { cls: "atlas-tagnav-tag" });
+    b.createSpan({ text: "#" + tag });
+    b.setAttr("title", "#" + tag);
+    b.createSpan({ cls: "atlas-tagnav-tag-count", text: String(count) });
+    b.onclick = () => this.add(tag);
+  }
+  openSearch() {
+    const query = this.chosen.map((t) => `tag:#${t}`).join(" ");
+    const search = this.app.internalPlugins?.getPluginById?.("global-search")?.instance;
+    if (search?.openGlobalSearch) search.openGlobalSearch(query);
+  }
+  async openView(tag) {
+    const file = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
+    if (file instanceof import_obsidian7.TFile) await this.app.workspace.getLeaf(false).openFile(file);
+  }
+};
+
+// src/viewfolders.ts
+var import_obsidian8 = require("obsidian");
+var ViewFolders = class extends import_obsidian8.Component {
+  constructor(app) {
+    super();
+    this.app = app;
+  }
+  app;
+  style = null;
+  enabled = false;
+  refresh = (0, import_obsidian8.debounce)(() => this.apply(), 300, true);
+  onload() {
+    this.style = document.head.createEl("style", { attr: { id: "atlas-view-folders" } });
+    this.registerEvent(this.app.vault.on("create", () => this.refresh()));
+    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
+    this.registerEvent(this.app.vault.on("rename", () => this.refresh()));
+    this.registerDomEvent(document, "click", (evt) => this.onClick(evt), { capture: true });
+    this.app.workspace.onLayoutReady(() => this.refresh());
+  }
+  onunload() {
+    this.style?.remove();
+    this.style = null;
+  }
+  setEnabled(on) {
+    this.enabled = on;
+    this.apply();
+  }
+  apply() {
+    if (!this.style) return;
+    const rules = [
+      `.nav-folder-title[data-path^="views/tags/"] .nav-folder-title-content { font-weight: var(--font-semibold); }`
+    ];
+    if (this.enabled) {
+      rules.push(`.nav-folder-title[data-path^="views/tags/"] { cursor: pointer; }`);
+      for (const file of this.app.vault.getMarkdownFiles()) {
+        if (isTagView(file.path)) rules.push(`.nav-file-title[data-path=${cssString(file.path)}] { display: none; }`);
+      }
+    }
+    this.style.textContent = rules.join("\n");
+  }
+  onClick(evt) {
+    if (!this.enabled || !(evt.target instanceof Element)) return;
+    if (evt.target.closest(".nav-folder-collapse-indicator")) return;
+    const title = evt.target.closest(".nav-folder-title");
+    const tag = tagOfFolder(title?.getAttribute("data-path") ?? "");
+    if (!tag) return;
+    const note = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
+    if (note instanceof import_obsidian8.TFile) void this.app.workspace.getLeaf(import_obsidian8.Keymap.isModEvent(evt)).openFile(note);
+  }
+};
+
+// src/workbar.ts
+var import_obsidian9 = require("obsidian");
+var BAR3 = "atlas-work-bar";
+function workDoc(app, view) {
+  if (!view.file) return null;
+  const fm = app.metadataCache.getFileCache(view.file)?.frontmatter;
+  if (!fm || !fm.id) return null;
+  if (fm.type === "stub") return { id: String(fm.id), kind: "stub", status: String(fm.status ?? "open"), blocked: false };
+  if (fm.type === "spec" && fm.kind === "plan") {
+    return { id: String(fm.id), kind: "plan", status: String(fm.status ?? "open"), blocked: Boolean(fm.blocked) };
+  }
+  return null;
+}
+var closed = (s) => s === "done" || s === "dropped" || s === "resolved";
+var WorkBar = class extends import_obsidian9.Component {
+  constructor(plugin) {
+    super();
+    this.plugin = plugin;
+  }
+  plugin;
+  busy = false;
+  refresh = (0, import_obsidian9.debounce)(() => this.update(), 100, true);
+  get app() {
+    return this.plugin.app;
+  }
+  onload() {
+    const ws = this.app.workspace;
+    this.registerEvent(ws.on("active-leaf-change", () => this.refresh()));
+    this.registerEvent(ws.on("file-open", () => this.refresh()));
+    this.registerEvent(ws.on("layout-change", () => this.refresh()));
+    this.registerEvent(this.app.metadataCache.on("changed", () => this.refresh()));
+    ws.onLayoutReady(() => this.refresh());
+  }
+  onunload() {
+    document.querySelectorAll(`.${BAR3}`).forEach((el) => el.remove());
+  }
+  update() {
+    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
+      if (leaf.view instanceof import_obsidian9.MarkdownView) this.updateView(leaf.view);
+    }
+  }
+  updateView(view) {
+    const d = workDoc(this.app, view);
+    const existing = view.containerEl.querySelector(`:scope > .${BAR3}`);
+    if (!d) {
+      existing?.remove();
+      return;
+    }
+    const key = `${d.id}
+${d.status}
+${d.blocked}`;
+    if (existing?.dataset.key === key) return;
+    existing?.remove();
+    const bar = createDiv({ cls: BAR3 });
+    bar.dataset.key = key;
+    bar.createSpan({ cls: "atlas-work-bar-label", text: d.kind === "stub" ? "Stub" : "Plan" });
+    bar.createSpan({ cls: "atlas-work-bar-status", text: d.blocked ? `${d.status}, blocked` : d.status });
+    const buttons = bar.createDiv({ cls: "atlas-work-bar-buttons" });
+    const add = (text, run) => {
+      const b = buttons.createEl("button", { text });
+      b.onclick = run;
+    };
+    if (closed(d.status)) {
+      add("Reopen", () => new ReasonModal2(this.app, "Reopen", "Why (optional)", false, (r) => void this.run(["work", "reopen", d.id, "--reason", r], "Reopened")).open());
+    } else {
+      if (d.kind === "plan") {
+        if (d.blocked) add("Unblock", () => void this.run(["work", "unblock", d.id], "Unblocked"));
+        else add("Block", () => new ReasonModal2(this.app, "Block the plan", "What it waits on, in one line", true, (r) => void this.run(["work", "block", d.id, "--reason", r], "Blocked")).open());
+      }
+      add("Drop", () => new ReasonModal2(this.app, "Drop", "Why", true, (r) => void this.run(["work", "drop", d.id, "--reason", r], "Dropped")).open());
+    }
+    view.containerEl.insertBefore(bar, view.contentEl);
+  }
+  async run(args, done) {
+    if (this.busy) return;
+    this.busy = true;
+    try {
+      await this.plugin.atlas(args);
+      new import_obsidian9.Notice(`Atlas: ${done}.`);
+    } catch (e) {
+      new import_obsidian9.Notice(`Atlas: ${e.message}`);
+    } finally {
+      this.busy = false;
+      this.refresh();
+    }
+  }
+};
+var ReasonModal2 = class extends import_obsidian9.Modal {
+  constructor(app, heading, placeholder, required, done) {
+    super(app);
+    this.heading = heading;
+    this.placeholder = placeholder;
+    this.required = required;
+    this.done = done;
+  }
+  heading;
+  placeholder;
+  required;
+  done;
+  reason = "";
+  onOpen() {
+    this.setTitle(this.heading);
+    const submit = () => {
+      if (this.required && this.reason.trim() === "") return;
+      this.close();
+      this.done(this.reason.trim());
+    };
+    new import_obsidian9.Setting(this.contentEl).setName("Reason").addText((text) => {
+      text.setPlaceholder(this.placeholder).onChange((v) => this.reason = v);
+      text.inputEl.addClass("atlas-reason-input");
+      text.inputEl.addEventListener("keydown", (e) => {
+        if (e.key === "Enter" && !e.isComposing) {
+          e.preventDefault();
+          submit();
+        }
+      });
+      window.setTimeout(() => text.inputEl.focus(), 0);
+    });
+    new import_obsidian9.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText(this.heading).setCta().onClick(submit));
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/main.ts
-var SYNC_DELAY = 1500;
+var SYNC_DELAY = 2e3;
 var ECHO_WINDOW = 5e3;
-var AtlasPlugin = class extends import_obsidian7.Plugin {
+var AtlasPlugin = class extends import_obsidian10.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   badges;
-  scopeFolders;
+  viewFolders;
   graphColors;
   syncing = false;
   syncTimer = null;
@@ -1215,12 +1531,10 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
     this.badges = this.addChild(new Badges(this.app));
     this.badges.setEnabled(this.settings.badges);
     this.addChild(new ChangeBar(this));
-    this.scopeFolders = this.addChild(
-      new ScopeFolders(this.app, () => {
-        if (this.settings.syncOnChange) this.scheduleSync();
-      })
-    );
-    this.scopeFolders.setEnabled(this.settings.folderPages);
+    this.addChild(new WorkBar(this));
+    this.viewFolders = this.addChild(new ViewFolders(this.app));
+    this.viewFolders.setEnabled(this.settings.viewFolders);
+    this.registerMarkdownCodeBlockProcessor("atlas-repo", repoProcessor(this));
     this.graphColors = this.addChild(new GraphColors(this));
     for (const { mode, label } of GRAPH_MODES) {
       this.addCommand({
@@ -1231,6 +1545,10 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
     }
     this.addRibbonIcon("refresh-cw", "Atlas: sync the vault", () => void this.sync(true));
     this.addCommand({ id: "sync", name: "Sync the vault", callback: () => void this.sync(true) });
+    this.registerView(TAG_NAV_VIEW, (leaf) => new TagNavigator(leaf));
+    this.addRibbonIcon("tags", "Atlas: open the tag navigator", () => void this.openTags());
+    this.addCommand({ id: "open-tags", name: "Open the tag navigator", callback: () => void this.openTags() });
+    this.registerDomEvent(document, "click", (evt) => this.onTagClick(evt), { capture: true });
     this.registerView(SESSIONS_VIEW, (leaf) => new SessionsView(leaf));
     this.sessionsRibbon = this.addRibbonIcon("bot", "Atlas: open the sessions", () => void this.openSessions());
     this.sessionsRibbon.addClass("atlas-sessions-ribbon");
@@ -1238,18 +1556,33 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
     this.statusItem = this.addStatusBarItem();
     this.statusItem.addClass("atlas-status-waiting");
     this.statusItem.onClickEvent(() => void this.openSessions());
+    this.addCommand({ id: "migrate", name: "Migrate this vault to the 7.0 layout", callback: () => void this.migrate() });
     this.registerEditorExtension(mentionEditor);
     this.registerMarkdownPostProcessor(mentionReading);
     this.registerEvent(
       this.app.metadataCache.on("changed", (file) => {
         if (file.path.startsWith("sessions/")) this.refreshSessions();
-        this.onThreadChange(file);
+        this.onDocChange(file.path);
       })
     );
-    this.registerEvent(this.app.vault.on("delete", () => this.refreshSessions()));
-    this.registerEvent(this.app.vault.on("rename", () => this.refreshSessions()));
+    this.registerEvent(
+      this.app.vault.on("delete", (file) => {
+        this.refreshSessions();
+        this.onDocChange(file.path);
+      })
+    );
+    this.registerEvent(
+      this.app.vault.on("rename", (file, oldPath) => {
+        this.refreshSessions();
+        this.onDocChange(file.path);
+        this.onDocChange(oldPath);
+      })
+    );
     this.registerInterval(window.setInterval(() => this.sessionViews().forEach((v) => v.tick()), 3e4));
-    this.app.workspace.onLayoutReady(() => this.refreshSessions());
+    this.app.workspace.onLayoutReady(() => {
+      this.refreshSessions();
+      this.checkLayout();
+    });
     const first = this.app.metadataCache.on("resolved", () => {
       this.app.metadataCache.offref(first);
       this.refreshSessions();
@@ -1260,7 +1593,12 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
   }
   async loadSettings() {
-    this.settings = { ...DEFAULT_SETTINGS, ...await this.loadData() };
+    const saved = await this.loadData();
+    this.settings = { ...DEFAULT_SETTINGS };
+    for (const key of Object.keys(DEFAULT_SETTINGS)) {
+      if (saved && saved[key] !== void 0) this.settings[key] = saved[key];
+    }
+    if (saved?.folderPages !== void 0 && saved.viewFolders === void 0) this.settings.viewFolders = saved.folderPages;
     if (!isGraphMode(this.settings.graphColors)) this.settings.graphColors = DEFAULT_SETTINGS.graphColors;
   }
   async saveSettings() {
@@ -1269,15 +1607,16 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
   /** Runs one atlas command in this vault and returns its JSON. */
   atlas(args) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian7.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian10.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args);
   }
   // Sync
+  /** A manual sync heals everything; an automatic one runs the steps that read no git. */
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian7.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian10.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -1286,13 +1625,14 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
     this.pending.clear();
     let wrote = [];
     try {
-      const out = await this.atlas(["vault", "sync"]);
+      const args = manual ? ["vault", "sync"] : ["vault", "sync", "--views"];
+      const out = await this.atlas(args);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian7.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      if (manual) new import_obsidian10.Notice(`Atlas: ${syncSummary(out.synced)}`);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian7.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian10.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -1307,14 +1647,14 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
       if (left.length > 0) this.scheduleSync();
     }
   }
-  onThreadChange(file) {
-    if (!this.settings.syncOnChange || !isThreadPath(file.path)) return;
+  onDocChange(path) {
+    if (!this.settings.syncOnChange || !isWatchedPath(path) || !this.migrated()) return;
     if (this.syncing) {
-      this.pending.add(file.path);
+      this.pending.add(path);
       return;
     }
-    if (Date.now() < this.echoUntil && this.echoes.has(file.path)) {
-      this.echoes.delete(file.path);
+    if (Date.now() < this.echoUntil && this.echoes.has(path)) {
+      this.echoes.delete(path);
       return;
     }
     this.scheduleSync();
@@ -1326,11 +1666,75 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
       void this.sync(false);
     }, SYNC_DELAY);
   }
+  // Layout
+  /** Whether the vault has the 7.0 layout, by its vault document. */
+  migrated() {
+    const atlas = this.app.vault.getFileByPath("Atlas.md");
+    if (!atlas) return true;
+    return layoutOf(this.app.metadataCache.getFileCache(atlas)?.frontmatter) >= 3;
+  }
+  checkLayout() {
+    if (this.migrated()) return;
+    const notice = new import_obsidian10.Notice("", 0);
+    const el = notice.messageEl;
+    el.createDiv({ text: "Atlas: this vault has the 6.x layout. The 7.0 plugin needs the flat layout." });
+    const button = el.createEl("button", { text: "Show the migration", cls: "mod-cta atlas-notice-button" });
+    button.onclick = () => {
+      notice.hide();
+      void this.migrate();
+    };
+  }
+  async migrate() {
+    try {
+      const report = await this.atlas(["vault", "migrate", "--dry-run"]);
+      new MigrationModal(this.app, report, async () => {
+        try {
+          const done = await this.atlas(["vault", "migrate"]);
+          new import_obsidian10.Notice(`Atlas: migrated in one commit, ${String(done.commit ?? "").slice(0, 7)}.${done.problems ? ` Lint finds ${done.problems} errors.` : ""}`, 1e4);
+        } catch (e) {
+          new import_obsidian10.Notice(`Atlas: ${e.message}`, 1e4);
+        }
+      }).open();
+    } catch (e) {
+      new import_obsidian10.Notice(`Atlas: ${e.message}`, 1e4);
+    }
+  }
+  // Tags
+  onTagClick(evt) {
+    if (!this.settings.tagClick || !(evt.target instanceof Element)) return;
+    const el = evt.target.closest("a.tag, .cm-hashtag");
+    if (!el) return;
+    let tag = el.getAttribute("href") ?? el.textContent ?? "";
+    if (el.classList.contains("cm-hashtag")) {
+      const line = el.closest(".cm-line");
+      const parts = line ? Array.from(line.querySelectorAll(".cm-hashtag")) : [el];
+      const i = parts.indexOf(el);
+      const begin = parts[i]?.classList.contains("cm-hashtag-begin") ? i : i - 1;
+      tag = (parts[begin]?.textContent ?? "") + (parts[begin + 1]?.textContent ?? "");
+    }
+    tag = normalTag(tag);
+    if (!tag) return;
+    evt.preventDefault();
+    evt.stopPropagation();
+    void this.openTags(tag);
+  }
+  async openTags(tag) {
+    const { workspace } = this.app;
+    let leaf = workspace.getLeavesOfType(TAG_NAV_VIEW)[0];
+    if (!leaf) {
+      const left = workspace.getLeftLeaf(false);
+      if (!left) return;
+      await left.setViewState({ type: TAG_NAV_VIEW, active: true });
+      leaf = left;
+    }
+    await workspace.revealLeaf(leaf);
+    if (tag && leaf.view instanceof TagNavigator) leaf.view.show(tag);
+  }
   // Sessions
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian7.debounce)(
+  refreshSessions = (0, import_obsidian10.debounce)(
     () => {
       const waiting = activeSessions(this.app).filter((s) => s.status === "waiting").length;
       this.statusItem?.setText(waiting > 0 ? waitingLabel(waiting) : "");
@@ -1354,5 +1758,44 @@ var AtlasPlugin = class extends import_obsidian7.Plugin {
       leaf = right;
     }
     await workspace.revealLeaf(leaf);
+  }
+};
+var MigrationModal = class extends import_obsidian10.Modal {
+  constructor(app, report, run) {
+    super(app);
+    this.report = report;
+    this.run = run;
+  }
+  report;
+  run;
+  onOpen() {
+    const r = this.report;
+    this.setTitle("Migrate to the 7.0 layout");
+    const el = this.contentEl;
+    el.addClass("atlas-migration");
+    el.createEl("p", { text: `The migration of ${r.vault} moves ${r.documents} documents into wiki/documents, writes ${r.events} events, and moves ${r.assets} files into wiki/assets, in one commit. git revert takes it back.` });
+    const list = (title, rows) => {
+      if (rows.length === 0) return;
+      const d = el.createEl("details");
+      d.createEl("summary", { text: `${title} (${rows.length})` });
+      const ul = d.createEl("ul");
+      for (const row of rows) ul.createEl("li", { text: row });
+    };
+    list("Tags from the scope tree", (r.tags ?? []).map((t) => `${t.scope} \u2192 #${t.tag}`));
+    list("Titles that change; links follow", (r.retitles ?? []).map((t) => `${t.old} \u2192 ${t.new}`));
+    list("Notes with no type, to the inbox", r.inbox ?? []);
+    list("Files to the scratchpad", r.scratchpad ?? []);
+    list("Warnings", r.warnings ?? []);
+    const buttons = el.createDiv({ cls: "atlas-migration-buttons" });
+    buttons.createEl("button", { text: "Cancel" }).onclick = () => this.close();
+    const go = buttons.createEl("button", { text: "Migrate", cls: "mod-cta" });
+    go.onclick = async () => {
+      go.disabled = true;
+      await this.run();
+      this.close();
+    };
+  }
+  onClose() {
+    this.contentEl.empty();
   }
 };

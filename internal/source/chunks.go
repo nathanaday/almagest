@@ -5,8 +5,8 @@ import (
 	"path"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -31,13 +31,14 @@ type Chunk struct {
 
 // TextBlob is one chunk ready for a worker.
 type TextBlob struct {
-	Doc       string `json:"doc"`
-	Type      string `json:"type"`
-	Title     string `json:"title"`
-	Scope     string `json:"scope,omitempty"`
-	Authority string `json:"authority,omitempty"`
-	Chunk     Chunk  `json:"chunk"`
-	Content   string `json:"content,omitempty"`
+	Doc       string   `json:"doc"`
+	Type      string   `json:"type"`
+	Kind      string   `json:"kind,omitempty"`
+	Title     string   `json:"title"`
+	Tags      []string `json:"tags"`
+	Authority string   `json:"authority,omitempty"`
+	Chunk     Chunk    `json:"chunk"`
+	Content   string   `json:"content,omitempty"`
 	// File is the captured file a worker reads with its host's Read, for a PDF or an
 	// image; Pages is the range to read.
 	File  string `json:"file,omitempty"`
@@ -55,13 +56,15 @@ type material struct {
 func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 	if d.Type() == "source" {
 		file := doc.LinkTarget(d.Str("file"))
-		rel := path.Join(vault.SourceFiles, file)
-		m := &material{kind: core.Kind(file), file: rel}
+		rel := path.Join(vault.Assets, file)
+		m := &material{kind: Media(file), file: rel}
 		switch m.kind {
 		case "pdf":
 			m.pages = pagesOf(d.Str("measure"))
 			return m, nil
-		case "image", "other":
+		case "markdown", "text":
+		default:
+			m.kind = "other"
 			return m, nil
 		}
 		data, err := v.Read(rel)
@@ -71,13 +74,17 @@ func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 		m.lines = strings.Split(strings.TrimRight(string(data), "\n"), "\n")
 		return m, nil
 	}
-	body := strings.TrimRight(doc.StripLead(d.Body), "\n")
-	return &material{kind: "markdown", lines: strings.Split(body, "\n")}, nil
+	var code []string
+	if t := schema.Get(d.Type()); t != nil {
+		code = t.CodeSections
+	}
+	body := strings.TrimRight(doc.StripSections(doc.StripLead(d.Body), code), "\n")
+	return &material{kind: "markdown", lines: strings.Split(strings.TrimLeft(body, "\n"), "\n")}, nil
 }
 
 // Chunks splits a document for reading: a PDF 20 pages at a time, markdown by whole
 // sections joined up to 800 lines, text 800 lines at a time cut at a blank line, and a
-// thread document or anything shorter than 800 lines whole.
+// stub, a spec, an event, or anything shorter than 800 lines whole.
 func Chunks(idx *vault.Index, key string) ([]Chunk, error) {
 	d, err := idx.Resolve(key)
 	if err != nil {
@@ -122,8 +129,8 @@ func split(d *doc.Doc, m *material) []span {
 		return []span{{locator: "whole"}}
 	}
 	n := len(m.lines)
-	threadDoc := d.Type() == "stub" || d.Type() == "spec" || d.Type() == "task" || d.Type() == "receipt"
-	if n <= LinesPerChunk || threadDoc {
+	work := d.Type() == "stub" || d.Type() == "spec" || d.Type() == "event"
+	if n <= LinesPerChunk || work {
 		return []span{{1, n, "whole"}}
 	}
 	if m.kind == "markdown" {
@@ -272,10 +279,7 @@ func Read(idx *vault.Index, key string, index int) (*TextBlob, error) {
 	}
 	c := chunks[index-1]
 	m, _ := materialOf(idx.V, d)
-	blob := &TextBlob{Doc: d.ID(), Type: d.Type(), Title: vault.Title(d), Authority: d.Str("authority"), Chunk: c}
-	if ids := idx.ScopeIDs(d); len(ids) > 0 {
-		blob.Scope = ids[0]
-	}
+	blob := &TextBlob{Doc: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: vault.Title(d), Tags: nonNil(d.List("tags")), Authority: d.Str("authority"), Chunk: c}
 	switch m.kind {
 	case "pdf", "image", "other":
 		blob.File = idx.V.Abs(m.file)

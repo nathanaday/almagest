@@ -6,6 +6,7 @@ import (
 	"os"
 	"path"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -14,6 +15,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/links"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/atlas-obsidian/internal/tags"
 )
 
 // skipDirs are folders the index never enters.
@@ -58,9 +60,13 @@ func cachedDoc(v *Vault, rel string) (*doc.Doc, error) {
 // Index is every document of the vault, read at one moment.
 type Index struct {
 	V *Vault
-	// Docs are the typed documents: those whose type is a document type.
+	// Docs are the typed documents in their place: the six types directly in
+	// wiki/documents, sessions under sessions/, changes under changes/, and Atlas.md.
 	Docs []*doc.Doc
-	// Notes are the other markdown files outside the scratchpad: the user's notes.
+	// Misplaced are typed documents anywhere else. Tools do not see them; lint reports
+	// them, and sync moves one under wiki/ back into wiki/documents.
+	Misplaced []*doc.Doc
+	// Notes are the other markdown files outside the scratchpad and the views: the user's.
 	Notes []*doc.Doc
 	// Files are every other file a link may name, including the scratchpad's notes.
 	Files []string
@@ -70,18 +76,25 @@ type Index struct {
 	byAlias map[string][]*doc.Doc
 	byPath  map[string]*doc.Doc
 	fileKey map[string][]string // file name key → paths of non-markdown files and scratchpad notes
-	// scopeDirs maps each scope folder, without case, to the page that makes it a scope.
-	scopeDirs map[string]*doc.Doc
-	// legacy is set while a scope page still lies in wiki/areas or wiki/repositories.
-	legacy bool
+
+	tagOnce  sync.Once
+	counts   map[string]int
+	pages    map[string][]*doc.Doc
+	children map[string][]string
 
 	pendingOnce sync.Once
 	absorbed    map[string]map[string]bool // document id → hashes applied changes absorbed
+	absorbers   map[string][]absorber      // document id → the applied changes that absorbed it
 }
 
-// Load reads every document of the vault.
+type absorber struct {
+	hash   string
+	change *doc.Doc
+}
+
+// Load reads every document of the vault. It skips views/, which code derives.
 func Load(v *Vault) (*Index, error) {
-	idx := &Index{V: v, byID: map[string]*doc.Doc{}, byTitle: map[string][]string{}, byAlias: map[string][]*doc.Doc{}, byPath: map[string]*doc.Doc{}, fileKey: map[string][]string{}, scopeDirs: map[string]*doc.Doc{}}
+	idx := &Index{V: v, byID: map[string]*doc.Doc{}, byTitle: map[string][]string{}, byAlias: map[string][]*doc.Doc{}, byPath: map[string]*doc.Doc{}, fileKey: map[string][]string{}}
 	err := filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
@@ -89,7 +102,7 @@ func Load(v *Vault) (*Index, error) {
 		r, _ := filepath.Rel(v.Root, abs)
 		rel := filepath.ToSlash(r)
 		if e.IsDir() {
-			if abs != v.Root && (skipDirs[e.Name()] || strings.HasPrefix(e.Name(), ".")) {
+			if abs != v.Root && (skipDirs[e.Name()] || strings.HasPrefix(e.Name(), ".") || rel == Views) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -100,9 +113,8 @@ func Load(v *Vault) (*Index, error) {
 		md := strings.HasSuffix(strings.ToLower(e.Name()), ".md")
 		if !md || rel == Scratchpad || strings.HasPrefix(rel, Scratchpad+"/") {
 			idx.Files = append(idx.Files, rel)
-			key := links.Key(e.Name())
 			if md {
-				key = links.BaseKey(rel)
+				key := links.BaseKey(rel)
 				idx.byTitle[key] = append(idx.byTitle[key], rel)
 			}
 			idx.fileKey[strings.ToLower(e.Name())] = append(idx.fileKey[strings.ToLower(e.Name())], rel)
@@ -119,18 +131,22 @@ func Load(v *Vault) (*Index, error) {
 		return nil, err
 	}
 	sort.Slice(idx.Docs, func(i, j int) bool { return idx.Docs[i].Path < idx.Docs[j].Path })
-	for _, d := range idx.Of("area", "repository") {
-		switch {
-		case IsFolderPage(d.Path):
-			dir := strings.ToLower(path.Dir(d.Path))
-			if idx.scopeDirs[dir] == nil {
-				idx.scopeDirs[dir] = d
-			}
-		case inLegacyFolder(d.Path):
-			idx.legacy = true
-		}
-	}
 	return idx, nil
+}
+
+// InPlace reports whether a typed document lies where its type lives.
+func InPlace(d *doc.Doc) bool {
+	switch t := d.Type(); {
+	case t == "vault":
+		return d.Path == Marker
+	case t == "session":
+		return strings.HasPrefix(d.Path, Sessions+"/")
+	case t == "change":
+		return strings.HasPrefix(d.Path, Changes+"/")
+	case schema.IsDocument(t):
+		return path.Dir(d.Path) == Documents
+	}
+	return false
 }
 
 func (idx *Index) add(d *doc.Doc) {
@@ -139,6 +155,10 @@ func (idx *Index) add(d *doc.Doc) {
 	idx.byTitle[key] = append(idx.byTitle[key], d.Path)
 	if d.Front == nil || !schema.Is(d.Type()) {
 		idx.Notes = append(idx.Notes, d)
+		return
+	}
+	if !InPlace(d) {
+		idx.Misplaced = append(idx.Misplaced, d)
 		return
 	}
 	idx.Docs = append(idx.Docs, d)
@@ -172,18 +192,17 @@ func Title(d *doc.Doc) string {
 
 // Of lists the typed documents of the given types, in path order.
 func (idx *Index) Of(types ...string) []*doc.Doc {
-	want := map[string]bool{}
-	for _, t := range types {
-		want[t] = true
-	}
 	var out []*doc.Doc
 	for _, d := range idx.Docs {
-		if want[d.Type()] {
+		if slices.Contains(types, d.Type()) {
 			out = append(out, d)
 		}
 	}
 	return out
 }
+
+// Documents lists the documents of wiki/documents.
+func (idx *Index) Documents() []*doc.Doc { return idx.Of(schema.DocumentTypes...) }
 
 // Resolve finds the one typed document a key names: an id, a title, a [[link]], or an
 // alias. None or two is an error that lists what it found.
@@ -199,7 +218,7 @@ func (idx *Index) Resolve(key string) (*doc.Doc, error) {
 	var found []*doc.Doc
 	seen := map[string]bool{}
 	for _, p := range idx.byTitle[links.BaseKey(target)] {
-		if d := idx.byPath[p]; d != nil && d.Front != nil && schema.Is(d.Type()) && !seen[p] {
+		if d := idx.byPath[p]; d != nil && idx.byID[d.ID()] == d && !seen[p] {
 			if strings.Contains(target, "/") && !strings.HasSuffix(links.Key(p), links.Key(target)) {
 				continue
 			}
@@ -234,10 +253,8 @@ func (idx *Index) ResolveType(key string, types ...string) (*doc.Doc, error) {
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range types {
-		if d.Type() == t {
-			return d, nil
-		}
+	if slices.Contains(types, d.Type()) {
+		return d, nil
 	}
 	return nil, fmt.Errorf("%s is a %s, not a %s", Title(d), d.Type(), strings.Join(types, " or "))
 }
@@ -284,8 +301,8 @@ func dedupe(in []string) []string {
 	return out
 }
 
-// TypeOfLink is the type of the typed document a link names; "" when it names none or a
-// file with no type.
+// TypeOfLink is the type of the typed document a link names; "file" for a file with no
+// type, "" when it names none.
 func (idx *Index) TypeOfLink(target string) (string, error) {
 	t := doc.LinkTarget(target)
 	if d := idx.byID[t]; d != nil {
@@ -298,7 +315,7 @@ func (idx *Index) TypeOfLink(target string) (string, error) {
 	if len(paths) == 0 {
 		return "", nil
 	}
-	if d := idx.byPath[paths[0]]; d != nil && d.Front != nil && schema.Is(d.Type()) {
+	if d := idx.byPath[paths[0]]; d != nil && idx.byID[d.ID()] == d {
 		return d.Type(), nil
 	}
 	return "file", nil
@@ -317,10 +334,21 @@ func (idx *Index) Linked(value string) *doc.Doc {
 	if len(paths) != 1 {
 		return nil
 	}
-	if d := idx.byPath[paths[0]]; d != nil && d.Front != nil && schema.Is(d.Type()) {
+	if d := idx.byPath[paths[0]]; d != nil && idx.byID[d.ID()] == d {
 		return d
 	}
 	return nil
+}
+
+// LinkedAll are the typed documents a list field names, skipping links to none.
+func (idx *Index) LinkedAll(values []string) []*doc.Doc {
+	var out []*doc.Doc
+	for _, v := range values {
+		if d := idx.Linked(v); d != nil {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // TitleHolders lists the markdown files whose title, or whose typed alias, is title,
@@ -334,61 +362,189 @@ func (idx *Index) TitleHolders(title string) []string {
 	return dedupe(out)
 }
 
-// Ref is how a tool names one document: its id, type, title, path, scope, one line, and
-// the state its type derives.
+// DocTags are a document's own tags and the tag it defines, as written.
+func DocTags(d *doc.Doc) []string {
+	out := slices.Clone(d.List("tags"))
+	if def := d.Str("defines"); def != "" {
+		out = append(out, def)
+	}
+	for i, t := range out {
+		out[i] = strings.ToLower(strings.TrimPrefix(strings.TrimSpace(t), "#"))
+	}
+	return out
+}
+
+// Holds reports whether a document holds every tag of want: it lists each tag, or a tag
+// below it, in its tags or its defines.
+func Holds(d *doc.Doc, want ...string) bool { return tags.HoldsAll(DocTags(d), want) }
+
+func (idx *Index) readTags() {
+	idx.counts = map[string]int{}
+	idx.pages = map[string][]*doc.Doc{}
+	idx.children = map[string][]string{}
+	for _, d := range idx.Documents() {
+		for _, t := range tags.Expand(DocTags(d)) {
+			idx.counts[t]++
+		}
+		if def := d.Str("defines"); def != "" && (d.Type() == "topic" || d.Type() == "repository") {
+			k := strings.ToLower(def)
+			idx.pages[k] = append(idx.pages[k], d)
+		}
+	}
+	for t := range idx.counts {
+		if p := tags.Parent(t); p != "" {
+			idx.children[p] = append(idx.children[p], t)
+		}
+	}
+	for _, c := range idx.children {
+		sort.Strings(c)
+	}
+}
+
+// TagCounts maps every tag that some document holds, and every tag above one, to the
+// count of documents that hold it.
+func (idx *Index) TagCounts() map[string]int {
+	idx.tagOnce.Do(idx.readTags)
+	return idx.counts
+}
+
+// TagExists reports whether some document holds the tag, or a tag below it.
+func (idx *Index) TagExists(t string) bool {
+	return idx.TagCounts()[strings.ToLower(t)] > 0
+}
+
+// TagPage is the one document that defines a tag, or nil.
+func (idx *Index) TagPage(t string) *doc.Doc {
+	idx.tagOnce.Do(idx.readTags)
+	if p := idx.pages[strings.ToLower(t)]; len(p) > 0 {
+		return p[0]
+	}
+	return nil
+}
+
+// TagPages maps each defined tag to the documents that define it; lint reports two.
+func (idx *Index) TagPages() map[string][]*doc.Doc {
+	idx.tagOnce.Do(idx.readTags)
+	return idx.pages
+}
+
+// TagChildren are the tags directly below t, sorted.
+func (idx *Index) TagChildren(t string) []string {
+	idx.tagOnce.Do(idx.readTags)
+	return idx.children[t]
+}
+
+// TopTags are the tags with no parent, the most used first.
+func (idx *Index) TopTags() []string {
+	var out []string
+	for t := range idx.TagCounts() {
+		if !strings.Contains(t, "/") {
+			out = append(out, t)
+		}
+	}
+	idx.SortByCount(out)
+	return out
+}
+
+// SortByCount orders tags by their counts, the most used first, then by name.
+func (idx *Index) SortByCount(list []string) {
+	c := idx.TagCounts()
+	sort.SliceStable(list, func(i, j int) bool {
+		if c[list[i]] != c[list[j]] {
+			return c[list[i]] > c[list[j]]
+		}
+		return list[i] < list[j]
+	})
+}
+
+// Ref is how a tool names one document.
 type Ref struct {
 	ID          string         `json:"id"`
 	Type        string         `json:"type"`
+	Kind        string         `json:"kind,omitempty"`
 	Title       string         `json:"title"`
 	Path        string         `json:"path"`
-	Scope       []string       `json:"scope"`
+	Tags        []string       `json:"tags"`
 	Description string         `json:"description,omitempty"`
+	Status      string         `json:"status,omitempty"`
 	State       map[string]any `json:"state,omitempty"`
 }
 
 // Ref builds the reference to a document.
 func (idx *Index) Ref(d *doc.Doc) Ref {
-	r := Ref{ID: d.ID(), Type: d.Type(), Title: Title(d), Path: d.Path, Scope: idx.ScopeIDs(d), Description: d.Str("description")}
+	r := Ref{ID: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: Title(d), Path: d.Path, Tags: nonNil(d.List("tags")), Description: d.Str("description"), Status: d.Str("status")}
 	state := map[string]any{}
 	switch d.Type() {
+	case "source":
+		r.Status = "absorbed"
+		if idx.Pending(d) {
+			r.Status = "pending"
+		}
+		state["media"] = d.Str("media")
+		state["authority"] = d.Str("authority")
+	case "repository":
+		state["path"] = d.Str("path")
+		state["defines"] = d.Str("defines")
+		state["behind"] = d.Front.Int("behind")
+		if d.Front.Bool("unlinked") {
+			state["unlinked"] = true
+		}
+	case "topic":
+		if def := d.Str("defines"); def != "" {
+			state["defines"] = def
+		}
+		if s := d.Str("strength"); s != "" {
+			state["strength"] = s
+		}
+		state["sources"] = len(d.List("sources"))
 	case "stub":
-		state["stage"] = d.Str("stage")
-		state["outcome"] = d.Str("outcome")
-		state["active"] = d.Front.Bool("active")
-		state["tasks"] = d.Str("tasks")
 		state["priority"] = orDefault(d.Str("priority"), "normal")
-		state["blocked"] = d.Str("blocked")
-	case "task":
-		state["status"] = d.Str("status")
-		state["active"] = d.Front.Bool("active")
-		state["order"] = d.Front.Int("order")
-		state["repository"] = doc.LinkTarget(d.Str("repository"))
+		if b := d.List("became"); len(b) > 0 {
+			state["became"] = targets(b)
+		}
+	case "spec":
+		if d.Str("kind") == "plan" {
+			state["parent"] = doc.LinkTarget(d.Str("parent"))
+			state["root"] = doc.LinkTarget(d.Str("root"))
+			state["priority"] = orDefault(d.Str("priority"), "normal")
+			state["blocked"] = d.Str("blocked")
+			state["active"] = d.Front.Bool("active")
+			state["parts"] = d.Str("parts")
+			state["ready"] = idx.Ready(d)
+		}
+		state["repositories"] = targets(d.List("repositories"))
+	case "event":
+		state["subject"] = doc.LinkTarget(d.Str("subject"))
+		state["at"] = d.Str("at")
+		state["session"] = doc.LinkTarget(d.Str("session"))
 	case "session":
-		state["status"] = d.Str("status")
-		state["threads"] = targets(d.List("threads"))
-		state["tasks"] = targets(d.List("tasks"))
+		state["specs"] = targets(d.List("specs"))
 	case "change":
-		state["status"] = d.Str("status")
 		state["counts"] = d.Str("counts")
 		if notes, ok := doc.Section(d.Body, "Notes"); ok {
 			r.Description = doc.FirstLine(notes)
 		}
-	case "source":
-		state["pending"] = idx.Pending(d)
-	case "repository":
-		state["path"] = d.Str("path")
-	default:
-		if s := d.Str("status"); s != "" {
-			state["status"] = s
-		}
 	}
-	if idx.Wikified(d.Type()) && d.Type() != "source" {
+	if d.Type() != "source" && idx.Wikified(d) {
 		state["pending"] = idx.Pending(d)
 	}
 	if len(state) > 0 {
 		r.State = state
 	}
 	return r
+}
+
+// Ready reports whether a plan is open and every plan it depends on is done or dropped.
+func (idx *Index) Ready(d *doc.Doc) bool {
+	if d.Type() != "spec" || d.Str("kind") != "plan" || orDefault(d.Str("status"), "open") != "open" {
+		return false
+	}
+	for _, dep := range d.List("depends") {
+		if s := idx.Linked(dep); s != nil && s.Str("status") != "done" && s.Str("status") != "dropped" {
+			return false
+		}
+	}
+	return true
 }
 
 // Refs builds the references to documents.
@@ -408,6 +564,13 @@ func targets(values []string) []string {
 	return out
 }
 
+func nonNil(list []string) []string {
+	if list == nil {
+		return []string{}
+	}
+	return list
+}
+
 func orDefault(s, def string) string {
 	if s == "" {
 		return def
@@ -415,213 +578,44 @@ func orDefault(s, def string) string {
 	return s
 }
 
-// ScopeIDs are the ids of the scope pages a document points at: a knowledge page's
-// scope, a stub's scopes, a scope page's parent, a task's repository. A page of the wiki
-// takes its scope from its folder.
-func (idx *Index) ScopeIDs(d *doc.Doc) []string {
-	var values []string
+// ProseEvents are the event kinds that hold prose, and so may be pending.
+var ProseEvents = []string{"completed", "dropped", "note"}
+
+// Wikified reports whether a document can be pending: its type is in the vault's wikify
+// list, and for an event, its kind holds prose.
+func (idx *Index) Wikified(d *doc.Doc) bool {
+	if !slices.Contains(idx.V.Wikify(), d.Type()) {
+		return false
+	}
 	switch d.Type() {
-	case "area", "repository", "concept", "entity", "policy", "source":
-		if idx.placed(d) {
-			if s := idx.PathScope(d); s != nil {
-				return []string{s.ID()}
-			}
-			return []string{}
-		}
-		field := "scope"
-		if d.Type() == "area" || d.Type() == "repository" {
-			field = "parent"
-		}
-		values = []string{d.Str(field)}
-	case "stub":
-		values = d.List("scope")
-		if home := idx.Home(d); home != nil {
-			out := []string{home.ID()}
-			for _, v := range values {
-				if s := idx.Linked(v); s != nil && s.ID() != home.ID() && (s.Type() == "area" || s.Type() == "repository") {
-					out = append(out, s.ID())
-				}
-			}
-			return out
-		}
-	case "task":
-		values = []string{d.Str("repository")}
-	case "spec", "receipt":
-		if stub := idx.Linked(d.Str("thread")); stub != nil {
-			values = stub.List("scope")
-		}
-	}
-	out := []string{}
-	for _, v := range values {
-		if s := idx.Linked(v); s != nil && (s.Type() == "area" || s.Type() == "repository") {
-			out = append(out, s.ID())
-		}
-	}
-	return out
-}
-
-// Parent is a scope page's parent, or nil for the vault. A page of the wiki takes it from
-// its folder; that is an area, unless a hand move put the page in a repository's folder,
-// which lint reports.
-func (idx *Index) Parent(d *doc.Doc) *doc.Doc {
-	if idx.placed(d) {
-		return idx.PathScope(d)
-	}
-	p := idx.Linked(d.Str("parent"))
-	if p != nil && p.Type() == "area" {
-		return p
-	}
-	return nil
-}
-
-// Legacy reports whether a scope page still lies in wiki/areas or wiki/repositories, where
-// scope pages lived before each scope had a folder. Sync moves them.
-func (idx *Index) Legacy() bool { return idx.legacy }
-
-// placed reports whether a document takes its scope from its path: a page of the wiki,
-// once no scope page lies in a legacy folder.
-func (idx *Index) placed(d *doc.Doc) bool {
-	return !idx.legacy && strings.HasPrefix(d.Path, Wiki+"/")
-}
-
-// Folder is the folder a scope page makes a scope: "wiki" for the vault (nil), the page's
-// folder when it is the page of its own folder, and "" for a scope page anywhere else.
-func (idx *Index) Folder(s *doc.Doc) string {
-	if s == nil || s.Type() == "vault" {
-		return Wiki
-	}
-	dir := path.Dir(s.Path)
-	if idx.scopeDirs[strings.ToLower(dir)] == s {
-		return dir
-	}
-	return ""
-}
-
-// Container is the scope whose folder holds a path, the nearest one; nil for the vault. A
-// path under threads/ lies in the mirror of a scope's folder (Mirror).
-func (idx *Index) Container(rel string) *doc.Doc {
-	for dir := path.Dir(rel); strings.HasPrefix(dir, Wiki+"/") || strings.HasPrefix(dir, Threads+"/"); dir = path.Dir(dir) {
-		key := dir
-		if w := wikiDirOf(dir); w != "" {
-			key = w
-		}
-		if s := idx.scopeDirs[strings.ToLower(key)]; s != nil {
-			return s
-		}
-	}
-	return nil
-}
-
-// Home is the scope whose folder under threads/ holds a thread's folder; nil when the
-// thread lies at the top of threads/, filed under no area yet.
-func (idx *Index) Home(stub *doc.Doc) *doc.Doc {
-	if !strings.HasPrefix(stub.Path, Threads+"/") {
-		return nil
-	}
-	return idx.Container(path.Dir(stub.Path))
-}
-
-// PathScope is the scope a page's path gives it: the nearest scope folder above it, not
-// counting the folder a scope page makes itself. nil is the vault.
-func (idx *Index) PathScope(d *doc.Doc) *doc.Doc {
-	rel := d.Path
-	if f := idx.Folder(d); f != "" && f != Wiki {
-		rel = f
-	}
-	return idx.Container(rel)
-}
-
-// ScopeFolders maps each scope folder to the page that makes it a scope.
-func (idx *Index) ScopeFolders() map[string]*doc.Doc {
-	out := make(map[string]*doc.Doc, len(idx.scopeDirs))
-	for _, d := range idx.scopeDirs {
-		out[path.Dir(d.Path)] = d
-	}
-	return out
-}
-
-// ScopeLink is the link a page's derived field holds: the scope of a knowledge page, the
-// parent of a scope page; "" for the vault.
-func (idx *Index) ScopeLink(d *doc.Doc) string {
-	var s *doc.Doc
-	if d.Type() == "area" || d.Type() == "repository" {
-		s = idx.Parent(d)
-	} else if ids := idx.ScopeIDs(d); len(ids) > 0 {
-		s = idx.byID[ids[0]]
-	}
-	if s == nil {
-		return ""
-	}
-	return doc.Link(Title(s))
-}
-
-// Ancestors are the areas above a scope page, nearest first, stopping at a loop.
-func (idx *Index) Ancestors(d *doc.Doc) []*doc.Doc {
-	var out []*doc.Doc
-	seen := map[string]bool{d.ID(): true}
-	for p := idx.Parent(d); p != nil && !seen[p.ID()]; p = idx.Parent(p) {
-		seen[p.ID()] = true
-		out = append(out, p)
-	}
-	return out
-}
-
-// Under reports whether a scope page is scope, or lies below it. The empty scope is the
-// vault, which holds everything.
-func (idx *Index) Under(d *doc.Doc, scope string) bool {
-	if scope == "" || d.ID() == scope {
+	case "source", "spec", "stub":
 		return true
-	}
-	for _, a := range idx.Ancestors(d) {
-		if a.ID() == scope {
-			return true
-		}
+	case "event":
+		return slices.Contains(ProseEvents, d.Str("kind"))
 	}
 	return false
 }
 
-// InScope reports whether a document belongs to scope or a scope below it. A document
-// with no scope belongs only to the vault.
-func (idx *Index) InScope(d *doc.Doc, scope string) bool {
-	if scope == "" {
-		return true
-	}
-	for _, id := range idx.ScopeIDs(d) {
-		if s := idx.byID[id]; s != nil && idx.Under(s, scope) {
-			return true
-		}
-	}
-	return false
-}
-
-// Wikified reports whether documents of a type are pending until a change absorbs them.
-func (idx *Index) Wikified(t string) bool {
-	for _, w := range idx.V.Wikify() {
-		if w == t {
-			return true
-		}
-	}
-	return false
-}
-
-// Hash is a document's content hash for pending: a source's file hash, else the hash of
-// its body below the lead callout.
+// Hash is a document's content hash for pending: a source's file hash; a stub's idea; else
+// the hash of its prose, without the lead callout and the sections code writes.
 func Hash(d *doc.Doc) string {
-	if d.Type() == "source" {
+	switch d.Type() {
+	case "source":
 		return d.Str("sha256")
+	case "stub":
+		idea, _ := doc.Section(d.Body, "Idea")
+		return doc.ContentHash(idea)
 	}
-	return doc.ContentHash(d.Body)
+	var code []string
+	if t := schema.Get(d.Type()); t != nil {
+		code = t.CodeSections
+	}
+	return doc.ProseHash(d.Body, code)
 }
 
 // Pending reports whether the wiki has not absorbed a document's current content.
 func (idx *Index) Pending(d *doc.Doc) bool {
-	if !idx.Wikified(d.Type()) {
-		return false
-	}
-	if d.Type() == "task" && d.Str("status") != "done" {
-		return false
-	}
-	if d.Type() == "receipt" && d.Front.Bool("superseded") {
+	if !idx.Wikified(d) {
 		return false
 	}
 	idx.pendingOnce.Do(idx.readAbsorbed)
@@ -673,7 +667,7 @@ func ParseAbsorbed(body string) []Absorbed {
 			continue
 		}
 		id, hash := strings.TrimSpace(cells[1]), strings.TrimSpace(cells[2])
-		if !doc.IDPattern.MatchString(id) {
+		if !schema.IDPattern.MatchString(id) {
 			continue
 		}
 		out = append(out, Absorbed{Title: doc.LinkTarget(strings.TrimSpace(cells[0])), ID: id, Hash: hash})
@@ -683,6 +677,7 @@ func ParseAbsorbed(body string) []Absorbed {
 
 func (idx *Index) readAbsorbed() {
 	idx.absorbed = map[string]map[string]bool{}
+	idx.absorbers = map[string][]absorber{}
 	for _, c := range idx.Of("change") {
 		if c.Str("status") != "applied" {
 			continue
@@ -692,6 +687,21 @@ func (idx *Index) readAbsorbed() {
 				idx.absorbed[a.ID] = map[string]bool{}
 			}
 			idx.absorbed[a.ID][a.Hash] = true
+			idx.absorbers[a.ID] = append(idx.absorbers[a.ID], absorber{hash: a.Hash, change: c})
 		}
 	}
+}
+
+// AbsorbedBy is the last applied change that absorbed a document's current content, or
+// nil.
+func (idx *Index) AbsorbedBy(d *doc.Doc) *doc.Doc {
+	idx.pendingOnce.Do(idx.readAbsorbed)
+	h := Hash(d)
+	var best *doc.Doc
+	for _, a := range idx.absorbers[d.ID()] {
+		if doc.SameHash(a.hash, h) && (best == nil || a.change.Str("applied") > best.Str("applied")) {
+			best = a.change
+		}
+	}
+	return best
 }

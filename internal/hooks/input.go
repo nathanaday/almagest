@@ -139,9 +139,8 @@ type toolInput struct {
 	} `json:"edits"`
 	Action string `json:"action"`
 	ID     string `json:"id"`
-	Thread string `json:"thread"`
-	Task   string `json:"task"`
-	Do     string `json:"do"`
+	Spec   string `json:"spec"`
+	Take   bool   `json:"take"`
 }
 
 func (in Input) tool() toolInput {

@@ -32,8 +32,9 @@ internal/work/        new, from threads/: stub, spec, and event writes; status f
 internal/source/      changed: wiki/assets/, tags, resolves, media
 internal/search/      changed: filters (types, kinds, tags, status, repository), tags as a ranked field, facets
 internal/match/       changed: kinds; across the child tags of a tag
-internal/context/     new, from scope/: tag pages, policies by tags, work, instructions, git facts now
+internal/brief/       new, from scope/: tag pages, policies by tags, work, instructions, git facts now
 internal/views/       new: the view writer ([[Views]])
+internal/derive/      new: the code-owned parts of sources, repositories, and topics: lead callouts, the atlas-repo block, git facts
 internal/sessions/    changed: specs, work, events
 internal/lint/        changed: the checks in [[Findings]]
 internal/mcpserver/   changed: the eight tools; `work` replaces `thread`

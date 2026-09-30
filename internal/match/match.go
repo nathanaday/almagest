@@ -1,7 +1,7 @@
 // Package match joins the subjects that workers extracted from a document's chunks and
-// matches each one against the wiki: a hit when a page holds its name, near when a page
-// scores above the threshold, new otherwise. Code decides all three; whether a near page
-// is the same subject is the drafter's judgment.
+// matches each one against the topics and sources: a hit when a document holds its name,
+// near when one scores above the threshold, new otherwise. Code decides all three;
+// whether a near document is the same subject is the drafter's judgment.
 package match
 
 import (
@@ -14,6 +14,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/search"
+	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -34,11 +35,11 @@ type Claim struct {
 
 // Item is a subject one chunk says something about.
 type Item struct {
-	Type        string   `json:"type" jsonschema:"concept, entity, or policy"`
+	Kind        string   `json:"kind" jsonschema:"concept, entity, or policy"`
 	Name        string   `json:"name"`
 	Aliases     []string `json:"aliases,omitempty"`
 	Description string   `json:"description,omitempty"`
-	Kind        string   `json:"kind,omitempty"`
+	Tags        []string `json:"tags,omitempty" jsonschema:"tags that exist and fit; the drafter decides"`
 	Strength    string   `json:"strength,omitempty"`
 	Claims      []Claim  `json:"claims,omitempty"`
 	Source      string   `json:"source,omitempty"`
@@ -64,9 +65,9 @@ type Neighbor struct {
 // Subject is one subject joined across chunks, and its match.
 type Subject struct {
 	Key   string `json:"key"`
-	Type  string `json:"type"`
+	Kind  string `json:"kind"`
 	Items []Item `json:"items"`
-	// Of is the page a rollup compares, when the input was pages.
+	// Of is the topic a map compares, when the input was documents.
 	Of        *vault.Ref `json:"of,omitempty"`
 	Match     string     `json:"match"`
 	Page      *vault.Ref `json:"page,omitempty"`
@@ -80,40 +81,57 @@ type Map struct {
 
 // Input selects what to match.
 type Input struct {
-	Items    []ItemMap `json:"items,omitempty"`
-	Pages    []string  `json:"pages,omitempty"`
-	Siblings bool      `json:"siblings,omitempty"`
-	Within   string    `json:"within,omitempty"`
+	Items  []ItemMap `json:"items,omitempty" jsonschema:"Item Maps from wiki-extract: new subjects to match against the topics"`
+	Docs   []string  `json:"docs,omitempty" jsonschema:"topics (ids or titles) to match against the other topics"`
+	Tags   []string  `json:"tags,omitempty" jsonschema:"limits the candidates to documents that hold every one of these tags"`
+	Across bool      `json:"across,omitempty" jsonschema:"with one tag: compare each topic under it only with topics under a different child tag of it"`
 }
 
-// knowledge are the types a subject matches against.
-var knowledge = []string{"concept", "entity", "policy", "source"}
+// kindOf is how a subject compares with a document: a topic by its kind, a source as a
+// source.
+func kindOf(d *doc.Doc) string {
+	if d.Type() == "topic" {
+		return d.Str("kind")
+	}
+	return d.Type()
+}
 
 // Run matches.
 func Run(idx *vault.Index, in Input) (*Map, error) {
-	within := ""
-	if in.Within != "" {
-		s, err := idx.ResolveType(in.Within, "area", "repository")
-		if err != nil {
-			return nil, fmt.Errorf("within: %w", err)
-		}
-		within = s.ID()
+	want, err := tags.NormalizeAll(in.Tags)
+	if err != nil {
+		return nil, err
 	}
 	var pages []*doc.Doc
-	for _, d := range idx.Of(knowledge...) {
-		if within == "" || idx.InScope(d, within) {
+	for _, d := range idx.Of("topic", "source") {
+		if len(want) == 0 || vault.Holds(d, want...) {
 			pages = append(pages, d)
 		}
 	}
+	if in.Across && len(want) != 1 {
+		return nil, errors.New("across compares the parts of one tag; give exactly one tag")
+	}
 	switch {
-	case len(in.Items) > 0 && len(in.Pages) > 0:
-		return nil, errors.New("match takes items or pages, not both")
+	case len(in.Items) > 0 && (len(in.Docs) > 0 || in.Across):
+		return nil, errors.New("match takes items, or documents to compare, not both")
 	case len(in.Items) > 0:
 		return matchItems(idx, in.Items, pages)
-	case len(in.Pages) > 0:
-		return matchPages(idx, in.Pages, pages, in.Siblings)
+	case len(in.Docs) > 0 || in.Across:
+		top := ""
+		if in.Across {
+			top = want[0]
+		}
+		ids := in.Docs
+		if len(ids) == 0 {
+			for _, p := range pages {
+				if p.Type() == "topic" {
+					ids = append(ids, p.ID())
+				}
+			}
+		}
+		return matchDocs(idx, ids, pages, top)
 	}
-	return nil, errors.New("match needs items (Item Maps) or pages (ids)")
+	return nil, errors.New("match needs items (Item Maps), or documents or a tag with across to compare")
 }
 
 // Normalize folds a name for comparison: lower case, trimmed, and every run of space
@@ -157,8 +175,8 @@ func matchItems(idx *vault.Index, maps []ItemMap, pages []*doc.Doc) (*Map, error
 	var items []Item
 	for i, m := range maps {
 		for j, it := range m.Items {
-			if strings.TrimSpace(it.Type) == "" || strings.TrimSpace(it.Name) == "" {
-				return nil, fmt.Errorf("Item Map %d (doc %s, chunk %d): item %d has no type or no name", i+1, m.Doc, m.Chunk, j+1)
+			if strings.TrimSpace(it.Kind) == "" || strings.TrimSpace(it.Name) == "" {
+				return nil, fmt.Errorf("Item Map %d (doc %s, chunk %d): item %d has no kind or no name", i+1, m.Doc, m.Chunk, j+1)
 			}
 			if it.Source == "" {
 				it.Source = m.Doc
@@ -197,7 +215,7 @@ func matchItems(idx *vault.Index, maps []ItemMap, pages []*doc.Doc) (*Map, error
 	seen := map[string]int{}
 	for i, it := range items {
 		for _, n := range append([]string{it.Name}, it.Aliases...) {
-			k := strings.ToLower(it.Type) + "\x00" + key(n)
+			k := strings.ToLower(it.Kind) + "\x00" + key(n)
 			if j, ok := seen[k]; ok {
 				parent[find(i)] = find(j)
 			} else {
@@ -225,7 +243,7 @@ func matchItems(idx *vault.Index, maps []ItemMap, pages []*doc.Doc) (*Map, error
 	out := &Map{Subjects: []Subject{}}
 	for _, r := range order {
 		g := groups[r]
-		s := Subject{Key: key(g[0].Name), Type: strings.ToLower(g[0].Type), Items: g, Neighbors: []Neighbor{}}
+		s := Subject{Key: key(g[0].Name), Kind: strings.ToLower(g[0].Kind), Items: g, Neighbors: []Neighbor{}}
 		var names []string
 		var desc []string
 		for _, it := range g {
@@ -238,7 +256,7 @@ func matchItems(idx *vault.Index, maps []ItemMap, pages []*doc.Doc) (*Map, error
 		var hit *doc.Doc
 		for _, n := range names {
 			for _, p := range byKey[key(n)] {
-				if hit == nil || (p.Type() == s.Type && hit.Type() != s.Type) {
+				if hit == nil || (kindOf(p) == s.Kind && kindOf(hit) != s.Kind) {
 					hit = p
 				}
 			}
@@ -278,14 +296,14 @@ func matchItems(idx *vault.Index, maps []ItemMap, pages []*doc.Doc) (*Map, error
 	return mergeHits(out), nil
 }
 
-// mergeHits joins the subjects of one type that hit one page: a page's alias shows they
-// name one thing, and one drafter must write that page.
+// mergeHits joins the subjects of one kind that hit one document: its alias shows they
+// name one thing, and one drafter must write that document.
 func mergeHits(m *Map) *Map {
 	var out []Subject
 	at := map[string]int{}
 	for _, s := range m.Subjects {
 		if s.Match == "hit" && s.Page != nil {
-			k := s.Type + "\x00" + s.Page.ID
+			k := s.Kind + "\x00" + s.Page.ID
 			if i, ok := at[k]; ok {
 				out[i].Items = append(out[i].Items, s.Items...)
 				continue
@@ -298,9 +316,10 @@ func mergeHits(m *Map) *Map {
 	return m
 }
 
-// matchPages compares existing pages with the pages of their sibling scopes: the
-// candidates for a bridge or an upgrade.
-func matchPages(idx *vault.Index, ids []string, pages []*doc.Doc, siblings bool) (*Map, error) {
+// matchDocs compares topics with the other candidates. With a tag, a topic is compared
+// only with topics under a different child tag of it: the candidates for a bridge, or
+// for widening a topic's tags to the parent.
+func matchDocs(idx *vault.Index, ids []string, pages []*doc.Doc, top string) (*Map, error) {
 	var inputs []*doc.Doc
 	for _, id := range ids {
 		d, err := idx.Resolve(id)
@@ -319,18 +338,22 @@ func matchPages(idx *vault.Index, ids []string, pages []*doc.Doc, siblings bool)
 	key := func(n string) string { return fold[Normalize(n)] }
 	out := &Map{Subjects: []Subject{}}
 	for _, d := range inputs {
-		cands := pages
-		if siblings {
-			cands = siblingPages(idx, d, pages)
-		}
 		var others []*doc.Doc
-		for _, c := range cands {
-			if c.ID() != d.ID() {
-				others = append(others, c)
+		own := childTags(d, top)
+		for _, c := range pages {
+			if c.ID() == d.ID() || c.Type() != "topic" {
+				continue
 			}
+			if top != "" {
+				theirs := childTags(c, top)
+				if len(own) == 0 || len(theirs) == 0 || overlap(own, theirs) {
+					continue
+				}
+			}
+			others = append(others, c)
 		}
 		of := idx.Ref(d)
-		s := Subject{Key: key(vault.Title(d)), Type: d.Type(), Items: []Item{}, Of: &of, Match: "new", Neighbors: []Neighbor{}}
+		s := Subject{Key: key(vault.Title(d)), Kind: kindOf(d), Items: []Item{}, Of: &of, Match: "new", Neighbors: []Neighbor{}}
 		names := map[string]bool{}
 		for _, n := range pageNames(d) {
 			names[key(n)] = true
@@ -363,27 +386,41 @@ func matchPages(idx *vault.Index, ids []string, pages []*doc.Doc, siblings bool)
 	return out, nil
 }
 
-// siblingPages are the pages whose scope is another child of the parent of d's scope.
-func siblingPages(idx *vault.Index, d *doc.Doc, pages []*doc.Doc) []*doc.Doc {
-	own := idx.ScopeIDs(d)
-	if len(own) == 0 {
+// childTags are the child tags of top that a document holds: for top work/p3 and a tag
+// work/p3/p3-edge/ml, work/p3/p3-edge.
+func childTags(d *doc.Doc, top string) []string {
+	if top == "" {
 		return nil
 	}
-	scope := idx.ByID(own[0])
-	parent := idx.Parent(scope)
-	var out []*doc.Doc
-	for _, p := range pages {
-		ids := idx.ScopeIDs(p)
-		if len(ids) == 0 || ids[0] == scope.ID() {
+	var out []string
+	for _, t := range vault.DocTags(d) {
+		if !tags.Under(t, top) || t == top {
 			continue
 		}
-		s := idx.ByID(ids[0])
-		pp := idx.Parent(s)
-		if (parent == nil && pp == nil) || (parent != nil && pp != nil && parent.ID() == pp.ID()) {
-			out = append(out, p)
+		child := top + "/" + strings.Split(strings.TrimPrefix(t, top+"/"), "/")[0]
+		if !slicesContains(out, child) {
+			out = append(out, child)
 		}
 	}
 	return out
+}
+
+func overlap(a, b []string) bool {
+	for _, x := range a {
+		if slicesContains(b, x) {
+			return true
+		}
+	}
+	return false
+}
+
+func slicesContains(list []string, s string) bool {
+	for _, x := range list {
+		if x == s {
+			return true
+		}
+	}
+	return false
 }
 
 // corpus ranks pages by BM25 over their name, aliases, and description.

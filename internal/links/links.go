@@ -16,7 +16,9 @@ type Link struct {
 	Fragment string
 	// Alias is the text after |, or "".
 	Alias string
-	Embed bool
+	// Escaped is a link in a table, which writes its pipe as \|.
+	Escaped bool
+	Embed   bool
 	// Start and End are the byte offsets of the whole link in the text.
 	Start, End int
 	// Line is 1-based.
@@ -89,6 +91,9 @@ func Find(text string) []Link {
 func Parse(inner string) Link {
 	var l Link
 	inner, l.Alias, _ = strings.Cut(inner, "|")
+	if l.Alias != "" && strings.HasSuffix(inner, `\`) {
+		inner, l.Escaped = strings.TrimSuffix(inner, `\`), true
+	}
 	target, frag, hasFrag := strings.Cut(inner, "#")
 	l.Target = strings.TrimSpace(target)
 	if hasFrag {
@@ -101,6 +106,9 @@ func Parse(inner string) Link {
 func (l Link) String() string {
 	s := "[[" + l.Target + l.Fragment
 	if l.Alias != "" {
+		if l.Escaped {
+			s += `\`
+		}
 		s += "|" + l.Alias
 	}
 	s += "]]"

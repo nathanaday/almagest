@@ -536,3 +536,32 @@ func (r Repo) Dirty() int {
 	}
 	return len(entries)
 }
+
+// HeadTime is the commit time of HEAD, in the local zone, or the zero time.
+func (r Repo) HeadTime() time.Time {
+	out, err := r.run("log", "-1", "--format=%cI")
+	if err != nil {
+		return time.Time{}
+	}
+	t, err := time.Parse(time.RFC3339, strings.TrimSpace(out))
+	if err != nil {
+		return time.Time{}
+	}
+	return t.Local()
+}
+
+// AheadBehind counts the commits HEAD has that its upstream lacks, and the reverse, as of
+// the last fetch. ok is false when the branch has no upstream.
+func (r Repo) AheadBehind() (ahead, behind int, ok bool) {
+	out, err := r.run("rev-list", "--left-right", "--count", "HEAD...@{upstream}")
+	if err != nil {
+		return 0, 0, false
+	}
+	f := strings.Fields(out)
+	if len(f) != 2 {
+		return 0, 0, false
+	}
+	ahead, _ = strconv.Atoi(f[0])
+	behind, _ = strconv.Atoi(f[1])
+	return ahead, behind, true
+}

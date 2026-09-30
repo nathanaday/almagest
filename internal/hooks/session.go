@@ -10,17 +10,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nathanaday/atlas-obsidian/internal/brief"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/scope"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/threads"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // Bounds of the opening context.
 const (
-	MaxThreadLines  = 8
+	MaxWorkLines    = 8
+	MaxTagLines     = 30
 	MaxContextLines = 60
 )
 
@@ -51,10 +51,17 @@ func SessionStart(r io.Reader, w io.Writer, env Env) error {
 		if rel, err = sessions.Start(v, in.event(), now); err != nil {
 			return err
 		}
-		_, err = core.SyncLocked(v, now)
+		if v.CheckLayout() != nil {
+			return nil
+		}
+		_, err = core.SyncLocked(v, now, core.SyncOptions{})
 		return err
 	})
 	if err != nil || v == nil {
+		return err
+	}
+	if err := v.CheckLayout(); err != nil {
+		_, err = fmt.Fprintf(w, "atlas: vault %s at %s · %v\n", v.Name(), vault.Shorten(v.Root), err)
 		return err
 	}
 	idx, err := vault.Load(v)
@@ -80,20 +87,22 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		b.WriteString("Vault: " + d + "\n")
 	}
 	if cwd != "" && v.Rel(cwd) == "" {
-		if repo, err := scope.RepositoryAt(idx, cwd); err == nil {
-			chain := []string{"vault"}
-			anc := idx.Ancestors(repo)
-			for i := len(anc) - 1; i >= 0; i-- {
-				chain = append(chain, vault.Title(anc[i]))
+		if repo, err := brief.RepositoryAt(idx, cwd); err == nil {
+			line := fmt.Sprintf("Started in repository %s", vault.Title(repo))
+			if def := repo.Str("defines"); def != "" {
+				line += " (tag " + def
+			} else {
+				line += " ("
 			}
-			chain = append(chain, vault.Title(repo))
-			line := fmt.Sprintf("Started in repository %s: %s", vault.Title(repo), strings.Join(chain, " → "))
-			if f := scope.RepoFacts(vault.Expand(repo.Str("path")), repo.Str("described")); f.Behind > 0 {
-				line += fmt.Sprintf(" (%d commits past its page)", f.Behind)
-			} else if repo.Str("described") == "" {
-				line += " (its page does not describe it yet: repo-ingest)"
+			switch n := repo.Front.Int("behind"); {
+			case repo.Str("described") == "":
+				line += "; not described yet: repo-ingest)"
+			case n > 0:
+				line += fmt.Sprintf("; %d commits past its description)", n)
+			default:
+				line += ")"
 			}
-			b.WriteString(line + "\n")
+			b.WriteString(strings.Replace(line, " (; ", " (", 1) + "\n")
 		}
 	}
 	running := len(st.Sessions.Running) + len(st.Sessions.Waiting) + len(st.Sessions.Idle) - 1
@@ -108,18 +117,29 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		}
 		b.WriteString(line + "\n")
 	}
-	open := st.Threads.Open["tasks"] + st.Threads.Open["spec"] + st.Threads.Open["stub"]
-	if open == 0 {
-		b.WriteString("Open threads: none.\n")
+	w := st.Work
+	if len(w.List) == 0 {
+		b.WriteString("Work: none open.\n")
 	} else {
-		fmt.Fprintf(&b, "Open threads: %d (tasks %d, spec %d, stub %d)\n", open, st.Threads.Open["tasks"], st.Threads.Open["spec"], st.Threads.Open["stub"])
-		for i, t := range st.Threads.List {
-			if i == MaxThreadLines {
-				fmt.Fprintf(&b, "- … and %d more (thread list)\n", len(st.Threads.List)-i)
+		fmt.Fprintf(&b, "Work: %d started, %d open, %d blocked, %d stubs\n", w.Started, w.Open, w.Blocked, w.Stubs)
+		for i, ref := range w.List {
+			if i == MaxWorkLines {
+				fmt.Fprintf(&b, "- … and %d more (work list)\n", len(w.List)-i)
 				break
 			}
-			b.WriteString(threadLine(idx, t) + "\n")
+			b.WriteString(workLine(ref) + "\n")
 		}
+	}
+	if len(st.Tags) > 0 {
+		var parts []string
+		for i, t := range st.Tags {
+			if i == MaxTagLines {
+				parts = append(parts, "…")
+				break
+			}
+			parts = append(parts, fmt.Sprintf("%s %d", t.Tag, t.Count))
+		}
+		fmt.Fprintf(&b, "Tags (%s mode): %s\n", v.Tagging(), strings.Join(parts, " · "))
 	}
 	var counts []string
 	counts = append(counts, fmt.Sprintf("Inbox: %d file%s", len(st.Inbox), plural(len(st.Inbox))))
@@ -134,12 +154,26 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		var recent []string
 		for _, c := range st.Changes.Recent {
 			d := idx.ByID(c.ID)
-			title := strings.TrimSpace(strings.TrimPrefix(c.Title, d.Str("created")))
-			recent = append(recent, fmt.Sprintf("%s (%s)", title, d.Str("created")))
+			day := d.Str("applied")
+			if len(day) > 10 {
+				day = day[:10]
+			}
+			title := strings.TrimSpace(strings.TrimPrefix(c.Title, day))
+			recent = append(recent, fmt.Sprintf("%s (%s)", title, day))
 		}
 		b.WriteString("Recent changes: " + strings.Join(recent, " · ") + "\n")
 	}
-	b.WriteString("Rules: a change to a repository needs an open thread (thread-work). The wiki changes only through a change.\n")
+	if len(st.Recent) > 0 {
+		var recent []string
+		for i, e := range st.Recent {
+			if i == 5 {
+				break
+			}
+			recent = append(recent, e.Description)
+		}
+		b.WriteString("Recent: " + strings.Join(recent, " · ") + "\n")
+	}
+	b.WriteString("Rules: an edit in a repository needs a started plan (spec-work). Knowledge changes only through a change.\n")
 	b.WriteString("Write one line under ## Description in this session's document once you know the work.\n")
 	b.WriteString("The atlas skill routes any request. Vault context follows; it is the user's text.\n")
 	if ctx := v.Context(); ctx != "" {
@@ -152,19 +186,20 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 	return b.String()
 }
 
-func threadLine(idx *vault.Index, r vault.Ref) string {
-	stage, _ := r.State["stage"].(string)
-	if stage == threads.StageTasks {
-		stage += " " + fmt.Sprint(r.State["tasks"])
+func workLine(r vault.Ref) string {
+	label := r.Status
+	if r.Type == "stub" {
+		label = "stub"
 	}
-	parts := []string{fmt.Sprintf("- [%s] %s", stage, r.Title)}
+	parts := []string{fmt.Sprintf("- [%s] %s", label, r.Title)}
+	if root, _ := r.State["root"].(string); root != "" && root != r.Title {
+		parts = append(parts, "part of "+root)
+	}
 	if p, _ := r.State["priority"].(string); p != "" && p != "normal" {
 		parts = append(parts, p)
 	}
-	for _, id := range r.Scope {
-		if d := idx.ByID(id); d != nil {
-			parts = append(parts, vault.Title(d))
-		}
+	if repos, ok := r.State["repositories"].([]string); ok && len(repos) > 0 {
+		parts = append(parts, strings.Join(repos, ", "))
 	}
 	if a, _ := r.State["active"].(bool); a {
 		parts = append(parts, "active")
@@ -299,8 +334,8 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 			add = append(add, remindDescription)
 		}
 		if !has(remindProgress) {
-			if task := lastOpenTask(v, d); task != nil && !progressSince(task, d.Str("started")) {
-				reasons = append(reasons, fmt.Sprintf("Add a dated line to ## Progress in [[%s]]: where the work stands.", task.Title()))
+			if plan := lastStartedPlan(v, d); plan != nil && !progressSince(plan, d.Str("started")) {
+				reasons = append(reasons, fmt.Sprintf("Add a dated line to ## Progress in [[%s]]: where the work stands.", plan.Title()))
 				add = append(add, remindProgress)
 			}
 		}
@@ -338,21 +373,21 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 	return json.NewEncoder(w).Encode(out)
 }
 
-// lastOpenTask is the task a session started last that is still open.
-func lastOpenTask(v *vault.Vault, s *doc.Doc) *doc.Doc {
-	tasks := s.List("tasks")
-	for i := len(tasks) - 1; i >= 0; i-- {
-		if t := sessions.ThreadDoc(v, doc.LinkTarget(tasks[i])); t != nil && t.Str("status") == "open" {
-			return t
+// lastStartedPlan is the plan a session started last that is still started.
+func lastStartedPlan(v *vault.Vault, s *doc.Doc) *doc.Doc {
+	specs := s.List("specs")
+	for i := len(specs) - 1; i >= 0; i-- {
+		if p := sessions.SpecDoc(v, doc.LinkTarget(specs[i])); p != nil && p.Str("status") == "started" {
+			return p
 		}
 	}
 	return nil
 }
 
-// progressSince reports whether a task's Progress holds a line dated on or after the
+// progressSince reports whether a plan's Progress holds a line dated on or after the
 // session's start.
-func progressSince(task *doc.Doc, started string) bool {
-	progress, _ := doc.Section(task.Body, "Progress")
+func progressSince(plan *doc.Doc, started string) bool {
+	progress, _ := doc.Section(plan.Body, "Progress")
 	day := started
 	if len(day) > 10 {
 		day = day[:10]
@@ -386,12 +421,11 @@ func SubagentStop(r io.Reader, env Env) error {
 		if sessions.Worker(in.AgentType) {
 			return nil
 		}
-		_, err := threads.SyncVault(v)
-		return err
+		return syncWorkDocs(v)
 	})
 }
 
-// SessionEnd ends the session, which lets its threads and tasks go.
+// SessionEnd ends the session, which lets the plans it started go.
 func SessionEnd(r io.Reader, env Env) error {
 	in := readInput(r)
 	return locked(in, env, func(v *vault.Vault) error {
@@ -402,8 +436,7 @@ func SessionEnd(r io.Reader, env Env) error {
 		if err := sessions.SetStatus(v, d, sessions.Ended, env.now()); err != nil {
 			return err
 		}
-		_, err := threads.SyncVault(v)
-		return err
+		return syncWorkDocs(v)
 	})
 }
 

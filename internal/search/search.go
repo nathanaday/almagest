@@ -1,19 +1,20 @@
-// Package search ranks the typed documents of a vault against a query with BM25 over
-// four fields: the title, the aliases, the description, and the body. It reads the vault
-// on each call, so no index file exists to go stale.
+// Package search ranks the documents of a vault against a query with BM25 over five
+// fields: the title, the aliases, the tags, the description, and the body. It filters on
+// the fields every document has: type, kind, tags, and status. It reads the vault on each
+// call, so no index file exists to go stale.
 package search
 
 import (
 	"fmt"
 	"math"
+	"slices"
 	"sort"
-	"strconv"
 	"strings"
 	"unicode"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -21,51 +22,66 @@ import (
 const (
 	WeightTitle       = 3.0
 	WeightAliases     = 3.0
+	WeightTags        = 2.0
 	WeightDescription = 2.0
 	WeightBody        = 1.0
 	k1                = 1.2
 	b                 = 0.75
 	DefaultLimit      = 20
+	// MaxFacetTags bounds the tags a facet lists.
+	MaxFacetTags = 30
 )
 
 // Query is what to search for.
 type Query struct {
-	Text  string              `json:"text,omitempty" jsonschema:"free text; may be empty when the filters say enough"`
-	Types []string            `json:"types,omitempty" jsonschema:"document types; empty means every type but change"`
-	Scope string              `json:"scope,omitempty" jsonschema:"an area or repository (id or title): this scope and every scope below it; empty is the whole vault"`
-	State map[string][]string `json:"state,omitempty" jsonschema:"filters on a Doc Ref's state, such as {stage: [stub, spec, tasks]} or {status: [proposed]}"`
-	Limit int                 `json:"limit,omitempty" jsonschema:"at most this many hits; 20 when 0"`
+	Text       string   `json:"text,omitempty" jsonschema:"free text; may be empty when the filters say enough"`
+	Types      []string `json:"types,omitempty" jsonschema:"source, repository, topic, stub, spec, event (and session or change); empty: the six document types"`
+	Kinds      []string `json:"kinds,omitempty" jsonschema:"topic kinds (concept, entity, policy, overview), spec kinds (plan, design), or event kinds"`
+	Tags       []string `json:"tags,omitempty" jsonschema:"a document must hold every one of these tags, or a tag below it"`
+	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep: open, started, done, dropped, resolved, current, superseded, pending, absorbed, draft, stable, contested, deprecated"`
+	Repository string   `json:"repository,omitempty" jsonschema:"only documents that name this repository or hold its tag, by id or title"`
+	Limit      int      `json:"limit,omitempty" jsonschema:"at most this many hits; 20 when 0"`
 }
 
 // Hit is one ranked document.
 type Hit struct {
 	Ref     vault.Ref `json:"ref"`
-	Score   float64   `json:"score"`
+	Score   float64   `json:"score,omitempty"`
 	Snippet string    `json:"snippet,omitempty"`
+}
+
+// Facets count the tags, types, and statuses among every match, before the limit.
+type Facets struct {
+	Tags   map[string]int `json:"tags"`
+	Types  map[string]int `json:"types"`
+	Status map[string]int `json:"status"`
 }
 
 // Hits is the output of a search.
 type Hits struct {
-	Hits  []Hit `json:"hits"`
-	Total int   `json:"total"`
+	Hits   []Hit  `json:"hits"`
+	Total  int    `json:"total"`
+	Facets Facets `json:"facets"`
 }
 
 // Fields are a document's text, as search ranks it.
 type Fields struct {
 	Title       []string
 	Aliases     []string
+	Tags        []string
 	Description []string
 	Body        []string
 	Lines       []string
 }
 
-// FieldsOf reads the four fields of a document. A change's Writes, which hold copies of
-// pages, and a lead callout are never ranked.
+// FieldsOf reads the five fields of a document. A change's Writes, which hold copies of
+// documents, and a lead callout are never ranked.
 func FieldsOf(d *doc.Doc) Fields {
-	body := doc.StripLead(lint.Checked(d))
+	body := doc.StripLead(vault.Readable(d))
 	return Fields{
 		Title:       Tokens(vault.Title(d)),
 		Aliases:     Tokens(strings.Join(d.List("aliases"), " ")),
+		Tags:        Tokens(strings.Join(vault.DocTags(d), " ")),
 		Description: Tokens(d.Str("description")),
 		Body:        Tokens(body),
 		Lines:       strings.Split(body, "\n"),
@@ -75,142 +91,162 @@ func FieldsOf(d *doc.Doc) Fields {
 // Search runs a query.
 func Search(idx *vault.Index, q Query) (*Hits, error) {
 	for _, t := range q.Types {
-		if !schema.Is(t) {
-			return nil, fmt.Errorf("type %q is not a document type; the types are %s", t, strings.Join(schema.Names(), ", "))
+		if !schema.Is(t) || t == "vault" {
+			return nil, fmt.Errorf("type %q is not a document type; the types are %s, and session or change", t, strings.Join(schema.DocumentTypes, ", "))
 		}
 	}
-	scope := ""
-	if strings.TrimSpace(q.Scope) != "" {
-		s, err := idx.ResolveType(q.Scope, "area", "repository")
-		if err != nil {
-			return nil, fmt.Errorf("scope: %w", err)
+	for _, k := range q.Kinds {
+		if !slices.Contains(schema.AllKinds(), k) {
+			return nil, fmt.Errorf("kind %q is no kind; the kinds are %s", k, strings.Join(schema.AllKinds(), ", "))
 		}
-		scope = s.ID()
+	}
+	for _, s := range q.Status {
+		if !slices.Contains(schema.Statuses(), s) {
+			return nil, fmt.Errorf("status %q is no status; the statuses are %s", s, strings.Join(schema.Statuses(), ", "))
+		}
+	}
+	want, err := tags.NormalizeAll(q.Tags)
+	if err != nil {
+		return nil, err
+	}
+	var repo *doc.Doc
+	if strings.TrimSpace(q.Repository) != "" {
+		if repo, err = idx.ResolveType(q.Repository, "repository"); err != nil {
+			return nil, fmt.Errorf("repository: %w", err)
+		}
 	}
 	limit := q.Limit
 	if limit <= 0 {
 		limit = DefaultLimit
 	}
-	var cands []*doc.Doc
-	for _, d := range idx.Docs {
-		if !wanted(d, q.Types) {
-			continue
-		}
-		if scope != "" && !inScope(idx, d, scope) {
-			continue
-		}
-		cands = append(cands, d)
-	}
-	var refs []vault.Ref
 	var kept []*doc.Doc
-	for _, d := range cands {
-		ref := idx.Ref(d)
-		if !stateMatches(ref.State, q.State) {
+	var refs []vault.Ref
+	for _, d := range idx.Docs {
+		if !wanted(d, q.Types) || (len(q.Kinds) > 0 && !slices.Contains(q.Kinds, d.Str("kind"))) {
 			continue
 		}
-		refs = append(refs, ref)
+		if len(want) > 0 && !vault.Holds(d, want...) {
+			continue
+		}
+		if repo != nil && !names(idx, d, repo) {
+			continue
+		}
+		ref := idx.Ref(d)
+		if len(q.Status) > 0 && !slices.Contains(q.Status, ref.Status) {
+			continue
+		}
 		kept = append(kept, d)
+		refs = append(refs, ref)
 	}
 	terms := Tokens(q.Text)
 	out := &Hits{Hits: []Hit{}}
+	var order []int
+	var scores []float64
+	var fields []Fields
 	if len(terms) == 0 {
-		order := make([]int, len(kept))
-		for i := range order {
-			order[i] = i
+		for i := range kept {
+			order = append(order, i)
 		}
 		sort.SliceStable(order, func(i, j int) bool {
 			return kept[order[i]].Str("updated") > kept[order[j]].Str("updated")
 		})
-		out.Total = len(kept)
-		for _, i := range order {
-			if len(out.Hits) == limit {
-				break
+	} else {
+		fields = make([]Fields, len(kept))
+		for i, d := range kept {
+			fields[i] = FieldsOf(d)
+		}
+		scores = Rank(fields, terms)
+		for i, s := range scores {
+			if s > 0 {
+				order = append(order, i)
 			}
-			out.Hits = append(out.Hits, Hit{Ref: refs[i]})
 		}
-		return out, nil
+		sort.SliceStable(order, func(i, j int) bool { return scores[order[i]] > scores[order[j]] })
 	}
-	fields := make([]Fields, len(kept))
-	for i, d := range kept {
-		fields[i] = FieldsOf(d)
-	}
-	scores := Rank(fields, terms)
-	order := make([]int, 0, len(kept))
-	for i, s := range scores {
-		if s > 0 {
-			order = append(order, i)
-		}
-	}
-	sort.SliceStable(order, func(i, j int) bool { return scores[order[i]] > scores[order[j]] })
 	out.Total = len(order)
+	out.Facets = facets(kept, refs, order, want)
 	for _, i := range order {
 		if len(out.Hits) == limit {
 			break
 		}
-		out.Hits = append(out.Hits, Hit{Ref: refs[i], Score: math.Round(scores[i]*100) / 100, Snippet: snippet(fields[i].Lines, terms)})
+		h := Hit{Ref: refs[i]}
+		if scores != nil {
+			h.Score = math.Round(scores[i]*100) / 100
+			h.Snippet = snippet(fields[i].Lines, terms)
+		}
+		out.Hits = append(out.Hits, h)
 	}
 	return out, nil
 }
 
-func wanted(d *doc.Doc, types []string) bool {
-	if len(types) == 0 {
-		return d.Type() != "change"
-	}
-	for _, t := range types {
-		if d.Type() == t {
-			return true
+// facets counts the tags beyond those asked for, the types, and the statuses of the
+// matches. The tags keep the most used, and a tag above one asked for is left out.
+func facets(docs []*doc.Doc, refs []vault.Ref, order []int, asked []string) Facets {
+	f := Facets{Tags: map[string]int{}, Types: map[string]int{}, Status: map[string]int{}}
+	skip := map[string]bool{}
+	for _, t := range asked {
+		skip[t] = true
+		for _, a := range tags.Ancestors(t) {
+			skip[a] = true
 		}
 	}
-	return false
-}
-
-// inScope reports whether a document belongs to scope: a scope page by its place in the
-// graph, any other by its scope.
-func inScope(idx *vault.Index, d *doc.Doc, scope string) bool {
-	switch d.Type() {
-	case "area", "repository":
-		return idx.Under(d, scope)
-	}
-	return idx.InScope(d, scope)
-}
-
-// stateMatches reports whether a Doc Ref's state holds one of the wanted values for each
-// key. A state value that is a list matches when it holds one of them.
-func stateMatches(state map[string]any, want map[string][]string) bool {
-	for k, values := range want {
-		if len(values) == 0 {
-			continue
+	all := map[string]int{}
+	for _, i := range order {
+		f.Types[refs[i].Type]++
+		if refs[i].Status != "" {
+			f.Status[refs[i].Status]++
 		}
-		have, ok := state[k]
-		if !ok {
-			return false
-		}
-		if !valueIn(have, values) {
-			return false
-		}
-	}
-	return true
-}
-
-func valueIn(have any, values []string) bool {
-	switch x := have.(type) {
-	case []string:
-		for _, h := range x {
-			if valueIn(h, values) {
-				return true
+		for _, t := range tags.Expand(vault.DocTags(docs[i])) {
+			if !skip[t] {
+				all[t]++
 			}
 		}
-		return false
-	case bool:
-		have = strconv.FormatBool(x)
-	case int:
-		have = strconv.Itoa(x)
 	}
-	s := fmt.Sprint(have)
-	for _, v := range values {
-		if strings.EqualFold(s, v) {
+	list := make([]string, 0, len(all))
+	for t := range all {
+		list = append(list, t)
+	}
+	sort.Slice(list, func(i, j int) bool {
+		if all[list[i]] != all[list[j]] {
+			return all[list[i]] > all[list[j]]
+		}
+		return list[i] < list[j]
+	})
+	for i, t := range list {
+		if i == MaxFacetTags {
+			break
+		}
+		f.Tags[t] = all[t]
+	}
+	return f
+}
+
+func wanted(d *doc.Doc, types []string) bool {
+	if len(types) == 0 {
+		return schema.IsDocument(d.Type())
+	}
+	return slices.Contains(types, d.Type())
+}
+
+// names reports whether a document belongs to a repository: the repository itself, a
+// spec that names it, an event about such a spec, or a document that holds its tag.
+func names(idx *vault.Index, d, repo *doc.Doc) bool {
+	if d.ID() == repo.ID() {
+		return true
+	}
+	lists := func(x *doc.Doc) bool {
+		return slices.ContainsFunc(x.List("repositories"), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) })
+	}
+	if lists(d) {
+		return true
+	}
+	if d.Type() == "event" {
+		if s := idx.Linked(d.Str("subject")); s != nil && lists(s) {
 			return true
 		}
+	}
+	if def := repo.Str("defines"); def != "" && vault.Holds(d, def) {
+		return true
 	}
 	return false
 }
@@ -222,10 +258,10 @@ func Rank(docs []Fields, terms []string) []float64 {
 	df := map[string]int{}
 	total := 0.0
 	for i, f := range docs {
-		lengths[i] = WeightTitle*float64(len(f.Title)) + WeightAliases*float64(len(f.Aliases)) + WeightDescription*float64(len(f.Description)) + WeightBody*float64(len(f.Body))
+		lengths[i] = WeightTitle*float64(len(f.Title)) + WeightAliases*float64(len(f.Aliases)) + WeightTags*float64(len(f.Tags)) + WeightDescription*float64(len(f.Description)) + WeightBody*float64(len(f.Body))
 		total += lengths[i]
 		seen := map[string]bool{}
-		for _, list := range [][]string{f.Title, f.Aliases, f.Description, f.Body} {
+		for _, list := range [][]string{f.Title, f.Aliases, f.Tags, f.Description, f.Body} {
 			for _, t := range list {
 				if !seen[t] {
 					seen[t] = true
@@ -254,6 +290,9 @@ func Rank(docs []Fields, terms []string) []float64 {
 		}
 		for _, t := range f.Aliases {
 			tf[t] += WeightAliases
+		}
+		for _, t := range f.Tags {
+			tf[t] += WeightTags
 		}
 		for _, t := range f.Description {
 			tf[t] += WeightDescription

@@ -25,13 +25,13 @@ const (
 	Lost    = "lost"
 )
 
-// Live reports whether a status holds its threads and tasks.
+// Live reports whether a status holds the plans it started.
 func Live(status string) bool {
 	return status == Running || status == Waiting || status == Idle
 }
 
 // ReadOnlyAgents are the plugin's read-only workers. The guard refuses their writes.
-var ReadOnlyAgents = []string{"wiki-extract", "wiki-draft", "wiki-audit", "thread-review"}
+var ReadOnlyAgents = []string{"wiki-extract", "wiki-draft", "wiki-audit", "spec-review"}
 
 // quietAgents are the host's own read-only agent types, which also get a line in their
 // parent's document and no document of their own.
@@ -164,7 +164,7 @@ func fields(id string, e Event, now time.Time, parent, agent string) []doc.Field
 	return []doc.Field{
 		{Key: "id", Value: id},
 		{Key: "type", Value: "session"},
-		{Key: "created", Value: vault.Date(now)},
+		{Key: "created", Value: vault.Stamp(now)},
 		{Key: "updated", Value: vault.Stamp(now)},
 		{Key: "harness", Value: harness},
 		{Key: "harness_id", Value: e.Key()},
@@ -175,10 +175,11 @@ func fields(id string, e Event, now time.Time, parent, agent string) []doc.Field
 		{Key: "cwd", Value: vault.Shorten(e.Cwd)},
 		{Key: "parent", Value: parent},
 		{Key: "agent", Value: agent},
-		{Key: "threads", Value: []string{}},
-		{Key: "tasks", Value: []string{}},
+		{Key: "specs", Value: []string{}},
+		{Key: "work", Value: []string{}},
 		{Key: "repositories", Value: []string{}},
 		{Key: "changes", Value: []string{}},
+		{Key: "events", Value: 0},
 		{Key: "description", Value: ""},
 		{Key: "reminded", Value: []string{}},
 	}
@@ -200,7 +201,7 @@ func Start(v *vault.Vault, e Event, now time.Time) (string, error) {
 }
 
 // Subagent handles SubagentStart: a subagent that may write gets its own document, which
-// inherits its parent's threads and tasks so the thread rule holds inside it; a worker
+// inherits its parent's started plans so the edit rule holds inside it; a worker
 // gets a line under its parent's Subagents. The caller holds the lock.
 func Subagent(v *vault.Vault, e Event, now time.Time) (string, error) {
 	parent := Find(v, e.SessionID)
@@ -229,7 +230,7 @@ func Subagent(v *vault.Vault, e Event, now time.Time) (string, error) {
 	list := fields("ses-"+Short(e.AgentID), e, now, doc.Link(parent.Title()), agent)
 	for i := range list {
 		switch list[i].Key {
-		case "threads", "tasks":
+		case "specs":
 			list[i].Value = nonNil(parent.List(list[i].Key))
 		}
 	}
@@ -370,31 +371,26 @@ func All(v *vault.Vault) []*doc.Doc {
 	return out
 }
 
-// Lead is a session's lead callout: its status, the task it started last that is still
-// open with that task's last progress line, and the repository it edited last.
+// Lead is a session's lead callout: its status, the plan it started last that is still
+// started with that plan's last progress line, and the repository it edited last.
 func Lead(v *vault.Vault, d *doc.Doc) string {
 	parts := []string{d.Str("status")}
 	var quote string
-	tasks := d.List("tasks")
-	for i := len(tasks) - 1; i >= 0; i-- {
-		title := doc.LinkTarget(tasks[i])
-		task := ThreadDoc(v, title)
-		if task == nil || task.Str("status") != "open" {
+	specs := d.List("specs")
+	for i := len(specs) - 1; i >= 0; i-- {
+		title := doc.LinkTarget(specs[i])
+		spec := SpecDoc(v, title)
+		if spec == nil || spec.Str("status") != "started" {
 			continue
 		}
-		thread := doc.LinkTarget(task.Str("thread"))
-		label := title
-		if rest, ok := strings.CutPrefix(title, thread+" — "); ok {
-			label, _, _ = strings.Cut(rest, " ")
-		}
-		parts = append(parts, label+" of "+doc.Link(thread))
-		progress, _ := doc.Section(task.Body, "Progress")
+		parts = append(parts, doc.Link(title))
+		progress, _ := doc.Section(spec.Body, "Progress")
 		quote = doc.LastLine(progress)
 		break
 	}
 	if len(parts) == 1 {
-		if threads := d.List("threads"); len(threads) > 0 {
-			parts = append(parts, threads[len(threads)-1])
+		if w := d.List("work"); len(w) > 0 {
+			parts = append(parts, w[len(w)-1])
 		}
 	}
 	if repos := d.List("repositories"); len(repos) > 0 {
@@ -409,13 +405,12 @@ func Lead(v *vault.Vault, d *doc.Doc) string {
 	return doc.Callout("session", strings.Join(parts, " · "), lines...)
 }
 
-// ThreadDoc finds a thread document by its title, in its thread's folder anywhere under
-// threads/.
-func ThreadDoc(v *vault.Vault, title string) *doc.Doc {
-	rel := v.FindThreadFile(title)
-	if rel == "" {
+// SpecDoc reads a document of wiki/documents by its title, or nil.
+func SpecDoc(v *vault.Vault, title string) *doc.Doc {
+	if title == "" || strings.ContainsAny(title, `/\`) {
 		return nil
 	}
+	rel := vault.DocPath(title)
 	data, err := v.Read(rel)
 	if err != nil {
 		return nil

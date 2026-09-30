@@ -16,27 +16,36 @@ func (f fake) TypeOfLink(target string) (string, error) {
 }
 
 func TestCheck(t *testing.T) {
-	concept := Get("concept")
-	good := Values{"id": "con-abcdef", "type": "concept", "created": "2026-09-27", "updated": "2026-09-27", "description": "x", "status": "draft", "scope": "[[p3]]", "sources": []string{"[[DINOv2]]"}}
-	r := fake{"[[p3]]": "area", "[[DINOv2]]": "source", "[[T]]": "stub"}
-	if p := concept.Check(good, r); len(p) != 0 {
-		t.Fatalf("a good page: %v", p)
+	topic := Get("topic")
+	good := Values{"id": "doc-abcdef", "type": "topic", "kind": "concept", "created": "2026-09-27T10:00:00", "updated": "2026-09-27", "description": "x", "status": "draft", "tags": []string{"ml/ssl", "vision"}, "sources": []string{"[[DINOv2]]"}}
+	r := fake{"[[DINOv2]]": "source", "[[T]]": "stub", "[[p3]]": "repository"}
+	if p := topic.Check(good, r); len(p) != 0 {
+		t.Fatalf("a good topic: %v", p)
 	}
-	bad := Values{"id": "ent-abcdef", "type": "concept", "created": "2026-09-27", "updated": "x", "status": "great", "scope": "[[T]]", "sources": []string{"[[gone]]"}}
+	// A 6.x id keeps its prefix.
+	good["id"] = "con-abcdef"
+	if p := topic.Check(good, r); len(p) != 0 {
+		t.Fatalf("an old id: %v", p)
+	}
+	bad := Values{"id": "x", "type": "topic", "kind": "idea", "created": "2026-09-27", "updated": "soon", "status": "great", "tags": []string{"Bad Tag"}, "sources": []string{"[[gone]]"}}
 	var got []string
-	for _, p := range concept.Check(bad, r) {
+	for _, p := range topic.Check(bad, r) {
 		got = append(got, p.String())
 	}
 	joined := strings.Join(got, "\n")
-	for _, want := range []string{"id: ent-abcdef does not start with con-", "description: is required", `status: is "great"`, "scope: [[T]] is a stub; it must be a area or repository", "sources: [[gone]] names no document"} {
+	for _, want := range []string{"id: x is not an id", "description: is required", `kind: is "idea"`, `status: is "great"`, `updated: is "soon"`, `tags: "Bad Tag" is no valid tag`, "sources: [[gone]] names no document"} {
 		if !strings.Contains(joined, want) {
 			t.Errorf("lacks %q in\n%s", want, joined)
 		}
 	}
-	if ByID("tsk-abcdef").Name != "task" || ByID("nope") != nil || !Get("stub").Owned("stage") || Get("stub").Owned("priority") {
-		t.Fatal("lookups and owners")
+	spec := Get("spec")
+	if p := spec.Check(Values{"id": "doc-abcdef", "type": "spec", "kind": "plan", "description": "x", "created": "2026-09-27", "updated": "2026-09-27", "repositories": []string{"[[T]]"}}, r); len(p) != 1 || !strings.Contains(p[0].Message, "must be a repository") {
+		t.Fatalf("a spec that names a stub as a repository: %v", p)
 	}
-	if len(Types) != 13 {
-		t.Fatalf("%d types", len(Types))
+	if !Get("spec").Owned("status") || Get("spec").Owned("parent") || !Get("event").Owned("subject") {
+		t.Fatal("owners")
+	}
+	if len(DocumentTypes) != 6 || !IsDocument("event") || IsDocument("session") || Get("topic").SectionsOf("policy")[0] != "Rule" {
+		t.Fatal("types")
 	}
 }

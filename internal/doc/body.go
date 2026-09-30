@@ -6,10 +6,21 @@ import (
 )
 
 // OwnedLeads are the callout types whose leading callout belongs to code. Any other
-// callout is the user's, and code never replaces it.
+// callout is the user's, and code never replaces it. An event's callout is event-<kind>,
+// since a kind such as note is a callout users write. The 6.x types are here so a
+// migration replaces their callouts.
 var OwnedLeads = map[string]bool{
-	"stub": true, "spec": true, "task": true, "receipt": true, "killed": true,
-	"session": true, "change": true, "area": true, "repository": true, "atlas": true,
+	"source": true, "repository": true, "repository-missing": true,
+	"concept": true, "entity": true, "policy": true, "overview": true,
+	"stub": true, "stub-resolved": true, "stub-dropped": true,
+	"spec": true, "spec-done": true, "spec-dropped": true, "design": true, "design-superseded": true,
+	"session": true, "change": true, "atlas": true,
+	"task": true, "receipt": true, "killed": true, "area": true,
+}
+
+// Owned reports whether a callout type is code's in the lead.
+func Owned(kind string) bool {
+	return OwnedLeads[kind] || strings.HasPrefix(kind, "event-")
 }
 
 var calloutOpen = regexp.MustCompile(`^>\s*\[!([A-Za-z0-9_-]+)\][+-]?`)
@@ -28,7 +39,7 @@ func LeadType(body string) string {
 // body does not open with a callout code owns.
 func splitLead(body string) (lead, rest string) {
 	trimmed := strings.TrimLeft(body, "\r\n")
-	if !OwnedLeads[LeadType(trimmed)] {
+	if !Owned(LeadType(trimmed)) {
 		return "", body
 	}
 	lines := strings.SplitAfter(trimmed, "\n")
@@ -210,4 +221,60 @@ func LastLine(text string) string {
 		}
 	}
 	return ""
+}
+
+// StripSections is the body without the level-two sections whose titles are given.
+func StripSections(body string, titles []string) string {
+	for _, t := range titles {
+		lines := strings.Split(body, "\n")
+		head, _, end := sectionSpan(lines, Headings(body), 2, t)
+		if head < 0 {
+			continue
+		}
+		body = strings.Join(append(append([]string{}, lines[:head]...), lines[end:]...), "\n")
+	}
+	return body
+}
+
+// ProseHash is the content hash of a body without its lead callout and without the
+// sections code writes.
+func ProseHash(body string, codeSections []string) string {
+	return ContentHash(StripSections(StripLead(body), codeSections))
+}
+
+// PutSection sets the level-two section title to text. A section the body lacks goes in
+// its place in order: before the first section that order lists after it and the body
+// holds, else at the end. Empty text removes the section.
+func PutSection(body, title, text string, order []string) string {
+	if strings.TrimSpace(text) == "" {
+		return RemoveSection(body, title)
+	}
+	if _, ok := Section(body, title); ok {
+		return SetSection(body, title, text)
+	}
+	pos := -1
+	for i, t := range order {
+		if strings.EqualFold(t, title) {
+			pos = i
+		}
+	}
+	if pos >= 0 {
+		lines := strings.Split(body, "\n")
+		hs := Headings(body)
+		for _, later := range order[pos+1:] {
+			head, _, _ := sectionSpan(lines, hs, 2, later)
+			if head < 0 {
+				continue
+			}
+			block := []string{"## " + title, "", strings.TrimSpace(text), ""}
+			out := append(append(append([]string{}, lines[:head]...), block...), lines[head:]...)
+			return strings.Join(out, "\n")
+		}
+	}
+	return SetSection(body, title, text)
+}
+
+// RemoveSection drops the level-two section title and its text.
+func RemoveSection(body, title string) string {
+	return StripSections(body, []string{title})
 }

@@ -70,7 +70,7 @@ func (c *CLI) setupCmd(argv []string) error {
 	}
 	// A first vault.
 	if p := a.get("vault"); p != "" {
-		st, err := core.Init(vault.InitOptions{Path: p, Name: a.get("name"), Description: a.get("description"), Areas: a.get("areas")}, h, c.Now())
+		st, err := core.Init(vault.InitOptions{Path: p, Name: a.get("name"), Description: a.get("description"), Tagging: a.get("tagging")}, h, c.Now())
 		if err != nil {
 			return err
 		}
@@ -86,7 +86,7 @@ func (c *CLI) setupCmd(argv []string) error {
 	fmt.Fprintln(c.Out, "")
 	fmt.Fprintln(c.Out, "Next:")
 	fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up atlas\": the atlas-onboard skill makes the vault\n", agent)
-	fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --areas few --description \"...\"")
+	fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --tagging open --description \"...\"")
 	fmt.Fprintln(c.Out, "  then: atlas-obsidian open, and turn on the Atlas plugin in Obsidian")
 	fmt.Fprintln(c.Out, "  atlas-obsidian doctor checks every part")
 	return nil
@@ -161,6 +161,10 @@ func (c *CLI) doctorCmd(argv []string) int {
 		idx, err := vault.Load(v)
 		if err != nil {
 			line(false, "vault "+v.Name(), err.Error())
+			continue
+		}
+		if v.CheckLayout() != nil {
+			line(false, "vault "+v.Name(), vault.Shorten(v.Root)+" has the 6.x layout; atlas-obsidian vault migrate --dry-run shows the move to 7.0")
 			continue
 		}
 		f, _ := lint.Run(idx, lint.Options{Quick: true, Now: c.Now()})
