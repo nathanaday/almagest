@@ -57,7 +57,7 @@ Tags ▸ school/cs513 ▸ self-driving                         [×]
 - The top of the pane is the path of chosen tags. The first choice lists every top-level tag with its count, and its children under a fold.
 - Each step lists the tags that occur with the chosen ones and their counts. A click adds one. The `×` on a chosen tag removes it.
 - Below, the documents that hold every chosen tag, grouped by type (open work first), each with its description on hover. A click opens it.
-- A button opens the chosen tags in Obsidian's search, and a button opens the first tag's view.
+- A button opens the chosen tags in Obsidian's search, a button colors the graph by them (Focus mode, [[#Graph colors]]), and a button opens the first tag's view. Focus mode follows the chosen tags as they change.
 - The pane reads the metadata cache, and follows it live. It counts a document for a tag when it holds the tag or a tag below it ([[Documents#What a tag reaches]]).
 - A setting makes a click on a `#tag` in a document open the navigator at that tag, in place of Obsidian's search.
 
@@ -135,22 +135,24 @@ A button resumes a session in a terminal (`claude --resume <session id>` in the 
 
 *Changed from 6.5.*
 
-The plugin colors the nodes of Obsidian's graph in one of four modes. Buttons over the graph view select the mode, and a legend under them names each color and counts its nodes. A command for each mode and a setting do the same. The default mode is Tag.
+The plugin colors the nodes of Obsidian's graph in one of five modes. Buttons over the graph view select the mode, and a legend under them names each color and counts its nodes. A command for each mode and a setting do the same. The default mode is Tag.
 
-| Mode | Groups |
-|---|---|
-| Tag | One color for each top-level tag. A document takes the top segment of its first tag; an event takes its subject's; a session or a change takes that of its first spec or first absorbed document. The eight top-level tags that some document held first (by the earliest `created`) get the eight colors, so a new tag never repaints the others. The tags after the eighth share one gray group, and a document with no tag is uncolored. |
-| Type | Sources, repositories, concepts, entities, policies, overviews, stubs and specs, events, and sessions with changes. |
-| Work | Open work, done work, and no work (gray). A stub or a plan takes its own state (open or started is open; done, dropped, or resolved is done). An event takes its subject's. Another document takes the state of each plan or stub it shares a link with, in either direction. Open wins over done. |
-| Activity | Four quarters of the markdown files, newest first. The sort key is the day of `updated`, then the file's modification time. |
+| Mode | Groups | Query |
+|---|---|---|
+| Tag | One color for each top-level tag of the typed documents, at most eight. The tag that some document held first (by the day of the earliest `created`) takes the first color, so a new tag never repaints the others; of two tags first held on one day, the one more documents hold comes first. Obsidian colors a node by the first group that matches, so a document with two top-level tags takes the color of the earlier tag. A session or a change holds no tags: it joins the group of the work or the documents it touched. A tag past the eighth, and a note with no type, stay uncolored. | `tag:#t OR [defines:/^t(\/\|$)/]`, and `path:"…"` for each session or change in the group |
+| Focus | The tags chosen in the tag navigator, crossed. The documents that hold all of them come first, then each smaller set, down to each tag alone, in the order you chose them. With more than three tags, only the full set and each tag alone. The Graph button of the navigator selects this mode and opens the graph. | `(tag:#a OR …) (tag:#b OR …)` for a set, the Tag query for one tag |
+| Type | Events, sources, repositories, concepts, entities, policies, overviews, stubs and specs, and sessions with changes. | `[type:source]`, `[type:topic] [kind:concept]`, … |
+| Work | Open work, done work, and no work (gray). A stub or a plan takes its own state (open or started is open; done, dropped, or resolved is done). An event takes its subject's. Another document takes the state of each plan or stub it shares a link with, in either direction. Open wins over done. | the paths |
+| Activity | Four quarters of the markdown files, newest first. The sort key is the day of `updated`, then the file's modification time. | the paths |
 
 The colors come from one categorical palette in a fixed order, with light and dark steps. Activity uses one blue ramp, where the newest quarter has the most contrast with the background. The plugin uses the steps of the current theme and applies them again when the theme changes.
 
-How the groups reach the graph (kept from 6.5, verified on Obsidian 1.13.7):
+How the groups reach the graph (verified on Obsidian 1.13.7):
 
-- **One query per group lists its paths**, as a regular expression that matches whole paths: `path:/^(?:wiki\/documents\/Idea\.md|…)$/`. The plugin computes each group from the metadata cache, because a search on a property cannot follow an event to its subject.
+- **A query you can read, where search can say it.** Tag, Focus, and Type groups are search queries, so the graph settings show what each color means, and Obsidian matches a new file without the plugin. Work and Activity depend on links and dates, which search cannot follow, so each of their groups lists its paths as a regular expression: `path:/^(?:wiki\/documents\/Idea\.md|…)$/`.
+- **Two facts of Obsidian's property search decide the queries.** It matches a property's value as a substring, so `defines` takes a regular expression that matches the tag or a tag below it. It also matches a property's name as a substring, so `[type:spec]` also finds an event's `to_type: spec`; the Events group comes first in Type mode for that reason.
 - **The groups follow the vault.** The plugin computes them again one second after the metadata cache resolves a change, after a rename or a delete, after a layout change, and after a theme change. It writes them only when they differ.
-- **Atlas owns the queries of that one form.** On each write the plugin removes every group whose query starts with `path:/^(?:` and ends with `)$/`, puts its own groups first, and keeps yours after them. Obsidian colors a node with the first group that matches, so your groups color only the nodes that Atlas's groups leave out. Off, or a disabled plugin, removes Atlas's groups and keeps yours.
+- **Atlas replaces only its own groups.** The plugin keeps the queries it wrote last in its settings (`graphOwned`). On each write it removes those and every path-list group, puts its own groups first, and keeps yours after them. A group you edited is yours. Obsidian colors a node with the first group that matches, so your groups color only the nodes that Atlas's groups leave out. Off, or a disabled plugin, removes Atlas's groups and keeps yours.
 - **The plugin writes to the graph's options and to every open graph** (`colorGroups` in the core graph plugin's options, and `view.dataEngine.setOptions` on each open global and local graph).
 - **`.obsidian/graph.json` stays out of git** ([[Vault Layout#Out of git]]).
 

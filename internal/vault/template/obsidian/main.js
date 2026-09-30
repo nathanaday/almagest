@@ -537,6 +537,7 @@ var import_obsidian3 = require("obsidian");
 var GRAPH_MODES = [
   { mode: "off", label: "Off" },
   { mode: "tag", label: "Tag" },
+  { mode: "focus", label: "Focus" },
   { mode: "type", label: "Type" },
   { mode: "work", label: "Work" },
   { mode: "activity", label: "Activity" }
@@ -555,22 +556,26 @@ var RECENCY = {
 var MUTED = "#898781";
 var WORK_TYPES = ["stub", "spec"];
 var TYPE_GROUPS = [
-  { name: "Sources", test: (f) => f.type === "source" },
-  { name: "Repositories", test: (f) => f.type === "repository" },
-  { name: "Concepts", test: (f) => f.type === "topic" && f.kind === "concept" },
-  { name: "Entities", test: (f) => f.type === "topic" && f.kind === "entity" },
-  { name: "Policies", test: (f) => f.type === "topic" && f.kind === "policy" },
-  { name: "Overviews", test: (f) => f.type === "topic" && f.kind === "overview" },
-  { name: "Stubs and specs", test: (f) => f.type === "stub" || f.type === "spec" },
-  { name: "Events", test: (f) => f.type === "event" }
+  { name: "Events", query: "[type:event]", test: (f) => f.type === "event" },
+  { name: "Sources", query: "[type:source]", test: (f) => f.type === "source" },
+  { name: "Repositories", query: "[type:repository]", test: (f) => f.type === "repository" },
+  { name: "Concepts", query: "[type:topic] [kind:concept]", test: (f) => f.type === "topic" && f.kind === "concept" },
+  { name: "Entities", query: "[type:topic] [kind:entity]", test: (f) => f.type === "topic" && f.kind === "entity" },
+  { name: "Policies", query: "[type:topic] [kind:policy]", test: (f) => f.type === "topic" && f.kind === "policy" },
+  { name: "Overviews", query: "[type:topic] [kind:overview]", test: (f) => f.type === "topic" && f.kind === "overview" },
+  { name: "Stubs and specs", query: "[type:stub] OR [type:spec]", test: (f) => f.type === "stub" || f.type === "spec" }
 ];
+var FOCUS_FULL = 3;
 var QUARTERS = ["Newest 25%", "25\u201350%", "50\u201375%", "Oldest 25%"];
-function graphGroups(mode, docs, resolve, theme) {
+function graphGroups(mode, docs, resolve, theme, focus = []) {
   const vault = new Vault(docs, resolve);
   let groups;
   switch (mode) {
     case "tag":
       groups = vault.byTag(theme);
+      break;
+    case "focus":
+      groups = byFocus(docs, focus, theme);
       break;
     case "type":
       groups = vault.byType(theme);
@@ -586,11 +591,19 @@ function graphGroups(mode, docs, resolve, theme) {
   }
   return groups.filter((g) => g.paths.length > 0);
 }
-function topTag(fields) {
+function tagsOf(fields) {
   const list = asList(fields.tags);
   if (typeof fields.defines === "string" && fields.defines) list.push(fields.defines);
-  const first = list.map((t) => t.trim().replace(/^#/, "").toLowerCase()).find((t) => t !== "");
-  return first ? first.split("/")[0] : null;
+  return list.map(normalTag).filter((t) => t !== "");
+}
+function topTags2(fields) {
+  return [...new Set(tagsOf(fields).map((t) => t.split("/")[0]))];
+}
+function tagQuery(tag) {
+  return `tag:#${tag} OR [defines:/^${tag}(\\/|$)/]`;
+}
+function allTagsQuery(tags) {
+  return tags.length === 1 ? tagQuery(tags[0]) : tags.map((t) => `(${tagQuery(t)})`).join(" ");
 }
 var Vault = class {
   constructor(docs, resolve) {
@@ -619,7 +632,7 @@ var Vault = class {
   /** The top tag a document belongs to: its own; an event's subject's; a session's or a change's first document's. */
   tagOf(doc, depth = 0) {
     if (depth > 3) return null;
-    const own = topTag(doc.fields);
+    const own = topTags2(doc.fields)[0];
     if (own) return own;
     const via = (field) => {
       for (const p of this.links(doc, field)) {
@@ -638,31 +651,65 @@ var Vault = class {
     }
     return null;
   }
+  /**
+   * A group per top tag of the typed documents, at most eight: the tags held first take
+   * the first colors, so a new tag never repaints the others, and of two tags held first
+   * on one day, the one more documents hold. The graph colors a node by the first group
+   * that matches, so the legend counts each document in the first group whose tag it
+   * holds. Sessions and changes hold no tags: each joins the group of the work it touched,
+   * by its path. A tag past the eighth, and a note with no type, get no group.
+   */
   byTag(theme) {
-    const members = /* @__PURE__ */ new Map();
+    const typed = this.docs.filter((d) => this.type(d.path) !== "");
     const first = /* @__PURE__ */ new Map();
-    for (const d of this.docs) {
-      const tag = this.tagOf(d);
-      if (tag === null) continue;
-      members.set(tag, [...members.get(tag) ?? [], d.path]);
-      const created = String(d.fields.created ?? "9999");
-      if (!first.has(tag) || created < (first.get(tag) ?? "")) first.set(tag, created);
+    const count = /* @__PURE__ */ new Map();
+    for (const d of typed) {
+      const created = String(d.fields.created ?? "9999").slice(0, 10);
+      for (const t of topTags2(d.fields)) {
+        if (!first.has(t) || created < (first.get(t) ?? "")) first.set(t, created);
+        count.set(t, (count.get(t) ?? 0) + 1);
+      }
     }
-    const order = [...members.keys()].sort((a, b) => (first.get(a) ?? "").localeCompare(first.get(b) ?? "") || a.localeCompare(b));
+    const order = [...first.keys()].sort(
+      (a, b) => (first.get(a) ?? "").localeCompare(first.get(b) ?? "") || (count.get(b) ?? 0) - (count.get(a) ?? 0) || a.localeCompare(b)
+    );
     const palette = CATEGORICAL[theme];
-    const groups = order.slice(0, palette.length).map((tag, i) => ({ name: "#" + tag, color: palette[i], paths: members.get(tag) ?? [] }));
-    const rest = order.slice(palette.length).flatMap((tag) => members.get(tag) ?? []);
-    if (rest.length > 0) groups.push({ name: "Other tags", color: MUTED, paths: rest });
-    return groups;
+    const groups = order.slice(0, palette.length).map((t, i) => ({ name: "#" + t, color: palette[i], tag: t, paths: [], records: [] }));
+    for (const d of typed) {
+      const own = topTags2(d.fields);
+      if (own.length > 0) {
+        groups.find((g2) => own.includes(g2.tag))?.paths.push(d.path);
+        continue;
+      }
+      const type = this.type(d.path);
+      if (type !== "session" && type !== "change") continue;
+      const g = groups.find((x) => x.tag === this.tagOf(d));
+      if (g) {
+        g.paths.push(d.path);
+        g.records.push(d.path);
+      }
+    }
+    return groups.map((g) => ({
+      name: g.name,
+      color: g.color,
+      paths: g.paths,
+      query: [tagQuery(g.tag), ...g.records.sort().map((p) => `path:"${p}"`)].join(" OR ")
+    }));
   }
   byType(theme) {
     const palette = CATEGORICAL[theme];
     const groups = TYPE_GROUPS.map((g, i) => ({
       name: g.name,
       color: palette[i],
-      paths: this.docs.filter((d) => g.test(d.fields)).map((d) => d.path)
+      paths: this.docs.filter((d) => g.test(d.fields)).map((d) => d.path),
+      query: g.query
     }));
-    groups.push({ name: "Sessions and changes", color: MUTED, paths: this.docs.filter((d) => this.type(d.path) === "session" || this.type(d.path) === "change").map((d) => d.path) });
+    groups.push({
+      name: "Sessions and changes",
+      color: MUTED,
+      paths: this.docs.filter((d) => this.type(d.path) === "session" || this.type(d.path) === "change").map((d) => d.path),
+      query: "[type:session] OR [type:change]"
+    });
     return groups;
   }
   byWork(theme) {
@@ -720,6 +767,31 @@ var Vault = class {
     return states;
   }
 };
+function byFocus(docs, chosen, theme) {
+  const tags = [...new Set(chosen.map(normalTag).filter((t) => t !== ""))];
+  if (tags.length === 0) return [];
+  let sets;
+  if (tags.length <= FOCUS_FULL) {
+    sets = [];
+    for (let mask = 1; mask < 1 << tags.length; mask++) sets.push(tags.filter((_, i) => mask & 1 << i));
+    sets.sort((a, b) => b.length - a.length);
+  } else {
+    sets = [tags, ...tags.map((t) => [t])];
+  }
+  const palette = CATEGORICAL[theme];
+  const groups = sets.slice(0, palette.length).map((set, i) => ({
+    name: set.map((t) => "#" + t).join(" + "),
+    color: palette[i],
+    paths: [],
+    query: allTagsQuery(set)
+  }));
+  for (const d of docs) {
+    const own = tagsOf(d.fields);
+    const i = sets.findIndex((set, k) => k < groups.length && set.every((t) => holds(own, t)));
+    if (i >= 0) groups[i].paths.push(d.path);
+  }
+  return groups;
+}
 function byActivity(docs, theme) {
   const key = (d) => {
     const updated = String(d.fields.updated ?? "").slice(0, 10);
@@ -741,15 +813,16 @@ function pathQuery(paths) {
 }
 function colorGroups(groups) {
   return groups.map((g) => ({
-    query: pathQuery(g.paths),
+    query: g.query ?? pathQuery(g.paths),
     color: { a: 1, rgb: parseInt(g.color.slice(1), 16) }
   }));
 }
 function isAtlasQuery(query) {
   return query.startsWith("path:/^(?:") && query.endsWith(")$/");
 }
-function mergeColorGroups(current, ours) {
-  return [...ours, ...current.filter((g) => !isAtlasQuery(g.query))];
+function mergeColorGroups(current, ours, owned = []) {
+  const mine = /* @__PURE__ */ new Set([...owned, ...ours.map((g) => g.query)]);
+  return [...ours, ...current.filter((g) => !isAtlasQuery(g.query) && !mine.has(g.query))];
 }
 
 // src/graphcolors.ts
@@ -793,6 +866,13 @@ var GraphColors = class extends import_obsidian3.Component {
       leaf.view.containerEl.querySelector(`.${BAR2}`)?.remove();
     }
   }
+  /** The tags Focus mode crosses: the tag navigator's choice. */
+  async setFocus(tags) {
+    if (JSON.stringify(tags) === JSON.stringify(this.host.settings.focusTags)) return;
+    this.host.settings.focusTags = [...tags];
+    await this.host.saveSettings();
+    if (this.host.settings.graphColors === "focus") this.apply();
+  }
   async setMode(mode) {
     this.host.settings.graphColors = mode;
     await this.host.saveSettings();
@@ -802,7 +882,7 @@ var GraphColors = class extends import_obsidian3.Component {
     const mode = this.host.settings.graphColors;
     const theme = document.body.hasClass("theme-dark") ? "dark" : "light";
     const cache = this.app.metadataCache;
-    this.groups = mode === "off" ? [] : graphGroups(mode, this.docs(), (link, from) => cache.getFirstLinkpathDest(link, from)?.path ?? null, theme);
+    this.groups = mode === "off" ? [] : graphGroups(mode, this.docs(), (link, from) => cache.getFirstLinkpathDest(link, from)?.path ?? null, theme, this.host.settings.focusTags);
     this.write(colorGroups(this.groups));
     this.renderBars();
   }
@@ -819,7 +899,8 @@ var GraphColors = class extends import_obsidian3.Component {
   write(ours) {
     const instance = graphInstance(this.app);
     if (!instance) return;
-    const merged = mergeColorGroups(instance.options.colorGroups ?? [], ours);
+    const owned = this.host.settings.graphOwned;
+    const merged = mergeColorGroups(instance.options.colorGroups ?? [], ours, owned);
     if (!same(instance.options.colorGroups ?? [], merged)) {
       instance.options.colorGroups = merged;
       instance.saveOptions();
@@ -829,9 +910,14 @@ var GraphColors = class extends import_obsidian3.Component {
         const engine = engineOf(leaf.view);
         if (!engine) continue;
         const current = engine.getOptions().colorGroups ?? [];
-        const next = mergeColorGroups(current, ours);
+        const next = mergeColorGroups(current, ours, owned);
         if (!same(current, next)) engine.setOptions({ colorGroups: next });
       }
+    }
+    const queries = ours.map((g) => g.query);
+    if (JSON.stringify(queries) !== JSON.stringify(owned)) {
+      this.host.settings.graphOwned = queries;
+      void this.host.saveSettings();
     }
   }
   /** The mode buttons and the legend, over each graph view. */
@@ -854,6 +940,10 @@ var GraphColors = class extends import_obsidian3.Component {
         button.toggleClass("is-active", m.mode === mode);
         button.setAttr("aria-pressed", String(m.mode === mode));
         button.onClickEvent(() => void this.setMode(m.mode));
+      }
+      if (mode === "focus" && this.host.settings.focusTags.length === 0) {
+        bar.createDiv({ cls: "atlas-graph-legend-row", text: "Choose tags in the tag navigator to focus on them." });
+        continue;
       }
       if (this.groups.length === 0) continue;
       const legend = bar.createDiv({ cls: "atlas-graph-legend" });
@@ -1139,7 +1229,9 @@ var DEFAULT_SETTINGS = {
   badges: true,
   viewFolders: true,
   tagClick: false,
-  graphColors: "tag"
+  graphColors: "tag",
+  graphOwned: [],
+  focusTags: []
 };
 var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
   constructor(app, plugin) {
@@ -1231,11 +1323,17 @@ function tagDocs(app) {
   return out;
 }
 var TagNavigator = class extends import_obsidian7.ItemView {
+  constructor(leaf, onChoose = () => {
+  }, onGraph = () => {
+  }) {
+    super(leaf);
+    this.onChoose = onChoose;
+    this.onGraph = onGraph;
+  }
+  onChoose;
+  onGraph;
   chosen = [];
   rerender = (0, import_obsidian7.debounce)(() => this.render(), 500, true);
-  constructor(leaf) {
-    super(leaf);
-  }
   getViewType() {
     return TAG_NAV_VIEW;
   }
@@ -1273,6 +1371,7 @@ var TagNavigator = class extends import_obsidian7.ItemView {
     this.render();
   }
   render() {
+    this.onChoose([...this.chosen]);
     const root = this.contentEl;
     root.empty();
     root.addClass("atlas-tagnav");
@@ -1300,6 +1399,9 @@ var TagNavigator = class extends import_obsidian7.ItemView {
     actions.createSpan({ cls: "atlas-tagnav-count", text: `${matches.length} ${matches.length === 1 ? "document" : "documents"}` });
     const search = actions.createEl("button", { text: "Search" });
     search.onclick = () => this.openSearch();
+    const graph = actions.createEl("button", { text: "Graph" });
+    graph.setAttr("aria-label", "Color the graph by these tags");
+    graph.onclick = () => this.onGraph();
     const view = actions.createEl("button", { text: "Tag view" });
     view.setAttr("aria-label", "Open the view of " + this.chosen[0]);
     view.onclick = () => void this.openView(this.chosen[0]);
@@ -1555,7 +1657,14 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     }
     this.addRibbonIcon("refresh-cw", "Atlas: sync the vault", () => void this.sync(true));
     this.addCommand({ id: "sync", name: "Sync the vault", callback: () => void this.sync(true) });
-    this.registerView(TAG_NAV_VIEW, (leaf) => new TagNavigator(leaf));
+    this.registerView(
+      TAG_NAV_VIEW,
+      (leaf) => new TagNavigator(
+        leaf,
+        (tags) => void this.graphColors.setFocus(tags),
+        () => void this.focusGraph()
+      )
+    );
     this.addRibbonIcon("tags", "Atlas: open the tag navigator", () => void this.openTags());
     this.addCommand({ id: "open-tags", name: "Open the tag navigator", callback: () => void this.openTags() });
     this.registerDomEvent(document, "click", (evt) => this.onTagClick(evt), { capture: true });
@@ -1602,6 +1711,13 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   onunload() {
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
   }
+  /** Colors the graph by the navigator's tags, and opens the graph. */
+  async focusGraph() {
+    await this.graphColors.setMode("focus");
+    const open = this.app.workspace.getLeavesOfType("graph")[0];
+    if (open) this.app.workspace.revealLeaf(open);
+    else this.app.commands?.executeCommandById?.("graph:open");
+  }
   async loadSettings() {
     const saved = await this.loadData();
     this.settings = { ...DEFAULT_SETTINGS };
@@ -1610,6 +1726,10 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     }
     if (saved?.folderPages !== void 0 && saved.viewFolders === void 0) this.settings.viewFolders = saved.folderPages;
     if (!isGraphMode(this.settings.graphColors)) this.settings.graphColors = DEFAULT_SETTINGS.graphColors;
+    for (const key of ["graphOwned", "focusTags"]) {
+      const list = this.settings[key];
+      this.settings[key] = Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
+    }
   }
   async saveSettings() {
     await this.saveData(this.settings);
