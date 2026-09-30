@@ -37,27 +37,28 @@ The 6.5 scope folders become the views' tag tree ([[Views#Tag views]]). In the f
 
 The plugin never renames or moves a view: the binary writes them. The 6.5 rename sync between a scope folder and its page goes. A setting turns the click and the hidden note off.
 
-## Tag navigator
+## Atlas navigator
 
 *New in 7.0.*
 
-A pane in the left sidebar that narrows the documents by tags, to any depth, with no file written.
+A pane in the left sidebar that narrows the documents by tags, to any depth, with no file written. The compass icon in the left ribbon, or the command **Open the Atlas navigator**, opens it. Its name and icon differ from Obsidian's own Tags pane, which lists every tag in the vault and opens Obsidian's search.
 
 ```text
-Tags ▸ school/cs513 ▸ self-driving                         [×]
-12 documents
-  With: project 5 · paper 4 · ml/vision 3 · …
-  Open work (2)   Filter pedestrians by depth · spec · started
-                  Try a smaller backbone · stub
-  Topics (6)      Occupancy grids · concept …
-  Sources (4)     …
-  Events (9)      the last five …
+All tags   #school/cs513 ×   #self-driving ×
+12 documents hold both tags
+VIEW     Search · Graph · Tag view
+NARROW   › project 5 · #paper 4 · #ml/vision 3 · …
+Open work (2)   Filter pedestrians by depth · plan · started
+                Try a smaller backbone · stub · open
+Topics (6)      Occupancy grids · concept · stable
+Sources (4)     …
 ```
 
-- The top of the pane is the path of chosen tags. The first choice lists every top-level tag with its count, and its children under a fold.
-- Each step lists the tags that occur with the chosen ones and their counts. A click adds one. The `×` on a chosen tag removes it.
+- The top of the pane is the path of chosen tags. **All tags** starts again; the `×` on a chosen tag removes it. With no tag chosen, the pane lists every top-level tag with its count.
+- Under the path, one line counts the documents that hold every chosen tag.
+- **View** holds the buttons: **Search** opens the chosen tags in Obsidian's search; **Graph** colors the graph by them (Focus mode, [[#Graph colors]]) and opens it; **Tag view** opens the view of the last chosen tag. Focus mode follows the chosen tags as they change.
+- **Narrow** lists the tags that occur with the chosen ones, with their counts. A click adds one. A tag below a chosen one shows only the part after it (`› project` under `#school/cs513`).
 - Below, the documents that hold every chosen tag, grouped by type (open work first), each with its description on hover. A click opens it.
-- A button opens the chosen tags in Obsidian's search, a button colors the graph by them (Focus mode, [[#Graph colors]]), and a button opens the first tag's view. Focus mode follows the chosen tags as they change.
 - The pane reads the metadata cache, and follows it live. It counts a document for a tag when it holds the tag or a tag below it ([[Documents#What a tag reaches]]).
 - A setting makes a click on a `#tag` in a document open the navigator at that tag, in place of Obsidian's search.
 
@@ -140,7 +141,7 @@ The plugin colors the nodes of Obsidian's graph in one of five modes. Buttons ov
 | Mode | Groups | Query |
 |---|---|---|
 | Tag | One color for each top-level tag of the typed documents, at most eight. The tag that some document held first (by the day of the earliest `created`) takes the first color, so a new tag never repaints the others; of two tags first held on one day, the one more documents hold comes first. Obsidian colors a node by the first group that matches, so a document with two top-level tags takes the color of the earlier tag. A session or a change holds no tags: it joins the group of the work or the documents it touched. A tag past the eighth, and a note with no type, stay uncolored. | `tag:#t OR [defines:/^t(\/\|$)/]`, and `path:"…"` for each session or change in the group |
-| Focus | The tags chosen in the tag navigator, crossed. The documents that hold all of them come first, then each smaller set, down to each tag alone, in the order you chose them. With more than three tags, only the full set and each tag alone. The Graph button of the navigator selects this mode and opens the graph. | `(tag:#a OR …) (tag:#b OR …)` for a set, the Tag query for one tag |
+| Focus | The documents that hold every tag chosen in the Atlas navigator, in one color. The rest stay uncolored, so the overlap stands out in a large graph. The Graph button of the navigator selects this mode and opens the graph. Without a chosen tag, the legend says how to open the navigator. | `(tag:#a OR …) (tag:#b OR …)`, or the Tag query for one tag |
 | Type | Events, sources, repositories, concepts, entities, policies, overviews, stubs and specs, and sessions with changes. | `[type:source]`, `[type:topic] [kind:concept]`, … |
 | Work | Open work, done work, and no work (gray). A stub or a plan takes its own state (open or started is open; done, dropped, or resolved is done). An event takes its subject's. Another document takes the state of each plan or stub it shares a link with, in either direction. Open wins over done. | the paths |
 | Activity | Four quarters of the markdown files, newest first. The sort key is the day of `updated`, then the file's modification time. | the paths |

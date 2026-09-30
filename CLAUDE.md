@@ -128,7 +128,7 @@ evaluate JavaScript and take screenshots through the DevTools protocol at
 
 Not yet verified: Codex's hook events (the guard reads `apply_patch` paths; the rest is
 untested on Codex), the Notification types in a live session, and the rest of the Obsidian
-plugin inside Obsidian (the 7.0 tag navigator, repository panel, work bar, view folders,
+plugin inside Obsidian (the 7.0 Atlas navigator, repository panel, work bar, view folders,
 change bar, badges, and sessions pane have not run in the app).
 
 ## Constraints

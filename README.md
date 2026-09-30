@@ -98,7 +98,7 @@ atlas-obsidian lint                       # the health check
 ```
 
 In Obsidian, `views/` holds the notes that code writes: Home, Work, Timeline, Library,
-and one view per tag under `views/tags/`. The tag navigator narrows the documents one
+and one view per tag under `views/tags/`. The Atlas navigator narrows the documents one
 tag at a time. `sessions/Sessions.base` shows what runs now, and `changes/Changes.base`
 lists the changes that wait for you.
 

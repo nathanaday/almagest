@@ -6,7 +6,7 @@ Three parts, one version number:
 |---|---|---|
 | the binary `atlas-obsidian` | Go, one static file | the MCP server, the CLI, the hooks, the view writer: every rule and every write |
 | the agent plugin | files for Claude Code and Codex | `.mcp.json`, `hooks/hooks.json`, the skills, the agents, the references |
-| the Obsidian plugin | TypeScript, thin | styles, the views folder, the tag navigator, the repository panel, the change bar, the work buttons, the sessions pane, mentions, graph colors ([[Obsidian Plugin]]) |
+| the Obsidian plugin | TypeScript, thin | styles, the views folder, the Atlas navigator, the repository panel, the change bar, the work buttons, the sessions pane, mentions, graph colors ([[Obsidian Plugin]]) |
 
 ## Why Go
 
@@ -85,7 +85,7 @@ npx atlas-obsidian setup
 4. **Views.** `views`, `vault sync --views`. The views of a fixed vault match their golden files.
 5. **The pipeline.** `source`, `match`, the two agents. Then [[wiki-ingest]], [[wiki-sync]], and [[repo-ingest]] work.
 6. **Migration.** `migrate`, and its tests.
-7. **Obsidian.** Styles, the views folder, sync on change, the tag navigator, the repository panel, the work buttons, the migration notice, the graph modes. Each is checked live in a second Obsidian instance ([[#Checking the Obsidian plugin]]).
+7. **Obsidian.** Styles, the views folder, sync on change, the Atlas navigator, the repository panel, the work buttons, the migration notice, the graph modes. Each is checked live in a second Obsidian instance ([[#Checking the Obsidian plugin]]).
 8. **Across tags.** [[wiki-map]]; the deep run of [[wiki-review]].
 9. **Release.** The version goes to 7.0.0 in every manifest; the design pages hold no departure the build did not record.
 

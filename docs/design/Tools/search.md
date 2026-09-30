@@ -9,7 +9,7 @@ One search serves every need: finding a topic, finding the repository a request 
 - `tags` is a list, and a document matches when it holds every tag in it ([[Documents#What a tag reaches]]). So `tags: [school/cs513, self-driving]` finds the documents at the meeting of the two, and `tags: [school]` finds everything under `school`.
 - `repository` limits the hits to the documents that name the repository (in `repositories`, or as `subject` of an event of such a spec), or that hold its tag.
 - Ranking: BM25 over title (weight 3), aliases (3), tags (2), description (2), and body (1). A tag's words count as text, so "cs513 self-driving project" ranks the documents that hold those tags even when the query sets no filter. An empty `text` with filters lists the matches, newest `updated` first.
-- `facets` in the Hits count the tags, types, and statuses among all the matches before the limit. An agent narrows a broad query with them: it adds the tag that splits the hits, as you would in the [[Obsidian Plugin#Tag navigator|tag navigator]].
+- `facets` in the Hits count the tags, types, and statuses among all the matches before the limit. An agent narrows a broad query with them: it adds the tag that splits the hits, as you would in the [[Obsidian Plugin#Atlas navigator|Atlas navigator]].
 
 The server keeps no index file. It reads the documents per call and may cache parsed files in memory by modification time.
 

@@ -309,6 +309,10 @@ function expandTags(list) {
   }
   return [...out];
 }
+function relativeTag(tag, chosen) {
+  const above = chosen.filter((c) => tag.startsWith(c + "/")).sort((a, b) => b.length - a.length)[0];
+  return above ? "\u203A " + tag.slice(above.length + 1).split("/").join(" \u203A ") : "#" + tag;
+}
 function narrow(docs, chosen) {
   const matches = docs.filter((d) => chosen.every((t) => holds(d.tags, t)));
   const counts = /* @__PURE__ */ new Map();
@@ -565,7 +569,6 @@ var TYPE_GROUPS = [
   { name: "Overviews", query: "[type:topic] [kind:overview]", test: (f) => f.type === "topic" && f.kind === "overview" },
   { name: "Stubs and specs", query: "[type:stub] OR [type:spec]", test: (f) => f.type === "stub" || f.type === "spec" }
 ];
-var FOCUS_FULL = 3;
 var QUARTERS = ["Newest 25%", "25\u201350%", "50\u201375%", "Oldest 25%"];
 function graphGroups(mode, docs, resolve, theme, focus = []) {
   const vault = new Vault(docs, resolve);
@@ -770,27 +773,14 @@ var Vault = class {
 function byFocus(docs, chosen, theme) {
   const tags = [...new Set(chosen.map(normalTag).filter((t) => t !== ""))];
   if (tags.length === 0) return [];
-  let sets;
-  if (tags.length <= FOCUS_FULL) {
-    sets = [];
-    for (let mask = 1; mask < 1 << tags.length; mask++) sets.push(tags.filter((_, i) => mask & 1 << i));
-    sets.sort((a, b) => b.length - a.length);
-  } else {
-    sets = [tags, ...tags.map((t) => [t])];
-  }
-  const palette = CATEGORICAL[theme];
-  const groups = sets.slice(0, palette.length).map((set, i) => ({
-    name: set.map((t) => "#" + t).join(" + "),
-    color: palette[i],
-    paths: [],
-    query: allTagsQuery(set)
-  }));
-  for (const d of docs) {
-    const own = tagsOf(d.fields);
-    const i = sets.findIndex((set, k) => k < groups.length && set.every((t) => holds(own, t)));
-    if (i >= 0) groups[i].paths.push(d.path);
-  }
-  return groups;
+  return [
+    {
+      name: tags.map((t) => "#" + t).join(" + "),
+      color: CATEGORICAL[theme][0],
+      paths: docs.filter((d) => tags.every((t) => holds(tagsOf(d.fields), t))).map((d) => d.path),
+      query: allTagsQuery(tags)
+    }
+  ];
 }
 function byActivity(docs, theme) {
   const key = (d) => {
@@ -866,7 +856,7 @@ var GraphColors = class extends import_obsidian3.Component {
       leaf.view.containerEl.querySelector(`.${BAR2}`)?.remove();
     }
   }
-  /** The tags Focus mode crosses: the tag navigator's choice. */
+  /** The tags Focus mode crosses: the Atlas navigator's choice. */
   async setFocus(tags) {
     if (JSON.stringify(tags) === JSON.stringify(this.host.settings.focusTags)) return;
     this.host.settings.focusTags = [...tags];
@@ -942,7 +932,11 @@ var GraphColors = class extends import_obsidian3.Component {
         button.onClickEvent(() => void this.setMode(m.mode));
       }
       if (mode === "focus" && this.host.settings.focusTags.length === 0) {
-        bar.createDiv({ cls: "atlas-graph-legend-row", text: "Choose tags in the tag navigator to focus on them." });
+        bar.createDiv({ cls: "atlas-graph-legend-row", text: "Open the Atlas navigator (left ribbon) and choose tags to focus on them." });
+        continue;
+      }
+      if (mode === "focus" && this.groups.length === 0) {
+        bar.createDiv({ cls: "atlas-graph-legend-row", text: "No document holds all the chosen tags." });
         continue;
       }
       if (this.groups.length === 0) continue;
@@ -1284,7 +1278,7 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
         this.plugin.viewFolders.setEnabled(value);
       })
     );
-    new import_obsidian6.Setting(containerEl).setName("Open a tag in the tag navigator").setDesc("A click on a #tag in a note opens the tag navigator at that tag, in place of Obsidian's search.").addToggle(
+    new import_obsidian6.Setting(containerEl).setName("Open a tag in the Atlas navigator").setDesc("A click on a #tag in a note opens the Atlas navigator at that tag, in place of Obsidian's search.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.tagClick).onChange(async (value) => {
         this.plugin.settings.tagClick = value;
         await this.plugin.saveSettings();
@@ -1300,6 +1294,7 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
 // src/tagnav.ts
 var import_obsidian7 = require("obsidian");
 var TAG_NAV_VIEW = "atlas-tag-navigator";
+var NAV_ICON = "compass";
 var DOC_TYPES = /* @__PURE__ */ new Set(["source", "repository", "topic", "stub", "spec", "event"]);
 var MAX_WITH = 30;
 function tagDocs(app) {
@@ -1338,10 +1333,10 @@ var TagNavigator = class extends import_obsidian7.ItemView {
     return TAG_NAV_VIEW;
   }
   getDisplayText() {
-    return "Atlas tags";
+    return "Atlas navigator";
   }
   getIcon() {
-    return "tags";
+    return NAV_ICON;
   }
   getState() {
     return { chosen: this.chosen };
@@ -1377,7 +1372,7 @@ var TagNavigator = class extends import_obsidian7.ItemView {
     root.addClass("atlas-tagnav");
     const docs = tagDocs(this.app);
     const path = root.createDiv({ cls: "atlas-tagnav-path" });
-    const home = path.createEl("button", { cls: "atlas-tagnav-home", text: "Tags" });
+    const home = path.createEl("button", { cls: "atlas-tagnav-home", text: "All tags" });
     home.onclick = () => {
       this.chosen = [];
       this.render();
@@ -1385,30 +1380,33 @@ var TagNavigator = class extends import_obsidian7.ItemView {
     for (const t of this.chosen) {
       const chip = path.createSpan({ cls: "atlas-tagnav-chip" });
       chip.createSpan({ text: "#" + t });
+      chip.setAttr("title", "#" + t);
       const x = chip.createEl("button", { cls: "atlas-tagnav-x", text: "\xD7", attr: { "aria-label": `Remove ${t}` } });
       x.onclick = () => this.drop(t);
     }
     if (this.chosen.length === 0) {
-      const list = root.createDiv({ cls: "atlas-tagnav-tags" });
+      root.createDiv({ cls: "atlas-tagnav-hint", text: "Choose a tag, then narrow by the tags that occur with it." });
+      const list = this.section(root, "Tags");
       for (const f of topTags(docs)) this.tagButton(list, f.tag, f.count);
       if (docs.length === 0) root.createDiv({ cls: "atlas-tagnav-empty", text: "No document holds a tag yet." });
       return;
     }
     const { matches, with: facets } = narrow(docs, this.chosen);
-    const actions = root.createDiv({ cls: "atlas-tagnav-actions" });
-    actions.createSpan({ cls: "atlas-tagnav-count", text: `${matches.length} ${matches.length === 1 ? "document" : "documents"}` });
-    const search = actions.createEl("button", { text: "Search" });
+    const count = `${matches.length} ${matches.length === 1 ? "document holds" : "documents hold"} ${this.chosen.length === 1 ? "this tag" : this.chosen.length === 2 ? "both tags" : `all ${this.chosen.length} tags`}`;
+    root.createDiv({ cls: "atlas-tagnav-count", text: count });
+    const view = this.section(root, "View");
+    const search = view.createEl("button", { text: "Search" });
+    search.setAttr("aria-label", "Find these documents in Obsidian's search");
     search.onclick = () => this.openSearch();
-    const graph = actions.createEl("button", { text: "Graph" });
-    graph.setAttr("aria-label", "Color the graph by these tags");
+    const graph = view.createEl("button", { text: "Graph" });
+    graph.setAttr("aria-label", "Color these documents in the graph");
     graph.onclick = () => this.onGraph();
-    const view = actions.createEl("button", { text: "Tag view" });
-    view.setAttr("aria-label", "Open the view of " + this.chosen[0]);
-    view.onclick = () => void this.openView(this.chosen[0]);
+    const page = view.createEl("button", { text: "Tag view" });
+    page.setAttr("aria-label", "Open the view of #" + this.chosen[this.chosen.length - 1]);
+    page.onclick = () => void this.openView(this.chosen[this.chosen.length - 1]);
     if (facets.length > 0) {
-      const withEl = root.createDiv({ cls: "atlas-tagnav-with" });
-      withEl.createSpan({ cls: "atlas-tagnav-label", text: "With" });
-      for (const f of facets.slice(0, MAX_WITH)) this.tagButton(withEl, f.tag, f.count);
+      const list = this.section(root, "Narrow");
+      for (const f of facets.slice(0, MAX_WITH)) this.tagButton(list, f.tag, f.count, relativeTag(f.tag, this.chosen));
     }
     for (const group of groupDocs(matches)) {
       const g = root.createDiv({ cls: "atlas-tagnav-group" });
@@ -1427,9 +1425,15 @@ var TagNavigator = class extends import_obsidian7.ItemView {
       }
     }
   }
-  tagButton(parent, tag, count) {
+  /** A labeled section; returns the element its items go in. */
+  section(root, label) {
+    const el = root.createDiv({ cls: "atlas-tagnav-section" });
+    el.createDiv({ cls: "atlas-tagnav-label", text: label });
+    return el.createDiv({ cls: "atlas-tagnav-items" });
+  }
+  tagButton(parent, tag, count, label = "#" + tag) {
     const b = parent.createEl("button", { cls: "atlas-tagnav-tag" });
-    b.createSpan({ text: "#" + tag });
+    b.createSpan({ text: label });
     b.setAttr("title", "#" + tag);
     b.createSpan({ cls: "atlas-tagnav-tag-count", text: String(count) });
     b.onclick = () => this.add(tag);
@@ -1665,8 +1669,8 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
         () => void this.focusGraph()
       )
     );
-    this.addRibbonIcon("tags", "Atlas: open the tag navigator", () => void this.openTags());
-    this.addCommand({ id: "open-tags", name: "Open the tag navigator", callback: () => void this.openTags() });
+    this.addRibbonIcon(NAV_ICON, "Atlas: open the Atlas navigator", () => void this.openTags());
+    this.addCommand({ id: "open-tags", name: "Open the Atlas navigator", callback: () => void this.openTags() });
     this.registerDomEvent(document, "click", (evt) => this.onTagClick(evt), { capture: true });
     this.registerView(SESSIONS_VIEW, (leaf) => new SessionsView(leaf));
     this.sessionsRibbon = this.addRibbonIcon("bot", "Atlas: open the sessions", () => void this.openSessions());

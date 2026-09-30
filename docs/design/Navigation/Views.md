@@ -57,7 +57,7 @@ One note per tag, in a folder per tag: `views/tags/school/cs513/Tag · school �
 A tag view holds:
 
 1. The callout: the tag, the count of documents that hold it, the tag's page when a document defines it, the parent tag's view, and the child tags' views with their counts.
-2. **Narrow**: the tags that occur with this one, each with its count, most first. Each is a link that opens Obsidian's search for both tags (`obsidian://search?vault=…&query=tag:#school/cs513 tag:#self-driving`). With the plugin, the [[Obsidian Plugin#Tag navigator|tag navigator]] does this in place, to any depth.
+2. **Narrow**: the tags that occur with this one, each with its count, most first. Each is a link that opens Obsidian's search for both tags (`obsidian://search?vault=…&query=tag:#school/cs513 tag:#self-driving`). With the plugin, the [[Obsidian Plugin#Atlas navigator|Atlas navigator]] does this in place, to any depth.
 3. **Open work**: a Base of the stubs and plans that hold the tag, open or started, by priority.
 4. **Topics**: a Base grouped by kind.
 5. **Sources**: a Base, pending first.
