@@ -364,27 +364,35 @@ func (r *renderer) repositories() string {
 			unlinked = append(unlinked, "- "+doc.Link(vault.Title(d))+" · "+d.Str("description"))
 			continue
 		}
-		// A tag above another in the list says nothing more: #a/b already holds #a.
-		all := append([]string{d.Str("defines")}, d.List("tags")...)
-		var tagLinks []string
-		for _, t := range all {
-			below := false
-			for _, u := range all {
-				below = below || strings.HasPrefix(u, t+"/")
+		link := func(t string) string { return fmt.Sprintf("[[%s|#%s]]", TagTitle(t), t) }
+		own := d.Str("defines")
+		var tagParts, also []string
+		if own != "" {
+			tagParts = append(tagParts, "Tag: "+link(own))
+			if parent := tags.Parent(own); parent != "" {
+				tagParts = append(tagParts, "Under: "+link(parent))
 			}
-			if t != "" && !below {
-				tagLinks = append(tagLinks, fmt.Sprintf("[[%s|#%s]]", TagTitle(t), t))
+		}
+		for _, t := range d.List("tags") {
+			if t != "" && t != own && (own == "" || !strings.HasPrefix(own, t+"/")) {
+				also = append(also, link(t))
 			}
+		}
+		if len(also) > 0 {
+			label := "Also: "
+			if own == "" {
+				label = "Tags: "
+			}
+			tagParts = append(tagParts, label+strings.Join(also, " "))
 		}
 		lines := []string{"## " + doc.Link(vault.Title(d))}
 		if desc := d.Str("description"); desc != "" {
 			lines = append(lines, desc)
 		}
-		facts := "`" + d.Str("path") + "`"
-		if len(tagLinks) > 0 {
-			facts += " · " + strings.Join(tagLinks, " ")
+		lines = append(lines, "`"+d.Str("path")+"`")
+		if len(tagParts) > 0 {
+			lines = append(lines, strings.Join(tagParts, " · "))
 		}
-		lines = append(lines, facts)
 		var plans []string
 		for _, s := range r.b.Specs {
 			if s.Str("kind") != work.Plan {

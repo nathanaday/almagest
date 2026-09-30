@@ -114,7 +114,7 @@ The note holds the last 30 days. Each earlier month has its own note under `view
 `View · Repositories` shows every linked repository on one page, by title. Each gets a section with:
 
 1. a heading that links the repository document, and its description;
-2. its path, and its tags as links to their tag views, its own tag first;
+2. its path; then, as in its tag view, its own tag (`Tag`), the tag it sits under (`Under`), and any other tags it holds (`Also`), each linked to its tag view;
 3. the open and started plans that name it;
 4. the `atlas-repo` block of its document, which the Obsidian plugin renders as the live status panel ([[Repository#Body]]).
 

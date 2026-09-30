@@ -15,7 +15,7 @@ func TestViews(t *testing.T) {
 	tv.Doc("topic", "CS513", map[string]any{"kind": "overview", "defines": "school/cs513", "tags": []string{"school"}}, "")
 	tv.Doc("topic", "Occupancy grids", map[string]any{"kind": "concept", "tags": []string{"school/cs513", "self-driving", "project"}}, "")
 	tv.Doc("topic", "Lidar", map[string]any{"kind": "entity", "tags": []string{"school/cs513", "self-driving"}}, "")
-	tv.Doc("repository", "grid-sim", map[string]any{"path": "~/code/grid-sim", "defines": "school/cs513/grid-sim", "tags": []string{"school/cs513"}, "description": "The grid simulator."}, "")
+	tv.Doc("repository", "grid-sim", map[string]any{"path": "~/code/grid-sim", "defines": "school/cs513/grid-sim", "tags": []string{"school/cs513", "simulation"}, "description": "The grid simulator."}, "")
 	tv.Doc("repository", "old-sim", map[string]any{"path": "", "unlinked": true, "description": "The first simulator."}, "")
 	tv.Write("Notes.md", "- [ ] buy a lidar #todo\n- [x] done #todo\n- [ ] @atlas add the grid paper\n```\n- [ ] #todo in code\n```\n")
 	tv.Commit()
@@ -38,7 +38,7 @@ func TestViews(t *testing.T) {
 		"views/View · Home.md":                            {views.Notice, "> [!atlas] Work", "## Tags", "[[Tag · school|#school]] · 6", "- [[Notes]]: @atlas add the grid paper", "## Recent", "started · [[Build the grid]]"},
 		"views/View · Work.md":                            {"## Plans", "```base", `kind == "plan"`, "formulas:\n  rank: 'if(priority == \"high\", 1,", "property: formula.rank\n        direction: ASC", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Mentions", "## Stubs"},
 		"views/View · Timeline.md":                        {"### 2026-09-27", "15:32 · started · [[Build the grid]]", "14:32 · written · [[Build the grid]] · #school/cs513"},
-		"views/View · Repositories.md":                    {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim` · [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]]\n\nWork: [[Build the grid]] (started)\n\n```atlas-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
+		"views/View · Repositories.md":                    {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]] · Under: [[Tag · school › cs513|#school/cs513]] · Also: [[Tag · simulation|#simulation]]\n\nWork: [[Build the grid]] (started)\n\n```atlas-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
 		"views/View · Home.md#":                           {"[[View · Repositories]]"},
 		"views/View · Library.md":                         {"## Topics", "## Needs care"},
 		"views/tags/school/cs513/Tag · school › cs513.md": {"> [!tag] #school/cs513 · 6 documents", "Page: [[CS513]]", "Under: [[Tag · school|#school]]", "## Narrow", "[self-driving (2)](obsidian://search?vault=work&query=tag%3A%23school%2Fcs513+tag%3A%23self-driving)", "## Open work", "## Topics", "## History", `file.hasTag("school/cs513", "school/cs513/grid-sim")`},

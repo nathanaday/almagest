@@ -1,6 +1,6 @@
 {
   "name": "atlas-obsidian",
-  "version": "7.0.1",
+  "version": "7.0.2",
   "description": "One Obsidian vault holds the wiki, the threads, the sessions, and the changes of your work. Agents start in the vault, find the repository through the context graph, and leave a document for every step. Eighteen skills on four nouns (atlas, repo, wiki, thread), four read-only agents, and hooks that keep the rules and a document for every session. Pairs with the atlas-obsidian binary, which serves the eight tools.",
   "author": {
     "name": "nathanaday",
