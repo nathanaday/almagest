@@ -319,7 +319,9 @@ func TestDescribedFollowsAbsorbedSnapshot(t *testing.T) {
 	pv := propose(t, tv, change.Plan{Title: "Describe p3-edge", Absorbs: []string{src}, Writes: []change.Write{{Op: "modify", ID: src, Fields: map[string]any{"description": "A snapshot."}}}})
 	apply(t, tv, pv.Ref.ID)
 	got := tv.Read("wiki/documents/p3-edge.md")
-	if !strings.Contains(got, "described: "+head[:7]) || !strings.Contains(got, "behind: 0") || !strings.Contains(got, "current") {
+	// A short hash such as 9572e60 reads as a number, so YAML quotes it.
+	described := strings.Contains(got, "described: "+head[:7]) || strings.Contains(got, `described: "`+head[:7]+`"`)
+	if !described || !strings.Contains(got, "behind: 0") || !strings.Contains(got, "current") {
 		t.Fatalf("described:\n%s", got)
 	}
 }
