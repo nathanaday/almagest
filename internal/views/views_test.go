@@ -41,7 +41,7 @@ func TestViews(t *testing.T) {
 		"views/View · Repositories.md":                    {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]] · Under: [[Tag · school › cs513|#school/cs513]] · Also: [[Tag · simulation|#simulation]]\n\nWork: [[Build the grid]] (started)\n\n```atlas-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
 		"views/View · Home.md#":                           {"[[View · Repositories]]"},
 		"views/View · Library.md":                         {"## Topics", "## Needs care"},
-		"views/tags/school/cs513/Tag · school › cs513.md": {"> [!tag] #school/cs513 · 6 documents", "Page: [[CS513]]", "Under: [[Tag · school|#school]]", "## Narrow", "[self-driving (2)](obsidian://search?vault=work&query=tag%3A%23school%2Fcs513+tag%3A%23self-driving)", "## Open work", "## Topics", "## History", `file.hasTag("school/cs513", "school/cs513/grid-sim")`},
+		"views/tags/school/cs513/Tag · school › cs513.md": {"> [!tag] #school/cs513 · 6 documents", "Page: [[CS513]]", "Under: [[Tag · school|#school]]", "## Narrow", "[self-driving (2)](obsidian://search?vault=work&query=tag:%23school%2Fcs513%20tag:%23self-driving)", "## Open work", "## Topics", "## History", `file.hasTag("school/cs513", "school/cs513/grid-sim")`},
 		"views/tags/school/Tag · school.md":               {`file.hasTag("school", "school/cs513", "school/cs513/grid-sim")`, "Below: [[Tag · school › cs513|cs513]] (6)"},
 	}
 	for rel, wants := range checks {

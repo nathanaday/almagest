@@ -592,7 +592,8 @@ func (r *renderer) tagView(t string) string {
 		if i == MaxNarrow {
 			break
 		}
-		q := url.QueryEscape("tag:#" + t + " tag:#" + k)
+		// Obsidian decodes with decodeURIComponent, which reads + as a plus, not a space.
+		q := url.PathEscape("tag:#" + t + " tag:#" + k)
 		narrow = append(narrow, fmt.Sprintf("[%s (%d)](obsidian://search?vault=%s&query=%s)", k, with[k], url.PathEscape(r.name), q))
 	}
 	has := map[string]bool{}
