@@ -104,8 +104,8 @@ lists the changes that wait for you.
 
 ## Patterns and conventions
 
-The design is in [`docs/design/`](docs/design/Atlas%207.md);
-start with `Atlas 7.md`.
+The design lives in the maintainer's Atlas vault, outside this repository. These are
+its core rules:
 
 - Everything is a document with an id and a type. No database and no state folder.
 - Code owns what code can derive: ids, statuses, links, hashes, git facts, the first

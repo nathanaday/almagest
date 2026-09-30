@@ -16,7 +16,7 @@ branch and the `v1-final` tag.
 
 | Thing | Location |
 |---|---|
-| The design: rules, document types, tools, hooks, skills | `docs/design/` (start with `Atlas 7.md`) |
+| The design: rules, document types, tools, hooks, skills | the SoftwareProjects vault (`~/Vaults/SoftwareProjects`), tag `tools/atlas-obsidian`: the design pages are sources there (start with `Atlas 7`), absorbed into topics |
 | Each skill's contract | `skills/<name>/SKILL.md`, `skills/atlas/references/` |
 | Each read-only agent | `agents/<name>.md` |
 | The schemas of the nine types | `internal/schema/schema.go` |
