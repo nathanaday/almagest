@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -41,10 +40,12 @@ func (h Home) ConfigPath() string { return filepath.Join(h.Root, "config.json") 
 // BinPath is where setup installs the binary.
 func (h Home) BinPath() string { return filepath.Join(h.Root, "bin", "atlas-obsidian") }
 
-// Config is the machine file: the paths of this machine's vaults, and nothing else.
+// Config is the machine file: the paths of this machine's vaults, and the preferences
+// of every vault.
 type Config struct {
-	Schema string   `json:"schema"`
-	Vaults []string `json:"vaults"`
+	Schema      string      `json:"schema"`
+	Vaults      []string    `json:"vaults"`
+	Preferences Preferences `json:"preferences"`
 }
 
 // Load reads the machine file. A missing file is an empty config.
@@ -57,11 +58,14 @@ func (h Home) Load() (*Config, error) {
 		return nil, err
 	}
 	var c Config
-	if err := json.Unmarshal(data, &c); err != nil {
+	if err := decodeStrict(data, &c); err != nil {
 		return nil, fmt.Errorf("%s: %w", h.ConfigPath(), err)
 	}
 	if c.Schema != ConfigSchema {
 		return nil, fmt.Errorf("%s: schema %q is not %s", h.ConfigPath(), c.Schema, ConfigSchema)
+	}
+	if err := c.Preferences.check(); err != nil {
+		return nil, fmt.Errorf("%s: %w", h.ConfigPath(), err)
 	}
 	return &c, nil
 }
@@ -72,14 +76,14 @@ func (h Home) Save(c *Config) error {
 	if c.Vaults == nil {
 		c.Vaults = []string{}
 	}
-	data, err := json.MarshalIndent(c, "", "  ")
+	data, err := marshalConfig(c)
 	if err != nil {
 		return err
 	}
 	if err := os.MkdirAll(h.Root, 0o755); err != nil {
 		return err
 	}
-	return writeAtomic(h.ConfigPath(), append(data, '\n'))
+	return writeAtomic(h.ConfigPath(), data)
 }
 
 // Paths are the vault folders, absolute.

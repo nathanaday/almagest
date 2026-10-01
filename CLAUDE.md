@@ -61,6 +61,15 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Resume names a config folder only when it is not `~/.claude`.** Claude Code keys its
   login to the folder it was told: `CLAUDE_CONFIG_DIR=~/.claude claude` reports "Not
   logged in" on a machine logged in through the default. Verified 2026-10-01 on 2.1.286.
+- **Agent preferences live in two files, and the binary merges them.** `~/.atlas/config.json`
+  (`preferences`) and `<vault>/.atlas/config.json` (`atlas.vault-config.v1`); the vault
+  wins per key (`vault.Merge`). Both decode strictly, so a typo is an error. The plugin
+  reads and writes them only through `atlas-obsidian config --json`, never the files.
+  The plugin settings of 8.0.2 and 8.0.3 (`agentCommand`, `terminal`, `terminalCommand`)
+  move into the vault file once, and stay in `data.json` until the move succeeds.
+- **A terminal launch fails where no one sees it** (osascript and `open` exit after the
+  spawn), so `openTerminal` checks for the app first. `obsidian/scripts/probe-launch.mjs`
+  opens a real terminal with a probe; record each result in COVERAGE.md.
 - **The chord canvas holds a legend of six colored groups** (`atlas-legend-1` to `-6`).
   Groups, since Obsidian hides a small text card's text when zoomed out and shows a
   group's label at any zoom. Code adds the legend when none is there and keeps each

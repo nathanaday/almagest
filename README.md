@@ -108,6 +108,31 @@ atlas-obsidian vault init --path ~/notes/work --name Work --tagging open \
 atlas-obsidian open --register   # opens it in Obsidian; turn on the Atlas plugin once
 ```
 
+### Agent preferences
+
+Start agent and Resume read four preferences:
+
+| Key                     | Values                                                  | Default    |
+| ----------------------- | ------------------------------------------------------- | ---------- |
+| `agent`                 | `claude`, `codex`                                       | `claude`   |
+| `agent_commands.<agent>`| the command as you type it in a shell, such as a shell function | the agent's name |
+| `terminal`              | `terminal`, `iterm`, `wezterm`, `ghostty`, `custom`     | `terminal` |
+| `terminal_command`      | for `custom`: a command with `{command}` for the agent's command | none |
+
+Two files hold them. `~/.atlas/config.json` holds them for every vault. `.atlas/config.json`
+in a vault overrides them, key by key: when both files set a key, the vault's value wins.
+Set them in the Atlas settings in Obsidian, or from a shell:
+
+```bash
+atlas-obsidian config set terminal wezterm --global        # every vault
+atlas-obsidian config set agent_commands.claude claude-work  # this vault: another account
+atlas-obsidian config                                      # the result, and where each value comes from
+atlas-obsidian config unset agent_commands.claude          # back to the global value
+```
+
+The terminal runs the command in your login shell, so your `PATH` and shell functions
+apply. [COVERAGE.md](COVERAGE.md) lists the agent and terminal pairs we tested.
+
 ## Usage
 
 Start the agent in the vault and ask in plain words. The `atlas` skill routes each
@@ -128,11 +153,10 @@ request.
   into threads and orders them. Obsidian shows the order as a canvas you can redraw,
   colored by each thread's state. "New thread" on a chord or its canvas plants a thread
   in it from a title and a line of idea.
-- "Start agent" on a thread or a chord opens a terminal with Claude Code in the vault,
-  given the hand-off line. The Atlas settings choose the terminal and the agent command
-  (per vault, so a vault can use another account). The sessions pane in the right
-  sidebar shows the open sessions and the ones that closed in the last two hours, with
-  Resume.
+- "Start agent" on a thread or a chord opens a terminal with your agent in the vault,
+  given the hand-off line. The agent preferences choose the agent and the terminal (see
+  below). The sessions pane in the right sidebar shows the open sessions and the ones
+  that closed in the last two hours, with Resume.
 - "Ingest the inbox." Files you dropped in `inbox/` become cited wiki pages.
 - "What should I work on?" The agent reads the board and ranks the open threads.
 - "What do we know about my cs513 self-driving project?" The agent searches the

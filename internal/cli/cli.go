@@ -71,6 +71,8 @@ Usage:
   atlas-obsidian lint [--tag T]...
   atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
   atlas-obsidian mcp                               the MCP server, over stdio
+  atlas-obsidian config [show] | set KEY VALUE [--global] | unset KEY [--global]
+                                                   agent preferences: the vault's file wins over ~/.atlas/config.json
   atlas-obsidian setup | doctor | version | open [DOC]
 
 Every command takes --vault (a path, or a name from ~/.atlas/config.json) and --json.
@@ -107,6 +109,8 @@ func (c *CLI) Run(argv []string) int {
 		return c.hookCmd(rest)
 	case "mcp":
 		err = c.mcpCmd()
+	case "config":
+		err = c.configCmd(rest)
 	case "setup":
 		err = c.setupCmd(rest)
 	case "doctor":

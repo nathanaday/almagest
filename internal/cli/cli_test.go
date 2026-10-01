@@ -225,3 +225,40 @@ func TestHookCommandReadsStdin(t *testing.T) {
 		t.Fatal("an unknown hook fails")
 	}
 }
+
+func TestConfigCommand(t *testing.T) {
+	tv := testvault.New(t)
+	r := run{t: t, tv: tv}
+	r.ok("", "config", "set", "terminal", "wezterm", "--global")
+	r.ok("", "config", "set", "agent_commands.claude", "claude-work")
+	var view struct {
+		Preferences struct {
+			AgentCommand string `json:"agent_command"`
+			Terminal     string
+			Sources      map[string]string
+		}
+		Vault *struct {
+			AgentCommands map[string]string `json:"agent_commands"`
+		}
+	}
+	json.Unmarshal([]byte(r.ok("", "config", "--json")), &view)
+	if view.Preferences.AgentCommand != "claude-work" || view.Preferences.Sources["agent_commands.claude"] != "vault" ||
+		view.Preferences.Terminal != "wezterm" || view.Preferences.Sources["terminal"] != "global" || view.Vault == nil {
+		t.Fatalf("config: %+v", view)
+	}
+	if _, err := os.Stat(filepath.Join(tv.V.Root, ".atlas", "config.json")); err != nil {
+		t.Fatalf("the vault's file: %v", err)
+	}
+	r.ok("", "config", "set", "terminal", "terminal")
+	if out := r.ok("", "config"); !strings.Contains(out, "terminal") || !strings.Contains(out, "vault") {
+		t.Fatalf("show:\n%s", out)
+	}
+	r.ok("", "config", "unset", "terminal")
+	json.Unmarshal([]byte(r.ok("", "config", "--json")), &view)
+	if view.Preferences.Terminal != "wezterm" {
+		t.Fatalf("unset falls back to the global file: %+v", view)
+	}
+	if code, _, errOut := r.atlas("", "config", "set", "terminal", "kitty"); code == 0 || !strings.Contains(errOut, "kitty") {
+		t.Fatalf("a bad value: %d %s", code, errOut)
+	}
+}

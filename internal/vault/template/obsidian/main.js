@@ -1315,6 +1315,34 @@ var TERMINAL_NAMES = {
   ghostty: "Ghostty",
   custom: "Custom command"
 };
+var AGENTS = ["claude", "codex"];
+var AGENT_NAMES = { claude: "Claude Code", codex: "Codex" };
+function preference(p, key) {
+  if (!p) return "";
+  if (key.startsWith("agent_commands.")) return p.agent_commands?.[key.slice("agent_commands.".length)] ?? "";
+  return String(p[key] ?? "");
+}
+function inherited(config, key) {
+  const g = preference(config.global, key);
+  if (g) return g;
+  if (key === "agent") return "claude";
+  if (key === "terminal") return "terminal";
+  if (key.startsWith("agent_commands.")) return key.slice("agent_commands.".length);
+  return "";
+}
+function legacyPreferences(saved, vault) {
+  if (!saved) return [];
+  const out = [];
+  const take = (key, value, old) => {
+    const v = typeof value === "string" ? value.trim() : "";
+    if (v && v !== old && !preference(vault, key)) out.push([key, v]);
+  };
+  take("agent_commands.claude", saved.agentCommand, "claude");
+  if (TERMINALS.includes(String(saved.terminal))) take("terminal", saved.terminal, "terminal");
+  if (String(saved.terminalCommand ?? "").includes("{command}")) take("terminal_command", saved.terminalCommand, "");
+  return out;
+}
+var TERMINAL_APPS = { iterm: "iTerm.app", wezterm: "WezTerm.app", ghostty: "Ghostty.app" };
 function terminalLaunch(app, command, shell, custom) {
   const sh = shell || "/bin/zsh";
   const interactive = [sh, "-lic", `${command}; exec ${sh} -l`];
@@ -1349,6 +1377,28 @@ function terminalLaunch(app, command, shell, custom) {
       };
   }
 }
+function plainLinks(text) {
+  return text.replace(/\[\[([^\]|]*)(?:\|([^\]]*))?\]\]/g, (_m, target, alias) => (alias ?? target).split("#")[0]);
+}
+function threadStage(t) {
+  if (t.blocked) return "blocked";
+  switch (t.status) {
+    case "stub":
+      return "needs spec";
+    case "specified":
+      return "writing tasks";
+    case "planned":
+      return "ready";
+    case "started":
+      return t.tasks ? `tasks ${t.tasks}` : "started";
+    case "unverified":
+      return "verifying";
+    case "verified":
+      return "to close";
+    default:
+      return t.status;
+  }
+}
 
 // src/launcher.ts
 var import_child_process2 = require("child_process");
@@ -1356,7 +1406,14 @@ var import_fs2 = require("fs");
 var import_os2 = require("os");
 var import_path = require("path");
 function openTerminal(app, command, custom) {
+  const bundle = TERMINAL_APPS[app];
+  const found = bundle ? ["/Applications", (0, import_path.join)((0, import_os2.homedir)(), "Applications")].map((d) => (0, import_path.join)(d, bundle)).find((p) => (0, import_fs2.existsSync)(p)) : void 0;
+  if (bundle && !found) return Promise.reject(new Error(`${TERMINAL_NAMES[app]} is not in /Applications`));
+  if (app === "custom" && !custom.includes("{command}")) {
+    return Promise.reject(new Error("the custom terminal command has no {command}"));
+  }
   const launch = terminalLaunch(app, command, process.env.SHELL ?? "/bin/zsh", custom);
+  if (app === "wezterm" && found) launch.program = (0, import_path.join)(found, "Contents/MacOS/wezterm");
   return new Promise((resolve, reject) => {
     const child = (0, import_child_process2.spawn)(launch.program, launch.args, { detached: true, stdio: "ignore" });
     child.once("error", reject);
@@ -1434,7 +1491,7 @@ function readSessions(app) {
     if (!file.path.startsWith("sessions/")) continue;
     const fm = app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || fm.type !== "session") continue;
-    const work = asList(fm.work);
+    const work = asList(fm.work).map(linkTitle);
     out.push({
       file,
       path: file.path,
@@ -1444,7 +1501,7 @@ function readSessions(app) {
       pid: Number(fm.pid ?? 0) || 0,
       parent: String(fm.parent ?? ""),
       description: typeof fm.description === "string" && fm.description.trim() ? fm.description : file.basename,
-      work: linkTitle(work[work.length - 1]),
+      work,
       threads: [...asList(fm.specs), ...asList(fm.threads)],
       harness: String(fm.harness ?? "claude"),
       harness_id: String(fm.harness_id ?? ""),
@@ -1459,17 +1516,28 @@ async function sessionGroups(app, staleHours) {
   const live = await liveAgents(rows.map((r) => r.pid));
   return { rows, groups: groupSessions(rows, (pid) => live.has(pid), /* @__PURE__ */ new Date(), staleHours) };
 }
-function currentThread(app, s) {
+function sessionThread(app, s) {
+  const stubOf = (title) => {
+    const file = title ? app.metadataCache.getFirstLinkpathDest(title, s.file.path) : null;
+    const fm = file ? app.metadataCache.getFileCache(file)?.frontmatter : void 0;
+    if (!file || !fm) return null;
+    if (fm.type === "spec" || fm.type === "tasks" || fm.type === "verification") return stubOf(linkTitle(fm.thread));
+    if (fm.type !== "stub") return null;
+    return { file, id: String(fm.id ?? ""), status: String(fm.status ?? ""), tasks: String(fm.tasks ?? ""), blocked: String(fm.blocked ?? "") };
+  };
   let fallback = null;
   for (let i = s.threads.length - 1; i >= 0; i--) {
-    const title = linkTitle(s.threads[i]);
-    if (!title) continue;
-    const file = app.metadataCache.getFirstLinkpathDest(title, s.file.path);
-    const entry = { title, file };
-    fallback ??= entry;
-    if (file && app.metadataCache.getFileCache(file)?.frontmatter?.status === "started") return entry;
+    const t = stubOf(linkTitle(s.threads[i]));
+    if (!t) continue;
+    fallback ??= t;
+    if (t.status === "started") return t;
   }
-  return fallback;
+  if (fallback) return fallback;
+  for (let i = s.work.length - 1; i >= 0; i--) {
+    const t = stubOf(s.work[i]);
+    if (t) return t;
+  }
+  return null;
 }
 async function resume(plugin, s) {
   const id = s.harness_id.trim();
@@ -1546,27 +1614,31 @@ var SessionsView = class extends import_obsidian6.ItemView {
     const card = root.createDiv({ cls: "atlas-session" });
     card.dataset.state = STATE_CLASS[state];
     card.onclick = () => void this.app.workspace.getLeaf(false).openFile(s.file);
-    const head = card.createDiv({ cls: "atlas-session-head" });
-    head.createSpan({ cls: "atlas-session-status", text: state });
-    head.createSpan({ cls: "atlas-session-title", text: s.description });
-    const thread = currentThread(this.app, s);
-    const where = (thread?.title ?? s.work) || "";
-    if (where) card.createDiv({ cls: "atlas-session-where", text: where });
-    const progress = card.createDiv({ cls: "atlas-session-progress" });
-    void this.app.vault.cachedRead(s.file).then((text) => {
-      if (generation === this.generation) progress.setText(lastProgressLine(text));
-    });
-    const foot = card.createDiv({ cls: "atlas-session-foot" });
+    const thread = sessionThread(this.app, s);
+    const top = card.createDiv({ cls: "atlas-session-top" });
+    top.createSpan({ cls: "atlas-session-status", text: state });
+    if (thread?.id) top.createSpan({ cls: "atlas-session-id", text: thread.id });
+    if (subagents > 0) top.createSpan({ cls: "atlas-session-sub", text: `+${subagents} ${subagents === 1 ? "subagent" : "subagents"}` });
     const closed = state === "ended" || state === "lost";
-    foot.createSpan({ cls: "atlas-session-ago", text: formatAgo(closed ? s.ended || s.updated : s.updated, now) });
-    if (subagents > 0) foot.createSpan({ cls: "atlas-session-sub", text: `${subagents} ${subagents === 1 ? "subagent" : "subagents"}` });
+    top.createSpan({ cls: "atlas-session-ago", text: formatAgo(closed ? s.ended || s.updated : s.updated, now) });
     if (closed) {
-      const button = foot.createEl("button", { text: "Resume" });
+      const button = top.createEl("button", { cls: "atlas-session-resume", text: "Resume" });
       button.onclick = (e) => {
         e.stopPropagation();
         void resume(this.plugin, s);
       };
     }
+    const title = plainLinks(s.description);
+    card.createDiv({ cls: "atlas-session-title", text: title }).setAttr("title", title);
+    if (thread) {
+      const line = card.createDiv({ cls: "atlas-session-thread" });
+      line.createSpan({ cls: "atlas-session-thread-name", text: thread.file.basename });
+      line.createSpan({ cls: "atlas-session-stage", text: threadStage(thread) }).dataset.stage = thread.blocked ? "blocked" : thread.status;
+    }
+    void this.app.vault.cachedRead(s.file).then((text) => {
+      const last = lastProgressLine(text);
+      if (generation === this.generation && last) card.setAttr("title", plainLinks(last));
+    });
   }
 };
 
@@ -1621,6 +1693,8 @@ var NewThreadModal = class extends import_obsidian7.Modal {
 
 // src/settings.ts
 var import_obsidian8 = require("obsidian");
+var import_os4 = require("os");
+var shortHome = (p) => p.startsWith((0, import_os4.homedir)() + "/") ? "~" + p.slice((0, import_os4.homedir)().length) : p;
 var DEFAULT_SETTINGS = {
   binaryPath: "",
   syncOnChange: true,
@@ -1629,10 +1703,7 @@ var DEFAULT_SETTINGS = {
   tagClick: false,
   graphColors: "tag",
   graphOwned: [],
-  focusTags: [],
-  terminal: "terminal",
-  terminalCommand: "",
-  agentCommand: "claude"
+  focusTags: []
 };
 var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
   constructor(app, plugin) {
@@ -1692,33 +1763,69 @@ var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
       })
     );
     new import_obsidian8.Setting(containerEl).setName("Agents").setHeading();
-    new import_obsidian8.Setting(containerEl).setName("Agent command").setDesc("What Start agent runs in the vault, with the hand-off line as its first prompt. Type it as you would in a shell: claude, or a shell function such as one that picks an account. This setting is per vault.").addText(
-      (text) => text.setPlaceholder("claude").setValue(this.plugin.settings.agentCommand).onChange(async (value) => {
-        this.plugin.settings.agentCommand = value.trim() || "claude";
-        await this.plugin.saveSettings();
-      })
-    );
-    let custom = null;
-    new import_obsidian8.Setting(containerEl).setName("Terminal").setDesc("The terminal that Start agent and Resume open. It runs the command in your login shell, so your PATH and shell functions apply.").addDropdown((dropdown) => {
-      for (const t of TERMINALS) dropdown.addOption(t, TERMINAL_NAMES[t]);
-      dropdown.setValue(this.plugin.settings.terminal).onChange(async (value) => {
-        this.plugin.settings.terminal = value;
-        await this.plugin.saveSettings();
-        custom?.settingEl.toggle(value === "custom");
-      });
-    });
-    custom = new import_obsidian8.Setting(containerEl).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText(
-      (text) => text.setValue(this.plugin.settings.terminalCommand).onChange(async (value) => {
-        this.plugin.settings.terminalCommand = value;
-        await this.plugin.saveSettings();
-      })
-    );
-    custom.settingEl.toggle(this.plugin.settings.terminal === "custom");
+    const agents = containerEl.createDiv();
+    void this.agents(agents);
     new import_obsidian8.Setting(containerEl).setName("Graph").setHeading();
     new import_obsidian8.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by top tag, by type, by the state of their work, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
       for (const { mode, label } of GRAPH_MODES) dropdown.addOption(mode, label);
       dropdown.setValue(this.plugin.settings.graphColors).onChange((value) => void this.plugin.graphColors.setMode(value));
     });
+  }
+  /**
+   * The agent preferences, from the binary: one group for every vault, one for this vault.
+   * A vault key left empty takes the global value, shown as its placeholder.
+   */
+  async agents(el) {
+    let config;
+    try {
+      config = await this.plugin.agentConfig();
+    } catch (e) {
+      el.empty();
+      el.createDiv({ cls: "setting-item-description", text: `Atlas cannot read the agent preferences: ${e.message}` });
+      return;
+    }
+    el.empty();
+    const intro = el.createDiv({ cls: "setting-item-description atlas-setting-intro" });
+    intro.setText(`Start agent and Resume read these. ${shortHome(config.files.global)} holds them for every vault; .atlas/config.json in this vault overrides them, key by key. atlas-obsidian config shows the result.`);
+    const set = async (key, value, global) => {
+      try {
+        await this.plugin.setPreference(key, value, global);
+      } catch (e) {
+        new import_obsidian8.Notice(`Atlas: ${e.message}`, 8e3);
+      }
+      void this.agents(el);
+    };
+    const group = (name, global) => {
+      new import_obsidian8.Setting(el).setName(name).setHeading();
+      const own = global ? config.global : config.vault;
+      const same2 = (key, label) => global ? "" : `Same as all vaults (${label || inherited(config, key)})`;
+      new import_obsidian8.Setting(el).setName("Agent").addDropdown((d) => {
+        if (!global) d.addOption("", same2("agent", AGENT_NAMES[inherited(config, "agent")]));
+        for (const a of AGENTS) d.addOption(a, AGENT_NAMES[a]);
+        d.setValue(preference(own, "agent") || (global ? "claude" : "")).onChange((v) => void set("agent", v, global));
+      });
+      for (const a of AGENTS) {
+        const key = `agent_commands.${a}`;
+        new import_obsidian8.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
+          t.setPlaceholder(global ? a : inherited(config, key)).setValue(preference(own, key));
+          t.inputEl.addEventListener("change", () => void set(key, t.getValue(), global));
+        });
+      }
+      new import_obsidian8.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
+        if (!global) d.addOption("", same2("terminal", TERMINAL_NAMES[inherited(config, "terminal")]));
+        for (const t of TERMINALS) d.addOption(t, TERMINAL_NAMES[t]);
+        d.setValue(preference(own, "terminal") || (global ? "terminal" : "")).onChange((v) => void set("terminal", v, global));
+      });
+      const terminal = preference(own, "terminal") || inherited(config, "terminal");
+      if (terminal === "custom") {
+        new import_obsidian8.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
+          t.setPlaceholder(global ? "" : inherited(config, "terminal_command")).setValue(preference(own, "terminal_command"));
+          t.inputEl.addEventListener("change", () => void set("terminal_command", t.getValue(), global));
+        });
+      }
+    };
+    group("All vaults", true);
+    group("This vault", false);
   }
 };
 
@@ -2099,9 +2206,12 @@ var ReasonModal2 = class extends import_obsidian11.Modal {
 
 // src/main.ts
 var SYNC_DELAY = 2e3;
+var LEGACY_KEYS = ["agentCommand", "terminal", "terminalCommand"];
 var ECHO_WINDOW = 5e3;
 var AtlasPlugin = class extends import_obsidian12.Plugin {
   settings = { ...DEFAULT_SETTINGS };
+  /** The agent settings of 8.0.2 and 8.0.3, kept in data.json until they move to the vault's config file. */
+  legacy = null;
   badges;
   viewFolders;
   graphColors;
@@ -2209,6 +2319,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     this.app.workspace.onLayoutReady(() => {
       this.refreshSessions();
       this.checkLayout();
+      void this.moveLegacyPreferences();
     });
     const first = this.app.metadataCache.on("resolved", () => {
       this.app.metadataCache.offref(first);
@@ -2228,6 +2339,8 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
   }
   async loadSettings() {
     const saved = await this.loadData();
+    const old = Object.entries(saved ?? {}).filter(([k]) => LEGACY_KEYS.includes(k));
+    this.legacy = old.length > 0 ? Object.fromEntries(old) : null;
     this.settings = { ...DEFAULT_SETTINGS };
     for (const key of Object.keys(DEFAULT_SETTINGS)) {
       if (saved && saved[key] !== void 0) this.settings[key] = saved[key];
@@ -2240,7 +2353,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     }
   }
   async saveSettings() {
-    await this.saveData(this.settings);
+    await this.saveData({ ...this.legacy, ...this.settings });
   }
   /** Runs one atlas command in this vault and returns its JSON. */
   atlas(args) {
@@ -2399,11 +2512,34 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     return n > 0 ? n : 12;
   }
   // Agents
+  /** The agent preferences: the vault's config file over ~/.atlas/config.json. */
+  agentConfig() {
+    return this.atlas(["config"]);
+  }
+  /** Sets or unsets (value "") one agent preference, in the vault's file or the global one. */
+  async setPreference(key, value, global) {
+    const args = value ? ["config", "set", key, value] : ["config", "unset", key];
+    return this.atlas(global ? [...args, "--global"] : args);
+  }
+  /** Moves the agent settings of 8.0.2 and 8.0.3 into the vault's config file, once. */
+  async moveLegacyPreferences() {
+    const saved = this.legacy;
+    if (!saved) return;
+    try {
+      const config = await this.agentConfig();
+      for (const [key, value] of legacyPreferences(saved, config.vault)) await this.setPreference(key, value, false);
+      this.legacy = null;
+      await this.saveSettings();
+    } catch (e) {
+      console.warn("Atlas: the agent settings did not move to .atlas/config.json", e);
+    }
+  }
   /** Runs a command in a new terminal; off macOS, or when that fails, copies it. */
-  async runInTerminal(command, what) {
+  async runInTerminal(command, what, config) {
     if (process.platform === "darwin") {
       try {
-        await openTerminal(this.settings.terminal, command, this.settings.terminalCommand);
+        const prefs = (config ?? await this.agentConfig()).preferences;
+        await openTerminal(prefs.terminal, command, prefs.terminal_command);
         return;
       } catch (e) {
         new import_obsidian12.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
@@ -2417,7 +2553,14 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     const adapter = this.app.vault.adapter;
     if (!(adapter instanceof import_obsidian12.FileSystemAdapter)) return;
     const prompt = `Resume Atlas ${type === "chord" ? "chord" : "thread"} ${id}`;
-    await this.runInTerminal(startCommand(adapter.getBasePath(), this.settings.agentCommand, prompt), "the agent command");
+    let config;
+    try {
+      config = await this.agentConfig();
+    } catch (e) {
+      new import_obsidian12.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
+      return;
+    }
+    await this.runInTerminal(startCommand(adapter.getBasePath(), config.preferences.agent_command, prompt), "the agent command", config);
   }
   /** The stub or chord open in the active view, or the chord of an open canvas. */
   activeWork() {
