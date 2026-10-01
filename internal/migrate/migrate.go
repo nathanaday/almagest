@@ -1,8 +1,11 @@
-// Package migrate moves a 6.x vault to the flat layout of 7.0 in one commit: every typed
+// Package migrate moves a vault of an earlier layout to the layout of 8.0 in one commit,
+// in two steps. The first takes a 6.x vault to the flat layout of 7.0: every typed
 // document into wiki/documents, the captured originals into wiki/assets, the scope tree
 // into tags, the threads into stubs, plans, and events. It reads the 6.x fields (scope,
 // parent, thread), which 6.4 and later kept current from the folders, and which earlier
-// releases held as the record. Plan computes the move and writes nothing; Run writes it.
+// releases held as the record. The second (v8.go) takes the plans of 7.x to threads and
+// chords. A 7.x vault takes the second step only. Plan computes the move and writes
+// nothing; Run writes it.
 package migrate
 
 import (
@@ -24,13 +27,13 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 	"github.com/nathanaday/atlas-obsidian/internal/views"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Trailer marks the migration's commit.
-const Trailer = "Atlas-Migrate: 6.5 → 7.0"
+const Trailer = "Atlas-Migrate: 8.0"
 
 // TagMap is the tag a scope became.
 type TagMap struct {
@@ -46,7 +49,19 @@ type Retitle struct {
 
 // Report is what a migration does.
 type Report struct {
-	Vault      string    `json:"vault"`
+	Vault string `json:"vault"`
+	// From is the layout the vault had: 6.x, or 7.x.
+	From string `json:"from"`
+	// Threads, Specs, TaskLists, Verifications, Chords, and Topics count what the plans
+	// and designs of 7.x became.
+	Threads       int `json:"threads"`
+	Specs         int `json:"specs"`
+	TaskLists     int `json:"task_lists"`
+	Verifications int `json:"verifications"`
+	Chords        int `json:"chords"`
+	Topics        int `json:"topics"`
+	Notes         int `json:"notes"`
+
 	Documents  int       `json:"documents"`
 	Events     int       `json:"events"`
 	Assets     int       `json:"assets"`
@@ -92,32 +107,74 @@ type titles struct{ taken map[string]string }
 func (t *titles) free(title string) bool  { _, ok := t.taken[strings.ToLower(title)]; return !ok }
 func (t *titles) take(title, path string) { t.taken[strings.ToLower(title)] = path }
 
-// Plan computes the migration of a 6.x vault and writes nothing.
+func newReport(v *vault.Vault) *Report {
+	return &Report{Vault: v.Name(), Tags: []TagMap{}, Retitles: []Retitle{}, Inbox: []string{}, Scratchpad: []string{}, Removed: []string{}, Warnings: []string{}}
+}
+
+// Plan computes the migration of a vault and writes nothing. For a 6.x vault it lists the
+// first step only: the second reads what the first wrote.
 func Plan(v *vault.Vault, now time.Time) (*Report, error) {
+	if fresh, err := vault.Open(v.Root); err == nil {
+		v = fresh
+	}
+	switch layout := v.LayoutVersion(); {
+	case layout >= vault.Layout:
+		return nil, errors.New("this vault has the 8.0 layout already; there is nothing to migrate")
+	case layout >= vault.LayoutFlat:
+		p, err := build8(v, now, newReport(v))
+		if err != nil {
+			return nil, err
+		}
+		p.report.From = "7.x"
+		return p.report, nil
+	}
 	p, err := build(v, now)
 	if err != nil {
 		return nil, err
 	}
+	p.report.From = "6.x"
+	p.report.Warnings = append(p.report.Warnings, "this lists the first step, the move to the flat layout; the same run then turns each plan into a thread (a stub, a spec, tasks, a verification)")
 	return p.report, nil
 }
 
-// Run migrates a 6.x vault in one commit, then syncs the derived parts and writes the
-// views.
+// Run migrates a vault in one commit, then syncs the derived parts and writes the views.
 func Run(v *vault.Vault, now time.Time) (*Report, error) {
 	tx, err := vault.Begin(v, func() error { return vault.Recover(v) })
 	if err != nil {
 		return nil, err
 	}
 	defer tx.Close()
-	p, err := build(v, now)
+	fresh, err := vault.Open(v.Root)
+	if err != nil {
+		return nil, err
+	}
+	if fresh.LayoutVersion() >= vault.Layout {
+		return nil, errors.New("this vault has the 8.0 layout already; there is nothing to migrate")
+	}
+	report := newReport(fresh)
+	report.From = "7.x"
+	if fresh.LayoutVersion() < vault.LayoutFlat {
+		p, err := build(fresh, now)
+		if err != nil {
+			return nil, err
+		}
+		if err := p.execute(); err != nil {
+			return nil, err
+		}
+		report = p.report
+		report.From = "6.x"
+		if fresh, err = vault.Open(v.Root); err != nil {
+			return nil, err
+		}
+	}
+	p, err := build8(fresh, now, report)
 	if err != nil {
 		return nil, err
 	}
 	if err := p.execute(); err != nil {
 		return nil, err
 	}
-	fresh, err := vault.Open(v.Root)
-	if err != nil {
+	if fresh, err = vault.Open(v.Root); err != nil {
 		return nil, err
 	}
 	if err := fresh.EnsureFolders(); err != nil {
@@ -126,7 +183,7 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 	if _, err := vault.ObsidianSettings(fresh); err != nil {
 		return nil, err
 	}
-	// A 6.x plugin cannot read the new layout, so the vault gets the one this binary carries.
+	// An older plugin cannot read the new layout, so the vault gets the one this binary carries.
 	if fresh.InstalledPluginVersion() != "" {
 		wrote, err := vault.InstallPlugin(fresh)
 		if err != nil {
@@ -143,7 +200,7 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 	if err := g.AddAll(); err != nil {
 		return nil, err
 	}
-	sha, err := g.Commit("layout: migrate to 7.0\n\n" + Trailer)
+	sha, err := g.Commit("layout: migrate to 8.0\n\n" + Trailer + " from " + report.From)
 	if err != nil {
 		return nil, err
 	}
@@ -167,7 +224,7 @@ func syncDerived(v *vault.Vault, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if _, err := work.Load(idx).Sync(v.WriteIfChanged); err != nil {
+	if _, err := thread.Load(idx).Sync(v.WriteIfChanged); err != nil {
 		return err
 	}
 	if idx, err = vault.Load(v); err != nil {
@@ -262,19 +319,19 @@ func (o *old) of(types ...string) []*doc.Doc {
 	return out
 }
 
-// build reads the 6.x vault and computes every write.
+// build reads the 6.x vault and computes every write of the first step.
 func build(v *vault.Vault, now time.Time) (*plan, error) {
 	if fresh, err := vault.Open(v.Root); err == nil {
 		v = fresh
 	}
-	if v.LayoutVersion() >= vault.Layout {
-		return nil, errors.New("this vault has the 7.0 layout already; there is nothing to migrate")
+	if v.LayoutVersion() >= vault.LayoutFlat {
+		return nil, errors.New("this vault has the flat layout already")
 	}
 	o, err := read(v)
 	if err != nil {
 		return nil, err
 	}
-	p := &plan{v: v, now: now.Truncate(time.Second), report: &Report{Vault: v.Name(), Tags: []TagMap{}, Retitles: []Retitle{}, Inbox: []string{}, Scratchpad: []string{}, Removed: []string{}, Warnings: []string{}}, titles: &titles{taken: map[string]string{}}, rename: links.Rename{}}
+	p := &plan{v: v, now: now.Truncate(time.Second), report: newReport(v), titles: &titles{taken: map[string]string{}}, rename: links.Rename{}}
 	var waiting []string
 	for _, c := range o.of("change") {
 		if s := c.Str("status"); s == "proposed" || s == "applying" {

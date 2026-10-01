@@ -1,6 +1,6 @@
 # Documents
 
-Every typed document lives flat in `wiki/documents/`. There are six types in three
+Every typed document lives flat in `wiki/documents/`. There are nine types in three
 families:
 
 | Type | Family | Kinds | Written by |
@@ -8,13 +8,16 @@ families:
 | source | knowledge | — | `source` capture; then `change` |
 | repository | knowledge | — | `change`; code keeps the git facts |
 | topic | knowledge | concept, entity, policy, overview | `change` |
-| stub | work | — | `work` |
-| spec | work | plan, design | `work` |
-| event | record | started, continued, completed, dropped, reopened, blocked, unblocked, promoted, resolved, note | code |
+| stub | work | — | `thread` |
+| spec | work | — | `thread` |
+| tasks | work | — | `thread` |
+| verification | work | — | `thread` |
+| chord | work | — | `chord` |
+| event | record | started, continued, dropped, reopened, blocked, unblocked, promoted, resolved, note | code |
 
 Knowledge is what the vault knows; only an applied change writes it
-([changes.md](changes.md)). Work is what the user means to do; see [work.md](work.md)
-for stubs, specs, and events. The file name is the title. Code routes every new document
+([changes.md](changes.md)). Work is what the user means to do; see
+[threads.md](threads.md) for threads, chords, and events. The file name is the title. Code routes every new document
 to `wiki/documents/<title>.md`, so give a type, a kind, and a title, never a path.
 
 ## Fields every document has
@@ -97,7 +100,7 @@ titled `<repository> @ <commit>`.
 Body: the live status block (code's), `## What it is`, `## How it is built` (languages,
 frameworks, build and test commands), `## Layout` (the main folders), `## Components`
 (links to entity topics tagged `component`, one line each), `## Instructions` (the paths
-of AGENTS.md and CLAUDE.md, and what they require), `## Work` and `## Knowledge`
+of AGENTS.md and CLAUDE.md, and what they require), `## Threads` and `## Knowledge`
 (code's inline Bases), `## Notes` (the user's).
 
 ## Topic
@@ -119,10 +122,11 @@ from: ""                   # the stub it grew from, when it spawned from one
 | overview | the page of a tag | `## Summary` (what the tag holds, for a reader), `## Context` (what an agent must know under the tag), `## Map` (code's), `## Related` |
 
 Every kind then has `## Sources` (each cited document, one line on what it gives),
-`## Origin` (code's, when the topic was a stub), and `## Notes` (the user's).
+`## Threads` (code's: the specs that cite the topic, when one does), `## Origin` (code's,
+when the topic was a stub), and `## Notes` (the user's).
 
 - The kind of an entity is a tag: `person`, `tool`, `component`, `service`.
-- `status`: `draft` when the topic is thin or rests only on a spec that is not done;
+- `status`: `draft` when the topic is thin or rests only on a spec that is not verified;
   `stable` when it is complete for what its sources say; `contested` when two sources
   disagree and the topic shows both; `deprecated` when the subject is gone, with a link
   to what replaced it.
@@ -136,15 +140,15 @@ Every kind then has `## Sources` (each cited document, one line on what it gives
 
 - The lead callout, the first block of the body, is code's for every type: never write
   or edit it. A body you give below it keeps it.
-- Code's sections: `## Map`, `## Origin` of a topic; `## Work`, `## Knowledge` of a
-  repository; the embed of a source. Never write them.
+- Code's sections: `## Map`, `## Threads`, `## Origin` of a topic; `## Threads`,
+  `## Knowledge` of a repository; the embed of a source. Never write them.
 - `## Notes` is the user's in every type. Add to it only when the user asks.
 
 ## Claims and citations
 
 - Cite the document for every material claim, with a locator when one exists:
   `[[DINOv2]], p. 4`, or `[[p3-edge @ 4ac19e2]], internal/score/box.go:40`. A citation
-  may name any document: a source, a spec, an event, a session. List each in `sources`.
+  may name any document: a source, a spec, a verification, an event, a session. List each in `sources`.
 - Keep a source's statements apart from your synthesis.
 - Keep contradictions: show both claims with their citations and set
   `status: contested`. Do not pick a winner in silence.

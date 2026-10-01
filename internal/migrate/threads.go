@@ -11,12 +11,12 @@ import (
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
-// thread is a 6.x thread: its stub and the documents that name it.
-type thread struct {
+// oldThread is a 6.x thread: its stub and the documents that name it.
+type oldThread struct {
 	stub     *doc.Doc
 	spec     *doc.Doc
 	tasks    []*doc.Doc
@@ -27,17 +27,17 @@ type thread struct {
 // document's events keep a strict order.
 type events struct {
 	p      *plan
-	titles *work.Titles
+	titles *thread.Titles
 	last   map[string]time.Time
 }
 
-func (e *events) add(in work.EventIn) *write {
+func (e *events) add(in thread.EventIn) *write {
 	if last, ok := e.last[in.SubjectID]; ok && !in.At.After(last) {
 		in.At = last.Add(time.Second)
 	}
 	e.last[in.SubjectID] = in.At
-	in.By = work.ByUser
-	rel, content, _ := work.NewEvent(e.titles, in)
+	in.By = thread.ByUser
+	rel, content, _ := thread.NewEvent(e.titles, in)
 	w := &write{to: rel, content: content}
 	e.p.writes = append(e.p.writes, w)
 	e.p.report.Events++
@@ -61,11 +61,11 @@ func (p *plan) threads(o *old, scopeTag map[string]string, absorbed map[string][
 	if err != nil {
 		return err
 	}
-	ev := &events{p: p, titles: work.NewTitles(idx), last: map[string]time.Time{}}
-	byID := map[string]*thread{}
-	var list []*thread
+	ev := &events{p: p, titles: thread.NewTitles(idx), last: map[string]time.Time{}}
+	byID := map[string]*oldThread{}
+	var list []*oldThread
 	for _, s := range o.of("stub") {
-		t := &thread{stub: s}
+		t := &oldThread{stub: s}
 		byID[s.ID()] = t
 		list = append(list, t)
 	}
@@ -103,7 +103,7 @@ func (p *plan) threads(o *old, scopeTag map[string]string, absorbed map[string][
 	return nil
 }
 
-func (p *plan) thread(o *old, t *thread, scopeTag map[string]string, absorbed map[string][]string, ev *events) {
+func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed map[string][]string, ev *events) {
 	s := t.stub
 	title := vault.Title(s)
 	idea, _ := doc.Section(s.Body, "Stub")
@@ -211,7 +211,7 @@ func (p *plan) thread(o *old, t *thread, scopeTag map[string]string, absorbed ma
 		}
 	}
 	type pending struct {
-		in       work.EventIn
+		in       thread.EventIn
 		absorbed bool
 	}
 	var taskEvents []pending
@@ -253,7 +253,7 @@ func (p *plan) thread(o *old, t *thread, scopeTag map[string]string, absorbed ma
 			{Key: "status", Value: "open"},
 		}
 		p.put(task, nt, doc.Render(append(fields, p.keepUser(task, "spec")...), strings.TrimSpace(tb)+"\n"))
-		base := work.EventIn{SubjectTitle: nt, SubjectID: task.ID(), SubjectTags: rootTags}
+		base := thread.EventIn{SubjectTitle: nt, SubjectID: task.ID(), SubjectTags: rootTags}
 		at, _ := vault.ParseTime(tUpdated)
 		if first := progressDate.FindString(progress); first != "" {
 			if st, ok := vault.ParseTime(first + "T09:00:00"); ok {
@@ -284,7 +284,7 @@ func (p *plan) thread(o *old, t *thread, scopeTag map[string]string, absorbed ma
 			p.absorbed = append(p.absorbed, w.to)
 		}
 	}
-	rootIn := work.EventIn{SubjectTitle: title, SubjectID: s.ID(), SubjectTags: rootTags}
+	rootIn := thread.EventIn{SubjectTitle: title, SubjectID: s.ID(), SubjectTags: rootTags}
 	if !earliest.IsZero() {
 		in := rootIn
 		in.Kind, in.At = "started", earliest.Add(-time.Second)

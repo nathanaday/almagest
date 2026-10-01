@@ -7,13 +7,16 @@ import (
 
 // OwnedLeads are the callout types whose leading callout belongs to code. Any other
 // callout is the user's, and code never replaces it. An event's callout is event-<kind>,
-// since a kind such as note is a callout users write. The 6.x types are here so a
-// migration replaces their callouts.
+// since a kind such as note is a callout users write. The types of 6.x and 7.x are here
+// so a migration replaces their callouts.
 var OwnedLeads = map[string]bool{
 	"source": true, "repository": true, "repository-missing": true,
 	"concept": true, "entity": true, "policy": true, "overview": true,
+	"thread": true, "thread-closed": true, "thread-resolved": true, "thread-dropped": true,
+	"spec": true, "tasks": true, "verification": true, "verification-pass": true, "verification-fail": true,
+	"chord": true, "chord-closed": true, "chord-dropped": true,
 	"stub": true, "stub-resolved": true, "stub-dropped": true,
-	"spec": true, "spec-done": true, "spec-dropped": true, "design": true, "design-superseded": true,
+	"spec-done": true, "spec-dropped": true, "design": true, "design-superseded": true,
 	"session": true, "change": true, "atlas": true,
 	"task": true, "receipt": true, "killed": true, "area": true,
 }

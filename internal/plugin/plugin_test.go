@@ -24,10 +24,11 @@ const root = "../.."
 
 // Skills are the skills of the design's map, by noun.
 var Skills = map[string][]string{
-	"atlas": {"atlas", "atlas-onboard"},
-	"repo":  {"repo-link", "repo-unlink", "repo-ingest"},
-	"wiki":  {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review", "wiki-stub"},
-	"spec":  {"spec-work", "spec-write", "spec-split", "spec-run", "spec-close"},
+	"atlas":  {"atlas", "atlas-onboard"},
+	"repo":   {"repo-link", "repo-unlink", "repo-ingest"},
+	"wiki":   {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review"},
+	"thread": {"thread-stub", "thread-spec", "thread-tasks", "thread-run", "thread-verify", "thread-close", "thread-work"},
+	"chord":  {"chord-create", "chord-work", "chord-close"},
 }
 
 func allSkills() []string {
@@ -75,7 +76,7 @@ func TestEverySkillHasItsForm(t *testing.T) {
 		}
 		prefix, _, _ := strings.Cut(name, "-")
 		if _, ok := Skills[prefix]; !ok {
-			t.Errorf("%s: a skill is named <noun>-<verb> on the four nouns", name)
+			t.Errorf("%s: a skill is named <noun>-<verb> on the five nouns", name)
 		}
 		for _, want := range []string{"\n# " + name + "\n", "\nTools: ", "\n## Hand off\n"} {
 			if !strings.Contains(text, want) {
@@ -158,7 +159,7 @@ func TestSkillsNameOnlyWhatExists(t *testing.T) {
 	for _, n := range mcpserver.ToolNames() {
 		tools[n] = true
 	}
-	name := regexp.MustCompile(`\[((?:atlas|repo|wiki|spec)-[a-z]+)\]\(`)
+	name := regexp.MustCompile(`\[((?:atlas|repo|wiki|thread|chord)-[a-z]+)\]\(`)
 	toolsLine := regexp.MustCompile("(?m)^Tools: (.*)$")
 	for _, s := range allSkills() {
 		text := read(t, "skills/"+s+"/SKILL.md")
@@ -209,7 +210,7 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 		}
 	}
 	guard := file.Hooks["PreToolUse"][0].Matcher
-	for _, tool := range []string{"Write", "Edit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_atlas__change"} {
+	for _, tool := range []string{"Write", "Edit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_atlas__change", "mcp__plugin_" + hooks.PluginName + "_atlas__thread", "mcp__plugin_" + hooks.PluginName + "_atlas__chord"} {
 		if !regexp.MustCompile("^(" + guard + ")$").MatchString(tool) {
 			t.Errorf("the guard does not see %s", tool)
 		}

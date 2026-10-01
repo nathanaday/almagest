@@ -1,7 +1,8 @@
 // Package derive keeps the parts of the knowledge documents that code owns: the lead
 // callout of a source, a repository, and a topic; the sections code writes (a source's
-// original, a repository's live status block and its Work and Knowledge Bases, an
-// overview's Map); a source's status; and a repository's git facts.
+// original, a repository's live status block and its Threads and Knowledge Bases, an
+// overview's Map, a topic's Threads when a spec cites it); a source's status; and a
+// repository's git facts.
 package derive
 
 import (
@@ -14,6 +15,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
+	"github.com/nathanaday/atlas-obsidian/internal/links"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -27,8 +29,9 @@ type WriteFunc func(rel string, content []byte) (bool, error)
 // content differs, and never changes updated. It returns the paths it wrote.
 func Sync(idx *vault.Index, write WriteFunc) ([]string, error) {
 	var out []string
+	cited := Cited(idx)
 	for _, d := range idx.Of("source", "repository", "topic") {
-		content := Derived(idx, d)
+		content := derived(idx, d, cited)
 		if content == d.Content {
 			continue
 		}
@@ -43,8 +46,23 @@ func Sync(idx *vault.Index, write WriteFunc) ([]string, error) {
 	return out, nil
 }
 
+// Cited are the paths of the documents that some thread's spec links.
+func Cited(idx *vault.Index) map[string]bool {
+	out := map[string]bool{}
+	for _, s := range idx.Of("spec") {
+		for _, l := range links.Find(s.Body) {
+			for _, p := range idx.LinkPaths(l.Target) {
+				out[p] = true
+			}
+		}
+	}
+	return out
+}
+
 // Derived is a knowledge document's content with the parts code owns made current.
-func Derived(idx *vault.Index, d *doc.Doc) string {
+func Derived(idx *vault.Index, d *doc.Doc) string { return derived(idx, d, Cited(idx)) }
+
+func derived(idx *vault.Index, d *doc.Doc, cited map[string]bool) string {
 	content := d.Content
 	switch d.Type() {
 	case "source":
@@ -62,7 +80,9 @@ func Derived(idx *vault.Index, d *doc.Doc) string {
 		content = putBlock(content, "atlas-repo", RepoBlock(d))
 		front, body, _ := doc.Split(content)
 		order := schema.Get("repository").Sections
-		body = doc.PutSection(body, "Work", WorkBase, order)
+		// 7.x named the section Work.
+		body = doc.RemoveSection(body, "Work")
+		body = doc.PutSection(body, "Threads", RepoThreadsBase, order)
 		if def := d.Str("defines"); def != "" && tags.Valid(def) {
 			body = doc.PutSection(body, "Knowledge", TagBase(idx, def, "Knowledge", false), order)
 		} else {
@@ -71,14 +91,17 @@ func Derived(idx *vault.Index, d *doc.Doc) string {
 		content = doc.Join(front, body)
 	case "topic":
 		content = doc.ReplaceLead(content, TopicLead(idx, d))
-		if d.Str("kind") == "overview" {
-			front, body, _ := doc.Split(content)
-			order := schema.Get("topic").SectionsOf("overview")
-			if def := d.Str("defines"); def != "" && tags.Valid(def) {
-				body = doc.PutSection(body, "Map", TagBase(idx, def, "Map", true), order)
-			}
-			content = doc.Join(front, body)
+		front, body, _ := doc.Split(content)
+		order := schema.Get("topic").SectionsOf(d.Str("kind"))
+		if def := d.Str("defines"); d.Str("kind") == "overview" && def != "" && tags.Valid(def) {
+			body = doc.PutSection(body, "Map", TagBase(idx, def, "Map", true), order)
 		}
+		if cited[d.Path] {
+			body = doc.PutSection(body, "Threads", TopicThreadsBase, order)
+		} else {
+			body = doc.RemoveSection(body, "Threads")
+		}
+		content = doc.Join(front, body)
 	}
 	return content
 }
@@ -327,24 +350,43 @@ func TopicLead(idx *vault.Index, d *doc.Doc) string {
 	return doc.Callout(kind, title, lines...)
 }
 
-// WorkBase is a repository's Work section: an inline Base of the specs that name it.
-const WorkBase = "```base\n" + `filters:
+// RepoThreadsBase is a repository's Threads section: an inline Base of the threads with a
+// task list for it.
+const RepoThreadsBase = "```base\n" + `filters:
   and:
     - file.inFolder("wiki/documents")
-    - 'type == "spec"'
+    - 'type == "stub"'
     - 'list(repositories).contains(this.file.asLink())'
 views:
   - type: table
-    name: Work
+    name: Threads
     order:
       - file.name
-      - kind
       - status
+      - tasks
       - priority
       - refreshed
     sort:
-      - property: status
+      - property: refreshed
         direction: DESC
+` + "```"
+
+// TopicThreadsBase is a topic's Threads section: an inline Base of the specs that cite
+// the topic, each with its thread and its status.
+const TopicThreadsBase = "```base\n" + `filters:
+  and:
+    - file.inFolder("wiki/documents")
+    - 'type == "spec"'
+    - 'file.hasLink(this.file)'
+views:
+  - type: table
+    name: Threads
+    order:
+      - thread
+      - status
+      - file.name
+      - refreshed
+    sort:
       - property: refreshed
         direction: DESC
 ` + "```"

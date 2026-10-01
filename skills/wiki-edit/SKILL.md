@@ -29,7 +29,7 @@ Tools: `search`, `lint`, `change`. References: [changes.md](../atlas/references/
    - new tags on a document: a `modify` of `fields.tags` (the whole list);
    - rename or merge a tag: a `retag` with `from` and `to`; code rewrites the tag in
      every document, the tags below it too; a `to` that exists merges the two;
-   - a stub that is one topic: a `promote` with `id` (the open stub), `kind` (concept,
+   - a stub that is one topic: a `promote` with `id` (a stub with no spec), `kind` (concept,
      entity, policy, or overview), `fields`, `body`, and a new `title` when it needs
      one; code keeps `## Idea` as `## Origin`;
    - a topic checked and still true: a `confirm` with `id`;

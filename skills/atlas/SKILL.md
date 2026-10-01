@@ -1,23 +1,24 @@
 ---
 name: atlas
-description: "Orient in the Atlas vault, show the board, make the quick moves on a stub or a plan, and route any request to the skill that owns it. Use for /atlas, what is going on, status, where do I work on X, the board, what is open, what should I work on, block, unblock, reprioritize, rename, drop, reopen, review the board, @atlas mentions, and any request when the right skill is not clear. Noting an idea is wiki-stub; starting work is spec-work."
+description: "Orient in the Atlas vault, show the board of threads and chords, make the quick moves on one, and route any request to the skill that owns it. Use for /atlas, what is going on, status, where do I work on X, the board, what is open, what should I work on, why is this still open, block, unblock, reprioritize, rename, drop, reopen, reorder, review the board, @atlas mentions, and any request when the right skill is not clear. Noting an idea is thread-stub; starting or resuming work is thread-work or chord-work."
 ---
 
 # atlas
 
 Every request passes this skill first. It reads where the session stands, names the kind
 of request, finds the repository or the tags that the request names, and hands off. It
-makes the small moves on work itself: the board, one plan or stub, and the `work` calls
-that change one field or one state.
+makes the small moves itself: the board, one thread or chord, and the calls that change
+one field or one state.
 
-Tools: `vault`, `search`, `context`, `work` (list, show, set, block, unblock, drop,
-reopen). References: [work.md](references/work.md).
+Tools: `vault`, `search`, `context`, `thread` (list, load, set, block, unblock, drop,
+reopen, note), `chord` (list, load, add, remove, order, set). References:
+[threads.md](references/threads.md).
 
 ## Procedure
 
-1. Read the opening context: the vault, the tags with their counts, the open work, the
-   live sessions, and this session's document. Call `vault` when the context is missing
-   or the user asks for the state.
+1. Read the opening context: the vault, the tags with their counts, the open threads,
+   the live sessions, and this session's document. Call `vault` when the context is
+   missing or the user asks for the state.
 2. Name the kind of request with the table below.
 3. When the request names work in a repository, find the repository: `search` with
    `types: [repository]` and the request's words, then `context` with `repository` set
@@ -30,11 +31,15 @@ reopen). References: [work.md](references/work.md).
    document (the opening context links it). Use Edit.
 6. Hand off.
 
-| The user wants | Skill | Needs a started plan? |
+| The user wants | Skill | Needs a started thread? |
 |---|---|---|
 | an answer, an explanation, to explore; what the vault holds under a tag | [wiki-query](../wiki-query/SKILL.md) | no |
-| a change to one or more repositories | [spec-work](../spec-work/SKILL.md) | yes |
-| to note an idea, a bug, or a paper for later ("note this", "remember to") | [wiki-stub](../wiki-stub/SKILL.md) | no |
+| `Resume Atlas thread <id>`; a change to a repository; to continue a piece of work | [thread-work](../thread-work/SKILL.md) | yes, with an open task |
+| `Resume Atlas chord <id>`; to continue a goal of several threads | [chord-work](../chord-work/SKILL.md) | per thread |
+| a goal too large for one thread; to order threads | [chord-create](../chord-create/SKILL.md) | no |
+| to note an idea, a bug, or a paper for later ("note this", "remember to") | [thread-stub](../thread-stub/SKILL.md) | no |
+| one step of a thread by name: the spec, the tasks, the verification, the close | [thread-spec](../thread-spec/SKILL.md), [thread-tasks](../thread-tasks/SKILL.md), [thread-run](../thread-run/SKILL.md), [thread-verify](../thread-verify/SKILL.md), [thread-close](../thread-close/SKILL.md) | as the step needs |
+| to close a chord | [chord-close](../chord-close/SKILL.md) | no |
 | to ingest files, or process the inbox | [wiki-ingest](../wiki-ingest/SKILL.md) | no |
 | to keep something from this conversation | [wiki-save](../wiki-save/SKILL.md) | no |
 | to bring the wiki up to date with new documents | [wiki-sync](../wiki-sync/SKILL.md) | no |
@@ -45,42 +50,53 @@ reopen). References: [work.md](references/work.md).
 | a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) | no |
 
 A question can turn into work. When the user then asks for a change to a repository,
-route to spec-work. The guard refuses an edit in a linked repository without a started
-plan that names it.
+route to thread-work. The guard refuses an edit in a linked repository unless this
+session started a thread with an open task for it.
 
 ## The board and the quick moves
 
 These are small, so this skill does them itself.
 
-- **The board**: `work` list, with `tags` or `repository` when the request names them.
-  Show the groups in this order: `active` (with the session on each), `started`,
-  `ready`, `blocked` (with the reason), `waiting` (open plans whose dependencies are not
-  done), and the open `stubs`. Mention the last few of `done` only when the user asks
-  what finished. Link `View · Work` for the live view.
-- **One plan or stub**: `work` show with `doc`. Say its status, its parts and the status
-  of each, its last events, and its `next`: `write` (it needs a spec or its
-  `## Done when`), `start <plan>`, `done`, or `none`.
-- **A quick move**: one `work` call, then one line back with the result.
-  - priority: `work` set with `set: {doc, priority}` (high, normal, low, someday);
-  - rename: `work` set with `set: {doc, title}`. Code renames the file and rewrites
-    every link in the same commit;
-  - tags: `work` set with `set: {doc, tags}`. In `tagging: known`, a tag that no
-    document holds needs the user's yes, then `new_tags: true` in `set`;
-  - block: `work` block with `spec` and `reason` (one line on what the plan waits on);
-  - unblock: `work` unblock with `spec`;
-  - drop: `work` drop with `doc` and `reason`. Dropping a plan drops every open or
-    started plan below it;
-  - reopen: `work` reopen with `doc`, and `reason` when the user gives one.
-- **What should I work on**: rank the open plans and stubs by priority, then by
-  readiness (a ready plan beats a stub), then by how long they waited. Recommend one,
-  with the reason.
-- **Review the board**, on request: plans started long ago with no recent event,
-  blocked plans with no way to unblock, likely duplicates (`search` with each stub's
-  words and `types: [stub, spec]`), and work the user mentioned that has no stub or
-  plan.
+- **The board**: `thread` list, with `tags`, `repository`, or `chord` when the request
+  names them. Show the chords first, each with its threads in order and their statuses.
+  Then the threads in no chord, in this order: `active` (with the session on each),
+  `started`, `verified` (each waits for its wiki change), `ready`, `blocked` (with the
+  reason), `waiting` (it comes after a thread not yet verified), and `stubs`. Mention
+  the last few of `ended` only when the user asks what finished. Link `View · Threads`
+  for the live view.
+- **One thread**: `thread` load with `thread`. Say its status, its task count, what
+  `missing` lists, and `next`. This answers "why is this still open": the status is
+  derived, and `missing` is what stands between the thread and closed. No call and no
+  button closes a thread; never tell the user to close one by hand.
+- **One chord**: `chord` load with `chord`. Say its threads in order, the ready ones,
+  and `next`.
+- **A quick move**: one call, then one line back with the result.
+  - priority: `thread` set with `set: {doc, priority}` (high, normal, low, someday);
+  - rename: `thread` set with `set: {doc, title}`. Code renames every document of the
+    thread and rewrites every link in the same commit;
+  - tags: `thread` set with `set: {doc, tags}`; the thread's documents follow. In
+    `tagging: known`, a tag that no document holds needs the user's yes, then
+    `new_tags: true` in `set`;
+  - order: `thread` set with `set: {doc, after: [...]}`, or `chord` order for several
+    threads at once; `chord` add and `chord` remove move a thread in or out;
+  - block: `thread` block with `thread` and `reason` (one line on what it waits on);
+  - unblock: `thread` unblock with `thread`;
+  - drop: `thread` drop with `thread` and `reason`; for a chord, `chord` drop, which
+    drops each of its threads that is not ended;
+  - reopen: `thread` reopen, or `chord` reopen, for one that was dropped. A closed
+    thread needs no reopen: a new task takes it up again;
+  - a remark to keep: `thread` note with `thread` and `text`.
+- **What should I work on**: rank by priority; then by readiness (a verified thread
+  that waits for its wiki change, then a started one, then a ready one, then a stub);
+  then by how long it waited. A thread that comes after one not yet verified is not a
+  candidate. Recommend one, with the reason and its hand-off line.
+- **Review the board**, on request: threads started long ago with no recent event,
+  verified threads nobody closed, blocked threads with no way to unblock, chords where
+  nothing is ready, likely duplicates (`search` with each stub's words and
+  `types: [stub]`), and work the user mentioned that has no thread.
 
-`work` list and show bind nothing and write nothing. Only `work` start binds a session to
-a plan; that belongs to spec-run.
+`thread` list, `thread` load, and `chord` load bind nothing and write nothing. Only
+`thread` start binds a session to a thread; that belongs to thread-run.
 
 ## Mentions
 
@@ -94,7 +110,7 @@ document that answers it).
 ## Gate
 
 None for reads. A quick move is one line back, not a question. Ask first only when the
-move is a drop of a plan with parts, since the drop reaches every part.
+move is a drop of a chord, since the drop reaches every thread in it.
 
 ## Hand off
 

@@ -6,16 +6,18 @@ says yes, and `change` apply makes one git commit. The guard refuses Write and E
 knowledge document, and the `change` tool refuses the model's apply in the turn that
 proposed it.
 
-Work documents (stub, spec, event) do not go through a change. The `work` tool writes
-them ([work.md](work.md)).
+Thread documents (stub, spec, task list, verification), chords, and events do not go
+through a change. The `thread` and `chord` tools write them ([threads.md](threads.md)).
+A change serves them in two ways: it promotes a stub to a topic, and it absorbs a
+verified thread or a done chord, which closes it.
 
 ## The plan
 
 ```yaml
 title: "Ingest the DINOv2 paper"      # short: the file name and the commit subject
 notes: "…"                            # what the change does and why; every skipped subject with its reason
-absorbs: [doc-p2x7nd]                 # the documents the change absorbs (sources, specs, events)
-work: ""                              # the stub or spec it serves, if any
+absorbs: [doc-p2x7nd]                 # the documents the change absorbs (sources, specs, verifications, chords, events)
+work: ""                              # the thread or the chord it serves, if any
 supersedes: ""                        # a proposed change this one replaces
 new_tags: false                       # true: allow tags no document holds, in tagging: known, after the user's yes
 writes:
@@ -36,7 +38,7 @@ writes:
     fields: {description: "…", authority: primary}   # merged over the document's fields
     body: "…"                         # replaces the body below the lead callout; leave it out to keep the body
   - op: promote
-    id: doc-c7v2kq                    # an open stub; it becomes a topic in place
+    id: doc-c7v2kq                    # a stub with no spec; it becomes a topic in place
     kind: concept
     title: "Motion scoring"           # optional: a new title
     fields: {description: "…", sources: [doc-p2x7nd]}
@@ -58,7 +60,7 @@ writes:
 |---|---|---|
 | `create` | `type` (topic or repository), `kind` for a topic, `title`, `fields`, `body` | a new document in `wiki/documents/` |
 | `modify` | `id`, `fields` (merged; `null` removes one), `body` (replaces; leave out to keep), `base` | rewrites a source, a repository, or a topic |
-| `promote` | `id` of an open stub, `kind`, `fields`, `body`, optional `title`, `base` | the stub becomes a topic in place, with its id and every link; a `promoted` event |
+| `promote` | `id` of a stub with no spec, `kind`, `fields`, `body`, optional `title`, `base` | the stub becomes a topic in place, with its id and every link; a `promoted` event |
 | `rename` | `id`, `title` | renames the file and rewrites every link to the old title |
 | `remove` | `id`, optional `redirect` | deletes the document; links to it go to the redirect |
 | `confirm` | `id`, `base` | sets `refreshed` and nothing else |
@@ -75,10 +77,11 @@ writes:
   document, and every inline `#tag` in every note. A retag to a tag that exists merges
   the two.
 - A source comes only from `source` capture. A change modifies it; it never creates one.
-- A stub, a spec, or an event comes only from `work`. A change writes a work document
-  only through a `promote`, its `promoted` event, and the link and tag rewrites.
+- A thread document, a chord, or an event comes only from `thread` and `chord`. A change
+  writes one only through a `promote`, its `promoted` event, and the link and tag
+  rewrites.
 - A repository is unlinked with a modify `{fields: {unlinked: true}}`; code empties its
-  `path`. `change` refuses to remove a repository that a spec names.
+  `path`. `change` refuses to remove a repository that a task list names.
 
 ## Validation
 
@@ -134,6 +137,9 @@ refuses when one of them changed since; then make the fix as a new change.
 ## Pending documents
 
 A document of a type in `wikify` is pending until an applied change lists it in
-`absorbs` with its current content. By default that is every source, every spec, and the
-events of kind `completed`, `dropped`, and `note`. A spec edited after the wiki absorbed
-it is pending again. `vault` status lists them; the wiki-sync skill absorbs them.
+`absorbs` with its current content. By default that is every source; the spec of a
+verified thread and its passing verification; a chord whose threads are all closed; and
+the events of kind `dropped` and `note`. A spec edited after the wiki absorbed it is
+pending again, and its thread is no longer closed. A change that absorbs a spec, a
+verification, or a chord closes a thread or a chord, so its apply waits for the user's
+answer even when it has no writes. `vault` status lists them; the wiki-sync skill absorbs them.

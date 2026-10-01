@@ -12,8 +12,9 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/links"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Trailer names the change a commit applied.
@@ -382,7 +383,7 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 		}
 	}
 	derived := describedWrites(idx, p, now)
-	titles := work.NewTitles(idx)
+	titles := thread.NewTitles(idx)
 	for _, o := range p.Ops {
 		titles.Take(o.Title)
 		if o.NewTitle != "" {
@@ -399,7 +400,7 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 			title = o.NewTitle
 		}
 		nd := doc.Parse(o.Path, []byte(o.Content))
-		rel, content, id := work.NewEvent(titles, work.EventIn{Kind: "promoted", SubjectTitle: title, SubjectID: o.ID, SubjectTags: nd.List("tags"), At: now, By: work.ByAgent, FromType: "stub", ToType: "topic", Change: vault.Title(d)})
+		rel, content, id := thread.NewEvent(titles, thread.EventIn{Kind: "promoted", SubjectTitle: title, SubjectID: o.ID, SubjectTags: nd.List("tags"), At: now, By: thread.ByAgent, FromType: "stub", ToType: "topic", Change: vault.Title(d)})
 		events = append(events, newEvent{rel: rel, content: content, id: id})
 	}
 	before := repoPaths(idx)
@@ -484,7 +485,7 @@ func syncDerived(v *vault.Vault, tx *vault.Tx) error {
 	if idx, err = vault.Load(v); err != nil {
 		return err
 	}
-	_, err = work.Load(idx).Sync(tx.WriteIfChanged)
+	_, err = thread.Load(idx).Sync(tx.WriteIfChanged)
 	return err
 }
 
@@ -506,7 +507,7 @@ func (c *check) revalidate(ops []*op) error {
 		if o.Kind != OpPromote {
 			o.Type = d.Type()
 		}
-		if o.Base != "" && !doc.SameHash(o.Base, doc.FileHash([]byte(d.Content))) {
+		if o.Base != "" && !sameBase(o.Base, d) {
 			conflicts = append(conflicts, d.Path)
 			continue
 		}
@@ -550,6 +551,9 @@ func (c *check) revalidate(ops []*op) error {
 			created := ""
 			if cur := c.idx.ByID(o.ID); cur != nil {
 				created = cur.Str("created")
+				if o.Kind == OpModify {
+					o.Content = keepDerived(o.Content, cur)
+				}
 			}
 			o.Content = forceCode(o.Content, o, created, c.now)
 			c.checkPage(o, o.Content)
@@ -578,6 +582,33 @@ func forceCode(content string, o *op, created string, now time.Time) string {
 		content = doc.SetField(content, "created", vault.Stamp(now))
 	}
 	return doc.SetFields(content, []doc.Field{{Key: "updated", Value: vault.Stamp(now)}, {Key: "refreshed", Value: vault.Stamp(now)}})
+}
+
+// keepDerived gives a modify's content the code-owned fields of the document as it is
+// now, so what a sync derived since the proposal (a repository's head, a source's
+// status) is not written back to what it was.
+func keepDerived(content string, cur *doc.Doc) string {
+	t := schema.Get(cur.Type())
+	if t == nil || cur.Front == nil {
+		return content
+	}
+	next := doc.Parse(cur.Path, []byte(content))
+	for _, f := range t.Fields {
+		if f.Owner != schema.Code || !cur.Front.Has(f.Name) || next.Front == nil || !next.Front.Has(f.Name) {
+			continue
+		}
+		switch {
+		case cur.Front.IsList(f.Name):
+			content = doc.SetField(content, f.Name, cur.List(f.Name))
+		case f.Kind == schema.Int:
+			content = doc.SetField(content, f.Name, cur.Front.Int(f.Name))
+		case f.Kind == schema.Bool:
+			content = doc.SetField(content, f.Name, cur.Front.Bool(f.Name))
+		default:
+			content = doc.SetField(content, f.Name, cur.Str(f.Name))
+		}
+	}
+	return content
 }
 
 // describedWrites sets described on each repository whose snapshot the change absorbs,

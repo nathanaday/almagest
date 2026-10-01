@@ -6,7 +6,6 @@ package cli
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -25,8 +24,8 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/migrate"
 	"github.com/nathanaday/atlas-obsidian/internal/search"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Version is the binary's version; the build stamps it.
@@ -59,10 +58,16 @@ Usage:
   atlas-obsidian source chunks DOC
   atlas-obsidian source read DOC CHUNK
   atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
-  atlas-obsidian work [list] | show DOC | stub TEXT... | spec FILE.json | promote STUB FILE.md --kind K
-                      | start SPEC [--take] | done SPEC FILE.json | drop DOC --reason R | reopen DOC
-                      | block SPEC --reason R | unblock SPEC | resolve STUB --became DOC... | note DOC --text T
-                      | set DOC [--title T] [--priority P] [--tag T]... [--parent P] [--repository R]...
+  atlas-obsidian thread [list] | load THREAD | stub TEXT... [--title T] [--chord C] [--after T]...
+                        | spec THREAD FILE.md | tasks THREAD FILE.json [--repository R] | start THREAD [--take]
+                        | check THREAD TASK [--state S] [--commit C]... [--note N] [--reason R]
+                        | verify THREAD FILE.json | finding THREAD FINDING --outcome O [--reason R] [--link L] [--task FILE.json]
+                        | drop THREAD --reason R | reopen THREAD | block THREAD --reason R | unblock THREAD
+                        | resolve STUB --became DOC... | note DOC --text T
+                        | set DOC [--title T] [--priority P] [--tag T]... [--chord C] [--after T]...
+  atlas-obsidian chord [list] | load CHORD | create FILE.json | add CHORD THREAD [--after T]... | remove CHORD THREAD
+                       | order CHORD FILE.json | drop CHORD --reason R | reopen CHORD
+                       | canvas CHORD [--save | --write | --tidy]
   atlas-obsidian lint [--tag T]...
   atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
   atlas-obsidian mcp                               the MCP server, over stdio
@@ -92,8 +97,10 @@ func (c *CLI) Run(argv []string) int {
 		err = c.sourceCmd(rest)
 	case "change":
 		err = c.changeCmd(rest)
-	case "work":
-		err = c.workCmd(rest)
+	case "thread":
+		err = c.threadCmd(rest)
+	case "chord":
+		err = c.chordCmd(rest)
 	case "lint":
 		err = c.lintCmd(rest)
 	case "hook":
@@ -241,7 +248,7 @@ func (c *CLI) readText(file string) (string, error) {
 }
 
 // user is how the CLI acts: as the user, now.
-func (c *CLI) user() work.Opts { return work.Opts{Now: c.Now(), By: work.ByUser} }
+func (c *CLI) user() thread.Opts { return thread.Opts{Now: c.Now(), By: thread.ByUser} }
 
 func (c *CLI) vaultCmd(argv []string) error {
 	a := parse(argv, "views", "dry-run")
@@ -280,7 +287,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"synced": s}, func(w io.Writer) {
-			fmt.Fprintf(w, "Synced: %d work documents, %d knowledge documents, %d moved back, %d lost sessions, %d session callouts, %d views", len(s.Work), len(s.Knowledge), len(s.Moved), len(s.Lost), len(s.Sessions), s.Views)
+			fmt.Fprintf(w, "Synced: %s, %s, %d moved back, %s, %s, %s", count(len(s.Threads), "thread document", "thread documents"), count(len(s.Knowledge), "knowledge document", "knowledge documents"), len(s.Moved), count(len(s.Lost), "lost session", "lost sessions"), count(len(s.Sessions), "session callout", "session callouts"), count(s.Views, "view", "views"))
 			if s.Settings {
 				fmt.Fprint(w, ", the harness settings")
 			}
@@ -321,11 +328,19 @@ func (c *CLI) vaultCmd(argv []string) error {
 
 func printMigration(w io.Writer, r *migrate.Report, done bool) {
 	if done {
-		fmt.Fprintf(w, "Migrated %s to the 7.0 layout in one commit, %s.\n", r.Vault, short(r.Commit))
+		fmt.Fprintf(w, "Migrated %s from the %s layout to 8.0 in one commit, %s.\n", r.Vault, r.From, short(r.Commit))
 	} else {
-		fmt.Fprintf(w, "The migration of %s to the 7.0 layout would make these moves; run it without --dry-run to write them.\n", r.Vault)
+		fmt.Fprintf(w, "The migration of %s from the %s layout to 8.0 would make these moves; run it without --dry-run to write them.\n", r.Vault, r.From)
 	}
-	fmt.Fprintf(w, "Documents: %d to wiki/documents · %d events written · %d titles changed · %d originals to wiki/assets\n", r.Documents, r.Events, len(r.Retitles), r.Assets)
+	if r.Documents+r.Events+r.Assets > 0 {
+		fmt.Fprintf(w, "Documents: %d to wiki/documents · %d events written · %d originals to wiki/assets\n", r.Documents, r.Events, r.Assets)
+	}
+	if !(r.From == "6.x" && !done) {
+		fmt.Fprintf(w, "Plans: %s · %s · %s · %s · %s · %s kept as notes\n", count(r.Threads, "thread", "threads"), count(r.Specs, "spec", "specs"), count(r.TaskLists, "task list", "task lists"), count(r.Verifications, "verification", "verifications"), count(r.Chords, "chord", "chords"), count(r.Notes, "set of sections", "sets of sections"))
+		if r.Topics > 0 {
+			fmt.Fprintf(w, "Designs: %s\n", count(r.Topics, "draft topic", "draft topics"))
+		}
+	}
 	for _, t := range r.Tags {
 		fmt.Fprintf(w, "  tag  %s ← %s\n", t.Tag, t.Scope)
 	}
@@ -362,7 +377,7 @@ func count(n int, one, many string) string {
 func printStatus(w io.Writer, st *core.Status) {
 	fmt.Fprintf(w, "%s · %s · %s · tagging %s\n", st.Vault.Name, st.Vault.Path, st.Vault.ID, st.Vault.Tagging)
 	var docs []string
-	for _, t := range []string{"topic", "source", "repository", "spec", "stub", "event"} {
+	for _, t := range []string{"topic", "source", "repository", "stub", "chord", "event"} {
 		docs = append(docs, fmt.Sprintf("%d %s", st.Documents[t], t))
 	}
 	fmt.Fprintf(w, "Documents: %s · %d draft · %d contested\n", strings.Join(docs, ", "), st.Topics.Draft, st.Topics.Contested)
@@ -377,7 +392,8 @@ func printStatus(w io.Writer, st *core.Status) {
 	if len(tagList) > 0 {
 		fmt.Fprintf(w, "Tags: %s\n", strings.Join(tagList, " · "))
 	}
-	fmt.Fprintf(w, "Work: %d started · %d open · %d blocked · %s · %d active\n", st.Work.Started, st.Work.Open, st.Work.Blocked, count(st.Work.Stubs, "stub", "stubs"), len(st.Work.Active))
+	t := st.Threads
+	fmt.Fprintf(w, "Threads: %d started · %d verified · %d ready · %d blocked · %d waiting · %s · %s · %d active\n", t.Started, t.Verified, t.Ready, t.Blocked, t.Waiting, count(t.Stubs, "stub", "stubs"), count(t.Chords, "open chord", "open chords"), len(t.Active))
 	fmt.Fprintf(w, "Sessions: %d running · %d waiting · %d idle\n", len(st.Sessions.Running), len(st.Sessions.Waiting), len(st.Sessions.Idle))
 	for _, s := range st.Sessions.Waiting {
 		fmt.Fprintf(w, "  waits for you: %s %s\n", s.Title, s.Description)
@@ -456,7 +472,7 @@ func (c *CLI) contextCmd(argv []string) error {
 			fmt.Fprintf(w, "Policy (%s): %s · %s\n", orDash(p.Strength), p.Ref.Title, strings.Join(p.Via, ", "))
 		}
 		for _, wk := range b.Work {
-			fmt.Fprintf(w, "Work: %s · %s %s\n", wk.Title, wk.Type, wk.Status)
+			fmt.Fprintf(w, "Thread: %s · %s\n", wk.Title, wk.Status)
 		}
 		for _, in := range b.Instructions {
 			fmt.Fprintf(w, "Instructions: %s\n", in.Path)
@@ -635,19 +651,19 @@ func printPreview(w io.Writer, pv *change.Preview) {
 	}
 }
 
-func (c *CLI) workCmd(argv []string) error {
-	a := parse(argv, "take", "new-tags", "resolve")
+func (c *CLI) threadCmd(argv []string) error {
+	a := parse(argv, "take", "new-tags")
 	v, err := c.open(a)
 	if err != nil {
 		return err
 	}
 	o := c.user()
-	show := func(r *work.Result, err error) error {
+	show := func(r *thread.Result, err error) error {
 		if err != nil {
 			return err
 		}
 		core.Views(v, c.Now())
-		return c.emit(a, r, func(w io.Writer) { printView(w, r.View) })
+		return c.emit(a, r, func(w io.Writer) { printResult(w, r) })
 	}
 	switch a.arg(0) {
 	case "", "list":
@@ -655,18 +671,18 @@ func (c *CLI) workCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		b := work.Load(idx).BoardView(work.Filter{Tags: a.list("tag"), Repository: a.get("repository")})
+		b := thread.Load(idx).BoardView(thread.Filter{Tags: a.list("tag"), Repository: a.get("repository"), Chord: a.get("chord")})
 		return c.emit(a, map[string]any{"board": b}, func(w io.Writer) { printBoard(w, b) })
-	case "show":
+	case "load":
 		idx, err := vault.Load(v)
 		if err != nil {
 			return err
 		}
-		view, err := work.Show(idx, a.arg(1))
+		loaded, err := thread.LoadThread(idx, a.arg(1))
 		if err != nil {
 			return err
 		}
-		return c.emit(a, map[string]any{"view": view}, func(w io.Writer) { printView(w, view) })
+		return c.emit(a, map[string]any{"thread": loaded}, func(w io.Writer) { printLoaded(w, loaded) })
 	case "stub":
 		text := strings.Join(a.pos[1:], " ")
 		if text == "" || text == "-" {
@@ -674,115 +690,260 @@ func (c *CLI) workCmd(argv []string) error {
 				return err
 			}
 		}
-		return show(work.Stub(v, work.StubIn{Text: text, Title: a.get("title"), Description: a.get("description"), Tags: a.list("tag"), Priority: a.get("priority"), Inbox: a.get("inbox"), NewTags: a.has("new-tags")}, o))
+		return show(thread.Stub(v, thread.StubIn{Text: text, Title: a.get("title"), Description: a.get("description"), Tags: a.list("tag"), Priority: a.get("priority"), Chord: a.get("chord"), After: a.list("after"), Inbox: a.get("inbox"), NewTags: a.has("new-tags")}, o))
 	case "spec":
-		var in work.SpecsIn
-		if err := c.readJSON(a.arg(1), &in); err != nil {
-			return fmt.Errorf("the specs: %w", err)
-		}
-		return show(work.Specs(v, in, o))
-	case "promote":
 		text, err := c.readText(a.arg(2))
 		if err != nil {
 			return err
 		}
-		return show(work.Promote(v, work.PromoteIn{Stub: a.arg(1), Kind: a.get("kind"), Text: text, Title: a.get("title"), Repositories: a.list("repository"), Parent: a.get("parent"), NewTags: a.has("new-tags")}, o))
+		return show(thread.Spec(v, thread.SpecIn{Thread: a.arg(1), Text: text, Description: a.get("description")}, o))
+	case "tasks":
+		var tasks []thread.TaskIn
+		if err := c.readJSON(a.arg(2), &tasks); err != nil {
+			return fmt.Errorf("the tasks: %w", err)
+		}
+		return show(thread.TasksWrite(v, thread.TasksIn{Thread: a.arg(1), Repository: a.get("repository"), Tasks: tasks}, o))
 	case "start":
-		return show(work.Start(v, a.arg(1), a.has("take"), o))
-	case "done":
-		var r work.ResultIn
-		if err := c.readJSON(a.arg(2), &r); err != nil {
-			return fmt.Errorf("the result: %w", err)
+		return show(thread.Start(v, a.arg(1), a.has("take"), o))
+	case "check":
+		return show(thread.Check(v, thread.CheckIn{Thread: a.arg(1), Task: a.arg(2), State: a.get("state"), Commits: a.list("commit"), Note: a.get("note"), Reason: a.get("reason")}, o))
+	case "verify":
+		var in thread.VerifyIn
+		if err := c.readJSON(a.arg(2), &in); err != nil {
+			return fmt.Errorf("the verification: %w", err)
 		}
-		return show(work.Complete(v, a.arg(1), r, o))
-	case "drop":
-		return show(work.Drop(v, a.arg(1), a.get("reason"), o))
-	case "reopen":
-		return show(work.Reopen(v, a.arg(1), a.get("reason"), o))
-	case "block":
-		return show(work.Block(v, a.arg(1), a.get("reason"), o))
-	case "unblock":
-		return show(work.Unblock(v, a.arg(1), o))
-	case "resolve":
-		return show(work.Resolve(v, a.arg(1), a.list("became"), o))
-	case "note":
-		return show(work.Note(v, a.arg(1), a.get("text"), o))
-	case "set":
-		set := work.SetIn{Doc: a.arg(1), Title: a.ptr("title"), Description: a.ptr("description"), Priority: a.ptr("priority"), Parent: a.ptr("parent"), Supersedes: a.ptr("supersedes"), Tags: a.listPtr("tag"), Aliases: a.listPtr("alias"), Repositories: a.listPtr("repository"), Depends: a.listPtr("depends"), Implements: a.listPtr("implements"), NewTags: a.has("new-tags")}
-		if a.has("order") {
-			n, err := strconv.Atoi(a.get("order"))
-			if err != nil {
-				return errors.New("--order takes a number")
+		in.Thread = a.arg(1)
+		return show(thread.Verify(v, in, o))
+	case "finding":
+		in := thread.FindingIn{Thread: a.arg(1), Finding: a.arg(2), Outcome: a.get("outcome"), Repository: a.get("repository"), Link: a.get("link"), Text: a.get("text"), Reason: a.get("reason")}
+		if a.has("task") {
+			in.Task = &thread.TaskIn{}
+			if err := c.readJSON(a.get("task"), in.Task); err != nil {
+				return fmt.Errorf("the task: %w", err)
 			}
-			set.Order = &n
 		}
-		return show(work.Set(v, set, o))
+		return show(thread.FindingOutcome(v, in, o))
+	case "drop":
+		return show(thread.Drop(v, a.arg(1), a.get("reason"), o))
+	case "reopen":
+		return show(thread.Reopen(v, a.arg(1), a.get("reason"), o))
+	case "block":
+		return show(thread.Block(v, a.arg(1), a.get("reason"), o))
+	case "unblock":
+		return show(thread.Unblock(v, a.arg(1), o))
+	case "resolve":
+		return show(thread.Resolve(v, a.arg(1), a.list("became"), o))
+	case "note":
+		return show(thread.Note(v, a.arg(1), a.get("text"), o))
+	case "set":
+		return show(thread.Set(v, thread.SetIn{Doc: a.arg(1), Title: a.ptr("title"), Description: a.ptr("description"), Priority: a.ptr("priority"), Chord: a.ptr("chord"), Tags: a.listPtr("tag"), Aliases: a.listPtr("alias"), After: a.listPtr("after"), NewTags: a.has("new-tags")}, o))
 	}
-	return fmt.Errorf("work takes list, show, stub, spec, promote, start, done, drop, reopen, block, unblock, resolve, note, or set, not %q", a.arg(0))
+	return fmt.Errorf("thread takes list, load, stub, spec, tasks, start, check, verify, finding, drop, reopen, block, unblock, resolve, note, or set, not %q", a.arg(0))
 }
 
-func printBoard(w io.Writer, b *work.BoardView) {
+func (c *CLI) chordCmd(argv []string) error {
+	a := parse(argv, "new-tags", "save", "write", "tidy")
+	v, err := c.open(a)
+	if err != nil {
+		return err
+	}
+	o := c.user()
+	show := func(r *thread.Result, err error) error {
+		if err != nil {
+			return err
+		}
+		core.Views(v, c.Now())
+		return c.emit(a, r, func(w io.Writer) { printResult(w, r) })
+	}
+	switch a.arg(0) {
+	case "", "list":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return err
+		}
+		chords := thread.Load(idx).BoardView(thread.Filter{Tags: a.list("tag")}).Chords
+		return c.emit(a, map[string]any{"chords": chords}, func(w io.Writer) {
+			for _, cv := range chords {
+				printChord(w, cv)
+			}
+		})
+	case "load":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return err
+		}
+		loaded, err := thread.LoadChord(idx, a.arg(1))
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"chord": loaded}, func(w io.Writer) {
+			printChord(w, loaded.ChordView)
+			if loaded.Canvas != nil && loaded.Canvas.Differs {
+				fmt.Fprintf(w, "  the canvas differs from the stubs: %s\n", strings.Join(loaded.Canvas.Changes, "; "))
+			}
+		})
+	case "create":
+		var in thread.ChordIn
+		if err := c.readJSON(a.arg(1), &in); err != nil {
+			return fmt.Errorf("the chord: %w", err)
+		}
+		return show(thread.ChordCreate(v, in, o))
+	case "add":
+		var after []string
+		if a.has("after") {
+			after = a.list("after")
+		}
+		return show(thread.ChordAdd(v, a.arg(1), a.arg(2), after, o))
+	case "remove":
+		return show(thread.ChordRemove(v, a.arg(1), a.arg(2), o))
+	case "order":
+		var order []thread.OrderIn
+		if err := c.readJSON(a.arg(2), &order); err != nil {
+			return fmt.Errorf("the order: %w", err)
+		}
+		return show(thread.ChordOrder(v, a.arg(1), order, o))
+	case "drop":
+		return show(thread.Drop(v, a.arg(1), a.get("reason"), o))
+	case "reopen":
+		return show(thread.Reopen(v, a.arg(1), a.get("reason"), o))
+	case "canvas":
+		switch {
+		case a.has("save"):
+			return show(thread.CanvasSave(v, a.arg(1), o))
+		case a.has("write"), a.has("tidy"):
+			return show(thread.CanvasWrite(v, a.arg(1), a.has("tidy"), o))
+		}
+		idx, err := vault.Load(v)
+		if err != nil {
+			return err
+		}
+		state, err := thread.CanvasStatus(idx, a.arg(1))
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"canvas": state}, func(w io.Writer) {
+			switch {
+			case !state.Exists:
+				fmt.Fprintf(w, "%s has no canvas yet.\n", state.Chord.Title)
+			case !state.Differs:
+				fmt.Fprintf(w, "%s shows the order the stubs hold.\n", state.Path)
+			default:
+				fmt.Fprintf(w, "%s differs from the stubs. --save would:\n", state.Path)
+				for _, ch := range state.Changes {
+					fmt.Fprintf(w, "  %s\n", ch)
+				}
+			}
+		})
+	}
+	return fmt.Errorf("chord takes list, load, create, add, remove, order, drop, reopen, or canvas, not %q", a.arg(0))
+}
+
+func threadLine(r vault.Ref) string {
+	line := "  " + r.Title + " (" + r.ID + ") · " + r.Status
+	if n, _ := r.State["tasks"].(string); n != "" {
+		line += " · " + n + " tasks"
+	}
+	if p, _ := r.State["priority"].(string); p != "normal" && p != "" {
+		line += " · " + p
+	}
+	if c, _ := r.State["chord"].(string); c != "" {
+		line += " · chord " + c
+	}
+	if bl, _ := r.State["blocked"].(string); bl != "" {
+		line += " · blocked: " + bl
+	}
+	return line
+}
+
+func printBoard(w io.Writer, b *thread.BoardView) {
 	group := func(label string, refs []vault.Ref) {
 		if len(refs) == 0 {
 			return
 		}
 		fmt.Fprintf(w, "%s (%d)\n", label, len(refs))
 		for _, r := range refs {
-			line := "  " + r.Title
-			if root, _ := r.State["root"].(string); root != "" && root != r.Title {
-				line += " · part of " + root
-			}
-			if p, _ := r.State["priority"].(string); p != "normal" && p != "" {
-				line += " · " + p
-			}
-			if n, _ := r.State["parts"].(string); n != "" {
-				line += " · parts " + n
-			}
-			if bl, _ := r.State["blocked"].(string); bl != "" {
-				line += " · blocked: " + bl
-			}
-			fmt.Fprintln(w, line)
+			fmt.Fprintln(w, threadLine(r))
 		}
 	}
 	group("active", b.Active)
 	group("started", b.Started)
+	group("verified, waiting for the wiki change", b.Verified)
 	group("ready", b.Ready)
 	group("blocked", b.Blocked)
-	group("waiting on other plans", b.Waiting)
+	group("waiting on other threads", b.Waiting)
 	group("stubs", b.Stubs)
-	group("done lately", b.Done)
+	group("ended lately", b.Ended)
+	for _, cv := range b.Chords {
+		printChord(w, cv)
+	}
 }
 
-func printView(w io.Writer, v *work.View) {
-	if v == nil {
+func printChord(w io.Writer, cv thread.ChordView) {
+	fmt.Fprintf(w, "chord %s (%s) · %s · %v threads closed · next: %s\n", cv.Chord.Title, cv.Chord.ID, cv.Chord.Status, cv.Chord.State["threads"], cv.Next.Reason)
+	for _, r := range cv.Threads {
+		line := threadLine(r)
+		if after, ok := r.State["after"].([]string); ok && len(after) > 0 {
+			line += " · after " + strings.Join(after, ", ")
+		}
+		if ready, _ := r.State["ready"].(bool); ready && (r.Status == thread.StatusStub || r.Status == thread.Specified || r.Status == thread.Planned) {
+			line += " · ready"
+		}
+		fmt.Fprintln(w, line)
+	}
+}
+
+func printState(w io.Writer, st *thread.State) {
+	if st == nil {
 		return
 	}
-	d := v.Doc
-	kind := d.Type
-	if d.Kind != "" {
-		kind += " " + d.Kind
+	fmt.Fprintln(w, strings.TrimPrefix(threadLine(st.Thread), "  "))
+	if len(st.Missing) > 0 {
+		fmt.Fprintf(w, "  missing: %s\n", strings.Join(st.Missing, " · "))
 	}
-	fmt.Fprintf(w, "%s (%s) · %s · %s · next: %s\n", d.Title, d.ID, kind, d.Status, v.Next)
-	for _, p := range v.Parts {
-		ready := ""
-		if p.Ready {
-			ready = " · ready"
-		}
-		fmt.Fprintf(w, "  part     %s · %s%s\n", p.Ref.Title, p.Ref.Status, ready)
+	next := st.Next.Reason
+	if st.Next.Skill != "" {
+		next += " (" + st.Next.Skill + ")"
 	}
-	for i, e := range v.Events {
-		if i == 5 {
-			fmt.Fprintf(w, "  …        %d more events\n", len(v.Events)-i)
-			break
-		}
+	fmt.Fprintf(w, "  next: %s\n", next)
+}
+
+func printResult(w io.Writer, r *thread.Result) {
+	printState(w, r.State)
+	if r.Chord != nil {
+		printChord(w, *r.Chord)
+	}
+	for _, d := range r.Wrote {
+		fmt.Fprintf(w, "  wrote    %s (%s)\n", d.Title, d.Type)
+	}
+	for _, e := range r.Events {
 		fmt.Fprintf(w, "  event    %s\n", e.Title)
 	}
-	if v.Result != nil {
-		fmt.Fprintf(w, "  result   %s\n", v.Result.Title)
+}
+
+func printLoaded(w io.Writer, l *thread.Loaded) {
+	printState(w, &thread.State{Thread: l.Thread, Missing: l.Missing, Next: l.Next})
+	if l.Blocked != "" {
+		fmt.Fprintf(w, "  blocked: %s\n", l.Blocked)
 	}
-	for _, s := range v.Sessions {
-		fmt.Fprintf(w, "  session  %s · %v\n", s.Title, s.Status)
+	if l.Spec != nil {
+		fmt.Fprintf(w, "  spec     %s · %d requirements\n", l.Spec.Ref.Title, len(l.Requirements))
 	}
+	for _, list := range l.Lists {
+		fmt.Fprintf(w, "  tasks    %s · %s\n", list.Ref.Title, list.Ref.Status)
+		for _, t := range list.Open {
+			fmt.Fprintf(w, "    [ ] %s: %s\n", t.ID, t.Text)
+		}
+	}
+	if v := l.Verification; v != nil {
+		fmt.Fprintf(w, "  verified %s · %s\n", v.Ref.Title, v.Verdict)
+		for _, f := range v.Findings {
+			fmt.Fprintf(w, "    [ ] %s: %s\n", f.ID, f.Text)
+		}
+	}
+	for _, s := range l.Sessions {
+		fmt.Fprintf(w, "  session  %s · %s\n", s.Ref.Title, s.Ref.Status)
+	}
+	fmt.Fprintf(w, "  hand off %s\n", l.Handoff)
 }
 
 func (c *CLI) lintCmd(argv []string) error {

@@ -7,15 +7,17 @@ import (
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Touched links the session to what a call touched: the repository an edit landed in,
-// the stubs and specs a work call wrote and the plan it started, the events a call wrote,
-// the change a proposal wrote. It copies the session's own description into its
-// frontmatter, and dates a work document an edit changed.
+// the documents a thread or chord call wrote and the thread it started, the events a call
+// wrote, the change a proposal wrote. It counts the tasks the session checked, copies the
+// session's own description into its frontmatter, and dates a thread document an edit
+// changed.
 func Touched(r io.Reader, env Env) error {
 	in := readInput(r)
 	now := env.now()
@@ -36,7 +38,8 @@ func Touched(r io.Reader, env Env) error {
 				link("repositories", repo)
 			}
 		}
-		var eventPaths []string
+		// eventPaths get this session as their session; eventRefs are the events among them.
+		var eventPaths, eventRefs []string
 		switch {
 		case editTools[in.ToolName]:
 			for _, f := range in.paths() {
@@ -63,14 +66,15 @@ func Touched(r io.Reader, env Env) error {
 				case strings.HasPrefix(rel, vault.Documents+"/"):
 					if data, err := v.Read(rel); err == nil {
 						d := doc.Parse(rel, data)
-						switch d.Type() {
-						case "stub", "spec", "event":
+						if schema.IsThread(d.Type()) || d.Type() == "event" {
 							v.WriteIfChanged(rel, []byte(doc.SetField(d.Content, "updated", vault.Stamp(now))))
+							// An edit of a spec or a list changes what its thread's status derives from.
+							syncWork = true
 						}
 					}
 				}
 			}
-		case (tool == "work" || tool == "change" || tool == "source") && !failed(resp):
+		case (tool == "thread" || tool == "chord" || tool == "change" || tool == "source") && !failed(resp):
 			if tool == "change" && in.tool().Action == "propose" {
 				ref := findObject(resp, "ref")
 				title, _ := ref["title"].(string)
@@ -84,19 +88,31 @@ func Touched(r io.Reader, env Env) error {
 					}
 				}
 			}
-			if tool == "work" {
+			if tool == "thread" || tool == "chord" {
 				for _, ref := range refList(resp, "wrote") {
 					if title, _ := ref["title"].(string); title != "" {
 						link("work", title)
 					}
+					// A verification names the session that filed it, as an event does.
+					if typ, _ := ref["type"].(string); typ == "verification" {
+						if p, _ := ref["path"].(string); p != "" {
+							eventPaths = append(eventPaths, p)
+						}
+					}
 				}
 				if started := findString(resp, "started"); started != "" {
-					link("specs", started)
+					link("threads", started)
+				}
+				if tool == "thread" && in.tool().Action == "check" {
+					edits = append(edits, func(c string) string {
+						return doc.SetField(c, "checked", doc.Parse("", []byte(c)).Front.Int("checked")+1)
+					})
 				}
 			}
 			for _, ref := range refList(resp, "events") {
 				if p, _ := ref["path"].(string); p != "" {
 					eventPaths = append(eventPaths, p)
+					eventRefs = append(eventRefs, p)
 				}
 			}
 			syncWork = true
@@ -106,9 +122,8 @@ func Touched(r io.Reader, env Env) error {
 			for _, edit := range edits {
 				c = edit(c)
 			}
-			if len(eventPaths) > 0 {
-				n := doc.Parse("", []byte(c)).Front.Int("events")
-				c = doc.SetField(c, "events", n+len(eventPaths))
+			if n := len(eventRefs); n > 0 {
+				c = doc.SetField(c, "events", doc.Parse("", []byte(c)).Front.Int("events")+n)
 			}
 			return c
 		})
@@ -129,14 +144,15 @@ func Touched(r io.Reader, env Env) error {
 	})
 }
 
-// syncWorkDocs brings the work documents' derived parts up to date after a hook changed a
-// session's links: the active flags, and the callouts that name a session.
+// syncWorkDocs brings the thread documents' derived parts up to date after a hook changed
+// a session's links or an edit changed a thread document: the statuses, the counts, the
+// active flags, and the callouts that name a session.
 func syncWorkDocs(v *vault.Vault) error {
 	idx, err := vault.Load(v)
 	if err != nil {
 		return err
 	}
-	_, err = work.Load(idx).Sync(v.WriteIfChanged)
+	_, err = thread.Load(idx).Sync(v.WriteIfChanged)
 	return err
 }
 

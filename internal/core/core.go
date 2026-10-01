@@ -20,9 +20,9 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 	"github.com/nathanaday/atlas-obsidian/internal/views"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // VaultInfo names a vault.
@@ -48,14 +48,17 @@ type TopicCounts struct {
 	Contested int            `json:"contested"`
 }
 
-// WorkCounts count the open work, and list it in board order.
-type WorkCounts struct {
-	Stubs   int         `json:"stubs"`
-	Open    int         `json:"open"`
-	Started int         `json:"started"`
-	Blocked int         `json:"blocked"`
-	Active  []vault.Ref `json:"active"`
-	// List is the open plans and stubs in board order, for the opening context.
+// ThreadCounts count the threads that are not ended, and list them in board order.
+type ThreadCounts struct {
+	Stubs    int         `json:"stubs"`
+	Ready    int         `json:"ready"`
+	Started  int         `json:"started"`
+	Verified int         `json:"verified"`
+	Blocked  int         `json:"blocked"`
+	Waiting  int         `json:"waiting"`
+	Chords   int         `json:"chords"`
+	Active   []vault.Ref `json:"active"`
+	// List is the threads that are not ended in board order, for the opening context.
 	List []vault.Ref `json:"list,omitempty"`
 }
 
@@ -92,7 +95,7 @@ type Status struct {
 	Documents map[string]int    `json:"documents"`
 	Topics    TopicCounts       `json:"topics"`
 	Tags      []TagCount        `json:"tags"`
-	Work      WorkCounts        `json:"work"`
+	Threads   ThreadCounts      `json:"threads"`
 	Sessions  SessionLists      `json:"sessions"`
 	Inbox     []InboxItem       `json:"inbox"`
 	Pending   []vault.Ref       `json:"pending"`
@@ -114,7 +117,7 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 		Documents: map[string]int{},
 		Topics:    TopicCounts{Kinds: map[string]int{}},
 		Tags:      []TagCount{},
-		Work:      WorkCounts{Active: []vault.Ref{}},
+		Threads:   ThreadCounts{Active: []vault.Ref{}},
 		Sessions:  SessionLists{Running: []vault.Ref{}, Waiting: []vault.Ref{}, Idle: []vault.Ref{}},
 		Inbox:     Inbox(v),
 		Pending:   idx.Refs(idx.PendingDocs()),
@@ -167,14 +170,11 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 		}
 		st.Tags = append(st.Tags, tc)
 	}
-	b := work.Load(idx)
-	bv := b.BoardView(work.Filter{})
-	st.Work.Stubs = len(bv.Stubs)
-	st.Work.Started = len(bv.Started) + len(bv.Active)
-	st.Work.Blocked = len(bv.Blocked)
-	st.Work.Open = len(bv.Ready) + len(bv.Waiting)
-	st.Work.Active = bv.Active
-	st.Work.List = append(append(append(append(append(append([]vault.Ref{}, bv.Active...), bv.Started...), bv.Blocked...), bv.Ready...), bv.Waiting...), bv.Stubs...)
+	bv := thread.Load(idx).BoardView(thread.Filter{})
+	st.Threads = ThreadCounts{
+		Stubs: len(bv.Stubs), Ready: len(bv.Ready), Started: len(bv.Started) + len(bv.Active), Verified: len(bv.Verified),
+		Blocked: len(bv.Blocked), Waiting: len(bv.Waiting), Chords: len(bv.Chords), Active: bv.Active, List: bv.Open(),
+	}
 	applied := idx.Of("change")
 	sort.SliceStable(applied, func(i, j int) bool { return applied[i].Str("applied") > applied[j].Str("applied") })
 	for _, c := range applied {
@@ -306,7 +306,7 @@ func CloseMention(v *vault.Vault, rel string, line int, link string) (*Mention, 
 type Synced struct {
 	Moved     []string `json:"moved"`
 	Lost      []string `json:"lost"`
-	Work      []string `json:"work"`
+	Threads   []string `json:"threads"`
 	Knowledge []string `json:"knowledge"`
 	Sessions  []string `json:"sessions"`
 	Settings  bool     `json:"settings"`
@@ -335,7 +335,7 @@ func Sync(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 
 // SyncLocked is Sync for a caller that holds the lock.
 func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
-	out := &Synced{Moved: []string{}, Lost: []string{}, Work: []string{}, Knowledge: []string{}, Sessions: []string{}}
+	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}}
 	if !o.Views {
 		if err := vault.Recover(v); err != nil {
 			return nil, err
@@ -358,11 +358,11 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if err != nil {
 		return nil, err
 	}
-	wrote, err := work.Load(idx).Sync(v.WriteIfChanged)
+	wrote, err := thread.Load(idx).Sync(v.WriteIfChanged)
 	if err != nil {
 		return nil, err
 	}
-	out.Work = append(out.Work, wrote...)
+	out.Threads = append(out.Threads, wrote...)
 	if !o.Views {
 		if idx, err = vault.Load(v); err != nil {
 			return nil, err

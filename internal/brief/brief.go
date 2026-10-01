@@ -1,6 +1,6 @@
 // Package brief gives an agent everything it needs to work in a repository or under a set
 // of tags: the pages of the tags from the top down, the repositories that hold them, the
-// policies that apply, the open work, and for a repository its own instruction files and
+// policies that apply, the open threads, and for a repository its own instruction files and
 // what git says about it now. (The spec calls this the context tool; Go's own context
 // package takes that name.)
 package brief
@@ -16,8 +16,8 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Bounds of what a brief carries.
@@ -239,21 +239,18 @@ func Policies(idx *vault.Index, held []string) []Policy {
 	return out
 }
 
-// openWork is the open and started plans and the open stubs that hold the tags or name
-// the repository, the most urgent first.
+// openWork is the threads that are not ended and that hold the tags, or have a task list
+// for the repository or hold its tag, the most urgent first.
 func openWork(idx *vault.Index, repo *doc.Doc, want []string) []vault.Ref {
-	b := work.Load(idx)
+	b := thread.Load(idx)
 	var list []*doc.Doc
-	for _, d := range append(append([]*doc.Doc{}, b.Stubs...), b.Specs...) {
-		if d.Type() == "spec" && d.Str("kind") != work.Plan {
-			continue
-		}
-		if work.Closed(b.Status(d)) {
+	for _, d := range b.Stubs {
+		if thread.Ended(b.Status(d)) {
 			continue
 		}
 		switch {
 		case repo != nil:
-			names := slices.ContainsFunc(d.List("repositories"), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) })
+			names := slices.ContainsFunc(b.Thread(d).Repositories(), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) })
 			if !names && !(repo.Str("defines") != "" && vault.Holds(d, repo.Str("defines"))) {
 				continue
 			}

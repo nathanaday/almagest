@@ -1,4 +1,4 @@
-// Package mcpserver serves the eight tools, each a thin layer over one package. A tool
+// Package mcpserver serves the nine tools, each a thin layer over one package. A tool
 // takes ids or titles and returns entities; every rule is the package's, and the
 // refusals come from there. After a write, the server writes the views.
 package mcpserver
@@ -21,8 +21,8 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/search"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Name is the server's name; hosts name its tools mcp__plugin_<plugin>_atlas__<tool>.
@@ -58,7 +58,7 @@ func New(opts Options) *Server {
 
 // ToolNames are the tools, in the order the server lists them.
 func ToolNames() []string {
-	return []string{"vault", "search", "context", "match", "source", "change", "work", "lint"}
+	return []string{"vault", "search", "context", "match", "source", "change", "thread", "chord", "lint"}
 }
 
 // open resolves the vault a call acts on.
@@ -216,7 +216,7 @@ func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in So
 		if err != nil {
 			return nil, SourceOut{}, err
 		}
-		res, err := source.Capture(v, in.Request, work.Opts{Now: s.opts.Now(), By: work.ByAgent})
+		res, err := source.Capture(v, in.Request, thread.Opts{Now: s.opts.Now(), By: thread.ByAgent})
 		if err != nil {
 			return nil, SourceOut{}, err
 		}
@@ -249,7 +249,7 @@ type ChangeIn struct {
 	Title      string         `json:"title,omitempty" jsonschema:"propose: a short name; the file name and the commit subject"`
 	Notes      string         `json:"notes,omitempty" jsonschema:"propose: what the change does and why, and each skipped subject with its reason"`
 	Absorbs    []string       `json:"absorbs,omitempty" jsonschema:"propose: ids of the documents the change absorbs into the wiki"`
-	Work       string         `json:"work,omitempty" jsonschema:"propose: the stub or spec the change serves, if any"`
+	Work       string         `json:"work,omitempty" jsonschema:"propose: the thread or the chord the change serves, if any"`
 	Supersedes string         `json:"supersedes,omitempty" jsonschema:"propose: a proposed change this one replaces"`
 	NewTags    bool           `json:"new_tags,omitempty" jsonschema:"propose: allow tags no document holds, in tagging: known, after the user agreed"`
 	Writes     []change.Write `json:"writes,omitempty" jsonschema:"propose: the writes: create (type topic or repository, kind, title, fields, body), modify (id, fields, body, base), promote (id of an open stub, kind, fields, body, title), rename (id, title), remove (id, redirect), confirm (id), retag (from, to)"`
@@ -287,112 +287,220 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 	return nil, nil, fmt.Errorf("change takes action show, propose, apply, reject, or undo, not %q", in.Action)
 }
 
-// WorkIn is the work tool's input.
-type WorkIn struct {
-	Action string `json:"action,omitempty" jsonschema:"list (the default), show, stub, spec, promote, start, done, drop, reopen, block, unblock, resolve, note, or set"`
+// ThreadIn is the thread tool's input.
+type ThreadIn struct {
+	Action string `json:"action,omitempty" jsonschema:"list (the default), load, stub, spec, tasks, start, check, verify, finding, drop, reopen, block, unblock, resolve, note, or set"`
 	Vault  string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
-	// The document an action acts on.
-	Doc  string `json:"doc,omitempty" jsonschema:"show, drop, reopen, note: the stub or spec (a note: any document), by id or title"`
-	Spec string `json:"spec,omitempty" jsonschema:"start, done, block, unblock: the plan, by id or title"`
-	Stub string `json:"stub,omitempty" jsonschema:"promote, resolve: the open stub, by id or title"`
-	// stub and promote.
-	Text        string   `json:"text,omitempty" jsonschema:"stub: the user's words, as given; promote: the spec's sections; note: the note"`
-	Title       string   `json:"title,omitempty" jsonschema:"stub, promote: a short title"`
-	Description string   `json:"description,omitempty" jsonschema:"stub, promote: one sentence"`
-	Tags        []string `json:"tags,omitempty" jsonschema:"stub, promote: the categories; list: only work that holds every one"`
-	Priority    string   `json:"priority,omitempty" jsonschema:"stub, promote: high, normal, low, or someday"`
+	Thread string `json:"thread,omitempty" jsonschema:"every action on one thread: the thread, by the id or title of its stub or of any of its documents"`
+	Doc    string `json:"doc,omitempty" jsonschema:"note: any document, by id or title"`
+	// list.
+	Tags       []string `json:"tags,omitempty" jsonschema:"stub: the categories; list: only threads that hold every one"`
+	Repository string   `json:"repository,omitempty" jsonschema:"tasks, finding: the repository of the task list; list: only threads with a task list for it"`
+	Chord      string   `json:"chord,omitempty" jsonschema:"stub: the chord the new thread joins; list: only the threads of this chord"`
+	// stub, spec, note.
+	Text        string   `json:"text,omitempty" jsonschema:"stub: the user's words, as given; spec: the spec's body (Goal, Requirements as '- R1: …' lines, Rules, Decisions, Out of scope, Knowledge, Open questions); note: the note; finding with outcome stub: the words of a new stub"`
+	Title       string   `json:"title,omitempty" jsonschema:"stub: a short title"`
+	Description string   `json:"description,omitempty" jsonschema:"stub, spec: one sentence"`
+	Priority    string   `json:"priority,omitempty" jsonschema:"stub: high, normal, low, or someday"`
+	After       []string `json:"after,omitempty" jsonschema:"stub: the threads that must be verified first"`
 	Inbox       string   `json:"inbox,omitempty" jsonschema:"stub: a note in inbox/ that the stub replaces"`
-	NewTags     bool     `json:"new_tags,omitempty" jsonschema:"stub, spec, promote: allow a tag no document holds, in tagging: known, after the user agreed"`
-	// spec.
-	Specs   []work.SpecIn `json:"specs,omitempty" jsonschema:"spec: the specs to write in one commit (a plan and its parts, or one spec)"`
-	Resolve bool          `json:"resolve,omitempty" jsonschema:"spec: close the from stub as resolved, with the specs in its became"`
-	// promote.
-	Kind         string   `json:"kind,omitempty" jsonschema:"promote: plan or design"`
-	Repositories []string `json:"repositories,omitempty" jsonschema:"promote: the repositories the work touches"`
-	Parent       string   `json:"parent,omitempty" jsonschema:"promote: the plan this is a part of"`
-	Repository   string   `json:"repository,omitempty" jsonschema:"list: only plans that name this repository"`
-	// start, done, drop, reopen, block, resolve.
-	Take   bool           `json:"take,omitempty" jsonschema:"start: take a plan another live session started"`
-	Result *work.ResultIn `json:"result,omitempty" jsonschema:"done: the result: delivered and verified, and follow_ups and learned"`
-	Reason string         `json:"reason,omitempty" jsonschema:"drop: why; reopen: why, optional; block: what the plan waits on, in one line"`
-	Became []string       `json:"became,omitempty" jsonschema:"resolve: the documents the stub became"`
+	NewTags     bool     `json:"new_tags,omitempty" jsonschema:"stub: allow a tag no document holds, in tagging: known, after the user agreed"`
+	// tasks.
+	Tasks []thread.TaskIn `json:"tasks,omitempty" jsonschema:"tasks: the tasks to write or append, each with the requirements it serves"`
+	// start.
+	Take bool `json:"take,omitempty" jsonschema:"start: take a thread another live session started"`
+	// check.
+	Task    string   `json:"task,omitempty" jsonschema:"check: the task's id (T3)"`
+	State   string   `json:"state,omitempty" jsonschema:"check: done (the default), dropped, or open"`
+	Commits []string `json:"commits,omitempty" jsonschema:"check: the commits that did the task"`
+	Note    string   `json:"note,omitempty" jsonschema:"check: one line on what was done; needed when there is no commit"`
+	// verify.
+	Scope    string            `json:"scope,omitempty" jsonschema:"verify: what was checked, each repository with its commits"`
+	Results  []thread.ResultIn `json:"results,omitempty" jsonschema:"verify: one result (pass or fail, with evidence) for every requirement of the spec"`
+	Findings []string          `json:"findings,omitempty" jsonschema:"verify: what the check found, one line each"`
+	Notes    string            `json:"notes,omitempty" jsonschema:"verify: anything else the round should record"`
+	// finding.
+	Finding string         `json:"finding,omitempty" jsonschema:"finding: the finding's id (F1) in the thread's last verification"`
+	Outcome string         `json:"outcome,omitempty" jsonschema:"finding: task, spec, stub, knowledge, or accepted"`
+	NewTask *thread.TaskIn `json:"new_task,omitempty" jsonschema:"finding with outcome task: the task that fixes it"`
+	Link    string         `json:"link,omitempty" jsonschema:"finding: with stub, a stub that exists; with knowledge, the change or the topic that holds it"`
+	// drop, reopen, block, check, finding.
+	Reason string   `json:"reason,omitempty" jsonschema:"drop: why; reopen: why, optional; block: what the thread waits on, in one line; check with state dropped: why; finding with outcome accepted: why the user accepts it"`
+	Became []string `json:"became,omitempty" jsonschema:"resolve: the documents the stub became"`
 	// set.
-	Set *work.SetIn `json:"set,omitempty" jsonschema:"set: the stub or spec (doc) and the fields to change; a field left out stays"`
+	Set *thread.SetIn `json:"set,omitempty" jsonschema:"set: the thread (doc) and the fields to change; a field left out stays"`
 }
 
-// WorkOut is the work tool's output: the board, or one document with what the call wrote.
-type WorkOut struct {
-	Board   *work.BoardView `json:"board,omitempty"`
-	View    *work.View      `json:"view,omitempty"`
-	Commit  string          `json:"commit,omitempty"`
-	Wrote   []vault.Ref     `json:"wrote,omitempty"`
-	Events  []vault.Ref     `json:"events,omitempty"`
-	Started string          `json:"started,omitempty"`
+// ThreadOut is the thread tool's output: the board, the load of one thread, or the state
+// of the thread a write acted on with what the call wrote.
+type ThreadOut struct {
+	Board   *thread.BoardView `json:"board,omitempty"`
+	Thread  *thread.Loaded    `json:"thread,omitempty"`
+	State   *thread.State     `json:"state,omitempty"`
+	Commit  string            `json:"commit,omitempty"`
+	Wrote   []vault.Ref       `json:"wrote,omitempty"`
+	Events  []vault.Ref       `json:"events,omitempty"`
+	Started string            `json:"started,omitempty"`
 }
 
-func (s *Server) workTool(ctx context.Context, req *mcp.CallToolRequest, in WorkIn) (*mcp.CallToolResult, WorkOut, error) {
+const threadActions = "list, load, stub, spec, tasks, start, check, verify, finding, drop, reopen, block, unblock, resolve, note, or set"
+
+func (s *Server) threadTool(ctx context.Context, req *mcp.CallToolRequest, in ThreadIn) (*mcp.CallToolResult, ThreadOut, error) {
 	v, err := s.open(in.Vault)
 	if err != nil {
-		return nil, WorkOut{}, err
+		return nil, ThreadOut{}, err
 	}
-	o := work.Opts{Now: s.opts.Now(), By: work.ByAgent}
-	out := func(r *work.Result, err error) (*mcp.CallToolResult, WorkOut, error) {
+	o := thread.Opts{Now: s.opts.Now(), By: thread.ByAgent}
+	out := func(r *thread.Result, err error) (*mcp.CallToolResult, ThreadOut, error) {
 		if err != nil {
-			return nil, WorkOut{}, err
+			return nil, ThreadOut{}, err
 		}
 		s.views(v)
-		return nil, WorkOut{View: r.View, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events, Started: r.Started}, nil
+		return nil, ThreadOut{State: r.State, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events, Started: r.Started}, nil
 	}
 	switch in.Action {
 	case "", "list":
 		idx, err := vault.Load(v)
 		if err != nil {
-			return nil, WorkOut{}, err
+			return nil, ThreadOut{}, err
 		}
-		return nil, WorkOut{Board: work.Load(idx).BoardView(work.Filter{Tags: in.Tags, Repository: in.Repository})}, nil
-	case "show":
+		return nil, ThreadOut{Board: thread.Load(idx).BoardView(thread.Filter{Tags: in.Tags, Repository: in.Repository, Chord: in.Chord})}, nil
+	case "load":
 		idx, err := vault.Load(v)
 		if err != nil {
-			return nil, WorkOut{}, err
+			return nil, ThreadOut{}, err
 		}
-		view, err := work.Show(idx, in.Doc)
+		loaded, err := thread.LoadThread(idx, in.Thread)
 		if err != nil {
-			return nil, WorkOut{}, err
+			return nil, ThreadOut{}, err
 		}
-		return nil, WorkOut{View: view}, nil
+		return nil, ThreadOut{Thread: loaded}, nil
 	case "stub":
-		return out(work.Stub(v, work.StubIn{Text: in.Text, Title: in.Title, Description: in.Description, Tags: in.Tags, Priority: in.Priority, Inbox: in.Inbox, NewTags: in.NewTags}, o))
+		return out(thread.Stub(v, thread.StubIn{Text: in.Text, Title: in.Title, Description: in.Description, Tags: in.Tags, Priority: in.Priority, Chord: in.Chord, After: in.After, Inbox: in.Inbox, NewTags: in.NewTags}, o))
 	case "spec":
-		return out(work.Specs(v, work.SpecsIn{Specs: in.Specs, Resolve: in.Resolve, NewTags: in.NewTags}, o))
-	case "promote":
-		return out(work.Promote(v, work.PromoteIn{Stub: in.Stub, Kind: in.Kind, Text: in.Text, Title: in.Title, Description: in.Description, Tags: in.Tags, Repositories: in.Repositories, Parent: in.Parent, Priority: in.Priority, NewTags: in.NewTags}, o))
+		return out(thread.Spec(v, thread.SpecIn{Thread: in.Thread, Text: in.Text, Description: in.Description}, o))
+	case "tasks":
+		return out(thread.TasksWrite(v, thread.TasksIn{Thread: in.Thread, Repository: in.Repository, Tasks: in.Tasks}, o))
 	case "start":
-		return out(work.Start(v, in.Spec, in.Take, o))
-	case "done":
-		var r work.ResultIn
-		if in.Result != nil {
-			r = *in.Result
-		}
-		return out(work.Complete(v, in.Spec, r, o))
+		return out(thread.Start(v, in.Thread, in.Take, o))
+	case "check":
+		return out(thread.Check(v, thread.CheckIn{Thread: in.Thread, Task: in.Task, State: in.State, Commits: in.Commits, Note: in.Note, Reason: in.Reason}, o))
+	case "verify":
+		return out(thread.Verify(v, thread.VerifyIn{Thread: in.Thread, Scope: in.Scope, Results: in.Results, Findings: in.Findings, Notes: in.Notes}, o))
+	case "finding":
+		return out(thread.FindingOutcome(v, thread.FindingIn{Thread: in.Thread, Finding: in.Finding, Outcome: in.Outcome, Task: in.NewTask, Repository: in.Repository, Link: in.Link, Text: in.Text, Reason: in.Reason}, o))
 	case "drop":
-		return out(work.Drop(v, in.Doc, in.Reason, o))
+		return out(thread.Drop(v, in.Thread, in.Reason, o))
 	case "reopen":
-		return out(work.Reopen(v, in.Doc, in.Reason, o))
+		return out(thread.Reopen(v, in.Thread, in.Reason, o))
 	case "block":
-		return out(work.Block(v, in.Spec, in.Reason, o))
+		return out(thread.Block(v, in.Thread, in.Reason, o))
 	case "unblock":
-		return out(work.Unblock(v, in.Spec, o))
+		return out(thread.Unblock(v, in.Thread, o))
 	case "resolve":
-		return out(work.Resolve(v, in.Stub, in.Became, o))
+		return out(thread.Resolve(v, in.Thread, in.Became, o))
 	case "note":
-		return out(work.Note(v, in.Doc, in.Text, o))
+		doc := in.Doc
+		if doc == "" {
+			doc = in.Thread
+		}
+		return out(thread.Note(v, doc, in.Text, o))
 	case "set":
 		if in.Set == nil {
-			return nil, WorkOut{}, errors.New("set takes set: {doc, and the fields to change}")
+			return nil, ThreadOut{}, errors.New("set takes set: {doc, and the fields to change}")
 		}
-		return out(work.Set(v, *in.Set, o))
+		return out(thread.Set(v, *in.Set, o))
 	}
-	return nil, WorkOut{}, fmt.Errorf("work takes action list, show, stub, spec, promote, start, done, drop, reopen, block, unblock, resolve, note, or set, not %q", in.Action)
+	return nil, ThreadOut{}, fmt.Errorf("thread takes action %s, not %q", threadActions, in.Action)
+}
+
+// ChordIn is the chord tool's input.
+type ChordIn struct {
+	Action string `json:"action,omitempty" jsonschema:"list (the default), load, create, add, remove, order, drop, reopen, or set"`
+	Vault  string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Chord  string `json:"chord,omitempty" jsonschema:"every action on one chord: the chord, by id or title"`
+	// create.
+	Title       string                 `json:"title,omitempty" jsonschema:"create: the chord's title"`
+	Text        string                 `json:"text,omitempty" jsonschema:"create: the chord's Goal: what is true when every thread is closed"`
+	Description string                 `json:"description,omitempty" jsonschema:"create: one sentence"`
+	Tags        []string               `json:"tags,omitempty" jsonschema:"create: the chord's tags; each new stub takes them. list: only chords that hold every one"`
+	Priority    string                 `json:"priority,omitempty" jsonschema:"create: high, normal, low, or someday"`
+	Threads     []thread.ChordThreadIn `json:"threads,omitempty" jsonschema:"create: the threads, each a new stub (title, text) or a stub that exists (thread), with the threads it comes after"`
+	NewTags     bool                   `json:"new_tags,omitempty"`
+	// add, remove.
+	Thread string   `json:"thread,omitempty" jsonschema:"add, remove: the thread, by id or title"`
+	After  []string `json:"after,omitempty" jsonschema:"add: the threads it comes after"`
+	// order.
+	Order []thread.OrderIn `json:"order,omitempty" jsonschema:"order: each thread whose place changes, with every thread it comes after"`
+	// drop, reopen.
+	Reason string `json:"reason,omitempty" jsonschema:"drop: why; reopen: why, optional"`
+	// set.
+	Set *thread.SetIn `json:"set,omitempty" jsonschema:"set: the chord (doc) and its title, description, tags, aliases, or priority"`
+}
+
+// ChordOut is the chord tool's output: the chords, the load of one, or the chord a write
+// acted on with what the call wrote.
+type ChordOut struct {
+	Chords []thread.ChordView  `json:"chords,omitempty"`
+	Chord  *thread.ChordLoaded `json:"chord,omitempty"`
+	View   *thread.ChordView   `json:"view,omitempty"`
+	Commit string              `json:"commit,omitempty"`
+	Wrote  []vault.Ref         `json:"wrote,omitempty"`
+	Events []vault.Ref         `json:"events,omitempty"`
+}
+
+const chordActions = "list, load, create, add, remove, order, drop, reopen, or set"
+
+func (s *Server) chordTool(ctx context.Context, req *mcp.CallToolRequest, in ChordIn) (*mcp.CallToolResult, ChordOut, error) {
+	v, err := s.open(in.Vault)
+	if err != nil {
+		return nil, ChordOut{}, err
+	}
+	o := thread.Opts{Now: s.opts.Now(), By: thread.ByAgent}
+	out := func(r *thread.Result, err error) (*mcp.CallToolResult, ChordOut, error) {
+		if err != nil {
+			return nil, ChordOut{}, err
+		}
+		s.views(v)
+		return nil, ChordOut{View: r.Chord, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events}, nil
+	}
+	switch in.Action {
+	case "", "list":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return nil, ChordOut{}, err
+		}
+		chords := thread.Load(idx).BoardView(thread.Filter{Tags: in.Tags}).Chords
+		return nil, ChordOut{Chords: chords}, nil
+	case "load":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return nil, ChordOut{}, err
+		}
+		loaded, err := thread.LoadChord(idx, in.Chord)
+		if err != nil {
+			return nil, ChordOut{}, err
+		}
+		return nil, ChordOut{Chord: loaded}, nil
+	case "create":
+		return out(thread.ChordCreate(v, thread.ChordIn{Title: in.Title, Text: in.Text, Description: in.Description, Tags: in.Tags, Priority: in.Priority, Threads: in.Threads, NewTags: in.NewTags}, o))
+	case "add":
+		return out(thread.ChordAdd(v, in.Chord, in.Thread, in.After, o))
+	case "remove":
+		return out(thread.ChordRemove(v, in.Chord, in.Thread, o))
+	case "order":
+		return out(thread.ChordOrder(v, in.Chord, in.Order, o))
+	case "drop":
+		return out(thread.Drop(v, in.Chord, in.Reason, o))
+	case "reopen":
+		return out(thread.Reopen(v, in.Chord, in.Reason, o))
+	case "set":
+		if in.Set == nil {
+			return nil, ChordOut{}, errors.New("set takes set: {doc, and the fields to change}")
+		}
+		return out(thread.Set(v, *in.Set, o))
+	}
+	return nil, ChordOut{}, fmt.Errorf("chord takes action %s, not %q", chordActions, in.Action)
 }
 
 // LintIn is the lint tool's input.
@@ -416,21 +524,23 @@ func readOnly() *mcp.ToolAnnotations { return &mcp.ToolAnnotations{ReadOnlyHint:
 func (s *Server) MCP() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Atlas", Version: s.opts.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "vault",
-		Description: "The state of the vault in one read (status: documents by type, tags with counts, open work, live sessions, inbox, pending documents, proposed and recent changes, recent events, @atlas mentions, problems); init makes a vault; sync heals derived fields and writes the views; mention closes an @atlas mention with a link to its answer."}, s.vaultTool)
+		Description: "The state of the vault in one read (status: documents by type, tags with counts, open threads, live sessions, inbox, pending documents, proposed and recent changes, recent events, @atlas mentions, problems); init makes a vault; sync heals derived fields and writes the views; mention closes an @atlas mention with a link to its answer."}, s.vaultTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "search", Annotations: readOnly(),
-		Description: "Ranked search (BM25 over title, aliases, tags, description, body) over the documents of wiki/documents (source, repository, topic, stub, spec, event). Filter by types, kinds, tags (a document must hold every one), status, and repository. Returns Doc Refs with snippets, and facets: the counts of the tags, types, and statuses of every match, to narrow a broad query."}, s.searchTool)
+		Description: "Ranked search (BM25 over title, aliases, tags, description, body) over the documents of wiki/documents (source, repository, topic, stub, spec, tasks, verification, chord, event). Filter by types, kinds, tags (a document must hold every one), status, and repository. Returns Doc Refs with snippets, and facets: the counts of the tags, types, and statuses of every match, to narrow a broad query."}, s.searchTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "context", Annotations: readOnly(),
-		Description: "Everything an agent needs to work in a repository (by id or title, or a path inside it) or under tags: the tag pages from the top down with their Context, the repositories, the policies that apply (most specific first), the open work, and for a repository its AGENTS.md and CLAUDE.md and git facts now (branch, head, dirty files, ahead and behind, recent commits, commits past its description)."}, s.contextTool)
+		Description: "Everything an agent needs to work in a repository (by id or title, or a path inside it) or under tags: the tag pages from the top down with their Context, the repositories, the policies that apply (most specific first), the open threads, and for a repository its AGENTS.md and CLAUDE.md and git facts now (branch, head, dirty files, ahead and behind, recent commits, commits past its description)."}, s.contextTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "match", Annotations: readOnly(),
 		Description: "Join the subjects of Item Maps across chunks and match each against the topics and sources: hit (a document holds its name or alias), near (neighbors above the threshold), or new. With docs, or one tag and across, compare topics with topics under a different child tag of that tag, for wiki-map."}, s.matchTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "source",
 		Description: "capture brings inbox files, pasted text, or a snapshot of a linked repository into wiki/documents as sources, with the originals in wiki/assets, as one commit (a source is pending until a change absorbs it; resolves closes the stub that asked for it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, s.sourceTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "change",
 		Description: "The only way knowledge changes: sources, repositories, and topics. propose validates a Wiki Change Plan (create, modify, promote a stub to a topic, rename, remove, confirm, retag) and writes a change document (no commit) for the user to review; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, s.changeTool)
-	mcp.AddTool(server, &mcp.Tool{Name: "work",
-		Description: "Every write to stubs, specs, and events, and the reads of work. list is the board; show is a stub or spec with its parts, events, and next step. stub plants an idea in the user's words; spec writes a plan and its parts, or a design; promote makes a stub a spec in place; start binds this session to a plan with no parts (an edit in a repository needs one); done completes it with the result; drop, reopen, block, unblock, resolve, note, and set do what they say. Each write is one commit, and writes its events."}, s.workTool)
+	mcp.AddTool(server, &mcp.Tool{Name: "thread",
+		Description: "Every write to a thread, and the reads. A thread is one piece of work: a stub (its front page), a spec (numbered requirements), task lists (check boxes), and verifications (a result per requirement, and findings). Code derives its status (stub, specified, planned, started, unverified, verified, closed); no call sets it. list is the board; load returns everything needed to take a thread up, with its next step and the skill that does it. stub plants an idea in the user's words; spec writes or revises the spec; tasks writes or appends a task list for one repository; start binds this session to the thread (an edit in a repository needs a started thread with an open task for it); check marks one task done with its commits, or drops it; verify files one round from the verifier's report; finding gives a finding its outcome (task, spec, stub, knowledge, accepted); drop, reopen, block, unblock, resolve, note, and set do what they say. Each write is one commit. A thread closes with no call: when it is verified and the user applies the change that absorbs its spec and verification."}, s.threadTool)
+	mcp.AddTool(server, &mcp.Tool{Name: "chord",
+		Description: "A chord is a goal that needs several threads, with the order between them: each thread names the threads it comes after, and code refuses a loop. list shows the open chords with their threads in order; load returns one chord with its ready threads and its next step; create makes a chord and its stubs in one commit; add and remove move a thread in or out; order sets what each thread comes after; drop drops the chord and its open threads; reopen and set do what they say. A thread is ready when every thread it comes after is verified. Code writes a canvas per chord in chords/."}, s.chordTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Annotations: readOnly(),
-		Description: "The health check over every typed document, optionally the documents under tags: schema, duplicate titles, dead links, tag pages, repository paths, spec and event rules, misplaced and untyped files; orphans, uncited and stale topics; near-duplicate tags, repositories behind, old pending documents and proposals, lost sessions. Each finding names its fix. Reads only."}, s.lintTool)
+		Description: "The health check over every typed document, optionally the documents under tags: schema, duplicate titles, dead links, tag pages, repository paths, thread, task, and event rules, misplaced and untyped files; orphans, uncited and stale topics; near-duplicate tags, repositories behind, old pending documents and proposals, lost sessions. Each finding names its fix. Reads only."}, s.lintTool)
 	return server
 }
 

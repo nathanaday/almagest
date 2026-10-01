@@ -7,7 +7,7 @@ Every document is Obsidian Flavored Markdown.
 YAML between `---` lines at the top. Quote a link in a property:
 `subject: "[[Score boxes by motion]]"`, `sources: ["[[DINOv2]]", "[[p3-edge]]"]`. Code
 owns some properties of each type; never write those (see [pages.md](pages.md) and
-[work.md](work.md)).
+[threads.md](threads.md)).
 
 ## Tags
 
@@ -33,15 +33,17 @@ owns some properties of each type; never write those (see [pages.md](pages.md) a
 Types: note, tip, important, warning, caution, example, quote, info.
 
 The first callout of a typed document is code's, when its type is one of these: source,
-repository, repository-missing, concept, entity, policy, overview, stub, stub-resolved,
-stub-dropped, spec, spec-done, spec-dropped, design, design-superseded, and
-`event-<kind>` (`[!event-completed]`). The first callout of a session or change document
+repository, repository-missing, concept, entity, policy, overview, thread, thread-closed,
+thread-resolved, thread-dropped, spec, tasks, verification, verification-pass,
+verification-fail, chord, chord-closed, chord-dropped, and `event-<kind>`
+(`[!event-started]`). The `[!handoff]` callout in a stub or a chord is code's too. The first callout of a session or change document
 is code's too (session, change). Never write or edit one of those. Every other callout
 is the user's, or yours to write in a section you own.
 
 ## Other syntax
 
 - Task lines: `- [ ] open`, `- [x] done`. A line `- [ ] @atlas …` is a mention, a
-  request to the agent.
+  request to the agent. In a task list, `- [-]` is a dropped task; code writes the check
+  marks there.
 - Math: `$inline$` and `$$ block $$`. Diagrams: a fenced `mermaid` block.
 - Comments: `%% hidden %%`.

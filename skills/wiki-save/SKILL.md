@@ -1,6 +1,6 @@
 ---
 name: wiki-save
-description: "Keep something from this conversation in the wiki: an answer, a decision, a comparison, a finding, cited to this session. Use for save this, keep this answer, file this decision, remember this in the wiki. Files are wiki-ingest; an idea to act on later is wiki-stub."
+description: "Keep something from this conversation in the wiki: an answer, a decision, a comparison, a finding, cited to this session. Use for save this, keep this answer, file this decision, remember this in the wiki. Files are wiki-ingest; an idea to act on later is thread-stub."
 ---
 
 # wiki-save

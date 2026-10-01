@@ -13,6 +13,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -28,7 +29,8 @@ func deny(w io.Writer, reason string) error {
 // writeActions are, per atlas tool, the actions that write.
 var writeActions = map[string]map[string]bool{
 	"change": {"propose": true, "apply": true, "reject": true, "undo": true},
-	"work":   {"stub": true, "spec": true, "promote": true, "start": true, "done": true, "drop": true, "reopen": true, "block": true, "unblock": true, "resolve": true, "note": true, "set": true},
+	"thread": {"stub": true, "spec": true, "tasks": true, "start": true, "check": true, "verify": true, "finding": true, "drop": true, "reopen": true, "block": true, "unblock": true, "resolve": true, "note": true, "set": true},
+	"chord":  {"create": true, "add": true, "remove": true, "order": true},
 	"source": {"capture": true},
 	"vault":  {"init": true, "sync": true, "mention": true},
 }
@@ -52,7 +54,7 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		}
 		return nil
 	}
-	if tool == "work" && in.tool().Action == "start" {
+	if tool == "thread" && in.tool().Action == "start" {
 		if reason := restartRefusal(in, env); reason != "" {
 			return deny(w, reason)
 		}
@@ -112,11 +114,6 @@ func atlasCommandRefusal(cmd string) string {
 	return ""
 }
 
-var (
-	shellOperator = regexp.MustCompile("[;&|<>$`\n\\\\]")
-	gitRead       = regexp.MustCompile(`^git (-C ("[^"]*"|'[^']*'|\S+) )?(log|diff|show)(\s|$)`)
-)
-
 // readOnlyRefusal is why a read-only agent may not make a call, or "".
 func readOnlyRefusal(in Input, tool string) string {
 	agent := sessions.AgentName(in.AgentType)
@@ -126,17 +123,9 @@ func readOnlyRefusal(in Input, tool string) string {
 	case tool != "" && writeActions[tool][in.tool().Action]:
 		return fmt.Sprintf("%s is read-only; %s %s writes, so the skill that sent it makes that call", agent, tool, in.tool().Action)
 	case in.ToolName == "Bash":
-		cmd := strings.TrimSpace(in.tool().Command)
-		if agent == "spec-review" && gitRead.MatchString(cmd) && !shellOperator.MatchString(cmd) {
-			for _, f := range strings.Fields(cmd) {
-				if f == "-c" || strings.HasPrefix(f, "--output") || f == "--ext-diff" || f == "--textconv" {
-					return "spec-review may run git log, git diff, and git show without " + f
-				}
-			}
-			return ""
-		}
-		if agent == "spec-review" {
-			return "spec-review may run only git log, git diff, and git show (git -C <repository> log …), with no shell operator"
+		// thread-audit checks work by running its tests and reading git; it edits nothing.
+		if agent == "thread-audit" {
+			return atlasCommandRefusal(in.tool().Command)
 		}
 		return agent + " is read-only and runs no shell command"
 	}
@@ -156,9 +145,11 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	case strings.HasPrefix(rel, vault.Assets+"/"):
 		return rel + " is a captured original or an attachment; source capture writes the originals, and you add attachments in Obsidian"
 	case strings.HasPrefix(rel, vault.Wiki+"/"):
-		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from the work tool, change propose, or source capture"
+		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from the thread tool, the chord tool, change propose, or source capture"
 	case strings.HasPrefix(rel, vault.Changes+"/"):
 		return rel + " is a change document; the change tool writes it. Edit a proposed document inside it only when the user asks"
+	case strings.HasPrefix(rel, vault.Chords+"/"):
+		return rel + " is a chord's canvas, which code writes from the stubs; change the order with chord order, and the user redraws it in Obsidian"
 	case strings.HasPrefix(rel, vault.Views+"/"):
 		return rel + " is a view, which code writes from the documents; change the documents instead"
 	case rel == vault.Marker:
@@ -173,16 +164,34 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	return ""
 }
 
+// MaxCardLines is how many lines of prose a stub's Idea and Notes hold together before
+// the guard refuses an agent's edit that adds more: the card stays short.
+const MaxCardLines = 40
+
+// codeSection says why an agent does not edit a section code owns, by type.
+var codeSection = map[string]string{
+	"stub":         "## Thread is code's; it follows the thread's documents",
+	"tasks":        "## Tasks is code's for an agent: check, drop, or open a task with thread check, and add one with thread tasks. Edit ## Details freely",
+	"verification": "a verification is the record of one round: a correction is a new round (thread verify), and a finding's outcome is thread finding. Edit ## Notes freely",
+	"chord":        "## Threads is code's; it follows the stubs. Change the order with chord order",
+}
+
+var (
+	headingTwo = regexp.MustCompile(`^## +(.+?)\s*$`)
+	checkBox   = regexp.MustCompile(`^\s*[-*] \[.\] `)
+)
+
 // documentRefusal keeps the documents of wiki/documents to their writers: a new file
-// comes from a tool; knowledge changes through a change; a work document's prose is the
-// model's, and its frontmatter, lead callout, and code sections are code's.
+// comes from a tool; knowledge changes through a change; a thread document's prose is
+// the model's, and its frontmatter, lead callout, and code sections are code's. A thread
+// document holds only the sections of its type, and a stub stays short.
 func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 	data, err := v.Read(rel)
 	if err != nil {
 		if f.Op == "delete" {
 			return ""
 		}
-		return rel + " would be a new document; a stub or a spec comes from the work tool, a topic or a repository from change propose, a source from source capture"
+		return rel + " would be a new document; a stub, a spec, a task list, or a verification comes from the thread tool, a chord from the chord tool, a topic or a repository from change propose, a source from source capture"
 	}
 	d := doc.Parse(rel, data)
 	t := schema.Get(d.Type())
@@ -192,13 +201,36 @@ func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 	case t.Family == schema.Knowledge:
 		return rel + " is a " + d.Type() + ", which changes only through a change: build a plan, call change propose, show the preview, and apply after the user's yes"
 	case f.Op != "update" || in.ToolName == "Write":
-		return rel + " is a " + d.Type() + "; revise its prose with Edit, and its fields with work set"
+		return rel + " is a " + d.Type() + "; revise its prose with Edit, and its fields with thread set"
 	case touchesPrefix(in, f, d):
-		return "the frontmatter and the lead callout of " + d.Title() + " are code's; use work set, or the work action that fits"
+		return "the frontmatter and the lead callout of " + d.Title() + " are code's; use thread set, or the thread action that fits"
 	}
 	for _, s := range t.CodeSections {
 		if start, end := sectionBounds(d.Content, s); start >= 0 && touchesRange(in, f, d.Content, start, end) {
+			if why := codeSection[d.Type()]; why != "" {
+				return why
+			}
 			return "## " + s + " is code's; it follows the documents and the events"
+		}
+	}
+	if !schema.IsThread(d.Type()) {
+		return ""
+	}
+	added, removed := in.added(f)
+	for _, l := range added {
+		if m := headingTwo.FindStringSubmatch(l); m != nil && !slices.ContainsFunc(t.Sections, func(s string) bool { return strings.EqualFold(s, m[1]) }) {
+			return fmt.Sprintf("## %s is no section of a %s; it holds %s. %s", m[1], d.Type(), strings.Join(t.Sections, ", "), thread.Elsewhere)
+		}
+		if d.Type() == "spec" && checkBox.MatchString(l) {
+			return "a spec holds no check box; it says what must be true, and the task list holds the steps (thread tasks)"
+		}
+	}
+	if d.Type() == "stub" {
+		idea, _ := doc.Section(d.Body, "Idea")
+		notes, _ := doc.Section(d.Body, "Notes")
+		have := len(strings.Split(strings.TrimSpace(idea+"\n"+notes), "\n"))
+		if grow := len(added) - len(removed); grow > 0 && have+grow > MaxCardLines {
+			return fmt.Sprintf("a stub is the front page of its thread and stays short (%d lines of Idea and Notes at most). %s", MaxCardLines, thread.Elsewhere)
 		}
 	}
 	return ""
@@ -300,8 +332,8 @@ func sectionBounds(content, title string) (int, int) {
 	return -1, -1
 }
 
-// repositoryRefusal is the edit rule: an edit inside a linked repository needs a plan
-// this session started, still started, that names the repository.
+// repositoryRefusal is the edit rule: an edit inside a linked repository needs a thread
+// this session started that has a task list for the repository with an open task.
 func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 	var repo *vault.Repo
 	for _, r := range v.Repositories() {
@@ -319,34 +351,53 @@ func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 	if s == nil && in.AgentID != "" {
 		s = sessions.Find(v, in.event().SessionID)
 	}
+	why := ""
 	if s != nil {
-		for _, title := range s.List("specs") {
-			if covers(v, doc.LinkTarget(title), repo.Title) {
+		for _, title := range sessions.Threads(s) {
+			reason := covers(v, title, repo.Title)
+			if reason == "" {
 				return ""
+			}
+			if why == "" || strings.Contains(reason, "open task") {
+				why = reason
 			}
 		}
 	}
-	return fmt.Sprintf("an edit in %s needs a started plan that names it. Find or write one with the spec-work skill, then call work start on it, and edit", repo.Title)
+	if why == "" {
+		why = "this session started no thread"
+	}
+	return fmt.Sprintf("an edit in %s needs a thread this session started, with a task list for %s that has an open task; %s. The thread-work skill finds or plants the thread; thread start binds the session; a fix after the last task needs a new task first (thread tasks)", repo.Title, repo.Title, why)
 }
 
-// covers reports whether a plan is started and names the repository.
-func covers(v *vault.Vault, title, repo string) bool {
-	spec := sessions.SpecDoc(v, title)
-	if spec == nil || spec.Type() != "spec" || spec.Str("status") != "started" {
-		return false
+// covers says why a thread does not let its session edit a repository, or "" when it
+// does: the thread is not ended, and its task list for the repository has an open task.
+func covers(v *vault.Vault, title, repo string) string {
+	stub := sessions.Document(v, title)
+	if stub == nil || stub.Type() != "stub" {
+		return title + " is no thread"
 	}
-	for _, r := range spec.List("repositories") {
-		if strings.EqualFold(doc.LinkTarget(r), repo) {
-			return true
+	if s := stub.Str("status"); s == thread.Dropped || s == thread.Resolved {
+		return title + " is " + s
+	}
+	for _, list := range sessions.TaskLists(v, title) {
+		if !strings.EqualFold(doc.LinkTarget(list.Str("repository")), repo) {
+			continue
 		}
+		for _, task := range thread.Tasks(list) {
+			if task.State == thread.TaskOpen {
+				return ""
+			}
+		}
+		return title + " has no open task for " + repo + ": every task of its list is done"
 	}
-	return false
+	return title + " has no task list for " + repo
 }
 
-// restartRefusal refuses a second start of a plan this session already started and that
-// is still started: one continued event per session, and the session is bound already.
+// restartRefusal refuses a second start of a thread this session already started and
+// that is still started: one continued event per session, and the session is bound
+// already.
 func restartRefusal(in Input, env Env) string {
-	key := strings.TrimSpace(in.tool().Spec)
+	key := strings.TrimSpace(in.tool().Thread)
 	if key == "" {
 		return ""
 	}
@@ -358,20 +409,20 @@ func restartRefusal(in Input, env Env) string {
 	if s == nil {
 		return ""
 	}
-	spec := sessions.SpecDoc(v, doc.LinkTarget(key))
-	if spec == nil {
+	stub := sessions.Document(v, doc.LinkTarget(key))
+	if stub == nil {
 		if idx, err := vault.Load(v); err == nil {
 			if d := idx.ByID(key); d != nil {
-				spec = d
+				stub = d
 			}
 		}
 	}
-	if spec == nil || spec.Str("status") != "started" {
+	if stub == nil || stub.Str("status") != thread.Started {
 		return ""
 	}
-	for _, l := range s.List("specs") {
-		if strings.EqualFold(doc.LinkTarget(l), spec.Title()) {
-			return spec.Title() + " is started in this session already; go on with the work, and add a line to its ## Progress"
+	for _, t := range sessions.Threads(s) {
+		if strings.EqualFold(t, stub.Title()) {
+			return stub.Title() + " is started in this session already; go on with its open tasks, and check each one when it is done (thread check)"
 		}
 	}
 	return ""

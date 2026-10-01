@@ -28,6 +28,7 @@ const (
 	Scratchpad = "scratchpad"
 	Sessions   = "sessions"
 	Changes    = "changes"
+	Chords     = "chords"
 	Wiki       = "wiki"
 	Documents  = "wiki/documents"
 	Assets     = "wiki/assets"
@@ -39,13 +40,17 @@ const (
 )
 
 // Layout is the layout version this binary reads and writes, kept in Atlas.md's layout
-// field: 3 is the flat wiki/documents of 7.0. A vault below it is a 6.x vault, which only
-// `atlas-obsidian vault migrate` writes.
-const Layout = 3
+// field: 4 is the threads and chords of 8.0; 3 is the flat wiki/documents of 7.0, with
+// plans; below that is a 6.x vault. Only the migrate command writes a vault of an older
+// layout.
+const (
+	Layout     = 4
+	LayoutFlat = 3
+)
 
 // Folders are every folder of the layout. EnsureFolders makes the ones a clone left out,
 // because git keeps no empty folder.
-var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Wiki, Documents, Assets, Views}
+var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Chords, Wiki, Documents, Assets, Views}
 
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
@@ -54,7 +59,7 @@ var Excluded = []string{"/views/", "/.claude/settings.local.json", "/.obsidian/w
 
 // Defaults of the vault document.
 var (
-	DefaultWikify     = []string{"source", "spec", "event"}
+	DefaultWikify     = []string{"source", "spec", "verification", "chord", "event"}
 	DefaultStaleHours = 12
 	TaggingModes      = []string{"open", "known"}
 )
@@ -132,7 +137,7 @@ func (v *Vault) Tagging() string {
 func (v *Vault) LayoutVersion() int { return v.Doc.Front.Int("layout") }
 
 // ErrLegacy is the refusal of every write on a vault of an older layout.
-var ErrLegacy = errors.New("this vault has the 6.x layout; run `atlas-obsidian vault migrate --dry-run` to see the move to 7.0, then `atlas-obsidian vault migrate` (type it yourself, or with ! in a session)")
+var ErrLegacy = errors.New("this vault has the layout of an earlier release; run `atlas-obsidian vault migrate --dry-run` to see the move to 8.0, then `atlas-obsidian vault migrate` (type it yourself, or with ! in a session)")
 
 // CheckLayout refuses a vault whose layout this binary does not write.
 func (v *Vault) CheckLayout() error {

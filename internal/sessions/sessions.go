@@ -25,13 +25,14 @@ const (
 	Lost    = "lost"
 )
 
-// Live reports whether a status holds the plans it started.
+// Live reports whether a status holds the threads it started.
 func Live(status string) bool {
 	return status == Running || status == Waiting || status == Idle
 }
 
 // ReadOnlyAgents are the plugin's read-only workers. The guard refuses their writes.
-var ReadOnlyAgents = []string{"wiki-extract", "wiki-draft", "wiki-audit", "spec-review"}
+// thread-audit alone runs shell commands, since it checks work by running its tests.
+var ReadOnlyAgents = []string{"wiki-extract", "wiki-draft", "wiki-audit", "thread-audit"}
 
 // quietAgents are the host's own read-only agent types, which also get a line in their
 // parent's document and no document of their own.
@@ -132,11 +133,13 @@ func ByTitle(v *vault.Vault, title string) *doc.Doc {
 	return nil
 }
 
-// UserAnswered is the gate of a change the model applies: a change with writes applies
-// only when the user of the session that proposed it had a turn after the proposal.
+// UserAnswered is the gate of a change the model applies: a change that writes, or that
+// closes a thread or a chord by absorbing it, applies only when the user of the session
+// that proposed it had a turn after the proposal. A change with no writes that absorbs
+// only sources and events needs no answer.
 func UserAnswered(v *vault.Vault) func(d *doc.Doc, writes int) error {
 	return func(d *doc.Doc, writes int) error {
-		if writes == 0 {
+		if writes == 0 && !closes(v, d) {
 			return nil
 		}
 		wait := fmt.Errorf("show the preview of %s and wait for the user's yes; apply runs once the user has answered after the proposal", vault.Title(d))
@@ -153,6 +156,20 @@ func UserAnswered(v *vault.Vault) func(d *doc.Doc, writes int) error {
 		}
 		return wait
 	}
+}
+
+// closes reports whether a change absorbs a spec, a verification, or a chord: its apply
+// closes a thread or a chord, which is the user's to do.
+func closes(v *vault.Vault, d *doc.Doc) bool {
+	for _, a := range d.List("absorbs") {
+		if x := Document(v, doc.LinkTarget(a)); x != nil {
+			switch x.Type() {
+			case "spec", "verification", "chord":
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // fields is a new session document's frontmatter, in order.
@@ -175,11 +192,12 @@ func fields(id string, e Event, now time.Time, parent, agent string) []doc.Field
 		{Key: "cwd", Value: vault.Shorten(e.Cwd)},
 		{Key: "parent", Value: parent},
 		{Key: "agent", Value: agent},
-		{Key: "specs", Value: []string{}},
+		{Key: "threads", Value: []string{}},
 		{Key: "work", Value: []string{}},
 		{Key: "repositories", Value: []string{}},
 		{Key: "changes", Value: []string{}},
 		{Key: "events", Value: 0},
+		{Key: "checked", Value: 0},
 		{Key: "description", Value: ""},
 		{Key: "reminded", Value: []string{}},
 	}
@@ -201,7 +219,7 @@ func Start(v *vault.Vault, e Event, now time.Time) (string, error) {
 }
 
 // Subagent handles SubagentStart: a subagent that may write gets its own document, which
-// inherits its parent's started plans so the edit rule holds inside it; a worker
+// inherits its parent's started threads so the edit rule holds inside it; a worker
 // gets a line under its parent's Subagents. The caller holds the lock.
 func Subagent(v *vault.Vault, e Event, now time.Time) (string, error) {
 	parent := Find(v, e.SessionID)
@@ -229,9 +247,8 @@ func Subagent(v *vault.Vault, e Event, now time.Time) (string, error) {
 	rel := strings.TrimSuffix(parent.Path, ".md") + " · " + Short(e.AgentID) + ".md"
 	list := fields("ses-"+Short(e.AgentID), e, now, doc.Link(parent.Title()), agent)
 	for i := range list {
-		switch list[i].Key {
-		case "specs":
-			list[i].Value = nonNil(parent.List(list[i].Key))
+		if list[i].Key == "threads" {
+			list[i].Value = doc.Links(Threads(parent))
 		}
 	}
 	content := doc.Render(list, newBody)
@@ -371,22 +388,30 @@ func All(v *vault.Vault) []*doc.Doc {
 	return out
 }
 
-// Lead is a session's lead callout: its status, the plan it started last that is still
-// started with that plan's last progress line, and the repository it edited last.
+// Threads are the titles of the threads a session started. A session of 7.x holds the
+// plans it started in specs, and a plan became a stub with the same title.
+func Threads(d *doc.Doc) []string {
+	var out []string
+	for _, field := range []string{"specs", "threads"} {
+		for _, l := range d.List(field) {
+			if t := doc.LinkTarget(l); !slices.Contains(out, t) {
+				out = append(out, t)
+			}
+		}
+	}
+	return out
+}
+
+// Lead is a session's lead callout: its status, the thread it started last that is still
+// started, the repository it edited last, and its last progress line or its description.
 func Lead(v *vault.Vault, d *doc.Doc) string {
 	parts := []string{d.Str("status")}
-	var quote string
-	specs := d.List("specs")
-	for i := len(specs) - 1; i >= 0; i-- {
-		title := doc.LinkTarget(specs[i])
-		spec := SpecDoc(v, title)
-		if spec == nil || spec.Str("status") != "started" {
-			continue
+	list := Threads(d)
+	for i := len(list) - 1; i >= 0; i-- {
+		if stub := Document(v, list[i]); stub != nil && stub.Type() == "stub" && stub.Str("status") == "started" {
+			parts = append(parts, doc.Link(list[i]))
+			break
 		}
-		parts = append(parts, doc.Link(title))
-		progress, _ := doc.Section(spec.Body, "Progress")
-		quote = doc.LastLine(progress)
-		break
 	}
 	if len(parts) == 1 {
 		if w := d.List("work"); len(w) > 0 {
@@ -397,7 +422,8 @@ func Lead(v *vault.Vault, d *doc.Doc) string {
 		parts = append(parts, repos[len(repos)-1])
 	}
 	var lines []string
-	if quote != "" {
+	progress, _ := doc.Section(d.Body, "Progress")
+	if quote := doc.LastLine(progress); quote != "" {
 		lines = append(lines, oneLine(quote, 160))
 	} else if desc := d.Str("description"); desc != "" {
 		lines = append(lines, oneLine(desc, 160))
@@ -405,8 +431,8 @@ func Lead(v *vault.Vault, d *doc.Doc) string {
 	return doc.Callout("session", strings.Join(parts, " · "), lines...)
 }
 
-// SpecDoc reads a document of wiki/documents by its title, or nil.
-func SpecDoc(v *vault.Vault, title string) *doc.Doc {
+// Document reads a document of wiki/documents by its title, or nil.
+func Document(v *vault.Vault, title string) *doc.Doc {
 	if title == "" || strings.ContainsAny(title, `/\`) {
 		return nil
 	}
@@ -416,6 +442,23 @@ func SpecDoc(v *vault.Vault, title string) *doc.Doc {
 		return nil
 	}
 	return doc.Parse(rel, data)
+}
+
+// TaskLists reads the task lists of a thread by its stub's title: the documents named
+// "<title> · Tasks…", fast enough for a hook.
+func TaskLists(v *vault.Vault, title string) []*doc.Doc {
+	matches, _ := filepath.Glob(v.Abs(vault.DocPath(escapeGlob(title) + " · Tasks*")))
+	var out []*doc.Doc
+	for _, abs := range matches {
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			continue
+		}
+		if d := doc.Parse(v.Rel(abs), data); d.Type() == "tasks" && strings.EqualFold(doc.LinkTarget(d.Str("thread")), title) {
+			out = append(out, d)
+		}
+	}
+	return out
 }
 
 // write writes a session document with its lead callout current.

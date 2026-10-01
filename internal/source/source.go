@@ -17,8 +17,8 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // MaxFileSize bounds a file capture takes.
@@ -86,7 +86,7 @@ func Media(name string) string {
 }
 
 // Capture brings the requested documents into the vault as one commit.
-func Capture(v *vault.Vault, req Request, o work.Opts) (*Result, error) {
+func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 	n := 0
 	if len(req.Inbox) > 0 {
 		n++
@@ -124,8 +124,8 @@ func Capture(v *vault.Vault, req Request, o work.Opts) (*Result, error) {
 		if stub, err = idx.ResolveType(req.Resolves, "stub"); err != nil {
 			return nil, fmt.Errorf("resolves: %w", err)
 		}
-		if s := work.Load(idx).Status(stub); s != work.Open {
-			return nil, fmt.Errorf("resolves: %s is %s; only an open stub resolves", stub.Title(), s)
+		if s := thread.Load(idx).Status(stub); s != thread.StatusStub {
+			return nil, fmt.Errorf("resolves: %s is %s; only a stub with no spec resolves into a source", stub.Title(), s)
 		}
 	}
 	var items []item
@@ -255,7 +255,7 @@ func Capture(v *vault.Vault, req Request, o work.Opts) (*Result, error) {
 		if err != nil {
 			return nil, err
 		}
-		if eventID, err = work.ResolveInTx(tx, idx2, idx2.ByID(stub.ID()), titles, work.Opts{Now: now, By: o.By}); err != nil {
+		if eventID, err = thread.ResolveInTx(tx, idx2, idx2.ByID(stub.ID()), titles, thread.Opts{Now: now, By: o.By}); err != nil {
 			return nil, err
 		}
 	}
@@ -263,7 +263,7 @@ func Capture(v *vault.Vault, req Request, o work.Opts) (*Result, error) {
 		if _, err := derive.Sync(idx2, tx.WriteIfChanged); err != nil {
 			return nil, err
 		}
-		if _, err := work.Load(idx2).Sync(tx.WriteIfChanged); err != nil {
+		if _, err := thread.Load(idx2).Sync(tx.WriteIfChanged); err != nil {
 			return nil, err
 		}
 	}

@@ -11,7 +11,7 @@ convention, and the work its TODO lines point at. The snapshot that capture take
 source every claim cites. Every topic this skill writes holds the repository's own tag,
 so a lookup under that tag finds it.
 
-Tools: `context`, `source` (capture, chunks, read), `match`, `change`, `work` (stub).
+Tools: `context`, `source` (capture, chunks, read), `match`, `change`, `thread` (stub).
 Agents: [wiki-extract](../../agents/wiki-extract.md), [wiki-draft](../../agents/wiki-draft.md).
 References: [changes.md](../atlas/references/changes.md),
 [pages.md](../atlas/references/pages.md).
@@ -57,7 +57,7 @@ References: [changes.md](../atlas/references/changes.md),
 
 Propose the change, show the preview, and wait for the yes. Apply sets the repository
 document's `described` to the snapshot's commit. Then offer the candidate stubs as one
-numbered list. For each one the user picks, call `work` with `action: stub`, `text` (the
+numbered list. For each one the user picks, call `thread` with `action: stub`, `text` (the
 TODO line and its `path:line`, as written), a short `title`, and `tags` set to the
 repository's tag.
 

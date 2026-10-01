@@ -499,26 +499,41 @@ func (idx *Index) Ref(d *doc.Doc) Ref {
 		state["sources"] = len(d.List("sources"))
 	case "stub":
 		state["priority"] = orDefault(d.Str("priority"), "normal")
+		state["tasks"] = d.Str("tasks")
+		state["verification"] = d.Str("verification")
+		state["blocked"] = d.Str("blocked")
+		state["active"] = d.Front.Bool("active")
+		state["repositories"] = targets(d.List("repositories"))
+		if c := d.Str("chord"); c != "" {
+			state["chord"] = doc.LinkTarget(c)
+		}
+		if a := d.List("after"); len(a) > 0 {
+			state["after"] = targets(a)
+		}
 		if b := d.List("became"); len(b) > 0 {
 			state["became"] = targets(b)
 		}
-	case "spec":
-		if d.Str("kind") == "plan" {
-			state["parent"] = doc.LinkTarget(d.Str("parent"))
-			state["root"] = doc.LinkTarget(d.Str("root"))
-			state["priority"] = orDefault(d.Str("priority"), "normal")
-			state["blocked"] = d.Str("blocked")
-			state["active"] = d.Front.Bool("active")
-			state["parts"] = d.Str("parts")
-			state["ready"] = idx.Ready(d)
+	case "spec", "tasks", "verification":
+		state["thread"] = doc.LinkTarget(d.Str("thread"))
+		switch d.Type() {
+		case "tasks":
+			r.Status = fmt.Sprintf("%d/%d", d.Front.Int("done"), d.Front.Int("total"))
+			if repo := d.Str("repository"); repo != "" {
+				state["repository"] = doc.LinkTarget(repo)
+			}
+		case "verification":
+			r.Status = d.Str("verdict")
+			state["round"] = d.Front.Int("round")
 		}
-		state["repositories"] = targets(d.List("repositories"))
+	case "chord":
+		state["priority"] = orDefault(d.Str("priority"), "normal")
+		state["threads"] = d.Str("threads")
 	case "event":
 		state["subject"] = doc.LinkTarget(d.Str("subject"))
 		state["at"] = d.Str("at")
 		state["session"] = doc.LinkTarget(d.Str("session"))
 	case "session":
-		state["specs"] = targets(d.List("specs"))
+		state["threads"] = targets(append(d.List("threads"), d.List("specs")...))
 	case "change":
 		state["counts"] = d.Str("counts")
 		if notes, ok := doc.Section(d.Body, "Notes"); ok {
@@ -532,19 +547,6 @@ func (idx *Index) Ref(d *doc.Doc) Ref {
 		r.State = state
 	}
 	return r
-}
-
-// Ready reports whether a plan is open and every plan it depends on is done or dropped.
-func (idx *Index) Ready(d *doc.Doc) bool {
-	if d.Type() != "spec" || d.Str("kind") != "plan" || orDefault(d.Str("status"), "open") != "open" {
-		return false
-	}
-	for _, dep := range d.List("depends") {
-		if s := idx.Linked(dep); s != nil && s.Str("status") != "done" && s.Str("status") != "dropped" {
-			return false
-		}
-	}
-	return true
 }
 
 // Refs builds the references to documents.
@@ -579,24 +581,35 @@ func orDefault(s, def string) string {
 }
 
 // ProseEvents are the event kinds that hold prose, and so may be pending.
-var ProseEvents = []string{"completed", "dropped", "note"}
+var ProseEvents = []string{"dropped", "note"}
 
 // Wikified reports whether a document can be pending: its type is in the vault's wikify
-// list, and for an event, its kind holds prose.
+// list, and it is ready for the wiki. A spec is ready when its thread is verified, a
+// verification when it passes, a chord when every thread is closed, and an event when
+// its kind holds prose. Each reads the status sync wrote.
 func (idx *Index) Wikified(d *doc.Doc) bool {
 	if !slices.Contains(idx.V.Wikify(), d.Type()) {
 		return false
 	}
 	switch d.Type() {
-	case "source", "spec", "stub":
+	case "source":
 		return true
+	case "stub":
+		return d.Str("status") == "stub"
+	case "spec":
+		return d.Str("status") == "complete (verified)"
+	case "verification":
+		return d.Str("verdict") == "pass"
+	case "chord":
+		return d.Str("status") == "done" || d.Str("status") == "closed"
 	case "event":
 		return slices.Contains(ProseEvents, d.Str("kind"))
 	}
 	return false
 }
 
-// Hash is a document's content hash for pending: a source's file hash; a stub's idea; else
+// Hash is a document's content hash for pending: a source's file hash; a stub's idea; a
+// verification's whole body; else
 // the hash of its prose, without the lead callout and the sections code writes.
 func Hash(d *doc.Doc) string {
 	switch d.Type() {
@@ -605,6 +618,9 @@ func Hash(d *doc.Doc) string {
 	case "stub":
 		idea, _ := doc.Section(d.Body, "Idea")
 		return doc.ContentHash(idea)
+	case "verification":
+		// Code writes its sections from the report, and they are what the wiki absorbs.
+		return doc.ContentHash(d.Body)
 	}
 	var code []string
 	if t := schema.Get(d.Type()); t != nil {

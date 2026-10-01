@@ -1,7 +1,8 @@
-package work
+package thread
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -15,6 +16,9 @@ const (
 	ByAgent = "agent"
 	ByUser  = "user"
 )
+
+// legacySections are the sections of a 7.0 completed event.
+var legacySections = []string{"Delivered", "Verified", "Follow-ups", "Learned"}
 
 // EventIn is one event to write.
 type EventIn struct {
@@ -117,7 +121,15 @@ func NewEvent(t *Titles, in EventIn) (rel, content, id string) {
 		fields = append(fields, doc.Field{Key: "change", Value: doc.Link(in.Change)})
 	}
 	body := ""
-	for _, s := range schema.Get("event").SectionsOf(in.Kind) {
+	sections := schema.Get("event").SectionsOf(in.Kind)
+	// The first step of a migration from 6.x writes the results of 7.0, which the second
+	// step reads.
+	for _, s := range legacySections {
+		if _, ok := in.Prose[s]; ok && !slices.Contains(sections, s) {
+			sections = append(slices.Clone(sections), s)
+		}
+	}
+	for _, s := range sections {
 		if text := strings.TrimSpace(in.Prose[s]); text != "" {
 			body += "## " + s + "\n\n" + text + "\n\n"
 		}
@@ -128,8 +140,8 @@ func NewEvent(t *Titles, in EventIn) (rel, content, id string) {
 }
 
 // EventLead is an event's lead callout: the kind, the subject, the time, and who acted.
-// part is the root plan the subject is a part of, or "".
-func EventLead(e *doc.Doc, subject, part string) string {
+// chord is the chord the subject belongs to, or "".
+func EventLead(e *doc.Doc, subject, chord string) string {
 	kind := e.Str("kind")
 	at, _ := vault.ParseTime(e.Str("at"))
 	title := capital(kind) + " · " + doc.Link(subject) + " · " + at.Format("2006-01-02 15:04:05")
@@ -154,8 +166,8 @@ func EventLead(e *doc.Doc, subject, part string) string {
 	if c := e.Str("change"); c != "" {
 		who += " · through " + c
 	}
-	if part != "" && !strings.EqualFold(part, subject) {
-		who += " · part of " + doc.Link(part)
+	if chord != "" && !strings.EqualFold(chord, subject) {
+		who += " · in the chord " + doc.Link(chord)
 	}
 	line = append(line, who)
 	return doc.Callout("event-"+kind, title, line...)

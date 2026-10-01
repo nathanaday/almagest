@@ -19,7 +19,7 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 	if v.Name() != "Work" || v.Tagging() != "open" || v.StaleHours() != 12 || v.LayoutVersion() != vault.Layout || v.CheckLayout() != nil {
 		t.Fatalf("settings: %s %s %d %d", v.Name(), v.Tagging(), v.StaleHours(), v.LayoutVersion())
 	}
-	if got := strings.Join(v.Wikify(), ","); got != "source,spec,event" {
+	if got := strings.Join(v.Wikify(), ","); got != "source,spec,verification,chord,event" {
 		t.Fatalf("wikify %s", got)
 	}
 	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/plugins/atlas/manifest.json", ".obsidian/app.json", "wiki/documents", "wiki/assets", "views", "inbox", "scratchpad"} {
@@ -155,23 +155,41 @@ func TestIndexResolvesIdsTitlesAliasesAndTags(t *testing.T) {
 func TestPendingFollowsAbsorbedHashes(t *testing.T) {
 	tv := testvault.New(t)
 	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44", "file": "[[x.pdf]]"}, "")
-	spec := tv.Doc("spec", "Plan", map[string]any{"kind": "plan"}, "> [!spec] Open\n\n## Goal\n\nDo it.\n\n## Parts\n\n| a |\n")
+	tv.Doc("stub", "Plan", nil, "## Idea\n\nDo it.\n")
+	spec := tv.Doc("spec", "Plan · Spec", map[string]any{"thread": "[[Plan]]", "status": "complete (verified)"}, "> [!spec] Complete (verified)\n\n## Goal\n\nDo it.\n\n## Requirements\n\n- R1: done\n")
+	open := tv.Doc("spec", "Other · Spec", map[string]any{"thread": "[[Other]]", "status": "not implemented"}, "## Goal\n\nLater.\n")
+	round := tv.Doc("verification", "Plan · Verification 1", map[string]any{"thread": "[[Plan]]", "round": 1, "verdict": "pass"}, "## Scope\n\nx\n")
+	stale := tv.Doc("verification", "Plan · Verification 0", map[string]any{"thread": "[[Plan]]", "round": 0, "verdict": "stale"}, "## Scope\n\nx\n")
+	chord := tv.Doc("chord", "Goal", map[string]any{"status": "done"}, "> [!chord] Done\n\n## Goal\n\nAll of it.\n\n## Threads\n\n| a |\n")
 	note := tv.Doc("event", "Plan · note", map[string]any{"kind": "note", "subject": "[[Plan]]"}, "## Note\n\nx\n")
 	started := tv.Doc("event", "Plan · started", map[string]any{"kind": "started", "subject": "[[Plan]]"}, "")
 	idx := tv.Index()
-	if !idx.Pending(idx.ByID(src)) || !idx.Pending(idx.ByID(spec)) || !idx.Pending(idx.ByID(note)) || idx.Pending(idx.ByID(started)) {
-		t.Fatal("sources, specs, and prose events are pending; a started event is not")
+	for _, id := range []string{src, spec, round, chord, note} {
+		if !idx.Pending(idx.ByID(id)) {
+			t.Fatalf("%s is pending: a source, a verified spec, a passing verification, a done chord, a prose event", idx.ByID(id).Title())
+		}
 	}
-	h := vault.Hash(idx.ByID(spec))
-	tv.Write("changes/2026-09/2026-09-27 Ingest.md", "---\nid: chg-aaaaaa\ntype: change\nstatus: applied\n---\n\n## Absorbed\n\n| Document | Id | Hash |\n|---|---|---|\n| [[DINOv2]] | "+src+" | 3f9c1e2a7b8d |\n| [[Plan]] | "+spec+" | "+h[:12]+" |\n")
+	for _, id := range []string{open, stale, started} {
+		if idx.Pending(idx.ByID(id)) {
+			t.Fatalf("%s is not pending: a spec of an open thread, a stale verification, a started event", idx.ByID(id).Title())
+		}
+	}
+	h := vault.Hash(idx.ByID(chord))
+	tv.Write("changes/2026-09/2026-09-27 Ingest.md", "---\nid: chg-aaaaaa\ntype: change\nstatus: applied\n---\n\n## Absorbed\n\n| Document | Id | Hash |\n|---|---|---|\n| [[DINOv2]] | "+src+" | 3f9c1e2a7b8d |\n| [[Goal]] | "+chord+" | "+h[:12]+" |\n")
 	idx = tv.Index()
-	if idx.Pending(idx.ByID(src)) || idx.Pending(idx.ByID(spec)) {
+	if idx.Pending(idx.ByID(src)) || idx.Pending(idx.ByID(chord)) {
 		t.Fatal("an applied change absorbed them")
 	}
-	// A new callout or a new part is no edit of the prose.
-	tv.Write("wiki/documents/Plan.md", strings.Replace(tv.Read("wiki/documents/Plan.md"), "| a |", "| a |\n| b |", 1))
-	if idx := tv.Index(); idx.Pending(idx.ByID(spec)) {
+	// A new callout or a new row of a code section is no edit of the prose.
+	tv.Write("wiki/documents/Goal.md", strings.Replace(strings.Replace(tv.Read("wiki/documents/Goal.md"), "| a |", "| a |\n| b |", 1), "[!chord] Done", "[!chord-closed] Closed", 1))
+	if idx := tv.Index(); idx.Pending(idx.ByID(chord)) {
 		t.Fatal("a code section is not prose")
+	}
+	// A verification's sections are its content: an outcome on a finding is an edit.
+	hv := vault.Hash(idx.ByID(round))
+	tv.Write("wiki/documents/Plan · Verification 1.md", strings.Replace(tv.Read("wiki/documents/Plan · Verification 1.md"), "## Scope\n\nx", "## Scope\n\ny", 1))
+	if idx := tv.Index(); vault.Hash(idx.ByID(round)) == hv {
+		t.Fatal("a verification's hash covers the sections code wrote")
 	}
 }
 

@@ -1,7 +1,7 @@
 {
   "name": "atlas-obsidian",
-  "version": "7.2.0",
-  "description": "One Obsidian vault holds the wiki, the threads, the sessions, and the changes of your work. Agents start in the vault, find the repository through the context graph, and leave a document for every step. Eighteen skills on four nouns (atlas, repo, wiki, thread), four read-only agents, and hooks that keep the rules and a document for every session. Pairs with the atlas-obsidian binary, which serves the eight tools.",
+  "version": "8.0.0",
+  "description": "One Obsidian vault holds the wiki, the threads and chords, the sessions, and the changes of your work. Agents start in the vault, take a thread from stub to spec, tasks, and verification, and close it into the wiki. Twenty-two skills on five nouns (atlas, repo, wiki, thread, chord), four read-only agents, and hooks that keep the rules and a document for every session. Pairs with the atlas-obsidian binary, which serves the nine tools.",
   "author": {
     "name": "nathanaday",
     "url": "https://github.com/nathanaday"
@@ -9,5 +9,5 @@
   "license": "MIT",
   "homepage": "https://github.com/nathanaday/atlas-obsidian",
   "repository": "https://github.com/nathanaday/atlas-obsidian",
-  "keywords": ["obsidian", "knowledge-base", "wiki", "vault", "threads", "sessions", "agents"]
+  "keywords": ["obsidian", "knowledge-base", "wiki", "vault", "threads", "chords", "sessions", "agents"]
 }

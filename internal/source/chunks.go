@@ -129,7 +129,7 @@ func split(d *doc.Doc, m *material) []span {
 		return []span{{locator: "whole"}}
 	}
 	n := len(m.lines)
-	work := d.Type() == "stub" || d.Type() == "spec" || d.Type() == "event"
+	work := schema.IsThread(d.Type()) || d.Type() == "event"
 	if n <= LinesPerChunk || work {
 		return []span{{1, n, "whole"}}
 	}

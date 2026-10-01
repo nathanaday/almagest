@@ -7,20 +7,20 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 )
 
-var at = work.Opts{Now: testvault.Now}
+var at = thread.Opts{Now: testvault.Now}
 
 func TestCaptureFromTheInbox(t *testing.T) {
 	tv := testvault.New(t)
-	stub, err := work.Stub(tv.V, work.StubIn{Text: "Read the DINOv2 paper", Tags: []string{"ml"}}, at)
+	stub, err := thread.Stub(tv.V, thread.StubIn{Text: "Read the DINOv2 paper", Tags: []string{"ml"}}, at)
 	if err != nil {
 		t.Fatal(err)
 	}
 	tv.Write("inbox/DINOv2.pdf", "%PDF-1.4\n1 0 obj << /Type /Pages /Count 31 >> endobj\n")
 	tv.Write("inbox/meeting notes.md", "# Notes\n\nWe met.\n")
-	res, err := source.Capture(tv.V, source.Request{Inbox: []string{"DINOv2.pdf", "meeting notes.md"}, Tags: []string{"ML", "paper"}, Resolves: stub.View.Doc.ID}, at)
+	res, err := source.Capture(tv.V, source.Request{Inbox: []string{"DINOv2.pdf", "meeting notes.md"}, Tags: []string{"ML", "paper"}, Resolves: stub.State.Thread.ID}, at)
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,4 +1,4 @@
-// Package views writes the navigation notes of views/: a home note, the work board, the
+// Package views writes the navigation notes of views/: a home note, the threads, the
 // timeline, the library, and a note per tag in a folder per tag. A view lists, counts,
 // and links; it never copies a document's content, and code can write every view from
 // the documents alone. Git ignores views/, and a sync writes over any edit.
@@ -18,21 +18,21 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // Titles and places of the views.
 const (
 	Home        = "View · Home"
-	WorkView    = "View · Work"
+	Threads     = "View · Threads"
 	Timeline    = "View · Timeline"
 	Library     = "View · Library"
 	Repos       = "View · Repositories"
 	TagFolder   = "tags"
 	TimeFolder  = "timeline"
 	TimelineAge = 30 * 24 * time.Hour
-	DoneAge     = 14 * 24 * time.Hour
+	EndedAge    = 14 * 24 * time.Hour
 	MaxRecent   = 10
 	MaxNarrow   = 20
 )
@@ -103,12 +103,12 @@ func pruneEmpty(root string) {
 
 // Render builds every view in memory, by path.
 func Render(idx *vault.Index, now time.Time) map[string]string {
-	r := &renderer{idx: idx, b: work.Load(idx), now: now, name: filepath.Base(idx.V.Root)}
+	r := &renderer{idx: idx, b: thread.Load(idx), now: now, name: filepath.Base(idx.V.Root)}
 	out := map[string]string{
-		vault.Views + "/" + Home + ".md":     r.home(),
-		vault.Views + "/" + WorkView + ".md": r.workView(),
-		vault.Views + "/" + Library + ".md":  r.library(),
-		vault.Views + "/" + Repos + ".md":    r.repositories(),
+		vault.Views + "/" + Home + ".md":    r.home(),
+		vault.Views + "/" + Threads + ".md": r.threadsView(),
+		vault.Views + "/" + Library + ".md": r.library(),
+		vault.Views + "/" + Repos + ".md":   r.repositories(),
 	}
 	main, months := r.timeline()
 	out[vault.Views+"/"+Timeline+".md"] = main
@@ -123,7 +123,7 @@ func Render(idx *vault.Index, now time.Time) map[string]string {
 
 type renderer struct {
 	idx  *vault.Index
-	b    *work.Board
+	b    *thread.Board
 	now  time.Time
 	name string
 }
@@ -152,15 +152,18 @@ func (r *renderer) home() string {
 	for _, d := range idx.Documents() {
 		counts[d.Type()]++
 	}
-	stubs, started := 0, 0
+	stubs, open, chords := 0, 0, 0
 	for _, s := range r.b.Stubs {
-		if r.b.Status(s) == work.Open {
+		switch status := r.b.Status(s); {
+		case status == thread.StatusStub:
 			stubs++
+		case !thread.Ended(status):
+			open++
 		}
 	}
-	for _, s := range r.b.Specs {
-		if s.Str("kind") == work.Plan && r.b.Status(s) == work.Started {
-			started++
+	for _, c := range r.b.Chords {
+		if st := r.b.Status(c); st != thread.ChordDropped && st != thread.ChordClosed {
+			chords++
 		}
 	}
 	var proposed, waiting, live []*doc.Doc
@@ -181,13 +184,17 @@ func (r *renderer) home() string {
 	mentions := idx.OpenTasks(func(t string) bool { return strings.Contains(t, "@atlas") }, vault.Documents, vault.Changes, vault.Sessions, vault.Views, vault.Scratchpad)
 	pending := len(idx.PendingDocs())
 	var typeCounts []string
-	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories", "spec": "specs", "stub": "stubs", "event": "events"}
-	for _, t := range []string{"topic", "source", "repository", "spec", "stub", "event"} {
+	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories", "stub": "threads", "chord": "chords", "event": "events"}
+	for _, t := range []string{"topic", "source", "repository", "stub", "chord", "event"} {
+		if t == "stub" {
+			typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], plural(counts[t], "thread", plurals[t])))
+			continue
+		}
 		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], plural(counts[t], t, plurals[t])))
 	}
 	head := doc.Callout("atlas", r.idx.V.Name(),
 		strings.Join(typeCounts, " · "),
-		fmt.Sprintf("%d open %s · %d started %s · %d pending · %d proposed %s · %d live %s", stubs, plural(stubs, "stub", "stubs"), started, plural(started, "plan", "plans"), pending, len(proposed), plural(len(proposed), "change", "changes"), len(live), plural(len(live), "session", "sessions")))
+		fmt.Sprintf("%d %s · %d open %s · %d open %s · %d pending · %d proposed %s · %d live %s", stubs, plural(stubs, "stub", "stubs"), open, plural(open, "thread", "threads"), chords, plural(chords, "chord", "chords"), pending, len(proposed), plural(len(proposed), "change", "changes"), len(live), plural(len(live), "session", "sessions")))
 	var wait []string
 	for _, c := range proposed {
 		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · proposed change · "+c.Str("counts"))
@@ -207,10 +214,10 @@ func (r *renderer) home() string {
 		tagLines = append(tagLines, line)
 	}
 	viewsList := strings.Join([]string{
-		"- " + doc.Link(WorkView) + ": stubs, plans, to-do lines, mentions",
+		"- " + doc.Link(Threads) + ": every thread and chord, with what each waits on",
 		"- " + doc.Link(Timeline) + ": what happened, newest first",
 		"- " + doc.Link(Library) + ": topics, sources, repositories",
-		"- " + doc.Link(Repos) + ": every linked repository, its tags, its work, and its git status",
+		"- " + doc.Link(Repos) + ": every linked repository, its tags, its threads, and its git status",
 	}, "\n")
 	return r.note(Home, head,
 		section("Waiting for you", strings.Join(wait, "\n")),
@@ -274,10 +281,62 @@ func (r *renderer) hasTag(t string) string {
 	return "file.hasTag(" + strings.Join(quoted, ", ") + ")"
 }
 
-// workView is the board.
-func (r *renderer) workView() string {
+// About opens the threads view: what a thread and a chord are, and how to start each.
+const About = `> [!info]- What is a thread?
+> A thread is one piece of work, from idea to closed. It is a set of linked documents:
+> - a **stub**: the front page, with your words and what code derives;
+> - a **spec**: what must be true when the work is done, as numbered requirements;
+> - one or more **task lists**: the steps, as check boxes;
+> - one or more **verifications**: the work checked against each requirement, with findings.
+>
+> Code derives the status: stub → specified → planned → started → unverified → verified → closed. A thread is closed when it is verified and you applied the wiki change that absorbs it.
+>
+> To plant one, tell an agent: ` + "`note this idea: score boxes by motion in p3-edge`" + `
+> To work on one, copy the hand-off line from its stub: ` + "`Resume Atlas thread doc-…`" + `
+
+> [!info]- What is a chord?
+> A chord is a goal that needs several threads, with the order between them. A thread may come after several threads, and several may come after one. A thread is **ready** when every thread it comes after is verified.
+>
+> Each chord has a canvas in ` + "`chords/`" + `: one card per thread, one arrow per "comes after". Redraw the arrows there, then press **Save order**.
+>
+> To make one, tell an agent: ` + "`make a chord: train a vehicle detection model with YOLO`" + `
+> To work on one, copy the hand-off line from the chord: ` + "`Resume Atlas chord doc-…`"
+
+// looseThreads is the Base of the threads that belong to no chord and are not ended.
+const looseThreads = "```base\n" + `filters:
+  and:
+    - file.inFolder("wiki/documents")
+    - 'type == "stub"'
+    - '!chord'
+    - 'status != "closed" && status != "dropped" && status != "resolved"'
+formulas:
+  stage: 'if(status == "started", 1, if(status == "unverified", 2, if(status == "verified", 3, if(status == "planned", 4, if(status == "specified", 5, 6)))))'
+  rank: ` + priorityRank + `
+views:
+  - type: table
+    name: Threads
+    order:
+      - file.name
+      - status
+      - tasks
+      - verification
+      - priority
+      - tags
+      - refreshed
+    sort:
+      - property: formula.stage
+        direction: ASC
+      - property: formula.rank
+        direction: ASC
+      - property: refreshed
+        direction: DESC
+` + "```"
+
+// threadsView is the board: every thread that is not ended, and each chord with its
+// threads in order.
+func (r *renderer) threadsView() string {
 	idx := r.idx
-	bv := r.b.BoardView(work.Filter{})
+	bv := r.b.BoardView(thread.Filter{})
 	var wait []string
 	for _, c := range idx.Of("change") {
 		if c.Str("status") == "proposed" {
@@ -289,17 +348,32 @@ func (r *renderer) workView() string {
 			wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))
 		}
 	}
+	for _, ref := range bv.Verified {
+		wait = append(wait, "- "+doc.Link(ref.Title)+" · verified · it closes when you apply its wiki change (thread-close)")
+	}
 	var active []string
 	for _, ref := range bv.Active {
 		d := idx.ByID(ref.ID)
-		line := "- " + doc.Link(ref.Title)
+		line := "- " + doc.Link(ref.Title) + " · " + ref.Status
+		if n, _ := ref.State["tasks"].(string); n != "" {
+			line += " · " + n + " tasks"
+		}
 		if hs := r.b.Holders(d); len(hs) > 0 {
 			line += " · " + doc.Link(hs[0].Title())
-		}
-		if p, _ := doc.Section(d.Body, "Progress"); p != "" {
-			line += " · " + oneLine(doc.LastLine(p), 140)
+			if p, _ := doc.Section(hs[0].Body, "Progress"); p != "" {
+				line += " · " + oneLine(doc.LastLine(p), 120)
+			}
 		}
 		active = append(active, line)
+	}
+	var chords []string
+	for _, cv := range bv.Chords {
+		c := idx.ByID(cv.Chord.ID)
+		head := fmt.Sprintf("### %s\n\n%s · %s threads closed", doc.Link(cv.Chord.Title), cv.Chord.Status, cv.Chord.State["threads"])
+		if d := cv.Chord.Description; d != "" {
+			head += " · " + d
+		}
+		chords = append(chords, head+"\n\n"+r.b.ChordSection(c))
 	}
 	var blocked []string
 	for _, ref := range bv.Blocked {
@@ -315,31 +389,29 @@ func (r *renderer) workView() string {
 	for _, m := range mentions {
 		mentionLines = append(mentionLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(m.Doc)), oneLine(m.Text, 160)))
 	}
-	var done []string
-	for _, e := range idx.Of("event") {
-		k := e.Str("kind")
-		if k != "completed" && k != "dropped" {
-			continue
-		}
-		if t, ok := vault.ParseTime(e.Str("at")); ok && r.now.Sub(t) <= DoneAge {
-			done = append(done, e.Str("at")+"\x00"+fmt.Sprintf("- %s · %s %s · %s", minute(e.Str("at")), k, e.Str("subject"), doc.Link(e.Title()+"|"+map[string]string{"completed": "result", "dropped": "reason"}[k])))
+	var ended []string
+	for _, ref := range bv.Ended {
+		at := r.b.EndedAt(idx.ByID(ref.ID))
+		if t, ok := vault.ParseTime(at); ok && r.now.Sub(t) <= EndedAge {
+			ended = append(ended, fmt.Sprintf("- %s · %s %s", minute(at), ref.Status, doc.Link(ref.Title)))
 		}
 	}
-	sort.Sort(sort.Reverse(sort.StringSlice(done)))
-	for i := range done {
-		_, done[i], _ = strings.Cut(done[i], "\x00")
+	loose := ""
+	for _, s := range r.b.Stubs {
+		if r.b.Chord(s) == nil && !thread.Ended(r.b.Status(s)) {
+			loose = looseThreads
+			break
+		}
 	}
-	plans := base("Plans", []string{`type == "spec"`, `kind == "plan"`, `status == "open" || status == "started"`}, []string{"file.name", "status", "priority", "root", "repositories", "blocked", "refreshed"}, "status", "priority ASC", "refreshed DESC")
-	stubs := base("Stubs", []string{`type == "stub"`, `status == "open"`}, []string{"file.name", "priority", "tags", "created"}, "", "priority ASC", "created DESC")
-	return r.note(WorkView,
+	return r.note(Threads, About,
 		section("Waiting for you", strings.Join(wait, "\n")),
 		section("Active now", strings.Join(active, "\n")),
-		section("Plans", plans),
+		section("Chords", strings.Join(chords, "\n\n")),
+		section("Threads in no chord", loose),
 		section("Blocked", strings.Join(blocked, "\n")),
-		section("Stubs", stubs),
 		section("To-do lines", strings.Join(todoLines, "\n")),
 		section("Mentions", strings.Join(mentionLines, "\n")),
-		section("Done lately", strings.Join(done, "\n")))
+		section("Ended lately", strings.Join(ended, "\n")))
 }
 
 // library is the knowledge, for browsing.
@@ -351,7 +423,7 @@ func (r *renderer) library() string {
 	return r.note(Library, section("Topics", topics), section("Sources", sources), section("Repositories", repos), section("Needs care", care))
 }
 
-// repositories lists each linked repository with its tags, its open plans, and its live
+// repositories lists each linked repository with its tags, its open threads, and its live
 // git status block; the unlinked ones follow as links.
 func (r *renderer) repositories() string {
 	repos := r.idx.Of("repository")
@@ -393,24 +465,21 @@ func (r *renderer) repositories() string {
 		if len(tagParts) > 0 {
 			lines = append(lines, strings.Join(tagParts, " · "))
 		}
-		var plans []string
-		for _, s := range r.b.Specs {
-			if s.Str("kind") != work.Plan {
-				continue
-			}
+		var open []string
+		for _, s := range r.b.Stubs {
 			st := r.b.Status(s)
-			if st != work.Open && st != work.Started {
+			if thread.Ended(st) {
 				continue
 			}
-			for _, rd := range r.idx.LinkedAll(s.List("repositories")) {
+			for _, rd := range r.idx.LinkedAll(r.b.Thread(s).Repositories()) {
 				if rd.ID() == d.ID() {
-					plans = append(plans, doc.Link(s.Title())+" ("+string(st)+")")
+					open = append(open, doc.Link(s.Title())+" ("+st+")")
 					break
 				}
 			}
 		}
-		if len(plans) > 0 {
-			lines = append(lines, "Work: "+strings.Join(plans, ", "))
+		if len(open) > 0 {
+			lines = append(lines, "Threads: "+strings.Join(open, ", "))
 		}
 		lines = append(lines, derive.RepoBlock(d))
 		linked = append(linked, strings.Join(lines, "\n\n"))
@@ -436,32 +505,32 @@ func (r *renderer) entries() []timelineEntry {
 		}
 		line := fmt.Sprintf("%s · %s · %s", t.Format("15:04"), e.Str("kind"), e.Str("subject"))
 		switch e.Str("kind") {
-		case "completed":
-			line += " → " + doc.Link(e.Title()+"|result")
 		case "dropped":
 			line += " → " + doc.Link(e.Title()+"|reason")
 		case "note":
 			line += " → " + doc.Link(e.Title()+"|note")
 		case "blocked":
-			line += " · " + oneLine(work.BlockedLine(e), 100)
+			line += " · " + oneLine(thread.BlockedLine(e), 100)
 		}
 		if s := e.Str("session"); s != "" {
 			line += " · " + s
 		}
 		out = append(out, timelineEntry{t, line})
 	}
-	for _, d := range append(append([]*doc.Doc{}, r.b.Stubs...), r.b.Specs...) {
+	words := map[string]string{"stub": "planted", "spec": "spec written", "tasks": "tasks written", "verification": "verified", "chord": "chord made"}
+	for _, d := range r.idx.Of("stub", "spec", "tasks", "verification", "chord") {
 		t, ok := vault.ParseTime(d.Str("created"))
 		if !ok {
 			continue
 		}
-		word := "planted"
-		if d.Type() == "spec" {
-			word = "written"
-		}
-		line := fmt.Sprintf("%s · %s · %s", t.Format("15:04"), word, doc.Link(d.Title()))
-		if tl := d.List("tags"); len(tl) > 0 {
-			line += " · #" + strings.Join(tl, " #")
+		line := fmt.Sprintf("%s · %s · %s", t.Format("15:04"), words[d.Type()], doc.Link(d.Title()))
+		switch d.Type() {
+		case "verification":
+			line += " · " + r.b.Ref(d).Status
+		case "stub", "chord":
+			if tl := d.List("tags"); len(tl) > 0 {
+				line += " · #" + strings.Join(tl, " #")
+			}
 		}
 		out = append(out, timelineEntry{t, line})
 	}
@@ -599,15 +668,22 @@ func (r *renderer) tagView(t string) string {
 	has := map[string]bool{}
 	for _, d := range holders {
 		has[d.Type()] = true
-		if d.Type() == "stub" || (d.Type() == "spec" && d.Str("kind") == work.Plan && !work.Closed(r.b.Status(d))) {
-			has["open work"] = true
+		switch d.Type() {
+		case "stub":
+			if !thread.Ended(r.b.Status(d)) {
+				has["open threads"] = true
+			}
+		case "chord":
+			if st := r.b.Status(d); st != thread.ChordDropped && st != thread.ChordClosed {
+				has["open threads"] = true
+			}
 		}
 	}
 	filter := r.hasTag(t)
 	var sections []string
 	sections = append(sections, head, section("Narrow", strings.Join(narrow, " · ")))
-	if has["open work"] {
-		sections = append(sections, section("Open work", base("Open work", []string{filter, `type == "stub" || type == "spec"`, `status == "open" || status == "started"`}, []string{"file.name", "type", "status", "priority", "refreshed"}, "", "priority ASC")))
+	if has["open threads"] {
+		sections = append(sections, section("Open threads", base("Open threads", []string{filter, `type == "stub" || type == "chord"`, `status != "closed" && status != "dropped" && status != "resolved"`}, []string{"file.name", "type", "status", "tasks", "priority", "refreshed"}, "", "priority ASC")))
 	}
 	if has["topic"] {
 		sections = append(sections, section("Topics", base("Topics", []string{filter, `type == "topic"`}, []string{"file.name", "kind", "description", "status"}, "kind", "file.name ASC")))

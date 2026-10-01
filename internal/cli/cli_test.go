@@ -82,27 +82,72 @@ func TestCommands(t *testing.T) {
 		t.Fatalf("search by tag:\n%s", out)
 	}
 
-	out := r.ok("", "work", "stub", "Cut", "the", "false", "alarms", "--title", "Filter alarms", "--tag", "work/p3/p3-edge", "--priority", "high")
-	if !strings.Contains(out, "Filter alarms (doc-") {
+	out := r.ok("", "thread", "stub", "Cut", "the", "false", "alarms", "--title", "Filter alarms", "--tag", "work/p3/p3-edge", "--priority", "high")
+	if !strings.Contains(out, "Filter alarms (doc-") || !strings.Contains(out, "next: the thread has no spec with requirements (thread-spec)") {
 		t.Fatalf("stub:\n%s", out)
 	}
-	r.ok("## Goal\n\nFewer alarms.\n\n## Done when\n\n- half\n", "work", "promote", "Filter alarms", "-", "--kind", "plan", "--repository", "p3-edge")
-	specs := `{"specs": [{"title": "Score boxes", "kind": "plan", "parent": "Filter alarms", "repositories": ["p3-edge"], "text": "## Done when\n\n- scored\n"}]}`
-	specsFile := filepath.Join(tv.Dir, "specs.json")
-	os.WriteFile(specsFile, []byte(specs), 0o644)
-	r.ok("", "work", "spec", specsFile)
-	r.ok("", "work", "start", "Score boxes")
-	r.ok(`{"delivered": "Scored.", "verified": "Tests pass."}`, "work", "done", "Score boxes", "-")
-	r.ok("", "work", "block", "Filter alarms", "--reason", "data")
-	if out := r.ok("", "work"); !strings.Contains(out, "blocked (1)") || !strings.Contains(out, "blocked: data") {
+	r.ok("## Goal\n\nFewer alarms.\n\n## Requirements\n\n- R1: Half as many alarms.\n", "thread", "spec", "Filter alarms", "-")
+	file := func(name, content string) string {
+		p := filepath.Join(tv.Dir, name)
+		os.WriteFile(p, []byte(content), 0o644)
+		return p
+	}
+	r.ok("", "thread", "tasks", "Filter alarms", file("tasks.json", `[{"text": "Score boxes", "requirements": ["R1"], "details": "In score.go."}]`), "--repository", "p3-edge")
+	r.ok("", "thread", "start", "Filter alarms")
+	r.ok("", "thread", "block", "Filter alarms", "--reason", "data")
+	if out := r.ok("", "thread"); !strings.Contains(out, "blocked (1)") || !strings.Contains(out, "blocked: data") || !strings.Contains(out, "0/1 tasks") {
 		t.Fatalf("board:\n%s", out)
 	}
-	if out := r.ok("", "work", "show", "Filter alarms"); !strings.Contains(out, "next: done") || !strings.Contains(out, "part     Score boxes · done") {
-		t.Fatalf("show:\n%s", out)
+	r.ok("", "thread", "unblock", "Filter alarms")
+	if out := r.ok("", "thread", "load", "Filter alarms"); !strings.Contains(out, "[ ] T1: Score boxes (R1)") || !strings.Contains(out, "hand off Resume Atlas thread doc-") || !strings.Contains(out, "next: the next open task is T1") {
+		t.Fatalf("load:\n%s", out)
 	}
-	if !strings.Contains(tv.Read("wiki/documents/Score boxes.md"), "by: user") && !strings.Contains(tv.Read("wiki/documents/Score boxes.md"), "Done") {
-		t.Fatal("the CLI acts as the user")
+	if out := r.ok("", "thread", "check", "Filter alarms", "T1", "--commit", "abc1234", "--note", "scored"); !strings.Contains(out, "unverified · 1/1 tasks") {
+		t.Fatalf("check:\n%s", out)
 	}
+	verification := file("verify.json", `{"scope": "p3-edge at abc1234", "results": [{"requirement": "R1", "result": "pass", "evidence": "the log"}], "findings": ["The threshold is fixed."]}`)
+	r.ok("", "thread", "verify", "Filter alarms", verification)
+	if out := r.ok("", "thread", "finding", "Filter alarms", "F1", "--outcome", "accepted", "--reason", "Fine for now."); !strings.Contains(out, "verified · 1/1 tasks") || !strings.Contains(out, "(thread-close)") {
+		t.Fatalf("finding:\n%s", out)
+	}
+	if got := tv.Read("wiki/documents/Filter alarms · Verification 1.md"); !strings.Contains(got, "by: user") || !strings.Contains(got, "- [x] F1: The threshold is fixed. → accepted: Fine for now.") {
+		t.Fatalf("the CLI acts as the user:\n%s", got)
+	}
+	r.ok("", "thread", "set", "Filter alarms", "--priority", "low")
+	r.ok("", "thread", "note", "Filter alarms", "--text", "A vendor call.")
+
+	chord := file("chord.json", `{"title": "Quiet alarms", "text": "Alarms the user trusts.", "threads": [{"thread": "Filter alarms"}, {"title": "Tune per site", "text": "Each site gets its threshold.", "after": ["Filter alarms"]}]}`)
+	if out := r.ok("", "chord", "create", chord); !strings.Contains(out, "chord Quiet alarms (doc-") || !strings.Contains(out, "Tune per site (doc-") || !strings.Contains(out, "after Filter alarms · ready") {
+		t.Fatalf("chord:\n%s", out)
+	}
+	r.ok("", "thread", "stub", "Report the rate", "--title", "Report")
+	r.ok("", "chord", "add", "Quiet alarms", "Report", "--after", "Tune per site")
+	r.ok("", "chord", "order", "Quiet alarms", file("order.json", `[{"thread": "Report", "after": ["Filter alarms"]}]`))
+	if out := r.ok("", "chord", "canvas", "Quiet alarms"); !strings.Contains(out, "shows the order the stubs hold") {
+		t.Fatalf("canvas:\n%s", out)
+	}
+	canvas := tv.Read("chords/Quiet alarms.canvas")
+	tv.Write("chords/Quiet alarms.canvas", strings.Replace(canvas, `"edges": [`, `"edges": [{"id": "mine", "fromNode": "`+idOf(t, tv, "Tune per site")+`", "toNode": "`+idOf(t, tv, "Report")+`"},`, 1))
+	if out := r.ok("", "chord", "canvas", "Quiet alarms"); !strings.Contains(out, "put Report after Tune per site") {
+		t.Fatalf("canvas status:\n%s", out)
+	}
+	r.ok("", "chord", "canvas", "Quiet alarms", "--save")
+	if got := tv.Read("wiki/documents/Report.md"); !strings.Contains(got, `after: ["[[Filter alarms]]", "[[Tune per site]]"]`) {
+		t.Fatalf("saved order:\n%s", got)
+	}
+	r.ok("", "chord", "canvas", "Quiet alarms", "--tidy")
+	r.ok("", "chord", "remove", "Quiet alarms", "Report")
+	if out := r.ok("", "chord"); !strings.Contains(out, "chord Quiet alarms") || strings.Contains(out, "Report") {
+		t.Fatalf("chords:\n%s", out)
+	}
+	if out := r.ok("", "chord", "load", "Quiet alarms"); !strings.Contains(out, "next: [[Filter alarms]] is verified") {
+		t.Fatalf("chord load:\n%s", out)
+	}
+	r.ok("", "chord", "drop", "Quiet alarms", "--reason", "Later.")
+	r.ok("", "chord", "reopen", "Quiet alarms")
+	r.ok("", "thread", "drop", "Report", "--reason", "No.")
+	r.ok("", "thread", "reopen", "Report")
+	r.ok("", "thread", "resolve", "Report", "--became", "p3-edge")
 
 	out = r.ok("", "source", "capture", "--inbox", "notes.md", "--tag", "work/p3/p3-edge")
 	if !strings.Contains(out, "captured: notes (doc-") {
@@ -124,11 +169,11 @@ func TestCommands(t *testing.T) {
 		t.Fatalf("sync:\n%s", out)
 	}
 	r.ok("", "vault", "sync", "--views")
-	if !tv.V.Exists("views/View · Work.md") {
+	if !tv.V.Exists("views/View · Threads.md") {
 		t.Fatal("the views")
 	}
-	if code, _, errOut := r.atlas("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "7.0 layout already") {
-		t.Fatalf("a 7.0 vault: %d %s", code, errOut)
+	if code, _, errOut := r.atlas("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "8.0 layout already") {
+		t.Fatalf("an 8.0 vault: %d %s", code, errOut)
 	}
 
 	code, _, errOut := r.atlas("", "change", "apply", "chg-zzzzzz")
@@ -140,10 +185,19 @@ func TestCommands(t *testing.T) {
 	}
 }
 
+func idOf(t *testing.T, tv *testvault.T, title string) string {
+	t.Helper()
+	d, err := tv.Index().Resolve(title)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return d.ID()
+}
+
 func TestMigrateCommand(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	tv.Write("Atlas.md", strings.Replace(strings.Replace(tv.Read("Atlas.md"), "layout: 3", "layout: 2", 1), "tagging: open", "areas: manual", 1))
+	tv.Write("Atlas.md", strings.Replace(strings.Replace(tv.Read("Atlas.md"), "layout: 4", "layout: 2", 1), "tagging: open", "areas: manual", 1))
 	tv.Write("wiki/p3/p3.md", "---\nid: are-p3aaaa\ntype: area\ncreated: 2026-09-01\nupdated: 2026-09-01\nparent: \"\"\ndescription: The p3 product.\n---\n\nAbout p3.\n")
 	tv.Write("threads/Idea/Idea.md", "---\nid: thr-idea01\ntype: stub\ncreated: 2026-09-03\nupdated: 2026-09-03\nscope: [\"[[p3]]\"]\nstage: stub\n---\n\n## Stub\n\nAn idea.\n")
 	tv.Commit()
@@ -152,7 +206,7 @@ func TestMigrateCommand(t *testing.T) {
 		t.Fatalf("dry run:\n%s", out)
 	}
 	out = r.ok("", "vault", "migrate")
-	if !strings.Contains(out, "Migrated Work to the 7.0 layout in one commit") {
+	if !strings.Contains(out, "Migrated Work from the 6.x layout to 8.0 in one commit") {
 		t.Fatalf("migrate:\n%s", out)
 	}
 	if got := tv.Read("wiki/documents/Idea.md"); !strings.Contains(got, "tags: [p3]") || !strings.Contains(tv.Read("Atlas.md"), "tagging: known") {

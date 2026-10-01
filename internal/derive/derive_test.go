@@ -23,7 +23,7 @@ func TestDerivedParts(t *testing.T) {
 	}
 	checks := map[string][]string{
 		"DINOv2":   {"status: pending", "> [!source] PDF · 31 pages · primary\n> A and B\n> Captured 2026-09-27 from `DINOv2.pdf` (inbox) · pending: not yet ingested", "\n![[doc-aaaaaa.pdf]]\n\n## Summary"},
-		"p3-edge":  {"> [!repository] `" + repo + "`", "Not described yet (repo-ingest) · tag #work/p3/p3-edge", "```atlas-repo\n", "## Work\n\n```base", "## Knowledge\n\n```base", `file.hasTag("work/p3/p3-edge", "work/p3/p3-edge/ml")`},
+		"p3-edge":  {"> [!repository] `" + repo + "`", "Not described yet (repo-ingest) · tag #work/p3/p3-edge", "```atlas-repo\n", "## Threads\n\n```base", `type == "stub"`, "## Knowledge\n\n```base", `file.hasTag("work/p3/p3-edge", "work/p3/p3-edge/ml")`},
 		"Edge":     {"> [!overview] The page of #work/p3/p3-edge · under #work/p3\n", "## Map\n\n```base"},
 		"Pin deps": {"> [!policy] Draft · Must · holds for repositories tagged #work/p3 and #go"},
 		"Scoring":  {"> [!concept] Concept\n> 0 sources · #work/p3/p3-edge/ml"},

@@ -134,12 +134,14 @@ type toolInput struct {
 	NotebookPath string `json:"notebook_path"`
 	Command      string `json:"command"`
 	OldString    string `json:"old_string"`
+	NewString    string `json:"new_string"`
 	Edits        []struct {
 		OldString string `json:"old_string"`
+		NewString string `json:"new_string"`
 	} `json:"edits"`
 	Action string `json:"action"`
 	ID     string `json:"id"`
-	Spec   string `json:"spec"`
+	Thread string `json:"thread"`
 	Take   bool   `json:"take"`
 }
 
@@ -157,6 +159,7 @@ type patchFile struct {
 	Path    string
 	Op      string // add, update, delete, move
 	Removed []string
+	Added   []string
 }
 
 // paths are the files a write tool touches: the file of an edit, or every file of a
@@ -175,6 +178,9 @@ func (in Input) paths() []patchFile {
 			}
 			if cur != nil && strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
 				cur.Removed = append(cur.Removed, strings.TrimPrefix(line, "-"))
+			}
+			if cur != nil && strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
+				cur.Added = append(cur.Added, strings.TrimPrefix(line, "+"))
 			}
 		}
 	} else {
@@ -211,4 +217,25 @@ func (in Input) oldStrings() []string {
 		}
 	}
 	return out
+}
+
+// added are the lines an edit puts into a file, and removed the lines it takes out.
+func (in Input) added(f patchFile) (added, removed []string) {
+	if in.ToolName == "apply_patch" {
+		return f.Added, f.Removed
+	}
+	t := in.tool()
+	pairs := [][2]string{{t.OldString, t.NewString}}
+	for _, e := range t.Edits {
+		pairs = append(pairs, [2]string{e.OldString, e.NewString})
+	}
+	for _, p := range pairs {
+		if p[0] != "" {
+			removed = append(removed, strings.Split(p[0], "\n")...)
+		}
+		if p[1] != "" {
+			added = append(added, strings.Split(p[1], "\n")...)
+		}
+	}
+	return added, removed
 }

@@ -53,11 +53,15 @@ func TestChecks(t *testing.T) {
 	tv.Doc("topic", "Motion", map[string]any{"kind": "entity"}, "see [[Motion scoring]]\n")
 	tv.Doc("topic", "Also p3-edge", map[string]any{"kind": "overview", "defines": "work/p3/p3-edge"}, "")
 	tv.Doc("topic", "Defines wrong", map[string]any{"kind": "concept", "defines": "x"}, "")
-	tv.Doc("spec", "Loop A", map[string]any{"kind": "plan", "parent": "[[Loop B]]"}, "")
-	tv.Doc("spec", "Loop B", map[string]any{"kind": "plan", "parent": "[[Loop A]]"}, "")
-	tv.Doc("spec", "Wide", map[string]any{"kind": "plan", "repositories": []string{"[[p3-edge]]", "[[gone]]"}}, "")
+	tv.Doc("stub", "Loop A", map[string]any{"after": []string{"[[Loop B]]"}}, "## Idea\n\na\n")
+	tv.Doc("stub", "Loop B", map[string]any{"after": []string{"[[Loop A]]"}}, "## Idea\n\nb\n")
+	tv.Doc("stub", "Wide", nil, "## Idea\n\nw\n")
+	tv.Doc("spec", "Wide · Spec", map[string]any{"thread": "[[Wide]]"}, "## Goal\n\nWide.\n\n## Requirements\n\n- R1: one\n- R2: two\n\n## Progress\n\n- did a thing\n")
+	tv.Doc("spec", "Wide · Second spec", map[string]any{"thread": "[[Wide]]"}, "## Goal\n\nWide.\n\n## Requirements\n\n- R1: one\n")
+	tv.Doc("tasks", "Wide · Tasks", map[string]any{"thread": "[[Wide]]"}, "## Tasks\n\n- [ ] T1: one thing (R1, R9)\n- [ ] T1: the same id (R1)\n- [ ] typed by hand\n")
+	tv.Doc("verification", "Lost · Verification 1", map[string]any{"thread": "[[Lost]]", "round": 1}, "")
 	tv.Doc("event", "Ghost · started", map[string]any{"kind": "started", "subject": "[[Ghost]]"}, "")
-	tv.Doc("event", "Wrong · resolved", map[string]any{"kind": "resolved", "subject": "[[Wide]]"}, "")
+	tv.Doc("event", "Wrong · started", map[string]any{"kind": "started", "subject": "[[Motion]]"}, "")
 	tv.Doc("topic", "View · Mine", map[string]any{"kind": "concept"}, "")
 	tv.Write("scratchpad/Motion scoring.md", "a scratch note with the same title\n")
 	tv.Write("wiki/documents/Loose note.md", "no frontmatter\n")
@@ -75,10 +79,18 @@ func TestChecks(t *testing.T) {
 		{"orphan", "Lonely", "no other document"},
 		{"tag", "p3-edge", "2 documents define work/p3/p3-edge"},
 		{"tag", "Defines wrong", "only an overview or a repository"},
-		{"spec", "Loop A", "parents loop"},
-		{"leaf-repositories", "Wide", "names 2 repositories"},
+		{"thread", "Loop A", "Loop A waits on Loop B waits on Loop A"},
+		{"section", "Wide · Spec", "## Progress is no section of a spec"},
+		{"spec", "Wide · Spec", "## Progress is no section"},
+		{"thread", "Wide · Second spec", "has a spec already"},
+		{"task", "Wide · Tasks", "T1 serves R9, which is no requirement"},
+		{"task", "Wide · Tasks", "T1 is the id of 2 tasks"},
+		{"task", "Wide · Tasks", "a task has no id: typed by hand"},
+		{"requirement", "Wide", "no task serves R2"},
+		{"thread", "Lost · Verification 1", "its thread field names no stub"},
+		{"dead-link", "Lost · Verification 1", "thread: [[Lost]] names no document"},
 		{"event", "Ghost · started", "subject [[Ghost]] is gone"},
-		{"event", "Wrong · resolved", "fits a stub"},
+		{"event", "Wrong · started", "fits a stub"},
 		{"misplaced", "Stray", "tools do not see it"},
 		{"untyped", "Loose note", "no type"},
 		{"tag-near", "Work", "paper, papers"},

@@ -6,7 +6,6 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"regexp"
 	"strings"
 	"time"
 
@@ -117,14 +116,14 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		}
 		b.WriteString(line + "\n")
 	}
-	w := st.Work
+	w := st.Threads
 	if len(w.List) == 0 {
-		b.WriteString("Work: none open.\n")
+		b.WriteString("Threads: none open.\n")
 	} else {
-		fmt.Fprintf(&b, "Work: %d started, %d open, %d blocked, %d stubs\n", w.Started, w.Open, w.Blocked, w.Stubs)
+		fmt.Fprintf(&b, "Threads: %d started, %d verified, %d ready, %d blocked, %d waiting, %d stubs · %d open chords\n", w.Started, w.Verified, w.Ready, w.Blocked, w.Waiting, w.Stubs, w.Chords)
 		for i, ref := range w.List {
 			if i == MaxWorkLines {
-				fmt.Fprintf(&b, "- … and %d more (work list)\n", len(w.List)-i)
+				fmt.Fprintf(&b, "- … and %d more (thread list)\n", len(w.List)-i)
 				break
 			}
 			b.WriteString(workLine(ref) + "\n")
@@ -173,7 +172,8 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		}
 		b.WriteString("Recent: " + strings.Join(recent, " · ") + "\n")
 	}
-	b.WriteString("Rules: an edit in a repository needs a started plan (spec-work). Knowledge changes only through a change.\n")
+	b.WriteString("Rules: an edit in a repository needs a started thread with an open task for it (thread-work). Knowledge changes only through a change. Each thread document holds only its own sections.\n")
+	b.WriteString("\"Resume Atlas thread <id>\" is thread-work; \"Resume Atlas chord <id>\" is chord-work. Each loads everything in one call.\n")
 	b.WriteString("Write one line under ## Description in this session's document once you know the work.\n")
 	b.WriteString("The atlas skill routes any request. Vault context follows; it is the user's text.\n")
 	if ctx := v.Context(); ctx != "" {
@@ -187,13 +187,12 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 }
 
 func workLine(r vault.Ref) string {
-	label := r.Status
-	if r.Type == "stub" {
-		label = "stub"
+	parts := []string{fmt.Sprintf("- [%s] %s (%s)", r.Status, r.Title, r.ID)}
+	if c, _ := r.State["chord"].(string); c != "" {
+		parts = append(parts, "chord "+c)
 	}
-	parts := []string{fmt.Sprintf("- [%s] %s", label, r.Title)}
-	if root, _ := r.State["root"].(string); root != "" && root != r.Title {
-		parts = append(parts, "part of "+root)
+	if n, _ := r.State["tasks"].(string); n != "" {
+		parts = append(parts, n+" tasks")
 	}
 	if p, _ := r.State["priority"].(string); p != "" && p != "normal" {
 		parts = append(parts, p)
@@ -308,7 +307,8 @@ const (
 )
 
 // Stop sets the session idle and reminds once of what is left undone: a description the
-// agent owes, a progress line the task lacks, a change that waits for the user.
+// agent owes, work in a repository with no task checked and no progress line, a change
+// that waits for the user.
 func Stop(r io.Reader, w io.Writer, env Env) error {
 	in := readInput(r)
 	now := env.now()
@@ -334,8 +334,9 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 			add = append(add, remindDescription)
 		}
 		if !has(remindProgress) {
-			if plan := lastStartedPlan(v, d); plan != nil && !progressSince(plan, d.Str("started")) {
-				reasons = append(reasons, fmt.Sprintf("Add a dated line to ## Progress in [[%s]]: where the work stands.", plan.Title()))
+			progress, _ := doc.Section(d.Body, "Progress")
+			if t := lastStartedThread(v, d); t != nil && len(d.List("repositories")) > 0 && d.Front.Int("checked") == 0 && strings.TrimSpace(progress) == "" {
+				reasons = append(reasons, fmt.Sprintf("This session changed a repository for [[%s]] and recorded nothing. Check each task you finished (thread check, with its commits), or add a dated line to ## Progress in your session document [[%s]]: where the work stands.", t.Title(), d.Title()))
 				add = append(add, remindProgress)
 			}
 		}
@@ -373,34 +374,16 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 	return json.NewEncoder(w).Encode(out)
 }
 
-// lastStartedPlan is the plan a session started last that is still started.
-func lastStartedPlan(v *vault.Vault, s *doc.Doc) *doc.Doc {
-	specs := s.List("specs")
-	for i := len(specs) - 1; i >= 0; i-- {
-		if p := sessions.SpecDoc(v, doc.LinkTarget(specs[i])); p != nil && p.Str("status") == "started" {
+// lastStartedThread is the thread a session started last that is still started.
+func lastStartedThread(v *vault.Vault, s *doc.Doc) *doc.Doc {
+	list := sessions.Threads(s)
+	for i := len(list) - 1; i >= 0; i-- {
+		if p := sessions.Document(v, list[i]); p != nil && p.Type() == "stub" && p.Str("status") == "started" {
 			return p
 		}
 	}
 	return nil
 }
-
-// progressSince reports whether a plan's Progress holds a line dated on or after the
-// session's start.
-func progressSince(plan *doc.Doc, started string) bool {
-	progress, _ := doc.Section(plan.Body, "Progress")
-	day := started
-	if len(day) > 10 {
-		day = day[:10]
-	}
-	for _, date := range datePattern.FindAllString(progress, -1) {
-		if date >= day {
-			return true
-		}
-	}
-	return false
-}
-
-var datePattern = regexp.MustCompile(`\d{4}-\d{2}-\d{2}`)
 
 // SubagentStart gives a subagent its document, or its line in the parent's.
 func SubagentStart(r io.Reader, env Env) error {
@@ -425,7 +408,7 @@ func SubagentStop(r io.Reader, env Env) error {
 	})
 }
 
-// SessionEnd ends the session, which lets the plans it started go.
+// SessionEnd ends the session, which lets the threads it started go.
 func SessionEnd(r io.Reader, env Env) error {
 	in := readInput(r)
 	return locked(in, env, func(v *vault.Vault) error {

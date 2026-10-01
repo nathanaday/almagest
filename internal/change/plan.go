@@ -21,8 +21,8 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/links"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/work"
 )
 
 // MaxWrites bounds the writes the model gives in one change. Link and tag rewrites do
@@ -298,15 +298,18 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			continue
 		}
 		if !idx.Wikified(d) {
-			c.refuse("absorbs: %s is a %s the wiki does not absorb; the vault's wikify setting lists %s (for an event: completed, dropped, and note)", vault.Title(d), d.Type(), strings.Join(idx.V.Wikify(), ", "))
+			c.refuse("absorbs: %s is a %s the wiki does not absorb now; the vault's wikify setting lists %s, and the wiki takes a spec once its thread is verified, a verification that passes, a chord whose threads are closed, and a dropped or note event", vault.Title(d), d.Type(), strings.Join(idx.V.Wikify(), ", "))
 			continue
 		}
 		out.Absorbs = append(out.Absorbs, d)
 	}
 	if strings.TrimSpace(p.Work) != "" {
-		d, err := idx.ResolveType(p.Work, "stub", "spec")
+		d, err := idx.ResolveType(p.Work, "stub", "chord", "spec", "tasks", "verification")
 		if err != nil {
 			c.refuse("work: %v", err)
+		} else if t := thread.Load(idx).Thread(d); t != nil {
+			// A change serves a thread, whichever of its documents the plan named.
+			d = t.Stub
 		}
 		out.Work = d
 	}
@@ -392,26 +395,26 @@ func (c *check) existing(w Write) *op {
 	switch {
 	case o.Kind == OpPromote:
 		if d.Type() != "stub" {
-			c.refuse("%s: %s is a %s; a change promotes an open stub to a topic", o.label(), o.Title, d.Type())
+			c.refuse("%s: %s is a %s; a change promotes a stub with no spec to a topic", o.label(), o.Title, d.Type())
 			return nil
 		}
-		if s := work.Load(c.idx).Status(d); s != work.Open {
-			c.refuse("%s: %s is %s; only an open stub is promoted", o.label(), o.Title, s)
+		if s := thread.Load(c.idx).Status(d); s != thread.StatusStub {
+			c.refuse("%s: %s is %s; only a stub with no spec is promoted", o.label(), o.Title, s)
 			return nil
 		}
 		o.Type = "topic"
 	case !knowledge(d.Type()):
-		c.refuse("%s: %s is a %s; a change writes sources, repositories, and topics. Stubs, specs, and events change through the work tool", o.label(), o.Title, d.Type())
+		c.refuse("%s: %s is a %s; a change writes sources, repositories, and topics. The documents of a thread and events change through the thread tool, a chord through the chord tool", o.label(), o.Title, d.Type())
 		return nil
 	case o.Kind == OpRemove && d.Type() == "repository":
 		var named []string
-		for _, s := range c.idx.Of("spec") {
-			if slices.ContainsFunc(s.List("repositories"), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), o.Title) }) {
+		for _, s := range c.idx.Of("tasks") {
+			if strings.EqualFold(doc.LinkTarget(s.Str("repository")), o.Title) {
 				named = append(named, s.Title())
 			}
 		}
 		if len(named) > 0 {
-			c.refuse("%s: %d specs name it (%s); unlink it instead (a modify with unlinked: true), so their links hold", o.label(), len(named), strings.Join(firstN(named, 3), ", "))
+			c.refuse("%s: %d task lists name it (%s); unlink it instead (a modify with unlinked: true), so their links hold", o.label(), len(named), strings.Join(firstN(named, 3), ", "))
 			return nil
 		}
 	}
@@ -421,10 +424,10 @@ func (c *check) existing(w Write) *op {
 			return nil
 		}
 	}
-	current := doc.FileHash([]byte(d.Content))
+	current := BaseHash(d)
 	o.Base = current
 	if w.Base != "" {
-		if !doc.SameHash(w.Base, current) {
+		if !sameBase(w.Base, d) {
 			c.refuse("%s: conflict: %s changed since you read it (base %s, now %s). Read it again and propose again", o.label(), d.Path, doc.Short(w.Base), doc.Short(current))
 			return nil
 		}
@@ -507,8 +510,8 @@ func (c *check) create(w Write) *op {
 	case typ == "source":
 		c.refuse("%s: a source comes from the source tool's capture; a change modifies it", o.label())
 		return nil
-	case typ == "stub" || typ == "spec" || typ == "event":
-		c.refuse("%s: a %s comes from the work tool, not a change", o.label(), typ)
+	case schema.IsThread(typ) || typ == "event":
+		c.refuse("%s: a %s comes from the thread tool or the chord tool, not a change", o.label(), typ)
 		return nil
 	case !slices.Contains(createTypes, typ):
 		c.refuse("create: type %q; a change creates a topic or a repository", w.Type)
@@ -723,7 +726,14 @@ func (c *check) repoPath(p, self string) error {
 func (c *check) fields(o *op, t *schema.Type, in map[string]any) (map[string]any, []string) {
 	out := map[string]any{}
 	var removed []string
-	for k, v := range in {
+	// In key order, so the refusals and the new tags come out the same on every run.
+	keys := make([]string, 0, len(in))
+	for k := range in {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		v := in[k]
 		if k == "kind" && (o.Kind == OpCreate || o.Kind == OpPromote) {
 			continue
 		}
@@ -1000,7 +1010,7 @@ func (c *check) rewrites(out *planned) {
 			}
 			d := c.idx.ByPath(rw.Path)
 			if d != nil && knowledge(d.Type()) && c.idx.ByID(d.ID()) == d {
-				o := &op{Kind: OpModify, ID: d.ID(), Type: d.Type(), Title: vault.Title(d), Path: d.Path, Base: doc.FileHash([]byte(d.Content)), Content: rw.Content, Rewrite: true}
+				o := &op{Kind: OpModify, ID: d.ID(), Type: d.Type(), Title: vault.Title(d), Path: d.Path, Base: BaseHash(d), Content: rw.Content, Rewrite: true}
 				c.byID[o.ID] = append(c.byID[o.ID], o)
 				out.Ops = append(out.Ops, o)
 				byPath[rw.Path] = o
@@ -1101,4 +1111,35 @@ func (c *check) deadLinks(out *planned) {
 			}
 		}
 	}
+}
+
+// BaseHash is the hash of what a change must find unchanged in a document: the fields
+// the model or the user gives, and the prose. It leaves out what code derives (the
+// code-owned fields, the lead callout, the code sections), so a sync between a proposal
+// and its apply, which may refresh a repository's git facts or a callout, is no conflict.
+func BaseHash(d *doc.Doc) string {
+	var b strings.Builder
+	t := schema.Get(d.Type())
+	if d.Front != nil {
+		keys := d.Front.Keys()
+		sort.Strings(keys)
+		for _, k := range keys {
+			if t != nil && t.Owned(k) {
+				continue
+			}
+			b.WriteString(k + "=" + strings.Join(d.Front.List(k), "\x1f") + "\n")
+		}
+	}
+	var code []string
+	if t != nil {
+		code = t.CodeSections
+	}
+	b.WriteString(doc.ProseHash(d.Body, code))
+	return doc.FileHash([]byte(b.String()))
+}
+
+// sameBase reports whether a recorded base is the document as it is now. A change
+// proposed by 7.x recorded the hash of the whole file.
+func sameBase(base string, d *doc.Doc) bool {
+	return doc.SameHash(base, BaseHash(d)) || doc.SameHash(base, doc.FileHash([]byte(d.Content)))
 }

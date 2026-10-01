@@ -38,14 +38,14 @@ func TestCheck(t *testing.T) {
 			t.Errorf("lacks %q in\n%s", want, joined)
 		}
 	}
-	spec := Get("spec")
-	if p := spec.Check(Values{"id": "doc-abcdef", "type": "spec", "kind": "plan", "description": "x", "created": "2026-09-27", "updated": "2026-09-27", "repositories": []string{"[[T]]"}}, r); len(p) != 1 || !strings.Contains(p[0].Message, "must be a repository") {
-		t.Fatalf("a spec that names a stub as a repository: %v", p)
+	tasks := Get("tasks")
+	if p := tasks.Check(Values{"id": "doc-abcdef", "type": "tasks", "description": "x", "created": "2026-09-27", "updated": "2026-09-27", "thread": "[[T]]", "repository": "[[T]]"}, r); len(p) != 1 || !strings.Contains(p[0].Message, "must be a repository") {
+		t.Fatalf("a task list that names a stub as its repository: %v", p)
 	}
-	if !Get("spec").Owned("status") || Get("spec").Owned("parent") || !Get("event").Owned("subject") {
+	if !Get("stub").Owned("status") || Get("stub").Owned("after") || !Get("spec").Owned("thread") || !Get("event").Owned("subject") {
 		t.Fatal("owners")
 	}
-	if len(DocumentTypes) != 6 || !IsDocument("event") || IsDocument("session") || Get("topic").SectionsOf("policy")[0] != "Rule" {
+	if len(DocumentTypes) != 9 || !IsThread("chord") || IsThread("event") || !IsDocument("event") || IsDocument("session") || Get("topic").SectionsOf("policy")[0] != "Rule" {
 		t.Fatal("types")
 	}
 }

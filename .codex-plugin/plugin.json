@@ -1,14 +1,14 @@
 {
   "name": "atlas-obsidian",
-  "version": "7.2.0",
-  "description": "One Obsidian vault for the wiki, the threads, the sessions, and the changes of your work, shared by Claude Code and Codex.",
+  "version": "8.0.0",
+  "description": "One Obsidian vault for the wiki, the threads and chords, the sessions, and the changes of your work, shared by Claude Code and Codex.",
   "author": {"name": "nathanaday", "url": "https://github.com/nathanaday"},
   "license": "MIT",
   "skills": "./skills/",
   "mcpServers": "./.mcp.json",
   "interface": {
     "displayName": "Atlas",
-    "shortDescription": "One vault for the wiki, the threads, the sessions, and the changes.",
+    "shortDescription": "One vault for the wiki, the threads and chords, the sessions, and the changes.",
     "longDescription": "Keep what you know, what you do, and what your agents do in one Obsidian vault, with a reviewed change for every wiki edit and a thread for every repository edit.",
     "developerName": "nathanaday",
     "category": "Productivity",
