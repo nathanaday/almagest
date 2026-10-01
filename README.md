@@ -54,6 +54,42 @@ export PATH="$HOME/.atlas/bin:$PATH"
 An install of 6.0 to 6.2 named the binary `atlas`. After you update, delete
 `~/.atlas/bin/atlas`.
 
+### Add the plugin to an agent
+
+`setup` adds the agent plugin to Claude Code when Claude Code does not have it. It runs
+these two commands, which you can also run yourself:
+
+```bash
+claude plugin marketplace add nathanaday/atlas-obsidian
+claude plugin install atlas-obsidian@nathanaday-atlas-obsidian
+```
+
+Restart Claude Code to load the plugin. `atlas-obsidian doctor` checks the binary, the
+plugin, and every vault.
+
+**A second Claude Code account.** Claude Code keeps each account's plugins in its config
+folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. To add the plugin to
+an account with its own config folder, run `setup` with that variable set:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-other" ~/.atlas/bin/atlas-obsidian setup
+```
+
+Every account on the machine shares one binary (`~/.atlas/bin/atlas-obsidian`) and one
+list of vaults (`~/.atlas/config.json`), so each account finds the same vaults.
+
+**Update.** Each account holds its own copy of the plugin. After a new release, update
+the plugin in each account, then the binary once:
+
+```bash
+claude plugin marketplace update nathanaday-atlas-obsidian
+claude plugin update atlas-obsidian@nathanaday-atlas-obsidian
+make install
+```
+
+For an account with its own config folder, set `CLAUDE_CONFIG_DIR` on the two `claude`
+commands.
+
 A vault of 6.x or 7.x needs one migration to the 8.0 layout. Obsidian shows a notice.
 From a shell, `atlas-obsidian vault migrate --dry-run` lists every move, and
 `atlas-obsidian vault migrate` makes them in one commit. Each plan of 7.x becomes a
