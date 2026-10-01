@@ -235,9 +235,20 @@ func (b *Board) syncCanvas(chord *doc.Doc, write WriteFunc) (string, bool, error
 	before := c.render()
 	ours := !exists || force || tidy || have.hash() == chord.Str("canvas") || have.hash() == want.hash()
 	if !ours {
+		on := map[string]bool{}
 		for _, n := range c.nodes {
 			if s := byNode[str(n, "id")]; s != nil {
 				b.paint(n, s)
+				on[s.ID()] = true
+			}
+		}
+		// A thread that joined in this write gets its card; the user's arrows stay.
+		for _, s := range b.Members(chord) {
+			if b.Joined[s.ID()] && !on[s.ID()] {
+				n := map[string]any{"id": s.ID(), "type": "file"}
+				b.paint(n, s)
+				c.nodes = append(c.nodes, n)
+				place(c.nodes, n, b.Rank(s))
 			}
 		}
 		b.canvas[chord.ID()] = chord.Str("canvas")
@@ -245,6 +256,7 @@ func (b *Board) syncCanvas(chord *doc.Doc, write WriteFunc) (string, bool, error
 		b.layout(chord, c, byNode, tidy)
 		b.canvas[chord.ID()] = want.hash()
 	}
+	legend(c, tidy)
 	after := c.render()
 	if exists && sameJSON(before, after) {
 		return rel, false, nil
@@ -282,17 +294,6 @@ func (b *Board) layout(chord *doc.Doc, c *canvas, byNode map[string]*doc.Doc, ti
 			nodes = append(nodes, n)
 		}
 	}
-	taken := func(x, y float64) bool {
-		for _, n := range nodes {
-			if _, placed := n["x"]; !placed {
-				continue
-			}
-			if x < num(n, "x")+num(n, "width") && num(n, "x") < x+CardWidth && y < num(n, "y")+num(n, "height") && num(n, "y") < y+CardHeight {
-				return true
-			}
-		}
-		return false
-	}
 	if tidy {
 		for _, n := range nodeOf {
 			delete(n, "x")
@@ -310,13 +311,8 @@ func (b *Board) layout(chord *doc.Doc, c *canvas, byNode map[string]*doc.Doc, ti
 		if _, placed := n["x"]; placed {
 			continue
 		}
-		x := float64(b.Rank(s) * (CardWidth + CardGapX))
-		y := 0.0
-		for taken(x, y) {
-			y += CardHeight + CardGapY
-		}
-		n["x"], n["y"] = x, y
-		if _, sized := n["width"]; !sized || tidy {
+		place(nodes, n, b.Rank(s))
+		if tidy {
 			n["width"], n["height"] = float64(CardWidth), float64(CardHeight)
 		}
 	}
@@ -353,6 +349,106 @@ func (b *Board) layout(chord *doc.Doc, c *canvas, byNode map[string]*doc.Doc, ti
 		edges = append(edges, map[string]any{"id": "after-" + from + "-" + to, "fromNode": nodeID(from), "fromSide": "right", "toNode": nodeID(to), "toSide": "left"})
 	}
 	c.edges = edges
+}
+
+// place puts a card with no place in its rank's column, at the first free spot from the
+// top, and gives it the card's size when it has none.
+func place(nodes []map[string]any, n map[string]any, rank int) {
+	taken := func(x, y float64) bool {
+		for _, o := range nodes {
+			if _, placed := o["x"]; !placed || isLegend(o) {
+				continue
+			}
+			if x < num(o, "x")+num(o, "width") && num(o, "x") < x+CardWidth && y < num(o, "y")+num(o, "height") && num(o, "y") < y+CardHeight {
+				return true
+			}
+		}
+		return false
+	}
+	x := float64(rank * (CardWidth + CardGapX))
+	y := 0.0
+	for taken(x, y) {
+		y += CardHeight + CardGapY
+	}
+	n["x"], n["y"] = x, y
+	if _, sized := n["width"]; !sized {
+		n["width"], n["height"] = float64(CardWidth), float64(CardHeight)
+	}
+}
+
+// The legend: one small colored group per state, labeled, above the threads. Code owns
+// its groups, by id.
+const (
+	LegendPrefix = "atlas-legend-"
+	legendWidth  = 320
+	legendHeight = 28
+	legendGap    = 40
+	legendAbove  = 120
+)
+
+// LegendItems are the colors of the cards and what each means, in the legend's order.
+var LegendItems = []struct{ Color, Label string }{
+	{ColorDone, "Verified"},
+	{ColorReady, "Ready"},
+	{ColorStarted, "Started"},
+	{ColorChecking, "To verify"},
+	{ColorBlocked, "Blocked"},
+	{"", "Waiting"},
+}
+
+func isLegend(n map[string]any) bool { return strings.HasPrefix(str(n, "id"), LegendPrefix) }
+
+// legend keeps the legend's cards on a canvas that shows threads: it adds them above the
+// cards when none is there, and keeps the text and color of each it finds where the user
+// put it. tidy places them again.
+func legend(c *canvas, tidy bool) {
+	have := map[string]map[string]any{}
+	var rest []map[string]any
+	minX, minY, cards := 0.0, 0.0, 0
+	for _, n := range c.nodes {
+		if isLegend(n) {
+			if !tidy {
+				have[str(n, "id")] = n
+				rest = append(rest, n)
+			}
+			continue
+		}
+		rest = append(rest, n)
+		if str(n, "type") != "file" {
+			continue
+		}
+		if cards == 0 || num(n, "x") < minX {
+			minX = num(n, "x")
+		}
+		if cards == 0 || num(n, "y") < minY {
+			minY = num(n, "y")
+		}
+		cards++
+	}
+	c.nodes = rest
+	if cards == 0 {
+		return
+	}
+	for i, item := range LegendItems {
+		id := fmt.Sprintf("%s%d", LegendPrefix, i+1)
+		n := have[id]
+		if n == nil {
+			if len(have) > 0 {
+				// The user kept some of the legend and removed this card.
+				continue
+			}
+			n = map[string]any{"id": id, "x": minX + float64(i*(legendWidth+legendGap)), "y": minY - legendAbove, "width": float64(legendWidth), "height": float64(legendHeight)}
+			c.nodes = append(c.nodes, n)
+		}
+		// A group shows its label at any zoom; a text card's text hides when zoomed out.
+		n["type"], n["label"] = "group", item.Label
+		delete(n, "text")
+		if item.Color == "" {
+			delete(n, "color")
+		} else {
+			n["color"] = item.Color
+		}
+	}
 }
 
 // CanvasState says whether a chord's canvas shows the order its stubs hold.

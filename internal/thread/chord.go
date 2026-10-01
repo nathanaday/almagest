@@ -257,6 +257,7 @@ func ChordAdd(v *vault.Vault, chord, key string, after []string, o Opts) (*Resul
 		return nil, err
 	}
 	w.wrote = append(w.wrote, d.ID())
+	w.joined[d.ID()] = true
 	return w.finish("add "+d.Title()+" to "+c.Title(), c.ID())
 }
 

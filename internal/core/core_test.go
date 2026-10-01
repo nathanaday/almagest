@@ -1,6 +1,9 @@
 package core_test
 
 import (
+	"os"
+	"os/exec"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -76,5 +79,36 @@ func TestSyncHealsAndCloseMention(t *testing.T) {
 	v, _ := vault.Open(tv.V.Root)
 	if _, err := core.Sync(v, testvault.Now, core.SyncOptions{}); err == nil || !strings.Contains(err.Error(), "vault migrate") {
 		t.Fatalf("legacy: %v", err)
+	}
+}
+
+func TestSyncEndsASessionWhoseAgentIsGone(t *testing.T) {
+	tv := testvault.New(t)
+	gone := exec.Command("true")
+	if err := gone.Run(); err != nil {
+		t.Fatal(err)
+	}
+	now := testvault.Now
+	recent := vault.Stamp(now.Add(-time.Minute))
+	session := func(name string, pid int) string {
+		rel := "sessions/2026-09/2026-09-27 1400 " + name + ".md"
+		tv.Write(rel, "---\nid: ses-"+name+"\ntype: session\nharness_id: "+name+"\nstatus: idle\nupdated: "+recent+"\npid: "+strconv.Itoa(pid)+"\n---\n")
+		return rel
+	}
+	dead := session("aaaaaa", gone.Process.Pid)
+	// A live process that is no agent: its id was reused.
+	other := session("bbbbbb", os.Getpid())
+	quiet := session("cccccc", 0)
+	synced, err := core.Sync(tv.V, now, core.SyncOptions{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{dead, other} {
+		if got := tv.Read(rel); !strings.Contains(got, "status: ended") || !strings.Contains(got, "ended: "+vault.Stamp(now)) {
+			t.Fatalf("a session whose agent is gone ends:\n%s", got)
+		}
+	}
+	if got := tv.Read(quiet); !strings.Contains(got, "status: idle") || len(synced.Lost) != 2 {
+		t.Fatalf("a recent session with no process id stays: %v\n%s", synced.Lost, got)
 	}
 }

@@ -125,7 +125,14 @@ request.
 - "Resume Atlas thread doc-aswqa3." Each stub holds this line to copy. The agent loads
   the spec, the open tasks, and the open findings in one call, and goes on.
 - "Make a chord: train a vehicle detection model with YOLO." The agent splits the goal
-  into threads and orders them. Obsidian shows the order as a canvas you can redraw.
+  into threads and orders them. Obsidian shows the order as a canvas you can redraw,
+  colored by each thread's state. "New thread" on a chord or its canvas plants a thread
+  in it from a title and a line of idea.
+- "Start agent" on a thread or a chord opens a terminal with Claude Code in the vault,
+  given the hand-off line. The Atlas settings choose the terminal and the agent command
+  (per vault, so a vault can use another account). The sessions pane in the right
+  sidebar shows the open sessions and the ones that closed in the last two hours, with
+  Resume.
 - "Ingest the inbox." Files you dropped in `inbox/` become cited wiki pages.
 - "What should I work on?" The agent reads the board and ranks the open threads.
 - "What do we know about my cs513 self-driving project?" The agent searches the

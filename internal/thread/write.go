@@ -140,6 +140,8 @@ type writer struct {
 	// force and tidy name the chords whose canvas the write lays out again.
 	force map[string]bool
 	tidy  map[string]bool
+	// joined names the stubs that join a chord in this write.
+	joined map[string]bool
 }
 
 func begin(v *vault.Vault, o Opts) (*writer, error) {
@@ -160,7 +162,7 @@ func begin(v *vault.Vault, o Opts) (*writer, error) {
 	if now.IsZero() {
 		now = time.Now()
 	}
-	return &writer{v: v, tx: tx, idx: idx, b: Load(idx), now: now.Truncate(time.Second), by: by, titles: NewTitles(idx), newTag: map[string]bool{}, force: map[string]bool{}, tidy: map[string]bool{}}, nil
+	return &writer{v: v, tx: tx, idx: idx, b: Load(idx), now: now.Truncate(time.Second), by: by, titles: NewTitles(idx), newTag: map[string]bool{}, force: map[string]bool{}, tidy: map[string]bool{}, joined: map[string]bool{}}, nil
 }
 
 // StateOf is where a thread stands.
@@ -176,7 +178,7 @@ func (w *writer) finish(subject, focus string) (*Result, error) {
 		return nil, err
 	}
 	nb := Load(idx)
-	nb.ForceCanvas, nb.TidyCanvas = w.force, w.tidy
+	nb.ForceCanvas, nb.TidyCanvas, nb.Joined = w.force, w.tidy, w.joined
 	if _, err := nb.Sync(w.tx.WriteIfChanged); err != nil {
 		return nil, err
 	}
@@ -499,6 +501,10 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (*Result, error) {
 			return nil, err
 		}
 		chord = doc.Link(c.Title())
+		// A thread planted in a chord with no tags of its own takes the chord's.
+		if len(tg) == 0 {
+			tg = nonNil(c.List("tags"))
+		}
 	}
 	after, _, err := w.afterLinks(in.After, "")
 	if err != nil {
@@ -520,6 +526,9 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (*Result, error) {
 	id, _, err := w.newDoc("stub", title, desc, tg, stubFields(in.Priority, chord, after), "## Idea\n\n"+text+"\n")
 	if err != nil {
 		return nil, err
+	}
+	if chord != "" {
+		w.joined[id] = true
 	}
 	return w.finish("stub "+title, id)
 }

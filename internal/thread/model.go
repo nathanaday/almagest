@@ -91,6 +91,9 @@ type Board struct {
 	// user changed it; TidyCanvas names those whose cards it places again.
 	ForceCanvas map[string]bool
 	TidyCanvas  map[string]bool
+	// Joined names the stubs that joined a chord in this write. Each gets its card on the
+	// canvas even while the user's drawing there is not saved.
+	Joined map[string]bool
 }
 
 // Load reads the threads of an index.

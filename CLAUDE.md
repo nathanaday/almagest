@@ -52,6 +52,19 @@ The design pages are the spec. When the code departs from them, the reason is be
   the lead callout, the code sections. A sync between a proposal and its apply refreshes
   a repository's git facts, and that was a conflict on every close of a thread. Apply
   keeps the document's current code-owned fields (`keepDerived`).
+- **A session records its agent's process and conversation.** The hooks walk up from
+  their own process to the nearest `claude` or `codex` and keep its id in `pid`, and keep
+  `transcript_path` in `transcript`. A sync ends a live session whose process is gone,
+  and the sessions pane shows a session as open only while its process runs. Resume
+  reads the conversation's first `cwd` and its config folder from the transcript, and
+  finds the transcript of an older session by its id under `~/.claude*/projects/`.
+- **Resume names a config folder only when it is not `~/.claude`.** Claude Code keys its
+  login to the folder it was told: `CLAUDE_CONFIG_DIR=~/.claude claude` reports "Not
+  logged in" on a machine logged in through the default. Verified 2026-10-01 on 2.1.286.
+- **The chord canvas holds a legend of six colored groups** (`atlas-legend-1` to `-6`).
+  Groups, since Obsidian hides a small text card's text when zoomed out and shows a
+  group's label at any zoom. Code adds the legend when none is there and keeps each
+  group where the user moved it.
 - **thread-audit runs shell commands.** It checks work by running its tests. The guard
   refuses its edits and its atlas writes, not its shell.
 - **A tag page that does not hold its tag's parent is a warning.** No document is lost

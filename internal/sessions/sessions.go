@@ -69,6 +69,8 @@ type Event struct {
 	Source string
 	// Detail is a subagent's task, when the host gives it.
 	Detail string
+	// Transcript is the file where the host keeps the conversation; resume reads it.
+	Transcript string
 }
 
 // Key is the id the hooks look a session up by: the agent id of a subagent, else the
@@ -200,7 +202,27 @@ func fields(id string, e Event, now time.Time, parent, agent string) []doc.Field
 		{Key: "checked", Value: 0},
 		{Key: "description", Value: ""},
 		{Key: "reminded", Value: []string{}},
+		{Key: "pid", Value: 0},
+		{Key: "transcript", Value: e.Transcript},
 	}
+}
+
+// process gives a session's content the agent's process id and the conversation's file,
+// when it lacks them. A subagent's document keeps no transcript: only its parent resumes.
+func process(content string, e Event) string {
+	d := doc.Parse("", []byte(content))
+	if d.Front == nil {
+		return content
+	}
+	if d.Front.Int("pid") == 0 {
+		if pid := HarnessPID(); pid > 0 {
+			content = doc.SetField(content, "pid", pid)
+		}
+	}
+	if e.Transcript != "" && e.AgentID == "" && d.Str("transcript") == "" {
+		content = doc.SetField(content, "transcript", e.Transcript)
+	}
+	return content
 }
 
 const newBody = "## Description\n\n## Progress\n\n## Summary\n\n## Subagents\n"
@@ -210,11 +232,13 @@ const newBody = "## Description\n\n## Progress\n\n## Summary\n\n## Subagents\n"
 func Start(v *vault.Vault, e Event, now time.Time) (string, error) {
 	if d := Find(v, e.Key()); d != nil {
 		content := doc.SetFields(d.Content, []doc.Field{{Key: "status", Value: Running}, {Key: "ended", Value: ""}, {Key: "updated", Value: vault.Stamp(now)}})
+		// A resumed session runs in a new process.
+		content = process(doc.SetField(content, "pid", 0), e)
 		return d.Path, write(v, d.Path, content)
 	}
 	name := now.Format("2006-01-02 1504") + " " + Short(e.Key())
 	rel := fmt.Sprintf("%s/%s/%s.md", vault.Sessions, now.Format("2006-01"), name)
-	content := doc.Render(fields("ses-"+Short(e.Key()), e, now, "", ""), newBody)
+	content := process(doc.Render(fields("ses-"+Short(e.Key()), e, now, "", ""), newBody), e)
 	return rel, write(v, rel, content)
 }
 
@@ -318,7 +342,7 @@ func Touch(v *vault.Vault, e Event, now time.Time, fn func(content string) strin
 			return nil, fmt.Errorf("session document %s did not appear", p)
 		}
 	}
-	content := d.Content
+	content := process(d.Content, e)
 	if fn != nil {
 		content = fn(content)
 	}
@@ -351,12 +375,23 @@ func AddLink(content, field, title string) string {
 	return doc.SetField(content, field, append(nonNil(list), link))
 }
 
-// MarkLost sets every live session with no hook event for staleHours to lost, and
-// returns the paths it wrote. The caller holds the lock.
+// MarkLost ends every live session whose agent process is gone, sets every other live
+// session with no hook event for staleHours to lost, and returns the paths it wrote. The
+// caller holds the lock.
 func MarkLost(v *vault.Vault, now time.Time, staleHours int) ([]string, error) {
 	var out []string
 	for _, d := range All(v) {
 		if !Live(d.Str("status")) {
+			continue
+		}
+		if pid := d.Front.Int("pid"); pid > 0 {
+			if Alive(pid) {
+				continue
+			}
+			if err := SetStatus(v, d, Ended, now); err != nil {
+				return out, err
+			}
+			out = append(out, d.Path)
 			continue
 		}
 		last, ok := vault.ParseTime(d.Str("updated"))

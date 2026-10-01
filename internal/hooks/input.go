@@ -52,6 +52,7 @@ type Input struct {
 	StopHookActive   bool            `json:"stop_hook_active"`
 	Reason           string          `json:"reason"`
 	TurnID           string          `json:"turn_id"`
+	TranscriptPath   string          `json:"transcript_path"`
 	Description      string          `json:"description"`
 }
 
@@ -94,7 +95,7 @@ func (in Input) event() sessions.Event {
 	if sessionID == "" {
 		sessionID = in.ParentSession2
 	}
-	return sessions.Event{Harness: harness, SessionID: sessionID, AgentID: in.AgentID, AgentType: in.AgentType, Cwd: in.Cwd, Source: in.Source, Detail: in.Description}
+	return sessions.Event{Harness: harness, SessionID: sessionID, AgentID: in.AgentID, AgentType: in.AgentType, Cwd: in.Cwd, Source: in.Source, Detail: in.Description, Transcript: in.TranscriptPath}
 }
 
 // findVault resolves the vault of a hook's session, or nil.

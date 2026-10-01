@@ -498,16 +498,27 @@ func TestAChordOrdersItsThreads(t *testing.T) {
 }
 
 type canvasFile struct {
-	Nodes []map[string]any `json:"nodes"`
-	Edges []map[string]any `json:"edges"`
+	Nodes  []map[string]any `json:"nodes"`
+	Edges  []map[string]any `json:"edges"`
+	Legend []map[string]any `json:"-"`
 }
 
+// readCanvas reads a canvas, with the legend's cards apart from the others.
 func readCanvas(t *testing.T, tv *testvault.T, rel string) canvasFile {
 	t.Helper()
 	var c canvasFile
 	if err := json.Unmarshal([]byte(tv.Read(rel)), &c); err != nil {
 		t.Fatal(err)
 	}
+	var nodes []map[string]any
+	for _, n := range c.Nodes {
+		if id, _ := n["id"].(string); strings.HasPrefix(id, thread.LegendPrefix) {
+			c.Legend = append(c.Legend, n)
+		} else {
+			nodes = append(nodes, n)
+		}
+	}
+	c.Nodes = nodes
 	return c
 }
 
@@ -713,5 +724,57 @@ func TestSyncGivesAStubOf7xItsChordAndAfter(t *testing.T) {
 	}
 	if again, _ := thread.Load(tv.Index()).Sync(tv.V.WriteIfChanged); len(again) != 0 {
 		t.Fatalf("a second sync writes nothing: %v", again)
+	}
+}
+
+func TestTheCanvasHasALegendAndANewThreadGetsItsCard(t *testing.T) {
+	tv := chord(t)
+	rel := "chords/Vehicle detection model.canvas"
+	c := readCanvas(t, tv, rel)
+	if len(c.Legend) != len(thread.LegendItems) || c.Legend[0]["label"] != "Verified" || c.Legend[0]["type"] != "group" || c.Legend[0]["color"] != thread.ColorDone || c.Legend[5]["color"] != nil {
+		t.Fatalf("legend %v", c.Legend)
+	}
+	if y := c.Legend[0]["y"].(float64); y >= 0 {
+		t.Fatalf("the legend sits above the cards: y %v", y)
+	}
+	// The user moves the legend and redraws an arrow, and does not save.
+	var raw map[string]any
+	json.Unmarshal([]byte(tv.Read(rel)), &raw)
+	nodes := raw["nodes"].([]any)
+	for _, x := range nodes {
+		n := x.(map[string]any)
+		if n["id"] == thread.LegendPrefix+"1" {
+			n["x"] = -2000.0
+		}
+	}
+	raw["edges"] = raw["edges"].([]any)[1:]
+	data, _ := json.Marshal(raw)
+	tv.Write(rel, string(data))
+	// A thread planted in the chord gets its card at once; the user's drawing stays.
+	ok(t)(thread.Stub(tv.V, thread.StubIn{Text: "Deploy it", Title: "Deploy", Chord: "Vehicle detection model"}, opts(tv)))
+	c = readCanvas(t, tv, rel)
+	found := false
+	for _, n := range c.Nodes {
+		if n["file"] == "wiki/documents/Deploy.md" {
+			found = n["color"] == thread.ColorReady && n["width"] != nil
+		}
+	}
+	if !found || len(c.Edges) != 3 {
+		t.Fatalf("the new card, and the user's three arrows: %v, %d edges", found, len(c.Edges))
+	}
+	for _, n := range c.Legend {
+		if n["id"] == thread.LegendPrefix+"1" && n["x"].(float64) != -2000 {
+			t.Fatalf("the legend stays where the user put it: %v", n)
+		}
+	}
+	state, _ := thread.CanvasStatus(tv.Index(), "Vehicle detection model")
+	if len(state.Threads) != 1 || state.Threads[0] == "Deploy" {
+		t.Fatalf("only the user's arrow is unsaved, and the new thread is saved: %v", state.Threads)
+	}
+	// Tidy places the legend again, above the cards.
+	ok(t)(thread.CanvasWrite(tv.V, "Vehicle detection model", true, opts(tv)))
+	c = readCanvas(t, tv, rel)
+	if len(c.Legend) != len(thread.LegendItems) || c.Legend[0]["x"].(float64) == -2000 {
+		t.Fatalf("tidy: %v", c.Legend)
 	}
 }
