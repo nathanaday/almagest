@@ -131,7 +131,7 @@ atlas-obsidian config unset agent_commands.claude          # back to the global 
 ```
 
 The terminal runs the command in your login shell, so your `PATH` and shell functions
-apply. [COVERAGE.md](COVERAGE.md) lists the agent and terminal pairs we tested.
+apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
 
 ## Usage
 

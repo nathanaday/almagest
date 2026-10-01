@@ -69,7 +69,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   move into the vault file once, and stay in `data.json` until the move succeeds.
 - **A terminal launch fails where no one sees it** (osascript and `open` exit after the
   spawn), so `openTerminal` checks for the app first. `obsidian/scripts/probe-launch.mjs`
-  opens a real terminal with a probe; record each result in COVERAGE.md.
+  opens a real terminal with a probe; record each result in TESTED.md.
 - **The chord canvas holds a legend of six colored groups** (`atlas-legend-1` to `-6`).
   Groups, since Obsidian hides a small text card's text when zoomed out and shows a
   group's label at any zoom. Code adds the legend when none is there and keeps each
