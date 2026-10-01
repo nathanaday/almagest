@@ -93,7 +93,14 @@ func (b *Board) derivedStub(d *doc.Doc) string {
 	if t.Spec != nil {
 		spec = doc.Link(t.Spec.Title())
 	}
-	content := setFields(d, []doc.Field{
+	var set []doc.Field
+	// A stub of 7.x has no chord or after; a view filters on them, so each stub holds both.
+	for _, f := range []doc.Field{{Key: "chord", Value: ""}, {Key: "after", Value: []string{}}} {
+		if !d.Front.Has(f.Key) {
+			set = append(set, f)
+		}
+	}
+	content := setFields(d, append(set, []doc.Field{
 		{Key: "status", Value: b.Status(d)},
 		{Key: "spec", Value: spec},
 		{Key: "tasks", Value: t.CountsText()},
@@ -103,7 +110,7 @@ func (b *Board) derivedStub(d *doc.Doc) string {
 		{Key: "active", Value: b.Active(d)},
 		{Key: "rank", Value: b.Rank(d)},
 		{Key: "refreshed", Value: b.Refreshed(d)},
-	})
+	}...))
 	content = doc.ReplaceLead(content, b.stubLead(d))
 	return putSection(content, "stub", "Thread", b.ThreadSection(d))
 }

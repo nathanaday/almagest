@@ -30,8 +30,35 @@ const (
 // CanvasPath is where a chord's canvas lives.
 func CanvasPath(chord *doc.Doc) string { return vault.Chords + "/" + chord.Title() + ".canvas" }
 
-// statusColor is a card's color, from Obsidian's six presets; "" is the default gray.
-var statusColor = map[string]string{Started: "5", Unverified: "3", Verified: "6", Closed: "4"}
+// Card colors, from Obsidian's six presets: 1 red, 2 orange, 3 yellow, 4 green, 5 cyan,
+// 6 purple. "" is the default gray.
+const (
+	ColorDone     = "4" // verified or closed
+	ColorReady    = "5" // can start now
+	ColorBlocked  = "3" // blocked
+	ColorStarted  = "6" // work under way
+	ColorChecking = "2" // every task done, not verified yet
+)
+
+// CardColor is the color of a thread's card. A thread that waits on another, a dropped
+// thread, and a resolved one stay gray.
+func (b *Board) CardColor(s *doc.Doc) string {
+	switch status := b.Status(s); {
+	case status == Verified || status == Closed:
+		return ColorDone
+	case Ended(status):
+		return ""
+	case b.Blocked(s) != "":
+		return ColorBlocked
+	case status == Unverified:
+		return ColorChecking
+	case status == Started:
+		return ColorStarted
+	case b.ReadyToStart(s):
+		return ColorReady
+	}
+	return ""
+}
 
 // graph is the threads of a canvas or of a chord, and the order between them.
 type graph struct {
@@ -181,11 +208,7 @@ func (b *Board) readCanvas(chord *doc.Doc) (*canvas, bool, error) {
 // paint sets a stub's node to the stub's file and its status color.
 func (b *Board) paint(node map[string]any, s *doc.Doc) {
 	node["file"] = s.Path
-	color := statusColor[b.Status(s)]
-	if b.Blocked(s) != "" {
-		color = "1"
-	}
-	if color == "" {
+	if color := b.CardColor(s); color == "" {
 		delete(node, "color")
 	} else {
 		node["color"] = color
@@ -338,6 +361,8 @@ type CanvasState struct {
 	Path    string    `json:"path"`
 	Exists  bool      `json:"exists"`
 	Differs bool      `json:"differs"`
+	// Threads are the titles of the threads whose place saving the canvas would change.
+	Threads []string `json:"threads"`
 	// Changes are what saving the canvas would change, one line each.
 	Changes []string `json:"changes"`
 }
@@ -349,7 +374,7 @@ func CanvasStatus(idx *vault.Index, key string) (*CanvasState, error) {
 		return nil, err
 	}
 	b := Load(idx)
-	out := &CanvasState{Chord: b.Ref(chord), Path: CanvasPath(chord), Changes: []string{}}
+	out := &CanvasState{Chord: b.Ref(chord), Path: CanvasPath(chord), Threads: []string{}, Changes: []string{}}
 	c, exists, err := b.readCanvas(chord)
 	if err != nil {
 		return nil, err
@@ -359,9 +384,45 @@ func CanvasStatus(idx *vault.Index, key string) (*CanvasState, error) {
 		return out, nil
 	}
 	have, _ := b.canvasGraph(c)
-	out.Changes = b.graphChanges(b.chordGraph(chord), have)
+	want := b.chordGraph(chord)
+	out.Changes = b.graphChanges(want, have)
+	out.Threads = b.moved(want, have)
 	out.Differs = len(out.Changes) > 0
 	return out, nil
+}
+
+// moved are the titles of the threads whose place differs between two orders: a thread
+// that joins or leaves, and a thread whose arrows in differ.
+func (b *Board) moved(from, to *graph) []string {
+	ids := map[string]bool{}
+	for m := range to.members {
+		if !from.members[m] {
+			ids[m] = true
+		}
+	}
+	for m := range from.members {
+		if !to.members[m] {
+			ids[m] = true
+		}
+	}
+	diff := func(x, y *graph) {
+		for e := range x.edges {
+			a, c, _ := strings.Cut(e, ">")
+			if !y.edges[e] && to.members[a] && to.members[c] {
+				ids[c] = true
+			}
+		}
+	}
+	diff(to, from)
+	diff(from, to)
+	out := []string{}
+	for id := range ids {
+		if d := b.Idx.ByID(id); d != nil {
+			out = append(out, d.Title())
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // graphChanges lists what turns the order from into the order to.

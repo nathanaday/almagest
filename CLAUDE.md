@@ -139,6 +139,12 @@ The design pages are the spec. When the code departs from them, the reason is be
 - `ATLAS_HOOK_LOG=<file>` appends every hook event the binary receives, one JSON line
   each. Use it to check a host's events.
 
+Obsidian 1.13.7, verified live (2026-10-01): in a Base filter, an expression on a
+property a note lacks fails, and the note drops out: `!chord` and `!chord || chord == ""`
+both hide a stub with no `chord`. `chord.isEmpty()` is true for a missing property and
+for `""`. A hidden window renders nothing, so a DevTools screenshot hangs; bring the
+second instance to the front by its pid with `osascript` first.
+
 Obsidian 1.13.7, verified live (2026-09-28): the graph colors. A group's
 `path:/^(?:…)$/` regex colors nodes, `view.dataEngine.setOptions({colorGroups})` recolors
 an open graph, and a hidden window pauses timers and rendering.

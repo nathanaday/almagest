@@ -544,6 +544,9 @@ func TestTheCanvasShowsTheOrderAndSavesIt(t *testing.T) {
 	if !state.Differs || strings.Join(state.Changes, "; ") != "add the thread Deploy; put Annotate the dataset after Baseline; put Deploy after Train round 1" {
 		t.Fatalf("changes %v", state.Changes)
 	}
+	if strings.Join(state.Threads, ", ") != "Annotate the dataset, Deploy" {
+		t.Fatalf("the threads that move: %v", state.Threads)
+	}
 	// A sync keeps what the user drew, and a status change still recolors a card.
 	ok(t)(thread.Block(tv.V, "Baseline", "no GPU", opts(tv)))
 	c = readCanvas(t, tv, rel)
@@ -551,8 +554,8 @@ func TestTheCanvasShowsTheOrderAndSavesIt(t *testing.T) {
 		t.Fatalf("a sync keeps the user's canvas: %d nodes, %d edges", len(c.Nodes), len(c.Edges))
 	}
 	for _, n := range c.Nodes {
-		if n["id"] == id("Baseline") && n["color"] != "1" {
-			t.Fatalf("a blocked card is red: %v", n)
+		if n["id"] == id("Baseline") && n["color"] != thread.ColorBlocked {
+			t.Fatalf("a blocked card is yellow: %v", n)
 		}
 	}
 	// Save writes the order to the stubs.
@@ -647,5 +650,68 @@ func TestAChordClosesWhenItsThreadsDo(t *testing.T) {
 	absorb("Close the chord", c.ID())
 	if _, c = load(tv, "Small chord"); c.Str("status") != thread.ChordClosed || !strings.Contains(c.Content, "> [!chord-closed] Closed · 1/1 threads closed · absorbed by [[2026-09-27 Close the chord]]") {
 		t.Fatalf("closed:\n%s", c.Content)
+	}
+}
+
+func TestCardColorsFollowWhatEachThreadNeeds(t *testing.T) {
+	tv := chord(t)
+	o := func() thread.Opts { return opts(tv) }
+	spec := "## Goal\n\nx\n\n## Requirements\n\n- R1: one\n"
+	plan := func(name string) {
+		ok(t)(thread.Spec(tv.V, thread.SpecIn{Thread: name, Text: spec}, o()))
+		ok(t)(thread.TasksWrite(tv.V, thread.TasksIn{Thread: name, Tasks: []thread.TaskIn{{Text: "Do it", Requirements: []string{"R1"}}}}, o()))
+	}
+	// Curate is verified, Annotate is started, Baseline has every task done and no
+	// verification, Train waits on both.
+	plan("Curate the dataset")
+	ok(t)(thread.Start(tv.V, "Curate the dataset", false, o()))
+	ok(t)(thread.Check(tv.V, thread.CheckIn{Thread: "Curate the dataset", Task: "T1", Note: "done"}, o()))
+	ok(t)(thread.Verify(tv.V, thread.VerifyIn{Thread: "Curate the dataset", Scope: "x", Results: pass("R1")}, o()))
+	plan("Annotate the dataset")
+	ok(t)(thread.Start(tv.V, "Annotate the dataset", false, o()))
+	plan("Baseline")
+	ok(t)(thread.Start(tv.V, "Baseline", false, o()))
+	ok(t)(thread.Check(tv.V, thread.CheckIn{Thread: "Baseline", Task: "T1", Note: "done"}, o()))
+	ok(t)(thread.Stub(tv.V, thread.StubIn{Text: "Deploy it", Title: "Deploy", Chord: "Vehicle detection model"}, o()))
+	ok(t)(thread.Stub(tv.V, thread.StubIn{Text: "Paper", Title: "Paper", Chord: "Vehicle detection model"}, o()))
+	ok(t)(thread.Block(tv.V, "Paper", "no venue", o()))
+	b, _ := load(tv, "Vehicle detection model")
+	want := map[string]string{
+		"Curate the dataset":   thread.ColorDone,
+		"Annotate the dataset": thread.ColorStarted,
+		"Baseline":             thread.ColorChecking,
+		"Train round 1":        "",
+		"Deploy":               thread.ColorReady,
+		"Paper":                thread.ColorBlocked,
+	}
+	for title, color := range want {
+		_, d := load(tv, title)
+		if got := b.CardColor(d); got != color {
+			t.Errorf("%s: color %q, want %q", title, got, color)
+		}
+	}
+	c := readCanvas(t, tv, "chords/Vehicle detection model.canvas")
+	for _, n := range c.Nodes {
+		title := vault.NoteTitle(n["file"].(string))
+		got, _ := n["color"].(string)
+		if got != want[title] {
+			t.Errorf("the card of %s is %q, want %q", title, got, want[title])
+		}
+	}
+}
+
+func TestSyncGivesAStubOf7xItsChordAndAfter(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("stub", "Old idea", map[string]any{"status": "open", "priority": "low"}, "## Idea\n\nLater.\n")
+	tv.Commit()
+	if _, err := thread.Load(tv.Index()).Sync(tv.V.WriteIfChanged); err != nil {
+		t.Fatal(err)
+	}
+	got := tv.Read("wiki/documents/Old idea.md")
+	if !strings.Contains(got, "chord: \"\"") || !strings.Contains(got, "after: []") || !strings.Contains(got, "status: stub") {
+		t.Fatalf("a 7.x stub gains chord and after:\n%s", got)
+	}
+	if again, _ := thread.Load(tv.Index()).Sync(tv.V.WriteIfChanged); len(again) != 0 {
+		t.Fatalf("a second sync writes nothing: %v", again)
 	}
 }

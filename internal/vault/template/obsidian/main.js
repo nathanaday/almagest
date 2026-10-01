@@ -392,14 +392,25 @@ function barButtons(d) {
   out.push({ id: "drop", label: "Drop" });
   return out;
 }
+var CARD_LEGEND = [
+  { color: "4", label: "verified" },
+  { color: "5", label: "ready" },
+  { color: "6", label: "started" },
+  { color: "2", label: "to verify" },
+  { color: "3", label: "blocked" },
+  { color: "", label: "waiting" }
+];
 function chordOfCanvas(path) {
   const m = /^chords\/([^/]+)\.canvas$/.exec(path);
   return m ? m[1] : null;
 }
 function canvasSummary(s) {
-  const n = s.changes?.length ?? 0;
-  if (!s.differs || n === 0) return "The canvas shows the saved order.";
-  return `${plural(n, "change", "changes")} not saved: ${(s.changes ?? []).slice(0, 2).join("; ")}${n > 2 ? "; \u2026" : ""}`;
+  if (!s.differs) return "Saved";
+  const names = s.threads ?? [];
+  const n = names.length;
+  if (n === 0) return "Not saved";
+  const shown = names.slice(0, 2).join(", ");
+  return `${plural(n, "thread moves", "threads move")}: ${shown}${n > 2 ? `, +${n - 2}` : ""}`;
 }
 
 // src/changebar.ts
@@ -1074,7 +1085,12 @@ ${(state.changes ?? []).join("|")}`;
     bar.toggleClass("is-changed", state.differs);
     bar.createSpan({ cls: "atlas-canvas-bar-label", text: "Chord" });
     const text = bar.createSpan({ cls: "atlas-canvas-bar-status", text: canvasSummary(state) });
-    if (state.differs) text.setAttr("title", (state.changes ?? []).join("\n"));
+    if (state.differs) text.setAttr("title", (state.threads ?? []).join("\n"));
+    const legend = bar.createDiv({ cls: "atlas-canvas-legend" });
+    for (const { color, label } of CARD_LEGEND) {
+      const item = legend.createSpan({ cls: "atlas-canvas-legend-item", text: label });
+      item.dataset.color = color;
+    }
     const buttons = bar.createDiv({ cls: "atlas-canvas-bar-buttons" });
     const add = (label, cls, args, done) => {
       const b = buttons.createEl("button", { text: label, cls });

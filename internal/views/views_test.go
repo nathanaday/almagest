@@ -48,7 +48,7 @@ func TestViews(t *testing.T) {
 		"views/View · Threads.md": {"> [!info]- What is a thread?", "> [!info]- What is a chord?", "`Resume Atlas chord doc-…`",
 			"## Chords\n\n### [[Grid project]]\n\nstarted · 0/2 threads closed · The grid runs in the simulator.",
 			"| 1 | [[Build the grid]] | started | 0/1 |  | [[grid-sim]] |", "| 2 | [[Show the grid]] | stub |  | [[Build the grid]] |  |", "Canvas: [[chords/Grid project.canvas|the order as a graph]]",
-			"## Threads in no chord\n\n```base", "- '!chord'", "formulas:\n  stage: 'if(status == \"started\", 1,", "property: formula.rank\n        direction: ASC",
+			"## Threads in no chord\n\n```base", "- 'chord.isEmpty()'", "formulas:\n  stage: 'if(status == \"started\", 1,", "property: formula.rank\n        direction: ASC",
 			"## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Mentions"},
 		"views/View · Timeline.md":                        {"### 2026-09-27", "15:32 · started · [[Build the grid]]", "14:32 · planted · [[Build the grid]] · #school/cs513", "14:32 · chord made · [[Grid project]]", "spec written · [[Build the grid · Spec]]"},
 		"views/View · Repositories.md":                    {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]] · Under: [[Tag · school › cs513|#school/cs513]] · Also: [[Tag · simulation|#simulation]]\n\nThreads: [[Build the grid]] (started)\n\n```atlas-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},

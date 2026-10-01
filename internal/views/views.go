@@ -307,7 +307,7 @@ const looseThreads = "```base\n" + `filters:
   and:
     - file.inFolder("wiki/documents")
     - 'type == "stub"'
-    - '!chord'
+    - 'chord.isEmpty()'
     - 'status != "closed" && status != "dropped" && status != "resolved"'
 formulas:
   stage: 'if(status == "started", 1, if(status == "unverified", 2, if(status == "verified", 3, if(status == "planned", 4, if(status == "specified", 5, 6)))))'
