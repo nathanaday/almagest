@@ -1,6 +1,8 @@
 package mcpserver_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -34,4 +36,21 @@ func TestACaptureWhoseNameCleansToNothingKeepsTheServerAnswering(t *testing.T) {
 	if hits, _ := found["hits"].([]any); len(hits) == 0 {
 		t.Fatalf("search after the capture: %v", found)
 	}
+}
+
+func TestTheMentionToolRefusesANoteOutsideTheVault(t *testing.T) {
+	tv := testvault.New(t)
+	victim := filepath.Join(filepath.Dir(tv.V.Root), "outside", "victim.md")
+	tv.WriteFile(victim, "- [ ] @atlas track this\n")
+	tv.Write("Ideas.md", "- [ ] @atlas track this\n")
+	c := connect(t, tv, tv.V.Root)
+	c.call("thread", map[string]any{"action": "stub", "text": "Track this.", "title": "Idea"}, false)
+	_, msg := c.call("vault", map[string]any{"action": "mention", "note": "../outside/victim.md", "line": 1, "link": "Idea"}, true)
+	if !strings.Contains(msg, "is no note of the vault") {
+		t.Fatalf("the refusal: %s", msg)
+	}
+	if data, _ := os.ReadFile(victim); string(data) != "- [ ] @atlas track this\n" {
+		t.Fatalf("the outside note changed: %q", data)
+	}
+	c.call("vault", map[string]any{"action": "mention", "note": "Ideas.md", "line": 1, "link": "Idea"}, false)
 }

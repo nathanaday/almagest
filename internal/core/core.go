@@ -266,6 +266,27 @@ func Mentions(idx *vault.Index) []Mention {
 	return out
 }
 
+// mentionNote refuses a note that can hold no mention CloseMention may close: one the
+// index does not hold, one in a folder that holds no mentions, and a link.
+func mentionNote(v *vault.Vault, idx *vault.Index, rel string) error {
+	list := "; vault status lists each open mention with its note"
+	if idx.ByPath(rel) == nil {
+		return fmt.Errorf("note: %s is no note of the vault%s", rel, list)
+	}
+	for _, s := range mentionSkip {
+		if strings.HasPrefix(rel, s+"/") {
+			return fmt.Errorf("note: %s lies in %s/, whose files hold no mentions%s", rel, s, list)
+		}
+	}
+	if st, err := os.Lstat(v.Abs(rel)); err != nil || st.Mode()&fs.ModeSymlink != 0 {
+		return fmt.Errorf("note: %s is a link; a mention is closed only in a note kept in the vault%s", rel, list)
+	}
+	if err := v.Contain(rel); err != nil {
+		return fmt.Errorf("note: %w", err)
+	}
+	return nil
+}
+
 // CloseMention checks a mention's box and appends a link to what answered it. It is the
 // one write code makes into a note the user owns, and it is the answer asked for. It
 // commits nothing; the next snapshot keeps it.
@@ -282,6 +303,9 @@ func CloseMention(v *vault.Vault, rel string, line int, link string) (*Mention, 
 	answer, err := idx.Resolve(link)
 	if err != nil {
 		return nil, fmt.Errorf("link: %w", err)
+	}
+	if err := mentionNote(v, idx, rel); err != nil {
+		return nil, err
 	}
 	data, err := v.Read(rel)
 	if err != nil {
