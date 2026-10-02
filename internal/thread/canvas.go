@@ -40,6 +40,16 @@ const (
 	ColorChecking = "2" // every task done, not verified yet
 )
 
+// Legend is what each card color means, in the order Obsidian's canvas bar shows them.
+var Legend = []struct{ Color, Label string }{
+	{ColorDone, "Verified"},
+	{ColorReady, "Ready"},
+	{ColorStarted, "Started"},
+	{ColorChecking, "To verify"},
+	{ColorBlocked, "Blocked"},
+	{"", "Waiting"},
+}
+
 // CardColor is the color of a thread's card. A thread that waits on another, a dropped
 // thread, and a resolved one stay gray.
 func (b *Board) CardColor(s *doc.Doc) string {

@@ -16,6 +16,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -265,5 +266,27 @@ func TestOneVersion(t *testing.T) {
 	}
 	if !found {
 		t.Error("the marketplace does not list the plugin")
+	}
+}
+
+// The canvas bar's legend is TypeScript; the card colors are Go.
+func TestTheCanvasBarLegendMatchesTheCardColors(t *testing.T) {
+	presets := map[string]string{"red": "1", "orange": "2", "yellow": "3", "green": "4", "cyan": "5", "purple": "6", "gray": ""}
+	src := read(t, "obsidian/src/canvasbar.ts")
+	_, list, ok := strings.Cut(src, "const LEGEND = [")
+	if !ok {
+		t.Fatal("canvasbar.ts holds no LEGEND")
+	}
+	list, _, _ = strings.Cut(list, "];")
+	entries := regexp.MustCompile(`\{\s*color:\s*"([^"]*)",\s*label:\s*"([^"]*)"\s*\}`).FindAllStringSubmatch(list, -1)
+	if len(entries) != len(thread.Legend) || len(entries) != strings.Count(list, "{") {
+		t.Fatalf("LEGEND holds %d entries the test can read; thread.Legend holds %d", len(entries), len(thread.Legend))
+	}
+	for i, e := range entries {
+		color, known := presets[e[1]]
+		want := thread.Legend[i]
+		if !known || color != want.Color || e[2] != want.Label {
+			t.Errorf("LEGEND[%d] is %s %q; thread.Legend has color %q %q", i, e[1], e[2], want.Color, want.Label)
+		}
 	}
 }
