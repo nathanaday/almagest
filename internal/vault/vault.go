@@ -55,7 +55,7 @@ var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Chords, Wiki, Docum
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
 // Obsidian files it rewrites on every click and zoom, and the plugin on every change.
-var Excluded = []string{"/views/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store"}
+var Excluded = []string{"/views/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store", ".atlas-*"}
 
 // Defaults of the vault document.
 var (
@@ -185,28 +185,64 @@ func (v *Vault) Rel(abs string) string {
 	return filepath.ToSlash(rel)
 }
 
-// Local reports whether a vault-relative path names a document a change may write: a
-// clean relative .md path outside the machine folders, whose folder does not lead out of
-// the vault through a symbolic link.
-func (v *Vault) Local(rel string) bool {
-	if !filepath.IsLocal(rel) || path.Clean(rel) != rel || !strings.HasSuffix(rel, ".md") {
-		return false
+// ErrOutside is the refusal of a path that does not stay inside the vault.
+var ErrOutside = errors.New("not a path inside the vault")
+
+// MaxNameBytes is the longest file name the file systems Atlas runs on accept.
+const MaxNameBytes = 255
+
+// Contain refuses a vault-relative path that does not stay inside the vault: an absolute
+// or unclean path, one that climbs with "..", one under .git in any case, a name longer
+// than a file system takes, and one whose folders or final link resolve outside the
+// vault. A path that does not exist yet is judged by its nearest folder that does.
+func (v *Vault) Contain(rel string) error {
+	refuse := func(why string) error {
+		return fmt.Errorf("%q: %w: %s; give a clean vault-relative path such as %s", rel, ErrOutside, why, DocPath("Title"))
 	}
-	top, _, _ := strings.Cut(rel, "/")
-	if top == ".git" || top == Obsidian || top == ".claude" {
-		return false
+	if rel == "" || !filepath.IsLocal(rel) || path.Clean(rel) != rel || strings.Contains(rel, `\`) {
+		return refuse("it is absolute, empty, unclean, or climbs out with ..")
 	}
-	dir := filepath.Dir(v.Abs(rel))
+	for i, part := range strings.Split(rel, "/") {
+		if i == 0 && strings.EqualFold(part, ".git") {
+			return refuse("it lies in the vault's .git folder")
+		}
+		if len(part) > MaxNameBytes {
+			return refuse(fmt.Sprintf("the name %.40q… has %d bytes, and a file name holds at most %d", part, len(part), MaxNameBytes))
+		}
+	}
+	abs := v.Abs(rel)
+	if st, err := os.Lstat(abs); err == nil && st.Mode()&fs.ModeSymlink != 0 {
+		real, err := filepath.EvalSymlinks(abs)
+		if err != nil || !Within(real, v.Root) {
+			return refuse("it is a link that leads out of the vault")
+		}
+		return nil
+	}
+	dir := filepath.Dir(abs)
 	for {
 		if _, err := os.Lstat(dir); err == nil {
-			return Within(dir, v.Root)
+			if !Within(dir, v.Root) {
+				return refuse("a folder on its way is a link that leads out of the vault")
+			}
+			return nil
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			return false
+			return refuse("no folder of it exists")
 		}
 		dir = parent
 	}
+}
+
+// Local reports whether a vault-relative path names a document a change may write: a .md
+// path that Contain accepts, outside the machine folders .git, .obsidian, and .claude in
+// any case.
+func (v *Vault) Local(rel string) bool {
+	if !strings.HasSuffix(rel, ".md") || v.Contain(rel) != nil {
+		return false
+	}
+	top, _, _ := strings.Cut(rel, "/")
+	return !strings.EqualFold(top, ".git") && !strings.EqualFold(top, Obsidian) && !strings.EqualFold(top, ".claude")
 }
 
 // Git is the vault's repository.

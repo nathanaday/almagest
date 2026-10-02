@@ -198,5 +198,9 @@ func writeAtomic(file string, data []byte) error {
 		os.Remove(name)
 		return err
 	}
-	return os.Rename(name, file)
+	if err := os.Rename(name, file); err != nil {
+		os.Remove(name)
+		return err
+	}
+	return nil
 }
