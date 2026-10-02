@@ -245,6 +245,33 @@ func (v *Vault) Local(rel string) bool {
 	return !strings.EqualFold(top, ".git") && !strings.EqualFold(top, Obsidian) && !strings.EqualFold(top, ".claude")
 }
 
+// InboxFile resolves a file the caller names in inbox/ (with or without the folder) to its
+// vault-relative path. It refuses anything but a regular file whose real path lies in
+// inbox/: a folder, a link, or a file behind a folder that links out.
+func (v *Vault) InboxFile(name string) (string, error) {
+	rel := path.Join(Inbox, strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(name, Inbox+"/")), "/"))
+	missing := fmt.Errorf("inbox: %s is not a file in inbox/; vault status lists what waits there", name)
+	if rel == Inbox {
+		return "", missing
+	}
+	st, err := os.Lstat(v.Abs(rel))
+	switch {
+	case err != nil:
+		return "", missing
+	case st.Mode()&fs.ModeSymlink != 0:
+		return "", fmt.Errorf("inbox: %s is a link; capture takes only a file kept in inbox/, so copy the file there", name)
+	case !st.Mode().IsRegular():
+		return "", missing
+	}
+	if real, err := filepath.EvalSymlinks(v.Abs(rel)); err != nil || !Within(real, v.Abs(Inbox)) {
+		return "", fmt.Errorf("inbox: %s lies behind a folder that links out of inbox/; capture takes only a file kept in inbox/, so copy the file there", name)
+	}
+	if err := v.Contain(rel); err != nil {
+		return "", fmt.Errorf("inbox: %w", err)
+	}
+	return rel, nil
+}
+
 // Occupied reports whether a file already sits at rel on disk, under any case or Unicode
 // form the file system folds to it, and is none of the files at allowed. A create or a
 // rename asks it, since the index compares titles only by lower case.

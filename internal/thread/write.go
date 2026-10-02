@@ -3,7 +3,6 @@ package thread
 import (
 	"errors"
 	"fmt"
-	"path"
 	"slices"
 	"strings"
 	"time"
@@ -526,9 +525,9 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (*Result, error) {
 		return nil, err
 	}
 	if in.Inbox != "" {
-		rel := path.Clean(vault.Inbox + "/" + strings.TrimPrefix(in.Inbox, vault.Inbox+"/"))
-		if !strings.HasPrefix(rel, vault.Inbox+"/") || !w.v.Exists(rel) {
-			return nil, fmt.Errorf("inbox: %s is not in inbox/", in.Inbox)
+		rel, err := w.v.InboxFile(in.Inbox)
+		if err != nil {
+			return nil, err
 		}
 		if err := w.tx.Remove(rel); err != nil {
 			return nil, err

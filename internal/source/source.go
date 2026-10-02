@@ -132,10 +132,13 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 	switch {
 	case len(req.Inbox) > 0:
 		for _, name := range req.Inbox {
-			rel := path.Join(vault.Inbox, strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(name, vault.Inbox+"/")), "/"))
+			rel, err := v.InboxFile(name)
+			if err != nil {
+				return nil, err
+			}
 			st, err := os.Stat(v.Abs(rel))
-			if err != nil || st.IsDir() {
-				return nil, fmt.Errorf("inbox: %s is not a file in inbox/; vault status lists what waits there", name)
+			if err != nil {
+				return nil, err
 			}
 			if st.Size() > MaxFileSize {
 				return nil, fmt.Errorf("inbox: %s is %d MB; capture takes files up to 200 MB", name, st.Size()>>20)
