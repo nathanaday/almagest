@@ -97,6 +97,47 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 	}
 }
 
+func TestEveryWriteOfATransactionStaysInTheVault(t *testing.T) {
+	tv := testvault.New(t)
+	v := tv.V
+	out := outside(t)
+	link(t, out, v.Abs("wiki/documents/out"))
+	tv.Write("wiki/documents/A.md", "a\n")
+	tx, err := vault.BeginWrite(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Close()
+	if err := tx.Write("wiki/documents/out/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("Write: %v", err)
+	}
+	if _, err := tx.WriteIfChanged("wiki/documents/out/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("WriteIfChanged: %v", err)
+	}
+	if err := tx.Remove("wiki/documents/out/secret.md"); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("Remove: %v", err)
+	}
+	if err := tx.Move("wiki/documents/A.md", "wiki/documents/out/A.md"); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("Move: %v", err)
+	}
+	if err := tx.Write("../escape.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("Write ..: %v", err)
+	}
+	if len(tx.Paths()) != 0 {
+		t.Errorf("a refused write was marked: %v", tx.Paths())
+	}
+	entries, _ := os.ReadDir(out)
+	if len(entries) != 1 || entries[0].Name() != "secret.md" {
+		t.Fatalf("the outside folder changed: %v", entries)
+	}
+	if !v.Exists("wiki/documents/A.md") {
+		t.Fatal("the refused move took the file")
+	}
+	if err := tx.Write("wiki/documents/B.md", []byte("b\n")); err != nil {
+		t.Fatalf("a write inside the vault: %v", err)
+	}
+}
+
 func TestAFailedRenameLeavesNoTemporaryFile(t *testing.T) {
 	tv := testvault.New(t)
 	v := tv.V

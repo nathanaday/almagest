@@ -138,14 +138,21 @@ func (tx *Tx) Close() {
 	}
 }
 
-// Write writes a file and marks it for the commit.
+// Write writes a file and marks it for the commit. Like every write of a Tx, it refuses a
+// path that Contain refuses.
 func (tx *Tx) Write(rel string, content []byte) error {
+	if err := tx.V.Contain(rel); err != nil {
+		return err
+	}
 	tx.written[rel] = true
 	return tx.V.Write(rel, content)
 }
 
 // WriteIfChanged writes a file only when it differs, and marks it when it wrote.
 func (tx *Tx) WriteIfChanged(rel string, content []byte) (bool, error) {
+	if err := tx.V.Contain(rel); err != nil {
+		return false, err
+	}
 	wrote, err := tx.V.WriteIfChanged(rel, content)
 	if wrote {
 		tx.written[rel] = true
@@ -155,12 +162,21 @@ func (tx *Tx) WriteIfChanged(rel string, content []byte) (bool, error) {
 
 // Remove deletes a file and marks it for the commit.
 func (tx *Tx) Remove(rel string) error {
+	if err := tx.V.Contain(rel); err != nil {
+		return err
+	}
 	tx.written[rel] = true
 	return tx.V.Remove(rel)
 }
 
 // Move renames a file and marks both paths.
 func (tx *Tx) Move(from, to string) error {
+	if err := tx.V.Contain(from); err != nil {
+		return err
+	}
+	if err := tx.V.Contain(to); err != nil {
+		return err
+	}
 	tx.written[from] = true
 	tx.written[to] = true
 	if err := os.MkdirAll(filepath.Dir(tx.V.Abs(to)), 0o755); err != nil {
