@@ -736,13 +736,14 @@ func legendArrow(raw map[string]any) map[string]any {
 func TestASyncDropsTheOldLegendWithItsArrows(t *testing.T) {
 	tv := chord(t)
 	rel := "chords/Vehicle detection model.canvas"
-	// A canvas of 8.1.0 that code wrote, with an arrow of the user's to the legend.
+	// A canvas of 8.1.0 that code wrote, with the user's arrows to the legend and from it.
 	var raw map[string]any
 	json.Unmarshal([]byte(tv.Read(rel)), &raw)
-	arrow := legendArrow(raw)
+	to := legendArrow(raw)
+	from := map[string]any{"id": "from-legend", "fromNode": to["toNode"], "fromSide": "bottom", "toNode": to["fromNode"], "toSide": "top"}
 	raw["nodes"] = append(raw["nodes"].([]any),
 		map[string]any{"id": thread.LegendPrefix + "1", "type": "group", "label": "Verified", "x": -100.0, "y": -120.0, "width": 320.0, "height": 28.0, "color": "4"})
-	raw["edges"] = append(raw["edges"].([]any), arrow)
+	raw["edges"] = append(raw["edges"].([]any), to, from)
 	data, _ := json.Marshal(raw)
 	tv.Write(rel, string(data))
 	if _, err := thread.Load(tv.Index()).Sync(tv.V.WriteIfChanged); err != nil {
@@ -750,7 +751,7 @@ func TestASyncDropsTheOldLegendWithItsArrows(t *testing.T) {
 	}
 	c := readCanvas(t, tv, rel)
 	if len(c.Legend) != 0 || len(c.Nodes) != 4 || len(c.Edges) != 4 {
-		t.Fatalf("the sync drops the legend and its arrow only: %d legend, %d nodes, %d edges", len(c.Legend), len(c.Nodes), len(c.Edges))
+		t.Fatalf("the sync drops the legend and its arrows only: %d legend, %d nodes, %d edges", len(c.Legend), len(c.Nodes), len(c.Edges))
 	}
 }
 
