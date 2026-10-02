@@ -2,6 +2,7 @@ package thread_test
 
 import (
 	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -47,5 +48,37 @@ func TestDerivedTitlesOfALongStubFitAFileName(t *testing.T) {
 	ok(t)(thread.Spec(tv.V, thread.SpecIn{Thread: title, Text: specText}, opts(tv)))
 	ok(t)(thread.TasksWrite(tv.V, thread.TasksIn{Thread: title, Repository: "p3-edge", Tasks: []thread.TaskIn{{Text: "Score each box", Requirements: []string{"R1", "R2"}}}}, opts(tv)))
 	ok(t)(thread.Start(tv.V, title, false, opts(tv)))
+	tv.Clean()
+}
+
+const (
+	cafeNFC = "Café"
+	cafeNFD = "Café"
+)
+
+// foldsUnicode reports whether the file system under dir stores NFC and NFD names as
+// one file, as APFS does.
+func foldsUnicode(t *testing.T, dir string) bool {
+	t.Helper()
+	probe := filepath.Join(dir, "probe-"+cafeNFC)
+	if err := os.WriteFile(probe, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	defer os.Remove(probe)
+	_, err := os.Lstat(filepath.Join(dir, "probe-"+cafeNFD))
+	return err == nil
+}
+
+func TestAStubInAnotherUnicodeFormIsRefused(t *testing.T) {
+	tv := testvault.New(t)
+	if !foldsUnicode(t, tv.V.Abs("wiki/documents")) {
+		t.Skip("this file system keeps NFC and NFD names apart")
+	}
+	ok(t)(thread.Stub(tv.V, thread.StubIn{Text: "The first.", Title: cafeNFC}, opts(tv)))
+	first := tv.Read("wiki/documents/" + cafeNFC + ".md")
+	refuses(t, "already exists on disk under another case or Unicode form")(thread.Stub(tv.V, thread.StubIn{Text: "The second.", Title: cafeNFD}, opts(tv)))
+	if tv.Read("wiki/documents/"+cafeNFC+".md") != first {
+		t.Fatal("the first stub changed")
+	}
 	tv.Clean()
 }

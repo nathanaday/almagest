@@ -253,14 +253,20 @@ func (c *check) takeTitle(o *op, title string, self string) bool {
 		c.refuse("%s: another write of this change also takes the title %q", o.label(), title)
 		return false
 	}
+	allowed := []string{self}
 	for _, p := range c.idx.TitleHolders(title) {
 		if p == self {
 			continue
 		}
 		if d := c.idx.ByPath(p); d != nil && c.gone[links.Key(vault.Title(d))] && links.Key(vault.Title(d)) == key {
+			allowed = append(allowed, p)
 			continue
 		}
 		c.refuse("%s: the title %q is held by %s; titles are unique in the vault", o.label(), title, p)
+		return false
+	}
+	if rel := vault.DocPath(title); c.idx.V != nil && c.idx.V.Occupied(rel, allowed...) {
+		c.refuse("%s: the title %q names a file that already exists on disk under another case or Unicode form (%s); choose another title", o.label(), title, c.idx.V.OnDisk(rel))
 		return false
 	}
 	c.claimed[key] = o

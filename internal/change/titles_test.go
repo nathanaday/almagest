@@ -34,3 +34,15 @@ func TestAChangeRefusesALongTitle(t *testing.T) {
 	refused(t, tv, change.Plan{Title: "Create", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: strings.Repeat("t", 151), Fields: map[string]any{"description": "A topic.", "status": "stable"}, Body: str("## Definition\n\nA topic.\n")}}}, "a title holds at most 150")
 	refused(t, tv, change.Plan{Title: strings.Repeat("p", 151)}, "the plan's title")
 }
+
+func TestACaseOnlyRenameStillApplies(t *testing.T) {
+	tv := testvault.New(t)
+	id := tv.Doc("topic", "Motion scoring", map[string]any{"kind": "concept"}, "")
+	tv.Commit()
+	pv := propose(t, tv, change.Plan{Title: "Rename", Writes: []change.Write{{Op: "rename", ID: id, Title: "Motion Scoring"}}})
+	apply(t, tv, pv.Ref.ID)
+	if got := tv.V.OnDisk("wiki/documents/Motion Scoring.md"); got != "wiki/documents/Motion Scoring.md" {
+		t.Fatalf("the file on disk is %s", got)
+	}
+	tv.Clean()
+}

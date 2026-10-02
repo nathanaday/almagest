@@ -270,6 +270,9 @@ func (w *writer) title(raw string) (string, error) {
 		return "", fmt.Errorf("%q begins as a view's title does; choose another", t)
 	case !w.titles.Free(t):
 		holders := w.idx.TitleHolders(t)
+		if len(holders) == 0 && w.v.Occupied(vault.DocPath(t)) {
+			return "", fmt.Errorf("the title %q names a file that already exists on disk under another case or Unicode form (%s); choose another title", t, w.v.OnDisk(vault.DocPath(t)))
+		}
 		if len(holders) == 0 {
 			holders = []string{"another document of this call"}
 		}

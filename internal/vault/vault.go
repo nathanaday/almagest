@@ -245,6 +245,45 @@ func (v *Vault) Local(rel string) bool {
 	return !strings.EqualFold(top, ".git") && !strings.EqualFold(top, Obsidian) && !strings.EqualFold(top, ".claude")
 }
 
+// Occupied reports whether a file already sits at rel on disk, under any case or Unicode
+// form the file system folds to it, and is none of the files at allowed. A create or a
+// rename asks it, since the index compares titles only by lower case.
+func (v *Vault) Occupied(rel string, allowed ...string) bool {
+	st, err := os.Lstat(v.Abs(rel))
+	if err != nil {
+		return false
+	}
+	for _, a := range allowed {
+		if a == "" {
+			continue
+		}
+		if ast, err := os.Lstat(v.Abs(a)); err == nil && os.SameFile(st, ast) {
+			return false
+		}
+	}
+	return true
+}
+
+// OnDisk is the vault-relative path under which the file system stores the file at rel,
+// which may differ from rel in case or Unicode form; rel when it finds no other.
+func (v *Vault) OnDisk(rel string) string {
+	st, err := os.Lstat(v.Abs(rel))
+	if err != nil {
+		return rel
+	}
+	entries, err := os.ReadDir(filepath.Dir(v.Abs(rel)))
+	if err != nil {
+		return rel
+	}
+	for _, e := range entries {
+		info, err := os.Lstat(filepath.Join(filepath.Dir(v.Abs(rel)), e.Name()))
+		if err == nil && os.SameFile(st, info) {
+			return path.Join(path.Dir(rel), e.Name())
+		}
+	}
+	return rel
+}
+
 // Git is the vault's repository.
 func (v *Vault) Git() gitx.Repo { return gitx.Repo{Dir: v.Root} }
 

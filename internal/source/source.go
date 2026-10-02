@@ -205,7 +205,7 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 					return true
 				}
 			}
-			return taken["t:"+strings.ToLower(title)]
+			return taken["t:"+strings.ToLower(title)] || v.Occupied(vault.DocPath(title))
 		}
 		for i := 2; held(title); i++ {
 			title = fmt.Sprintf("%s (%d)", it.title, i)

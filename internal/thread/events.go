@@ -49,9 +49,13 @@ type Titles struct {
 // NewTitles starts the titles of one write.
 func NewTitles(idx *vault.Index) *Titles { return &Titles{idx: idx, taken: map[string]bool{}} }
 
-// Free reports whether a title is free in the vault and in this write.
+// Free reports whether a title is free in the vault and in this write, and no file on
+// disk holds its name in another case or Unicode form.
 func (t *Titles) Free(title string) bool {
-	return !t.taken[strings.ToLower(title)] && len(t.idx.TitleHolders(title)) == 0
+	if t.taken[strings.ToLower(title)] || len(t.idx.TitleHolders(title)) > 0 {
+		return false
+	}
+	return t.idx.V == nil || !t.idx.V.Occupied(vault.DocPath(title))
 }
 
 // Take claims a title.
