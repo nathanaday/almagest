@@ -1,7 +1,11 @@
 package source
 
 import (
+	"errors"
 	"fmt"
+	"io"
+	"io/fs"
+	"os"
 	"path"
 	"strings"
 
@@ -56,6 +60,18 @@ type material struct {
 func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 	if d.Type() == "source" {
 		file := doc.LinkTarget(d.Str("file"))
+		if file == "" || file == "." || file == ".." || strings.ContainsAny(file, `/\`) {
+			return nil, fmt.Errorf("%s: its file field %q names no file of %s/; a source's file is a plain file name there, as capture writes it", vault.Title(d), file, vault.Assets)
+		}
+		assets, err := os.OpenRoot(v.Abs(vault.Assets))
+		if err != nil {
+			return nil, err
+		}
+		defer assets.Close()
+		// The root refuses a link that leads out of wiki/assets.
+		if _, err := assets.Stat(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return nil, fmt.Errorf("%s: the captured file %s leads out of %s/ (%v)", vault.Title(d), file, vault.Assets, err)
+		}
 		rel := path.Join(vault.Assets, file)
 		m := &material{kind: Media(file), file: rel}
 		switch m.kind {
@@ -67,7 +83,7 @@ func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 			m.kind = "other"
 			return m, nil
 		}
-		data, err := v.Read(rel)
+		data, err := readIn(assets, file)
 		if err != nil {
 			return nil, fmt.Errorf("%s: the captured file %s is missing", vault.Title(d), rel)
 		}
@@ -278,7 +294,10 @@ func Read(idx *vault.Index, key string, index int) (*TextBlob, error) {
 		return nil, fmt.Errorf("%s has chunks 1 to %d, not %d", vault.Title(d), len(chunks), index)
 	}
 	c := chunks[index-1]
-	m, _ := materialOf(idx.V, d)
+	m, err := materialOf(idx.V, d)
+	if err != nil {
+		return nil, err
+	}
 	blob := &TextBlob{Doc: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: vault.Title(d), Tags: nonNil(d.List("tags")), Authority: d.Str("authority"), Chunk: c}
 	switch m.kind {
 	case "pdf", "image", "other":
@@ -292,4 +311,15 @@ func Read(idx *vault.Index, key string, index int) (*TextBlob, error) {
 		blob.Content = strings.Join(m.lines[c.From-1:c.To], "\n")
 	}
 	return blob, nil
+}
+
+// readIn reads a file through a root, which refuses a path or a link that leads out of
+// it.
+func readIn(r *os.Root, rel string) ([]byte, error) {
+	f, err := r.Open(rel)
+	if err != nil {
+		return nil, err
+	}
+	defer f.Close()
+	return io.ReadAll(f)
 }

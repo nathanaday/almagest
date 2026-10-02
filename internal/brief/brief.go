@@ -7,6 +7,7 @@ package brief
 
 import (
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -307,12 +308,23 @@ func RepositoryAt(idx *vault.Index, path string) (*doc.Doc, error) {
 	return best, nil
 }
 
-// Instructions reads a repository's agent files, each bounded.
+// Instructions reads a repository's agent files, each bounded. It reads through a root,
+// so a file that links out of the repository is skipped.
 func Instructions(root string) []Instruction {
 	var out []Instruction
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return out
+	}
+	defer r.Close()
 	for _, rel := range InstructionFiles {
 		file := filepath.Join(root, rel)
-		data, err := os.ReadFile(file)
+		f, err := r.Open(rel)
+		if err != nil {
+			continue
+		}
+		data, err := io.ReadAll(f)
+		f.Close()
 		if err != nil {
 			continue
 		}

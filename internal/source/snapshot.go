@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"os"
 	"path"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -50,6 +49,13 @@ func Snapshot(repo *doc.Doc) (*Snap, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Every file is read through the root, which refuses a link that leads out of the
+	// repository.
+	r, err := os.OpenRoot(root)
+	if err != nil {
+		return nil, err
+	}
+	defer r.Close()
 	g := gitx.Repo{Dir: root}
 	files, err := g.LsFiles()
 	if err != nil {
@@ -84,7 +90,7 @@ func Snapshot(repo *doc.Doc) (*Snap, error) {
 		}
 		fmt.Fprintf(&b, "\n## %s\n", group.title)
 		for _, n := range present {
-			quote(&b, root, n)
+			quote(&b, r, n)
 		}
 	}
 	var docs []string
@@ -104,7 +110,7 @@ func Snapshot(repo *doc.Doc) (*Snap, error) {
 	if readme != "" || len(docs) > 0 {
 		b.WriteString("\n## Docs\n")
 		if readme != "" {
-			quote(&b, root, readme)
+			quote(&b, r, readme)
 		}
 		if len(docs) > 0 {
 			b.WriteString("\nThe docs folder holds:\n\n")
@@ -118,7 +124,7 @@ func Snapshot(repo *doc.Doc) (*Snap, error) {
 		}
 	}
 	b.WriteString("\n## TODO and FIXME\n\n")
-	markers := todos(root, files)
+	markers := todos(r, files)
 	if len(markers) == 0 {
 		b.WriteString("None.\n")
 	}
@@ -167,8 +173,8 @@ func tree(files []string) string {
 }
 
 // quote writes a file into the report, bounded, in a fence longer than any inside it.
-func quote(b *strings.Builder, root, rel string) {
-	data, err := os.ReadFile(filepath.Join(root, rel))
+func quote(b *strings.Builder, r *os.Root, rel string) {
+	data, err := readIn(r, rel)
 	if err != nil {
 		return
 	}
@@ -187,15 +193,14 @@ func quote(b *strings.Builder, root, rel string) {
 }
 
 // todos lists every TODO and FIXME line of the tracked text files, with its location.
-func todos(root string, files []string) []string {
+func todos(r *os.Root, files []string) []string {
 	var out []string
 	for _, f := range files {
-		abs := filepath.Join(root, f)
-		st, err := os.Stat(abs)
+		st, err := r.Stat(f)
 		if err != nil || st.IsDir() || st.Size() > MaxMarkerBytes {
 			continue
 		}
-		data, err := os.ReadFile(abs)
+		data, err := readIn(r, f)
 		if err != nil || bytes.IndexByte(data, 0) >= 0 {
 			continue
 		}
