@@ -237,6 +237,14 @@ func (c *check) finalTitle(d *doc.Doc) string {
 // another document or another write holds.
 func (c *check) takeTitle(o *op, title string, self string) bool {
 	key := links.Key(title)
+	if clean := doc.CleanTitle(title); clean != title {
+		c.refuse("%s: the title %q holds characters a title cannot (/ \\ : * ? \" < > | [ ] # ^ →, control characters, a leading dot); write it as %q", o.label(), title, clean)
+		return false
+	}
+	if err := doc.CheckTitle(title); err != nil {
+		c.refuse("%s: %v", o.label(), err)
+		return false
+	}
 	if vault.ReservedTitle(title) {
 		c.refuse("%s: %q begins as a view's title does; choose another", o.label(), title)
 		return false
@@ -287,6 +295,8 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 	out := &planned{Title: doc.CleanTitle(p.Title), Notes: strings.TrimSpace(p.Notes)}
 	if out.Title == "" {
 		c.refuse("the plan needs a title: a short name for the change")
+	} else if err := doc.CheckTitle(out.Title); err != nil {
+		c.refuse("the plan's title: %v", err)
 	}
 	if len(p.Writes) > MaxWrites {
 		c.refuse("the plan has %d writes; one change takes at most %d. Split it into several changes", len(p.Writes), MaxWrites)

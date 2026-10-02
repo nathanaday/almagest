@@ -7,9 +7,12 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"path"
 	"regexp"
 	"strings"
+	"unicode"
 )
 
 // Doc is one markdown file of the vault.
@@ -185,17 +188,54 @@ func NewID(prefix string, taken func(string) bool) string {
 	}
 }
 
-// titleStrip holds the characters a file name cannot hold, and the ones that break a
-// wikilink to it.
-var titleStrip = strings.NewReplacer("/", "", "\\", "", ":", "", "*", "", "?", "", "\"", "", "<", "", ">", "", "|", "", "[", "", "]", "", "#", "", "^", "")
+// titleStrip holds the characters a file name cannot hold, the ones that break a
+// wikilink to it, and "→", which splits the old and new titles of a change heading.
+var titleStrip = strings.NewReplacer("/", "", "\\", "", ":", "", "*", "", "?", "", "\"", "", "<", "", ">", "", "|", "", "[", "", "]", "", "#", "", "^", "", "→", "")
 
 // CleanTitle makes a title safe as a file name and as a link target: it removes the
-// characters neither may hold and a leading dot, and folds whitespace.
+// characters neither may hold, control characters, and a leading dot, and folds
+// whitespace.
 func CleanTitle(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if unicode.IsControl(r) {
+			return ' '
+		}
+		return r
+	}, s)
 	s = titleStrip.Replace(s)
 	s = strings.Join(strings.Fields(s), " ")
 	s = strings.TrimLeft(s, ".")
 	return strings.TrimSpace(s)
+}
+
+// MaxTitleBytes is the longest title a document takes, so the titles code derives from it
+// (an event, a spec, a task list) still fit in a file name.
+const MaxTitleBytes = 150
+
+// CheckTitle refuses a clean title that is empty or longer than MaxTitleBytes.
+func CheckTitle(t string) error {
+	switch {
+	case t == "":
+		return errors.New("the title is empty once cleaned; give a title of words")
+	case len(t) > MaxTitleBytes:
+		return fmt.Errorf("the title %.40q… has %d bytes, and a title holds at most %d; give a shorter one", t, len(t), MaxTitleBytes)
+	}
+	return nil
+}
+
+// CutTitle shortens a title to at most n bytes, at a character boundary.
+func CutTitle(t string, n int) string {
+	if len(t) <= n {
+		return t
+	}
+	cut := 0
+	for i := range t {
+		if i > n {
+			break
+		}
+		cut = i
+	}
+	return strings.TrimSpace(t[:cut])
 }
 
 // Link is the wikilink to a title.

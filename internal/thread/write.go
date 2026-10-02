@@ -248,12 +248,24 @@ func (w *writer) on(d *doc.Doc, kind string, prose map[string]string) error {
 	return w.event(EventIn{Kind: kind, SubjectTitle: d.Title(), SubjectID: d.ID(), SubjectTags: d.List("tags"), Prose: prose})
 }
 
-// title checks a new title: clean, not a view's, and free in the vault and this write.
+// named checks a title the caller gave, for a stub or a chord: the shared title check,
+// then title.
+func (w *writer) named(raw string) (string, error) {
+	if err := doc.CheckTitle(doc.CleanTitle(raw)); err != nil {
+		return "", err
+	}
+	return w.title(raw)
+}
+
+// title checks a new title, given or derived: clean, short enough for a file name, not a
+// view's, and free in the vault and this write.
 func (w *writer) title(raw string) (string, error) {
 	t := doc.CleanTitle(raw)
 	switch {
 	case t == "":
 		return "", errors.New("a title is needed")
+	case len(t)+len(".md") > vault.MaxNameBytes:
+		return "", fmt.Errorf("the title %.40q… would make a file name of %d bytes, and a file name holds at most %d; give the thread a shorter title (thread set)", t, len(t)+len(".md"), vault.MaxNameBytes)
 	case vault.ReservedTitle(t):
 		return "", fmt.Errorf("%q begins as a view's title does; choose another", t)
 	case !w.titles.Free(t):
@@ -483,7 +495,7 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (*Result, error) {
 	if strings.TrimSpace(raw) == "" {
 		raw = TitleFromText(text)
 	}
-	title, err := w.title(raw)
+	title, err := w.named(raw)
 	if err != nil {
 		return nil, err
 	}
@@ -1399,7 +1411,7 @@ func Set(v *vault.Vault, in SetIn, o Opts) (*Result, error) {
 	title := d.Title()
 	if in.Title != nil && doc.CleanTitle(*in.Title) != d.Title() {
 		w.titles.Release(d.Title())
-		if title, err = w.title(*in.Title); err != nil {
+		if title, err = w.named(*in.Title); err != nil {
 			return nil, err
 		}
 		moves := []vault.Retitle{{Old: d.Title(), New: title}}

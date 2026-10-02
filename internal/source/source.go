@@ -153,6 +153,9 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 		if title == "" {
 			return nil, errors.New("captured text needs a title")
 		}
+		if err := doc.CheckTitle(title); err != nil {
+			return nil, err
+		}
 		origin := "pasted"
 		if strings.HasPrefix(req.Locator, "http://") || strings.HasPrefix(req.Locator, "https://") {
 			origin = "url"

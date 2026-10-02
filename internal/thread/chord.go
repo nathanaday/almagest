@@ -60,7 +60,7 @@ func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (*Result, error) {
 		return nil, err
 	}
 	defer w.tx.Close()
-	title, err := w.title(in.Title)
+	title, err := w.named(in.Title)
 	if err != nil {
 		return nil, err
 	}
@@ -115,7 +115,7 @@ func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (*Result, error) {
 			if strings.TrimSpace(raw) == "" {
 				raw = TitleFromText(t.Text)
 			}
-			if m.title, err = w.title(raw); err != nil {
+			if m.title, err = w.named(raw); err != nil {
 				return nil, fmt.Errorf("thread %d: %w", i+1, err)
 			}
 			if err := checkPriority(t.Priority); err != nil {
