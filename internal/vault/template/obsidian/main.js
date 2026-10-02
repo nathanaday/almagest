@@ -163,7 +163,7 @@ function syncSummary(s) {
   add(s.sessions, "session callout", "session callouts");
   if (s.settings) parts.push("the harness settings");
   if (s.views) parts.push(plural(s.views, "view", "views"));
-  if (parts.length === 0) return "Nothing to heal.";
+  if (parts.length === 0) return "Generated files are up to date.";
   return `Synced ${parts.join(", ")}.`;
 }
 function syncedPaths(s) {
@@ -984,6 +984,14 @@ var GraphColors = class extends import_obsidian3.Component {
 // src/canvasbar.ts
 var import_obsidian4 = require("obsidian");
 var BAR3 = "atlas-canvas-bar";
+var LEGEND = [
+  { color: "green", label: "Verified" },
+  { color: "cyan", label: "Ready" },
+  { color: "purple", label: "Started" },
+  { color: "orange", label: "To verify" },
+  { color: "yellow", label: "Blocked" },
+  { color: "gray", label: "Waiting" }
+];
 var CanvasBar = class extends import_obsidian4.Component {
   constructor(plugin) {
     super();
@@ -1052,6 +1060,10 @@ ${(state.changes ?? []).join("|")}`;
     bar.createSpan({ cls: "atlas-canvas-bar-label", text: "Chord" });
     const text = bar.createSpan({ cls: "atlas-canvas-bar-status", text: canvasSummary(state) });
     if (state.differs) text.setAttr("title", (state.threads ?? []).join("\n"));
+    const legend = bar.createDiv({ cls: "atlas-canvas-legend" });
+    for (const { color, label } of LEGEND) {
+      legend.createSpan({ cls: "atlas-canvas-legend-item", text: label }).dataset.color = color;
+    }
     const buttons = bar.createDiv({ cls: "atlas-canvas-bar-buttons" });
     const add = (label, cls, args, done) => {
       const b = buttons.createEl("button", { text: label, cls });
@@ -2364,7 +2376,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args);
   }
   // Sync
-  /** A manual sync heals everything; an automatic one runs the steps that read no git. */
+  /** A manual sync runs every step; an automatic one runs the steps that read no git. */
   async sync(manual) {
     if (this.syncing) {
       if (manual) new import_obsidian12.Notice("Atlas: a sync is running.");

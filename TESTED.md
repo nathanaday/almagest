@@ -19,7 +19,7 @@ row or change a level each time you test a setup.
 
 | Date       | OS                     | Obsidian | Claude Code | Codex   | Atlas |
 | ---------- | ---------------------- | -------- | ----------- | ------- | ----- |
-| 2026-10-01 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1 | 8.1.0 |
+| 2026-10-01 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1 | 8.1.1 |
 
 ## Start agent: agent × terminal (macOS)
 

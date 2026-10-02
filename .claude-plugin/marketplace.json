@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Atlas: one Obsidian vault for the wiki, the threads and chords, the sessions, and the changes of your work.",
-    "version": "8.1.0"
+    "version": "8.1.1"
   },
   "plugins": [
     {
       "name": "atlas-obsidian",
       "source": "./",
       "description": "One Obsidian vault for the wiki, the threads and chords, the sessions, and the changes of your work, backed by the atlas-obsidian binary.",
-      "version": "8.1.0",
+      "version": "8.1.1",
       "category": "productivity"
     }
   ]

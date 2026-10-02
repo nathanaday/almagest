@@ -70,10 +70,10 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A terminal launch fails where no one sees it** (osascript and `open` exit after the
   spawn), so `openTerminal` checks for the app first. `obsidian/scripts/probe-launch.mjs`
   opens a real terminal with a probe; record each result in TESTED.md.
-- **The chord canvas holds a legend of six colored groups** (`atlas-legend-1` to `-6`).
-  Groups, since Obsidian hides a small text card's text when zoomed out and shows a
-  group's label at any zoom. Code adds the legend when none is there and keeps each
-  group where the user moved it.
+- **The canvas legend is in the canvas bar, not on the canvas.** 8.0.2 to 8.1.0 put six
+  groups (`atlas-legend-1` to `-6`) on each chord canvas; any canvas write removes them
+  (`dropLegend`). The bar's swatches use `--color-*-rgb`, because the `--canvas-color-*`
+  variables exist only inside a canvas.
 - **thread-audit runs shell commands.** It checks work by running its tests. The guard
   refuses its edits and its atlas writes, not its shell.
 - **A tag page that does not hold its tag's parent is a warning.** No document is lost

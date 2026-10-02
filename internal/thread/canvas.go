@@ -256,7 +256,7 @@ func (b *Board) syncCanvas(chord *doc.Doc, write WriteFunc) (string, bool, error
 		b.layout(chord, c, byNode, tidy)
 		b.canvas[chord.ID()] = want.hash()
 	}
-	legend(c, tidy)
+	dropLegend(c)
 	after := c.render()
 	if exists && sameJSON(before, after) {
 		return rel, false, nil
@@ -356,7 +356,7 @@ func (b *Board) layout(chord *doc.Doc, c *canvas, byNode map[string]*doc.Doc, ti
 func place(nodes []map[string]any, n map[string]any, rank int) {
 	taken := func(x, y float64) bool {
 		for _, o := range nodes {
-			if _, placed := o["x"]; !placed || isLegend(o) {
+			if _, placed := o["x"]; !placed {
 				continue
 			}
 			if x < num(o, "x")+num(o, "width") && num(o, "x") < x+CardWidth && y < num(o, "y")+num(o, "height") && num(o, "y") < y+CardHeight {
@@ -376,79 +376,21 @@ func place(nodes []map[string]any, n map[string]any, rank int) {
 	}
 }
 
-// The legend: one small colored group per state, labeled, above the threads. Code owns
-// its groups, by id.
-const (
-	LegendPrefix = "atlas-legend-"
-	legendWidth  = 320
-	legendHeight = 28
-	legendGap    = 40
-	legendAbove  = 120
-)
-
-// LegendItems are the colors of the cards and what each means, in the legend's order.
-var LegendItems = []struct{ Color, Label string }{
-	{ColorDone, "Verified"},
-	{ColorReady, "Ready"},
-	{ColorStarted, "Started"},
-	{ColorChecking, "To verify"},
-	{ColorBlocked, "Blocked"},
-	{"", "Waiting"},
-}
+// LegendPrefix marks the legend groups that 8.0.2 to 8.1.0 put on a canvas. The legend
+// is in Obsidian's canvas bar now; a write removes the groups.
+const LegendPrefix = "atlas-legend-"
 
 func isLegend(n map[string]any) bool { return strings.HasPrefix(str(n, "id"), LegendPrefix) }
 
-// legend keeps the legend's cards on a canvas that shows threads: it adds them above the
-// cards when none is there, and keeps the text and color of each it finds where the user
-// put it. tidy places them again.
-func legend(c *canvas, tidy bool) {
-	have := map[string]map[string]any{}
-	var rest []map[string]any
-	minX, minY, cards := 0.0, 0.0, 0
+// dropLegend removes the legend groups of an older canvas.
+func dropLegend(c *canvas) {
+	rest := c.nodes[:0]
 	for _, n := range c.nodes {
-		if isLegend(n) {
-			if !tidy {
-				have[str(n, "id")] = n
-				rest = append(rest, n)
-			}
-			continue
+		if !isLegend(n) {
+			rest = append(rest, n)
 		}
-		rest = append(rest, n)
-		if str(n, "type") != "file" {
-			continue
-		}
-		if cards == 0 || num(n, "x") < minX {
-			minX = num(n, "x")
-		}
-		if cards == 0 || num(n, "y") < minY {
-			minY = num(n, "y")
-		}
-		cards++
 	}
 	c.nodes = rest
-	if cards == 0 {
-		return
-	}
-	for i, item := range LegendItems {
-		id := fmt.Sprintf("%s%d", LegendPrefix, i+1)
-		n := have[id]
-		if n == nil {
-			if len(have) > 0 {
-				// The user kept some of the legend and removed this card.
-				continue
-			}
-			n = map[string]any{"id": id, "x": minX + float64(i*(legendWidth+legendGap)), "y": minY - legendAbove, "width": float64(legendWidth), "height": float64(legendHeight)}
-			c.nodes = append(c.nodes, n)
-		}
-		// A group shows its label at any zoom; a text card's text hides when zoomed out.
-		n["type"], n["label"] = "group", item.Label
-		delete(n, "text")
-		if item.Color == "" {
-			delete(n, "color")
-		} else {
-			n["color"] = item.Color
-		}
-	}
 }
 
 // CanvasState says whether a chord's canvas shows the order its stubs hold.
