@@ -1,5 +1,5 @@
 // Package core is the vault tool's backend: the state of the vault in one read, the sync
-// that heals every derived part and writes the views, and the mentions that ask the
+// that rewrites every derived part and writes the views, and the mentions that ask the
 // agent for work.
 package core
 
@@ -319,7 +319,7 @@ type SyncOptions struct {
 	Views bool
 }
 
-// Sync heals every derived part of the vault and writes the views. It writes a file only
+// Sync rewrites every derived part of the vault and writes the views. It writes a file only
 // when its derived content differs, never changes updated, and makes no commit.
 func Sync(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if err := v.CheckLayout(); err != nil {

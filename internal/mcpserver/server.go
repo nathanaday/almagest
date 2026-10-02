@@ -524,7 +524,7 @@ func readOnly() *mcp.ToolAnnotations { return &mcp.ToolAnnotations{ReadOnlyHint:
 func (s *Server) MCP() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Atlas", Version: s.opts.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "vault",
-		Description: "The state of the vault in one read (status: documents by type, tags with counts, open threads, live sessions, inbox, pending documents, proposed and recent changes, recent events, @atlas mentions, problems); init makes a vault; sync heals derived fields and writes the views; mention closes an @atlas mention with a link to its answer."}, s.vaultTool)
+		Description: "The state of the vault in one read (status: documents by type, tags with counts, open threads, live sessions, inbox, pending documents, proposed and recent changes, recent events, @atlas mentions, problems); init makes a vault; sync rewrites the derived fields that are out of date and writes the views; mention closes an @atlas mention with a link to its answer."}, s.vaultTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "search", Annotations: readOnly(),
 		Description: "Ranked search (BM25 over title, aliases, tags, description, body) over the documents of wiki/documents (source, repository, topic, stub, spec, tasks, verification, chord, event). Filter by types, kinds, tags (a document must hold every one), status, and repository. Returns Doc Refs with snippets, and facets: the counts of the tags, types, and statuses of every match, to narrow a broad query."}, s.searchTool)
 	mcp.AddTool(server, &mcp.Tool{Name: "context", Annotations: readOnly(),

@@ -40,7 +40,7 @@ func TestStatusCountsTheVault(t *testing.T) {
 	}
 }
 
-func TestSyncHealsAndCloseMention(t *testing.T) {
+func TestSyncRewritesAndCloseMention(t *testing.T) {
 	tv := testvault.New(t)
 	r, err := thread.Stub(tv.V, thread.StubIn{Text: "x", Title: "Idea"}, thread.Opts{Now: testvault.Now})
 	if err != nil {
