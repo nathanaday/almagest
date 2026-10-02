@@ -149,7 +149,10 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 			}
 			base := path.Base(rel)
 			ext := strings.ToLower(path.Ext(base))
-			items = append(items, item{title: doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, tags: tagList})
+			// The name is the user's file's, so a long one is cut, not refused; room is left
+			// for the " (n)" that tells two captures of one name apart.
+			title := doc.CutTitle(doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), doc.MaxTitleBytes-len(" (99)"))
+			items = append(items, item{title: title, ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, tags: tagList})
 		}
 	case strings.TrimSpace(req.Text) != "":
 		title := doc.CleanTitle(req.Title)
@@ -198,6 +201,10 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 		}
 		id := doc.NewID(schema.DocPrefix, func(s string) bool { return idx.ByID(s) != nil || taken[s] })
 		taken[id] = true
+		if it.title == "" {
+			// A name of only characters a title cannot hold, such as "###.txt".
+			it.title = id
+		}
 		title := it.title
 		held := func(title string) bool {
 			if vault.ReservedTitle(title) {
@@ -288,6 +295,9 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 	}
 	for _, rel := range created {
 		d := idx.ByPath(rel)
+		if d == nil {
+			continue
+		}
 		chunks, _ := Chunks(idx, d.ID())
 		out.Captured = append(out.Captured, Captured{Ref: idx.Ref(d), SHA256: d.Str("sha256"), Measure: d.Str("measure"), Chunks: chunks})
 	}
