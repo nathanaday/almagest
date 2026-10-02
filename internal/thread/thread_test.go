@@ -727,6 +727,33 @@ func TestSyncGivesAStubOf7xItsChordAndAfter(t *testing.T) {
 	}
 }
 
+// legendArrow is an arrow the user drew from the first card of a canvas to its legend.
+func legendArrow(raw map[string]any) map[string]any {
+	card := raw["nodes"].([]any)[0].(map[string]any)["id"]
+	return map[string]any{"id": "to-legend", "fromNode": card, "fromSide": "top", "toNode": thread.LegendPrefix + "1", "toSide": "bottom"}
+}
+
+func TestASyncDropsTheOldLegendWithItsArrows(t *testing.T) {
+	tv := chord(t)
+	rel := "chords/Vehicle detection model.canvas"
+	// A canvas of 8.1.0 that code wrote, with an arrow of the user's to the legend.
+	var raw map[string]any
+	json.Unmarshal([]byte(tv.Read(rel)), &raw)
+	arrow := legendArrow(raw)
+	raw["nodes"] = append(raw["nodes"].([]any),
+		map[string]any{"id": thread.LegendPrefix + "1", "type": "group", "label": "Verified", "x": -100.0, "y": -120.0, "width": 320.0, "height": 28.0, "color": "4"})
+	raw["edges"] = append(raw["edges"].([]any), arrow)
+	data, _ := json.Marshal(raw)
+	tv.Write(rel, string(data))
+	if _, err := thread.Load(tv.Index()).Sync(tv.V.WriteIfChanged); err != nil {
+		t.Fatal(err)
+	}
+	c := readCanvas(t, tv, rel)
+	if len(c.Legend) != 0 || len(c.Nodes) != 4 || len(c.Edges) != 4 {
+		t.Fatalf("the sync drops the legend and its arrow only: %d legend, %d nodes, %d edges", len(c.Legend), len(c.Nodes), len(c.Edges))
+	}
+}
+
 func TestAWriteDropsTheOldLegendAndANewThreadGetsItsCard(t *testing.T) {
 	tv := chord(t)
 	rel := "chords/Vehicle detection model.canvas"
@@ -735,7 +762,7 @@ func TestAWriteDropsTheOldLegendAndANewThreadGetsItsCard(t *testing.T) {
 	json.Unmarshal([]byte(tv.Read(rel)), &raw)
 	raw["nodes"] = append(raw["nodes"].([]any),
 		map[string]any{"id": thread.LegendPrefix + "1", "type": "group", "label": "Verified", "x": -100.0, "y": -120.0, "width": 320.0, "height": 28.0, "color": "4"})
-	raw["edges"] = raw["edges"].([]any)[1:]
+	raw["edges"] = append(raw["edges"].([]any)[1:], legendArrow(raw))
 	data, _ := json.Marshal(raw)
 	tv.Write(rel, string(data))
 	// A thread planted in the chord gets its card at once; the user's drawing stays.

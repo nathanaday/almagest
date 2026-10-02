@@ -382,15 +382,28 @@ const LegendPrefix = "atlas-legend-"
 
 func isLegend(n map[string]any) bool { return strings.HasPrefix(str(n, "id"), LegendPrefix) }
 
-// dropLegend removes the legend groups of an older canvas.
+// dropLegend removes the legend groups of an older canvas, and the arrows that touch one.
 func dropLegend(c *canvas) {
-	rest := c.nodes[:0]
+	legend := map[string]bool{}
+	nodes := c.nodes[:0]
 	for _, n := range c.nodes {
-		if !isLegend(n) {
-			rest = append(rest, n)
+		if isLegend(n) {
+			legend[str(n, "id")] = true
+		} else {
+			nodes = append(nodes, n)
 		}
 	}
-	c.nodes = rest
+	c.nodes = nodes
+	if len(legend) == 0 {
+		return
+	}
+	edges := c.edges[:0]
+	for _, e := range c.edges {
+		if !legend[str(e, "fromNode")] && !legend[str(e, "toNode")] {
+			edges = append(edges, e)
+		}
+	}
+	c.edges = edges
 }
 
 // CanvasState says whether a chord's canvas shows the order its stubs hold.
