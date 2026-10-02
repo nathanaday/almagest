@@ -1,8 +1,11 @@
 package change_test
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
@@ -45,4 +48,32 @@ func TestACaseOnlyRenameStillApplies(t *testing.T) {
 		t.Fatalf("the file on disk is %s", got)
 	}
 	tv.Clean()
+}
+
+func TestAHandEditedHeadingCannotWriteOutsideTheDocuments(t *testing.T) {
+	for _, bad := range []string{"../../outside", "x/../../y", "Old → New"} {
+		tv := testvault.New(t)
+		pv := propose(t, tv, change.Plan{Title: "Create", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "Alpha", Fields: map[string]any{"description": "A topic.", "status": "stable"}, Body: str("## Definition\n\nA topic.\n")}}})
+		rel := pv.Ref.Path
+		content := tv.Read(rel)
+		edited := strings.Replace(content, " · Alpha · ", " · "+bad+" · ", 1)
+		if edited == content {
+			t.Fatalf("no heading to edit in:\n%s", content)
+		}
+		tv.Write(rel, edited)
+		before, _ := os.ReadDir(filepath.Dir(tv.V.Root))
+		if _, err := change.Show(tv.Index(), pv.Ref.ID); err == nil || !strings.Contains(err.Error(), "propose the change again") {
+			t.Errorf("%s: show: %v", bad, err)
+		}
+		if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err == nil || !strings.Contains(err.Error(), "propose the change again") {
+			t.Errorf("%s: apply: %v", bad, err)
+		}
+		after, _ := os.ReadDir(filepath.Dir(tv.V.Root))
+		if len(after) != len(before) {
+			t.Errorf("%s: a file appeared beside the vault: %v", bad, after)
+		}
+		if _, err := os.Stat(filepath.Join(tv.V.Root, "outside.md")); err == nil {
+			t.Errorf("%s: outside.md was written", bad)
+		}
+	}
 }

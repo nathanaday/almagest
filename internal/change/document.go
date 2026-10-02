@@ -460,6 +460,23 @@ func parseHeading(h string) (*op, error) {
 	default:
 		return nil, fmt.Errorf("the heading %q is not a create, modify, promote, rename, remove, confirm, or retag", h)
 	}
+	// A title a create, a rename, or a promote takes becomes a path, so a heading edited
+	// by hand cannot name one the title check refuses.
+	taken := []string{o.NewTitle}
+	if o.Kind == OpCreate {
+		taken = append(taken, o.Title)
+	}
+	for _, t := range taken {
+		if t == "" {
+			continue
+		}
+		if clean := doc.CleanTitle(t); clean != t {
+			return nil, fmt.Errorf("the heading %q takes the title %q, which holds characters a title cannot; propose the change again", h, t)
+		}
+		if err := doc.CheckTitle(t); err != nil {
+			return nil, fmt.Errorf("the heading %q: %w; propose the change again", h, err)
+		}
+	}
 	return o, nil
 }
 
