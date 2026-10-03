@@ -347,3 +347,18 @@ func TestAnEditMayAnchorOnACodeHeading(t *testing.T) {
 		t.Error("an Edit of a ## Thread line was allowed")
 	}
 }
+
+// An Edit with straight quotes where the file has curly ones is judged as the host
+// would apply it.
+func TestAnEditIsMatchedWithCurlyAndStraightQuotesAlike(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Curly", Text: "It said “go”."}, thread.Opts{Now: f.tv.Clock}))
+	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
+	if !strings.Contains(f.tv.Read(r.State.Thread.Path), "“go”") {
+		t.Fatal("the stub lost its curly quotes, so the test proves nothing")
+	}
+	if !denied(f.run("guard", editNew(stub, "It said \"go\".\n\n## Thread\n\n- Spec: none", "It said \"go\".\n\n## Thread\n\n- Spec: [[Forged]]"))) {
+		t.Error("an Edit spanning from straight-quoted text into ## Thread was allowed")
+	}
+}

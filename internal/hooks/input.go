@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"slices"
 	"strings"
 	"time"
@@ -367,7 +368,19 @@ func (in Input) leaves(content string, f patchFile) (string, bool) {
 			continue
 		}
 		if !strings.Contains(content, e.old) {
-			return "", false
+			// The host's Edit may take curly and straight quotes as one; so does the
+			// guard, so an edit it would apply is never judged as one that fails.
+			loose := quoteBlind(e.old)
+			if !loose.MatchString(content) {
+				return "", false
+			}
+			if e.all {
+				content = loose.ReplaceAllLiteralString(content, e.new)
+			} else {
+				at := loose.FindStringIndex(content)
+				content = content[:at[0]] + e.new + content[at[1]:]
+			}
+			continue
 		}
 		if e.all {
 			content = strings.ReplaceAll(content, e.old, e.new)
@@ -376,6 +389,22 @@ func (in Input) leaves(content string, f patchFile) (string, bool) {
 		}
 	}
 	return content, true
+}
+
+// quoteBlind matches text with each quote mark standing for its straight and curly forms.
+func quoteBlind(text string) *regexp.Regexp {
+	var b strings.Builder
+	for _, r := range text {
+		switch r {
+		case '\'', '‘', '’':
+			b.WriteString("['‘’]")
+		case '"', '“', '”':
+			b.WriteString("[\"“”]")
+		default:
+			b.WriteString(regexp.QuoteMeta(string(r)))
+		}
+	}
+	return regexp.MustCompile(b.String())
 }
 
 // oldStrings are the texts an Edit or a MultiEdit replaces.
