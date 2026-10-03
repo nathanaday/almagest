@@ -206,6 +206,10 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 				seen[command] = true
 				// A hook waits for the lock half its timeout at most, so the work after
 				// the wait has time too.
+				// The host gives SessionEnd little time when the user quits.
+				if command == "session-end" && h.Timeout != 3 {
+					t.Errorf("session-end times out at %d s, not 3", h.Timeout)
+				}
 				if wait := hooks.Deadlines[command]; h.Timeout == 0 || 2*wait > time.Duration(h.Timeout)*time.Second {
 					t.Errorf("%s waits %s for the lock, more than half its timeout of %d s", command, wait, h.Timeout)
 				}
