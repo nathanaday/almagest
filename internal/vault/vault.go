@@ -597,6 +597,7 @@ func ReadFront(file string) (*doc.Front, error) {
 // The layouts of times that code writes for a reader or in a file name.
 const (
 	MonthFormat      = "2006-01"
+	ClockFormat      = "15:04"
 	MinuteFormat     = "2006-01-02 15:04"
 	SecondFormat     = "2006-01-02 15:04:05"
 	FileMinuteFormat = "2006-01-02 1504"

@@ -258,7 +258,7 @@ func Subagent(v *vault.Vault, e Event, now time.Time) (string, error) {
 	}
 	agent := AgentName(e.AgentType)
 	if Worker(e.AgentType) {
-		line := fmt.Sprintf("- %s · `%s` · started %s", agent, Short(e.AgentID), now.Format("15:04"))
+		line := fmt.Sprintf("- %s · `%s` · started %s", agent, Short(e.AgentID), now.Format(vault.ClockFormat))
 		if e.Detail != "" {
 			line += " · " + doc.OneLine(e.Detail, 120)
 		}
@@ -298,7 +298,7 @@ func SubagentStop(v *vault.Vault, e Event, now time.Time) error {
 	lines := strings.Split(section, "\n")
 	for i := len(lines) - 1; i >= 0; i-- {
 		if strings.Contains(lines[i], marker) && !strings.Contains(lines[i], "· ended") {
-			lines[i] += " · ended " + now.Format("15:04")
+			lines[i] += " · ended " + now.Format(vault.ClockFormat)
 			break
 		}
 	}

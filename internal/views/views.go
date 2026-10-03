@@ -538,7 +538,7 @@ func (r *renderer) entries() []timelineEntry {
 		if !ok {
 			continue
 		}
-		line := fmt.Sprintf("%s · %s · %s", t.Format("15:04"), e.Str("kind"), e.Str("subject"))
+		line := fmt.Sprintf("%s · %s · %s", t.Format(vault.ClockFormat), e.Str("kind"), e.Str("subject"))
 		switch e.Str("kind") {
 		case "dropped":
 			line += " → " + doc.Link(e.Title()+"|reason")
@@ -558,7 +558,7 @@ func (r *renderer) entries() []timelineEntry {
 		if !ok {
 			continue
 		}
-		line := fmt.Sprintf("%s · %s · %s", t.Format("15:04"), words[d.Type()], doc.Link(d.Title()))
+		line := fmt.Sprintf("%s · %s · %s", t.Format(vault.ClockFormat), words[d.Type()], doc.Link(d.Title()))
 		switch d.Type() {
 		case "verification":
 			line += " · " + r.b.Ref(d).Status
@@ -577,7 +577,7 @@ func (r *renderer) entries() []timelineEntry {
 		if !ok {
 			continue
 		}
-		out = append(out, timelineEntry{t, fmt.Sprintf("%s · change applied · %s · %s", t.Format("15:04"), doc.Link(vault.Title(c)), shortCounts(c.Str("counts")))})
+		out = append(out, timelineEntry{t, fmt.Sprintf("%s · change applied · %s · %s", t.Format(vault.ClockFormat), doc.Link(vault.Title(c)), shortCounts(c.Str("counts")))})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].at.After(out[j].at) })
 	return out
