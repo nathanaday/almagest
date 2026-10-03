@@ -98,3 +98,21 @@ func TestNoReadFollowsALinkOutOfTheRepositoryOrTheVault(t *testing.T) {
 		}
 	}
 }
+
+func TestAWriteToolSaysWhereANoteFromViewsWent(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("views/Draft.md", "# Draft\n\nMine.\n")
+	c := connect(t, tv, tv.V.Root)
+	out, _ := c.call("thread", map[string]any{"action": "stub", "text": "An idea.", "title": "Idea"}, false)
+	moved, _ := out["moved_from_views"].([]any)
+	if len(moved) != 1 {
+		t.Fatalf("the result does not name the move: %v", out)
+	}
+	m := moved[0].(map[string]any)
+	if m["from"] != "views/Draft.md" || m["to"] != "inbox/Draft.md" {
+		t.Fatalf("moved %v", m)
+	}
+	if tv.Read("inbox/Draft.md") != "# Draft\n\nMine.\n" {
+		t.Fatal("the note is not in the inbox")
+	}
+}

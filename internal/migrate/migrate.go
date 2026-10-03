@@ -73,7 +73,10 @@ type Report struct {
 	Warnings   []string  `json:"warnings"`
 	Commit     string    `json:"commit,omitempty"`
 	Plugin     string    `json:"plugin,omitempty"`
-	Problems   int       `json:"problems"`
+	// Strays are the notes of the user's found in views/, which the views step moved to
+	// inbox/.
+	Strays   []vault.Moved `json:"strays,omitempty"`
+	Problems int           `json:"problems"`
 }
 
 // write is one file the migration writes; from, when set, is the file it replaces.
@@ -216,7 +219,9 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 	if err != nil {
 		return p.report, err
 	}
-	views.Write(idx, now)
+	if _, strays, err := views.Write(idx, now); err == nil {
+		p.report.Strays = strays
+	}
 	fresh.SyncSettings(nil)
 	if f, err := lint.Run(idx, lint.Options{Quick: true, Now: now}); err == nil {
 		p.report.Problems = f.Counts[lint.Error]

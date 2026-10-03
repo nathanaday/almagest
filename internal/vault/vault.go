@@ -684,3 +684,9 @@ func (g *Guard) Write(rel string, content []byte) (bool, error) {
 	}
 	return wrote, err
 }
+
+// Moved is a note code moved to keep it: from where it was to where it went.
+type Moved struct {
+	From string `json:"from"`
+	To   string `json:"to"`
+}

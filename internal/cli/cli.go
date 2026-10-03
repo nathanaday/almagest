@@ -41,6 +41,15 @@ type CLI struct {
 	Dir    string
 }
 
+// views writes the views after a write, and tells the user, on stderr so JSON output
+// stays clean, where each note found in views/ went.
+func (c *CLI) views(v *vault.Vault, now time.Time) {
+	moved, _ := core.Views(v, now)
+	for _, m := range moved {
+		fmt.Fprintln(c.Err, core.StrayLine(m))
+	}
+}
+
 // New is the command as a process runs it.
 func New() *CLI {
 	dir, _ := os.Getwd()
@@ -296,8 +305,8 @@ func (c *CLI) vaultCmd(argv []string) error {
 				fmt.Fprint(w, ", the harness settings")
 			}
 			fmt.Fprintln(w, ".")
-			for _, p := range s.Strays {
-				fmt.Fprintf(w, "Moved %s out of views/, where code writes every file, into inbox/.\n", p)
+			for _, m := range s.Strays {
+				fmt.Fprintln(w, core.StrayLine(m))
 			}
 			for _, p := range s.Skipped {
 				fmt.Fprintf(w, "Left %s as saved during the sync; the next sync derives it.\n", p)
@@ -313,7 +322,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		core.Views(v, now)
+		c.views(v, now)
 		return c.emit(a, map[string]any{"mention": m}, func(w io.Writer) { fmt.Fprintf(w, "Closed: %s\n", m.Text) })
 	case "migrate":
 		v, err := c.open(a)
@@ -368,6 +377,9 @@ func printMigration(w io.Writer, r *migrate.Report, done bool) {
 	}
 	if r.Plugin != "" {
 		fmt.Fprintf(w, "Obsidian plugin: updated to %s; reload Obsidian to use it.\n", r.Plugin)
+	}
+	for _, m := range r.Strays {
+		fmt.Fprintln(w, core.StrayLine(m))
 	}
 	if done && r.Problems > 0 {
 		fmt.Fprintf(w, "Lint finds %d errors after the move: atlas-obsidian lint lists them.\n", r.Problems)
@@ -544,7 +556,7 @@ func (c *CLI) sourceCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		core.Views(v, c.Now())
+		c.views(v, c.Now())
 		return c.emit(a, res, func(w io.Writer) {
 			for _, cp := range res.Captured {
 				if cp.Duplicate != "" {
@@ -623,7 +635,7 @@ func (c *CLI) changeCmd(argv []string) error {
 		return err
 	}
 	if a.arg(0) != "show" && a.arg(0) != "" {
-		core.Views(v, now)
+		c.views(v, now)
 	}
 	return c.emit(a, pv, func(w io.Writer) { printPreview(w, pv) })
 }
@@ -672,7 +684,7 @@ func (c *CLI) threadCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		core.Views(v, c.Now())
+		c.views(v, c.Now())
 		return c.emit(a, r, func(w io.Writer) { printResult(w, r) })
 	}
 	switch a.arg(0) {
@@ -762,7 +774,7 @@ func (c *CLI) chordCmd(argv []string) error {
 		if err != nil {
 			return err
 		}
-		core.Views(v, c.Now())
+		c.views(v, c.Now())
 		return c.emit(a, r, func(w io.Writer) { printResult(w, r) })
 	}
 	switch a.arg(0) {

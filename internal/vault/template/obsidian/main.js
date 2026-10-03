@@ -163,11 +163,16 @@ function syncSummary(s) {
   add(s.sessions, "session callout", "session callouts");
   if (s.settings) parts.push("the harness settings");
   if (s.views) parts.push(plural(s.views, "view", "views"));
+  add(s.skipped, "document left as saved", "documents left as saved");
   if (parts.length === 0) return "Generated files are up to date.";
   return `Synced ${parts.join(", ")}.`;
 }
 function syncedPaths(s) {
-  return [...s.threads ?? [], ...s.knowledge ?? [], ...s.moved ?? [], ...s.lost ?? [], ...s.sessions ?? []];
+  const strays = (s.strays ?? []).flatMap((m) => [m.from, m.to]);
+  return [...s.threads ?? [], ...s.knowledge ?? [], ...s.moved ?? [], ...s.lost ?? [], ...s.sessions ?? [], ...strays];
+}
+function strayNotices(s) {
+  return (s.strays ?? []).map((m) => `Moved ${m.from} to ${m.to}: code writes every file in views/, so your note waits in the inbox.`);
 }
 function countsLine(counts) {
   if (typeof counts === "string") {
@@ -2393,6 +2398,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
       if (manual) new import_obsidian12.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      for (const line of strayNotices(out.synced)) new import_obsidian12.Notice(`Atlas: ${line}`, 0);
     } catch (e) {
       const message = e.message;
       if (manual || message !== this.lastAutoError) new import_obsidian12.Notice(`Atlas: ${message}`);

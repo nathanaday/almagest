@@ -336,7 +336,7 @@ type Synced struct {
 	Settings  bool     `json:"settings"`
 	Views     int      `json:"views"`
 	// Strays are the notes found in views/ that code did not write, moved to inbox/.
-	Strays []string `json:"strays"`
+	Strays []vault.Moved `json:"strays"`
 	// Skipped are the documents saved after the sync read them, which it left as saved.
 	Skipped []string `json:"skipped"`
 }
@@ -363,7 +363,7 @@ func Sync(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 
 // SyncLocked is Sync for a caller that holds the lock.
 func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
-	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}, Strays: []string{}, Skipped: []string{}}
+	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}, Strays: []vault.Moved{}, Skipped: []string{}}
 	if !o.Views {
 		if err := vault.Recover(v); err != nil {
 			return nil, err
@@ -475,18 +475,23 @@ func FileByHand(v *vault.Vault) ([]string, error) {
 }
 
 // Views writes the views alone, under the lock: what a write tool runs after its commit.
-func Views(v *vault.Vault, now time.Time) error {
+func Views(v *vault.Vault, now time.Time) ([]vault.Moved, error) {
 	unlock, err := v.Lock()
 	if err != nil {
-		return err
+		return nil, err
 	}
 	defer unlock()
 	idx, err := vault.Load(v)
 	if err != nil {
-		return err
+		return nil, err
 	}
-	_, _, err = views.Write(idx, now)
-	return err
+	_, strays, err := views.Write(idx, now)
+	return strays, err
+}
+
+// StrayLine is the line that tells the user where a note found in views/ went.
+func StrayLine(m vault.Moved) string {
+	return fmt.Sprintf("Moved %s to %s: code writes every file in views/, so a note of yours waits in the inbox.", m.From, m.To)
 }
 
 // Init makes a new vault, writes its views, and returns its status.
@@ -495,7 +500,7 @@ func Init(opts vault.InitOptions, h vault.Home, now time.Time) (*Status, error) 
 	if err != nil {
 		return nil, err
 	}
-	if err := Views(v, now); err != nil {
+	if _, err := Views(v, now); err != nil {
 		return nil, err
 	}
 	idx, err := vault.Load(v)

@@ -92,7 +92,7 @@ func TestTheViewsSyncMovesAStrayNoteToTheInbox(t *testing.T) {
 	if tv.Read("inbox/Meeting notes.md") != "an older note of that name\n" {
 		t.Fatal("the move overwrote a note in the inbox")
 	}
-	if len(synced.Strays) != 1 || synced.Strays[0] != "inbox/Meeting notes (2).md" {
+	if len(synced.Strays) != 1 || synced.Strays[0].To != "inbox/Meeting notes (2).md" || synced.Strays[0].From != "views/Meeting notes.md" {
 		t.Fatalf("strays %v", synced.Strays)
 	}
 	if tv.V.Exists(stale) {

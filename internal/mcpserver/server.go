@@ -75,9 +75,12 @@ func (s *Server) index(name string) (*vault.Index, error) {
 	return vault.Load(v)
 }
 
-// views writes the views after a write. A view that fails to write fails no call: the
-// next sync writes it.
-func (s *Server) views(v *vault.Vault) { core.Views(v, s.opts.Now()) }
+// views writes the views after a write, and returns the notes it moved out of views/. A
+// view that fails to write fails no call: the next sync writes it.
+func (s *Server) views(v *vault.Vault) []vault.Moved {
+	moved, _ := core.Views(v, s.opts.Now())
+	return moved
+}
 
 // VaultIn is the vault tool's input.
 type VaultIn struct {
@@ -95,9 +98,10 @@ type VaultIn struct {
 
 // VaultOut is the vault tool's output.
 type VaultOut struct {
-	Status  *core.Status  `json:"status,omitempty"`
-	Synced  *core.Synced  `json:"synced,omitempty"`
-	Mention *core.Mention `json:"mention,omitempty"`
+	Status         *core.Status  `json:"status,omitempty"`
+	Synced         *core.Synced  `json:"synced,omitempty"`
+	Mention        *core.Mention `json:"mention,omitempty"`
+	MovedFromViews []vault.Moved `json:"moved_from_views,omitempty" jsonschema:"notes of the user's found in views/, moved to inbox/; tell the user where each went"`
 }
 
 func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in VaultIn) (*mcp.CallToolResult, VaultOut, error) {
@@ -140,8 +144,7 @@ func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in Vau
 		if err != nil {
 			return nil, VaultOut{}, err
 		}
-		s.views(v)
-		return nil, VaultOut{Mention: m}, nil
+		return nil, VaultOut{Mention: m, MovedFromViews: s.views(v)}, nil
 	}
 	return nil, VaultOut{}, fmt.Errorf("vault takes action status, init, sync, or mention, not %q", in.Action)
 }
@@ -202,11 +205,12 @@ type SourceIn struct {
 
 // SourceOut is the source tool's output.
 type SourceOut struct {
-	Captured []source.Captured `json:"captured,omitempty"`
-	Events   []vault.Ref       `json:"events,omitempty"`
-	Commit   string            `json:"commit,omitempty"`
-	Chunks   []source.Chunk    `json:"chunks,omitempty"`
-	Blob     *source.TextBlob  `json:"blob,omitempty"`
+	Captured       []source.Captured `json:"captured,omitempty"`
+	Events         []vault.Ref       `json:"events,omitempty"`
+	Commit         string            `json:"commit,omitempty"`
+	Chunks         []source.Chunk    `json:"chunks,omitempty"`
+	Blob           *source.TextBlob  `json:"blob,omitempty"`
+	MovedFromViews []vault.Moved     `json:"moved_from_views,omitempty" jsonschema:"notes of the user's found in views/, moved to inbox/; tell the user where each went"`
 }
 
 func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in SourceIn) (*mcp.CallToolResult, SourceOut, error) {
@@ -220,8 +224,7 @@ func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in So
 		if err != nil {
 			return nil, SourceOut{}, err
 		}
-		s.views(v)
-		return nil, SourceOut{Captured: res.Captured, Events: res.Events, Commit: res.Commit}, nil
+		return nil, SourceOut{Captured: res.Captured, Events: res.Events, Commit: res.Commit, MovedFromViews: s.views(v)}, nil
 	case "chunks":
 		idx, err := s.index(in.Vault)
 		if err != nil {
@@ -263,7 +266,7 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 	now := s.opts.Now()
 	done := func(pv *change.Preview, err error) (*mcp.CallToolResult, *change.Preview, error) {
 		if err == nil {
-			s.views(v)
+			pv.MovedFromViews = s.views(v)
 		}
 		return nil, pv, err
 	}
@@ -334,13 +337,14 @@ type ThreadIn struct {
 // ThreadOut is the thread tool's output: the board, the load of one thread, or the state
 // of the thread a write acted on with what the call wrote.
 type ThreadOut struct {
-	Board   *thread.BoardView `json:"board,omitempty"`
-	Thread  *thread.Loaded    `json:"thread,omitempty"`
-	State   *thread.State     `json:"state,omitempty"`
-	Commit  string            `json:"commit,omitempty"`
-	Wrote   []vault.Ref       `json:"wrote,omitempty"`
-	Events  []vault.Ref       `json:"events,omitempty"`
-	Started string            `json:"started,omitempty"`
+	Board          *thread.BoardView `json:"board,omitempty"`
+	Thread         *thread.Loaded    `json:"thread,omitempty"`
+	State          *thread.State     `json:"state,omitempty"`
+	Commit         string            `json:"commit,omitempty"`
+	Wrote          []vault.Ref       `json:"wrote,omitempty"`
+	Events         []vault.Ref       `json:"events,omitempty"`
+	Started        string            `json:"started,omitempty"`
+	MovedFromViews []vault.Moved     `json:"moved_from_views,omitempty" jsonschema:"notes of the user's found in views/, moved to inbox/; tell the user where each went"`
 }
 
 const threadActions = "list, load, stub, spec, tasks, start, check, verify, finding, drop, reopen, block, unblock, resolve, note, or set"
@@ -355,8 +359,7 @@ func (s *Server) threadTool(ctx context.Context, req *mcp.CallToolRequest, in Th
 		if err != nil {
 			return nil, ThreadOut{}, err
 		}
-		s.views(v)
-		return nil, ThreadOut{State: r.State, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events, Started: r.Started}, nil
+		return nil, ThreadOut{State: r.State, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events, Started: r.Started, MovedFromViews: s.views(v)}, nil
 	}
 	switch in.Action {
 	case "", "list":
@@ -441,12 +444,13 @@ type ChordIn struct {
 // ChordOut is the chord tool's output: the chords, the load of one, or the chord a write
 // acted on with what the call wrote.
 type ChordOut struct {
-	Chords []thread.ChordView  `json:"chords,omitempty"`
-	Chord  *thread.ChordLoaded `json:"chord,omitempty"`
-	View   *thread.ChordView   `json:"view,omitempty"`
-	Commit string              `json:"commit,omitempty"`
-	Wrote  []vault.Ref         `json:"wrote,omitempty"`
-	Events []vault.Ref         `json:"events,omitempty"`
+	Chords         []thread.ChordView  `json:"chords,omitempty"`
+	Chord          *thread.ChordLoaded `json:"chord,omitempty"`
+	View           *thread.ChordView   `json:"view,omitempty"`
+	Commit         string              `json:"commit,omitempty"`
+	Wrote          []vault.Ref         `json:"wrote,omitempty"`
+	Events         []vault.Ref         `json:"events,omitempty"`
+	MovedFromViews []vault.Moved       `json:"moved_from_views,omitempty" jsonschema:"notes of the user's found in views/, moved to inbox/; tell the user where each went"`
 }
 
 const chordActions = "list, load, create, add, remove, order, drop, reopen, or set"
@@ -461,8 +465,7 @@ func (s *Server) chordTool(ctx context.Context, req *mcp.CallToolRequest, in Cho
 		if err != nil {
 			return nil, ChordOut{}, err
 		}
-		s.views(v)
-		return nil, ChordOut{View: r.Chord, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events}, nil
+		return nil, ChordOut{View: r.Chord, Commit: r.Commit, Wrote: r.Wrote, Events: r.Events, MovedFromViews: s.views(v)}, nil
 	}
 	switch in.Action {
 	case "", "list":

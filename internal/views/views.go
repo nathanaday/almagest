@@ -55,7 +55,7 @@ func TagPath(t string) string {
 // differs, and removes the views that stand for nothing now. It returns the paths it wrote
 // or removed, and the strays: notes in views/ that code did not write, which it moves to
 // inbox/ instead of deleting, since git does not hold views/. The caller holds the lock.
-func Write(idx *vault.Index, now time.Time) (written, strays []string, err error) {
+func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Moved, err error) {
 	files := Render(idx, now)
 	v := idx.V
 	for rel, content := range files {
@@ -93,11 +93,11 @@ func Write(idx *vault.Index, now time.Time) (written, strays []string, err error
 		if err != nil {
 			return written, strays, err
 		}
-		strays = append(strays, to)
+		strays = append(strays, vault.Moved{From: rel, To: to})
 	}
 	pruneEmpty(v.Abs(vault.Views))
 	sort.Strings(written)
-	sort.Strings(strays)
+	sort.Slice(strays, func(i, j int) bool { return strays[i].From < strays[j].From })
 	return written, strays, nil
 }
 
