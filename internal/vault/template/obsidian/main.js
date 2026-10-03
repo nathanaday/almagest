@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian12 = require("obsidian");
+var import_obsidian13 = require("obsidian");
 
 // src/badges.ts
 var import_obsidian = require("obsidian");
@@ -172,7 +172,16 @@ function syncedPaths(s) {
   return [...s.threads ?? [], ...s.knowledge ?? [], ...s.moved ?? [], ...s.lost ?? [], ...s.sessions ?? [], ...strays];
 }
 function strayNotices(s) {
-  return (s.strays ?? []).map((m) => `Moved ${m.from} to ${m.to}: code writes every file in views/, so your note waits in the inbox.`);
+  return (s.strays ?? []).map(movedLine);
+}
+function movedNotices(out) {
+  if (typeof out !== "object" || out === null) return [];
+  const moved = out.moved_from_views;
+  if (!Array.isArray(moved)) return [];
+  return moved.filter((m) => typeof m?.from === "string" && typeof m?.to === "string").map(movedLine);
+}
+function movedLine(m) {
+  return `Moved ${m.from} to ${m.to}: code writes every file in views/, so your note waits in the inbox.`;
 }
 function countsLine(counts) {
   if (typeof counts === "string") {
@@ -514,6 +523,7 @@ var ReasonModal = class extends import_obsidian2.Modal {
 var import_child_process = require("child_process");
 var import_fs = require("fs");
 var import_os = require("os");
+var import_obsidian3 = require("obsidian");
 var AtlasError = class extends Error {
 };
 function findBinary(override) {
@@ -545,18 +555,21 @@ function exec(bin, args, cwd) {
 async function runAtlas(bin, vault, args) {
   if (!bin) throw new AtlasError("the atlas binary was not found; set its path in the Atlas settings");
   const out = await exec(bin, [...args, "--vault", vault, "--json"], vault);
+  let parsed;
   try {
-    return JSON.parse(out);
+    parsed = JSON.parse(out);
   } catch {
     throw new AtlasError(`atlas-obsidian ${args[0]} did not print JSON`);
   }
+  for (const line of movedNotices(parsed)) new import_obsidian3.Notice(`Atlas: ${line}`, 0);
+  return parsed;
 }
 async function binaryVersion(bin) {
   return (await exec(bin, ["version"], void 0)).trim();
 }
 
 // src/graphcolors.ts
-var import_obsidian3 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 
 // src/graphgroups.ts
 var GRAPH_MODES = [
@@ -866,14 +879,14 @@ function engineOf(view) {
 function same(a, b) {
   return JSON.stringify(a) === JSON.stringify(b);
 }
-var GraphColors = class extends import_obsidian3.Component {
+var GraphColors = class extends import_obsidian4.Component {
   constructor(host) {
     super();
     this.host = host;
   }
   host;
   groups = [];
-  refresh = (0, import_obsidian3.debounce)(() => this.apply(), 1e3, true);
+  refresh = (0, import_obsidian4.debounce)(() => this.apply(), 1e3, true);
   get app() {
     return this.host.app;
   }
@@ -987,7 +1000,7 @@ var GraphColors = class extends import_obsidian3.Component {
 };
 
 // src/canvasbar.ts
-var import_obsidian4 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 var BAR3 = "atlas-canvas-bar";
 var LEGEND = [
   { color: "green", label: "Verified" },
@@ -997,7 +1010,7 @@ var LEGEND = [
   { color: "yellow", label: "Blocked" },
   { color: "gray", label: "Waiting" }
 ];
-var CanvasBar = class extends import_obsidian4.Component {
+var CanvasBar = class extends import_obsidian5.Component {
   constructor(plugin) {
     super();
     this.plugin = plugin;
@@ -1005,7 +1018,7 @@ var CanvasBar = class extends import_obsidian4.Component {
   plugin;
   busy = false;
   states = /* @__PURE__ */ new Map();
-  refresh = (0, import_obsidian4.debounce)(() => void this.update(), 400, true);
+  refresh = (0, import_obsidian5.debounce)(() => void this.update(), 400, true);
   get app() {
     return this.plugin.app;
   }
@@ -1025,7 +1038,7 @@ var CanvasBar = class extends import_obsidian4.Component {
     document.querySelectorAll(`.${BAR3}`).forEach((el) => el.remove());
   }
   views() {
-    return this.app.workspace.getLeavesOfType("canvas").map((leaf) => leaf.view).filter((v) => v instanceof import_obsidian4.FileView && v.file !== null && chordOfCanvas(v.file.path) !== null);
+    return this.app.workspace.getLeavesOfType("canvas").map((leaf) => leaf.view).filter((v) => v instanceof import_obsidian5.FileView && v.file !== null && chordOfCanvas(v.file.path) !== null);
   }
   async update() {
     const views = this.views();
@@ -1093,9 +1106,9 @@ ${(state.changes ?? []).join("|")}`;
     try {
       await new Promise((resolve) => window.setTimeout(resolve, 600));
       await this.plugin.atlas(args);
-      new import_obsidian4.Notice(`Atlas: ${done}.`);
+      new import_obsidian5.Notice(`Atlas: ${done}.`);
     } catch (e) {
-      new import_obsidian4.Notice(`Atlas: ${e.message}`, 1e4);
+      new import_obsidian5.Notice(`Atlas: ${e.message}`, 1e4);
     } finally {
       this.busy = false;
       this.refresh();
@@ -1158,8 +1171,8 @@ function wrap(node) {
 }
 
 // src/repo.ts
-var import_obsidian5 = require("obsidian");
-var RepoPanel = class extends import_obsidian5.MarkdownRenderChild {
+var import_obsidian6 = require("obsidian");
+var RepoPanel = class extends import_obsidian6.MarkdownRenderChild {
   constructor(containerEl, plugin, id, branch) {
     super(containerEl);
     this.plugin = plugin;
@@ -1250,7 +1263,7 @@ function repoFields(plugin, id, sourcePath) {
 }
 
 // src/sessions.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 var import_os3 = require("os");
 
 // src/agents.ts
@@ -1559,14 +1572,14 @@ function sessionThread(app, s) {
 async function resume(plugin, s) {
   const id = s.harness_id.trim();
   if (!id || s.parent) {
-    new import_obsidian6.Notice("Atlas: this session has no conversation of its own to resume.");
+    new import_obsidian7.Notice("Atlas: this session has no conversation of its own to resume.");
     return;
   }
   let target = { harness: s.harness, id, cwd: expandHome(s.cwd, (0, import_os3.homedir)()), configDir: "" };
   if (s.harness !== "codex") {
     const transcript = findTranscript(s.transcript, id);
     if (!transcript) {
-      new import_obsidian6.Notice("Atlas: Claude Code has no saved conversation for this session, so it cannot resume.", 8e3);
+      new import_obsidian7.Notice("Atlas: Claude Code has no saved conversation for this session, so it cannot resume.", 8e3);
       return;
     }
     const place = resumePlace(transcript);
@@ -1575,7 +1588,7 @@ async function resume(plugin, s) {
   await plugin.runInTerminal(resumeCommand(target), "the resume command");
 }
 var STATE_CLASS = { "needs you": "waiting", working: "working", idle: "idle", ended: "ended", lost: "ended" };
-var SessionsView = class extends import_obsidian6.ItemView {
+var SessionsView = class extends import_obsidian7.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -1660,8 +1673,8 @@ var SessionsView = class extends import_obsidian6.ItemView {
 };
 
 // src/newthread.ts
-var import_obsidian7 = require("obsidian");
-var NewThreadModal = class extends import_obsidian7.Modal {
+var import_obsidian8 = require("obsidian");
+var NewThreadModal = class extends import_obsidian8.Modal {
   constructor(app, chord, done) {
     super(app);
     this.chord = chord;
@@ -1679,7 +1692,7 @@ var NewThreadModal = class extends import_obsidian7.Modal {
       this.close();
       this.done(title, this.idea.trim());
     };
-    new import_obsidian7.Setting(this.contentEl).setName("Title").addText((text) => {
+    new import_obsidian8.Setting(this.contentEl).setName("Title").addText((text) => {
       text.setPlaceholder("Annotate the dataset").onChange((v) => this.title = v);
       text.inputEl.addClass("atlas-reason-input");
       text.inputEl.addEventListener("keydown", (e) => {
@@ -1690,7 +1703,7 @@ var NewThreadModal = class extends import_obsidian7.Modal {
       });
       window.setTimeout(() => text.inputEl.focus(), 0);
     });
-    new import_obsidian7.Setting(this.contentEl).setName("Idea").setDesc("What this thread delivers, in your words. An agent writes the spec from it later.").addTextArea((area) => {
+    new import_obsidian8.Setting(this.contentEl).setName("Idea").setDesc("What this thread delivers, in your words. An agent writes the spec from it later.").addTextArea((area) => {
       area.setPlaceholder("Label every image of the train and val splits.").onChange((v) => this.idea = v);
       area.inputEl.rows = 4;
       area.inputEl.addClass("atlas-idea-input");
@@ -1701,7 +1714,7 @@ var NewThreadModal = class extends import_obsidian7.Modal {
         }
       });
     });
-    new import_obsidian7.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Plant the thread").setCta().onClick(submit));
+    new import_obsidian8.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Plant the thread").setCta().onClick(submit));
   }
   onClose() {
     this.contentEl.empty();
@@ -1709,7 +1722,7 @@ var NewThreadModal = class extends import_obsidian7.Modal {
 };
 
 // src/settings.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 var import_os4 = require("os");
 var shortHome = (p) => p.startsWith((0, import_os4.homedir)() + "/") ? "~" + p.slice((0, import_os4.homedir)().length) : p;
 var DEFAULT_SETTINGS = {
@@ -1722,7 +1735,7 @@ var DEFAULT_SETTINGS = {
   graphOwned: [],
   focusTags: []
 };
-var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
+var AtlasSettingTab = class extends import_obsidian9.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -1732,7 +1745,7 @@ var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const found = findBinary("");
-    const binary = new import_obsidian8.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
+    const binary = new import_obsidian9.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
       (text) => text.setPlaceholder(found ?? "Not found").setValue(this.plugin.settings.binaryPath).onChange(async (value) => {
         this.plugin.settings.binaryPath = value.trim();
         await this.plugin.saveSettings();
@@ -1753,37 +1766,37 @@ var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian8.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the status of each stub, plan, and session, and the kind of each event.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the status of each stub, plan, and session, and the kind of each event.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.badges).onChange(async (value) => {
         this.plugin.settings.badges = value;
         await this.plugin.saveSettings();
         this.plugin.badges.setEnabled(value);
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Open a tag's view from its folder").setDesc("In the file explorer, a click on a folder under views/tags opens the tag's view, and the view itself is hidden inside the folder.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Open a tag's view from its folder").setDesc("In the file explorer, a click on a folder under views/tags opens the tag's view, and the view itself is hidden inside the folder.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.viewFolders).onChange(async (value) => {
         this.plugin.settings.viewFolders = value;
         await this.plugin.saveSettings();
         this.plugin.viewFolders.setEnabled(value);
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Open a tag in the Atlas navigator").setDesc("A click on a #tag in a note opens the Atlas navigator at that tag, in place of Obsidian's search.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Open a tag in the Atlas navigator").setDesc("A click on a #tag in a note opens the Atlas navigator at that tag, in place of Obsidian's search.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.tagClick).onChange(async (value) => {
         this.plugin.settings.tagClick = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian8.Setting(containerEl).setName("Agents").setHeading();
+    new import_obsidian9.Setting(containerEl).setName("Agents").setHeading();
     const agents = containerEl.createDiv();
     void this.agents(agents);
-    new import_obsidian8.Setting(containerEl).setName("Graph").setHeading();
-    new import_obsidian8.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by top tag, by type, by the state of their work, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
+    new import_obsidian9.Setting(containerEl).setName("Graph").setHeading();
+    new import_obsidian9.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by top tag, by type, by the state of their work, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
       for (const { mode, label } of GRAPH_MODES) dropdown.addOption(mode, label);
       dropdown.setValue(this.plugin.settings.graphColors).onChange((value) => void this.plugin.graphColors.setMode(value));
     });
@@ -1808,34 +1821,34 @@ var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
       try {
         await this.plugin.setPreference(key, value, global);
       } catch (e) {
-        new import_obsidian8.Notice(`Atlas: ${e.message}`, 8e3);
+        new import_obsidian9.Notice(`Atlas: ${e.message}`, 8e3);
       }
       void this.agents(el);
     };
     const group = (name, global) => {
-      new import_obsidian8.Setting(el).setName(name).setHeading();
+      new import_obsidian9.Setting(el).setName(name).setHeading();
       const own = global ? config.global : config.vault;
       const same2 = (key, label) => global ? "" : `Same as all vaults (${label || inherited(config, key)})`;
-      new import_obsidian8.Setting(el).setName("Agent").addDropdown((d) => {
+      new import_obsidian9.Setting(el).setName("Agent").addDropdown((d) => {
         if (!global) d.addOption("", same2("agent", AGENT_NAMES[inherited(config, "agent")]));
         for (const a of AGENTS) d.addOption(a, AGENT_NAMES[a]);
         d.setValue(preference(own, "agent") || (global ? "claude" : "")).onChange((v) => void set("agent", v, global));
       });
       for (const a of AGENTS) {
         const key = `agent_commands.${a}`;
-        new import_obsidian8.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
+        new import_obsidian9.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
           t.setPlaceholder(global ? a : inherited(config, key)).setValue(preference(own, key));
           t.inputEl.addEventListener("change", () => void set(key, t.getValue(), global));
         });
       }
-      new import_obsidian8.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
+      new import_obsidian9.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
         if (!global) d.addOption("", same2("terminal", TERMINAL_NAMES[inherited(config, "terminal")]));
         for (const t of TERMINALS) d.addOption(t, TERMINAL_NAMES[t]);
         d.setValue(preference(own, "terminal") || (global ? "terminal" : "")).onChange((v) => void set("terminal", v, global));
       });
       const terminal = preference(own, "terminal") || inherited(config, "terminal");
       if (terminal === "custom") {
-        new import_obsidian8.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
+        new import_obsidian9.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
           t.setPlaceholder(global ? "" : inherited(config, "terminal_command")).setValue(preference(own, "terminal_command"));
           t.inputEl.addEventListener("change", () => void set("terminal_command", t.getValue(), global));
         });
@@ -1847,7 +1860,7 @@ var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
 };
 
 // src/tagnav.ts
-var import_obsidian9 = require("obsidian");
+var import_obsidian10 = require("obsidian");
 var TAG_NAV_VIEW = "atlas-tag-navigator";
 var NAV_ICON = "compass";
 var DOC_TYPES = /* @__PURE__ */ new Set(["source", "repository", "topic", "stub", "spec", "event"]);
@@ -1872,7 +1885,7 @@ function tagDocs(app) {
   }
   return out;
 }
-var TagNavigator = class extends import_obsidian9.ItemView {
+var TagNavigator = class extends import_obsidian10.ItemView {
   constructor(leaf, onChoose = () => {
   }, onGraph = () => {
   }) {
@@ -1883,7 +1896,7 @@ var TagNavigator = class extends import_obsidian9.ItemView {
   onChoose;
   onGraph;
   chosen = [];
-  rerender = (0, import_obsidian9.debounce)(() => this.render(), 500, true);
+  rerender = (0, import_obsidian10.debounce)(() => this.render(), 500, true);
   getViewType() {
     return TAG_NAV_VIEW;
   }
@@ -1975,7 +1988,7 @@ var TagNavigator = class extends import_obsidian9.ItemView {
         row.createSpan({ cls: "atlas-tagnav-doc-meta", text: meta });
         row.onclick = (evt) => {
           const file = this.app.vault.getAbstractFileByPath(d.path);
-          if (file instanceof import_obsidian9.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
+          if (file instanceof import_obsidian10.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
         };
       }
     }
@@ -2000,13 +2013,13 @@ var TagNavigator = class extends import_obsidian9.ItemView {
   }
   async openView(tag) {
     const file = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
-    if (file instanceof import_obsidian9.TFile) await this.app.workspace.getLeaf(false).openFile(file);
+    if (file instanceof import_obsidian10.TFile) await this.app.workspace.getLeaf(false).openFile(file);
   }
 };
 
 // src/viewfolders.ts
-var import_obsidian10 = require("obsidian");
-var ViewFolders = class extends import_obsidian10.Component {
+var import_obsidian11 = require("obsidian");
+var ViewFolders = class extends import_obsidian11.Component {
   constructor(app) {
     super();
     this.app = app;
@@ -2014,7 +2027,7 @@ var ViewFolders = class extends import_obsidian10.Component {
   app;
   style = null;
   enabled = false;
-  refresh = (0, import_obsidian10.debounce)(() => this.apply(), 300, true);
+  refresh = (0, import_obsidian11.debounce)(() => this.apply(), 300, true);
   onload() {
     this.style = document.head.createEl("style", { attr: { id: "atlas-view-folders" } });
     this.registerEvent(this.app.vault.on("create", () => this.refresh()));
@@ -2051,12 +2064,12 @@ var ViewFolders = class extends import_obsidian10.Component {
     const tag = tagOfFolder(title?.getAttribute("data-path") ?? "");
     if (!tag) return;
     const note = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
-    if (note instanceof import_obsidian10.TFile) void this.app.workspace.getLeaf(import_obsidian10.Keymap.isModEvent(evt)).openFile(note);
+    if (note instanceof import_obsidian11.TFile) void this.app.workspace.getLeaf(import_obsidian11.Keymap.isModEvent(evt)).openFile(note);
   }
 };
 
 // src/threadbar.ts
-var import_obsidian11 = require("obsidian");
+var import_obsidian12 = require("obsidian");
 var BAR4 = "atlas-thread-bar";
 function barDoc(app, view) {
   if (!view.file) return null;
@@ -2079,14 +2092,14 @@ function foldProperties(view) {
   } catch {
   }
 }
-var ThreadBar = class extends import_obsidian11.Component {
+var ThreadBar = class extends import_obsidian12.Component {
   constructor(plugin) {
     super();
     this.plugin = plugin;
   }
   plugin;
   busy = false;
-  refresh = (0, import_obsidian11.debounce)(() => this.update(), 100, true);
+  refresh = (0, import_obsidian12.debounce)(() => this.update(), 100, true);
   get app() {
     return this.plugin.app;
   }
@@ -2103,7 +2116,7 @@ var ThreadBar = class extends import_obsidian11.Component {
   }
   /** Copies the hand-off line of the stub or chord in the active view. */
   copyActive() {
-    const view = this.app.workspace.getActiveViewOfType(import_obsidian11.MarkdownView);
+    const view = this.app.workspace.getActiveViewOfType(import_obsidian12.MarkdownView);
     const d = view ? barDoc(this.app, view) : null;
     if (!d) return false;
     void this.copy(d);
@@ -2113,14 +2126,14 @@ var ThreadBar = class extends import_obsidian11.Component {
     const line = handoffLine(d.type, d.id);
     try {
       await navigator.clipboard.writeText(line);
-      new import_obsidian11.Notice(`Atlas: copied "${line}". Paste it into an agent session.`);
+      new import_obsidian12.Notice(`Atlas: copied "${line}". Paste it into an agent session.`);
     } catch {
-      new import_obsidian11.Notice(`Atlas: ${line}`);
+      new import_obsidian12.Notice(`Atlas: ${line}`);
     }
   }
   update() {
     for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
-      if (leaf.view instanceof import_obsidian11.MarkdownView) this.updateView(leaf.view);
+      if (leaf.view instanceof import_obsidian12.MarkdownView) this.updateView(leaf.view);
     }
   }
   updateView(view) {
@@ -2174,16 +2187,16 @@ var ThreadBar = class extends import_obsidian11.Component {
     this.busy = true;
     try {
       await this.plugin.atlas(args);
-      new import_obsidian11.Notice(`Atlas: ${done}.`);
+      new import_obsidian12.Notice(`Atlas: ${done}.`);
     } catch (e) {
-      new import_obsidian11.Notice(`Atlas: ${e.message}`);
+      new import_obsidian12.Notice(`Atlas: ${e.message}`);
     } finally {
       this.busy = false;
       this.refresh();
     }
   }
 };
-var ReasonModal2 = class extends import_obsidian11.Modal {
+var ReasonModal2 = class extends import_obsidian12.Modal {
   constructor(app, heading, placeholder, required, done) {
     super(app);
     this.heading = heading;
@@ -2203,7 +2216,7 @@ var ReasonModal2 = class extends import_obsidian11.Modal {
       this.close();
       this.done(this.reason.trim());
     };
-    new import_obsidian11.Setting(this.contentEl).setName("Reason").addText((text) => {
+    new import_obsidian12.Setting(this.contentEl).setName("Reason").addText((text) => {
       text.setPlaceholder(this.placeholder).onChange((v) => this.reason = v);
       text.inputEl.addClass("atlas-reason-input");
       text.inputEl.addEventListener("keydown", (e) => {
@@ -2214,7 +2227,7 @@ var ReasonModal2 = class extends import_obsidian11.Modal {
       });
       window.setTimeout(() => text.inputEl.focus(), 0);
     });
-    new import_obsidian11.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText(this.heading).setCta().onClick(submit));
+    new import_obsidian12.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText(this.heading).setCta().onClick(submit));
   }
   onClose() {
     this.contentEl.empty();
@@ -2225,7 +2238,7 @@ var ReasonModal2 = class extends import_obsidian11.Modal {
 var SYNC_DELAY = 2e3;
 var LEGACY_KEYS = ["agentCommand", "terminal", "terminalCommand"];
 var ECHO_WINDOW = 5e3;
-var AtlasPlugin = class extends import_obsidian12.Plugin {
+var AtlasPlugin = class extends import_obsidian13.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   /** The agent settings of 8.0.2 and 8.0.3, kept in data.json until they move to the vault's config file. */
   legacy = null;
@@ -2375,7 +2388,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
   /** Runs one atlas command in this vault and returns its JSON. */
   atlas(args) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian12.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian13.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args);
@@ -2384,7 +2397,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
   /** A manual sync runs every step; an automatic one runs the steps that read no git. */
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian12.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian13.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -2397,11 +2410,11 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
       const out = await this.atlas(args);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian12.Notice(`Atlas: ${syncSummary(out.synced)}`);
-      for (const line of strayNotices(out.synced)) new import_obsidian12.Notice(`Atlas: ${line}`, 0);
+      if (manual) new import_obsidian13.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      for (const line of strayNotices(out.synced)) new import_obsidian13.Notice(`Atlas: ${line}`, 0);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian12.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian13.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -2448,7 +2461,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
   }
   checkLayout() {
     if (this.migrated()) return;
-    const notice = new import_obsidian12.Notice("", 0);
+    const notice = new import_obsidian13.Notice("", 0);
     const el = notice.messageEl;
     el.createDiv({ text: `Atlas: this vault has the ${layoutName(this.layout())} layout. This plugin needs the 8.0 layout: threads and chords.` });
     const button = el.createEl("button", { text: "Show the migration", cls: "mod-cta atlas-notice-button" });
@@ -2463,13 +2476,13 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
       new MigrationModal(this.app, report, async () => {
         try {
           const done = await this.atlas(["vault", "migrate"]);
-          new import_obsidian12.Notice(`Atlas: migrated in one commit, ${String(done.commit ?? "").slice(0, 7)}.${done.problems ? ` Lint finds ${done.problems} errors.` : ""}`, 1e4);
+          new import_obsidian13.Notice(`Atlas: migrated in one commit, ${String(done.commit ?? "").slice(0, 7)}.${done.problems ? ` Lint finds ${done.problems} errors.` : ""}`, 1e4);
         } catch (e) {
-          new import_obsidian12.Notice(`Atlas: ${e.message}`, 1e4);
+          new import_obsidian13.Notice(`Atlas: ${e.message}`, 1e4);
         }
       }).open();
     } catch (e) {
-      new import_obsidian12.Notice(`Atlas: ${e.message}`, 1e4);
+      new import_obsidian13.Notice(`Atlas: ${e.message}`, 1e4);
     }
   }
   // Tags
@@ -2507,7 +2520,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian12.debounce)(
+  refreshSessions = (0, import_obsidian13.debounce)(
     () => {
       void sessionGroups(this.app, this.staleHours()).then(({ groups }) => {
         const waiting = groups.open.filter((s) => s.state === "needs you").length;
@@ -2560,22 +2573,22 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
         await openTerminal(prefs.terminal, command, prefs.terminal_command);
         return;
       } catch (e) {
-        new import_obsidian12.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
+        new import_obsidian13.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
       }
     }
     await navigator.clipboard.writeText(command);
-    new import_obsidian12.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
+    new import_obsidian13.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
   }
   /** Starts an agent in the vault, with the hand-off line of a thread or a chord as its first prompt. */
   async startAgent(type, id) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian12.FileSystemAdapter)) return;
+    if (!(adapter instanceof import_obsidian13.FileSystemAdapter)) return;
     const prompt = `Resume Atlas ${type === "chord" ? "chord" : "thread"} ${id}`;
     let config;
     try {
       config = await this.agentConfig();
     } catch (e) {
-      new import_obsidian12.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
+      new import_obsidian13.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
       return;
     }
     await this.runInTerminal(startCommand(adapter.getBasePath(), config.preferences.agent_command, prompt), "the agent command", config);
@@ -2607,9 +2620,9 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     new NewThreadModal(this.app, chord.title, async (title, idea) => {
       try {
         await this.atlas(["thread", "stub", idea || title, "--title", title, "--chord", chord.id]);
-        new import_obsidian12.Notice(`Atlas: planted ${title} in ${chord.title}.`);
+        new import_obsidian13.Notice(`Atlas: planted ${title} in ${chord.title}.`);
       } catch (e) {
-        new import_obsidian12.Notice(`Atlas: ${e.message}`, 8e3);
+        new import_obsidian13.Notice(`Atlas: ${e.message}`, 8e3);
       }
     }).open();
   }
@@ -2625,7 +2638,7 @@ var AtlasPlugin = class extends import_obsidian12.Plugin {
     await workspace.revealLeaf(leaf);
   }
 };
-var MigrationModal = class extends import_obsidian12.Modal {
+var MigrationModal = class extends import_obsidian13.Modal {
   constructor(app, report, run) {
     super(app);
     this.report = report;

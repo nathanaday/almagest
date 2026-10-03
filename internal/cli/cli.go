@@ -33,6 +33,8 @@ var Version = "dev"
 
 // CLI is one run of the command.
 type CLI struct {
+	// moved are the notes the views step of this command moved out of views/.
+	moved  []vault.Moved
 	In     io.Reader
 	Out    io.Writer
 	Err    io.Writer
@@ -45,6 +47,7 @@ type CLI struct {
 // stays clean, where each note found in views/ went.
 func (c *CLI) views(v *vault.Vault, now time.Time) {
 	moved, _ := core.Views(v, now)
+	c.moved = append(c.moved, moved...)
 	for _, m := range moved {
 		fmt.Fprintln(c.Err, core.StrayLine(m))
 	}
@@ -229,12 +232,30 @@ func (c *CLI) index(a args) (*vault.Index, error) {
 // emit prints an entity as JSON with --json, else through the human printer.
 func (c *CLI) emit(a args, v any, human func(w io.Writer)) error {
 	if a.has("json") || human == nil {
+		if len(c.moved) > 0 {
+			v = withMoved(v, c.moved)
+		}
 		enc := json.NewEncoder(c.Out)
 		enc.SetIndent("", "  ")
 		return enc.Encode(v)
 	}
 	human(c.Out)
 	return nil
+}
+
+// withMoved adds moved_from_views to a JSON result, whatever its type, so a caller that
+// reads only stdout (the Obsidian plugin) learns where each note went.
+func withMoved(v any, moved []vault.Moved) any {
+	data, err := json.Marshal(v)
+	if err != nil {
+		return v
+	}
+	var out map[string]any
+	if json.Unmarshal(data, &out) != nil || out == nil {
+		return v
+	}
+	out["moved_from_views"] = moved
+	return out
 }
 
 func (c *CLI) readJSON(file string, into any) error {

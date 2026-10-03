@@ -262,3 +262,27 @@ func TestConfigCommand(t *testing.T) {
 		t.Fatalf("a bad value: %d %s", code, errOut)
 	}
 }
+
+// A write's JSON output names each note its views step moved out of views/, so a caller
+// that reads only stdout, such as the Obsidian plugin, learns where it went.
+func TestTheJSONOfAWriteNamesANoteMovedOutOfViews(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("views/Draft.md", "# Draft\n\nMine.\n")
+	r := run{t, tv}
+	code, out, errOut := r.atlas("", "thread", "stub", "An idea.", "--title", "Idea", "--json")
+	if code != 0 {
+		t.Fatalf("exit %d: %s", code, errOut)
+	}
+	var got struct {
+		Moved []vault.Moved `json:"moved_from_views"`
+	}
+	if err := json.Unmarshal([]byte(out), &got); err != nil {
+		t.Fatal(err)
+	}
+	if len(got.Moved) != 1 || got.Moved[0].From != "views/Draft.md" || got.Moved[0].To != "inbox/Draft.md" {
+		t.Fatalf("moved_from_views %+v in:\n%s", got.Moved, out)
+	}
+	if !strings.Contains(errOut, "Moved views/Draft.md to inbox/Draft.md") {
+		t.Fatalf("stderr: %s", errOut)
+	}
+}
