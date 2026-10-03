@@ -23,6 +23,7 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 		{[]string{"chord", "list", "--new-tags"}, "--new-tags is gone"},
 		{[]string{"chord", "create", "chord.json", "--new-tags=true"}, "--new-tags is gone"},
 		{[]string{"setup", "--yes", "--no-plugin"}, "--yes is gone: setup asks nothing"},
+		{[]string{"setup", "--yes=1", "--no-plugin"}, "--yes is gone"},
 	} {
 		code, _, errOut := r.atlas("", c.args...)
 		if code == 0 || !strings.Contains(errOut, c.want) {
@@ -41,8 +42,8 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 		{"chord", "list", "--tag", "--new-tags"},
 		{"setup", "--name", "--yes", "--no-plugin"},
 	} {
-		if _, _, errOut := r.atlas("", args...); strings.Contains(errOut, "is gone") {
-			t.Fatalf("%v: %s", args, errOut)
+		if code, _, errOut := r.atlas("", args...); code != 0 {
+			t.Fatalf("%v: exit %d: %s", args, code, errOut)
 		}
 	}
 }
