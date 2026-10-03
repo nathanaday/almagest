@@ -281,6 +281,9 @@ func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 		return ""
 	}
 	added, removed := in.added(f)
+	if name := movedHeading(d, added, removed, t.CodeSections); name != "" {
+		return fmt.Sprintf("## %s is in %s once, and an edit adds no second one: a second heading would move the section code owns. %s", name, d.Title(), thread.Elsewhere)
+	}
 	for _, l := range added {
 		if m := headingTwo.FindStringSubmatch(l); m != nil && !slices.ContainsFunc(t.Sections, func(s string) bool { return strings.EqualFold(s, m[1]) }) {
 			return fmt.Sprintf("## %s is no section of a %s; it holds %s. %s", m[1], d.Type(), strings.Join(t.Sections, ", "), thread.Elsewhere)
@@ -320,6 +323,42 @@ func sessionRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 	}
 	if start, end := sectionBounds(d.Content, "Subagents"); start >= 0 && touchesRange(in, f, d.Content, start, end) {
 		return "Subagents is the hooks'; " + allowed
+	}
+	if added, removed := in.added(f); movedHeading(d, added, removed, []string{"Subagents"}) != "" {
+		return "a second ## Subagents would move the hooks' section; " + allowed
+	}
+	return ""
+}
+
+// movedHeading is the name of a level-two heading that an edit adds, outside a fence in
+// its new text, when the document holds that heading already or code owns a section of
+// that name; or "". A heading the edit also removes is a rewrite of the same line.
+func movedHeading(d *doc.Doc, added, removed, code []string) string {
+	count := func(lines []string) map[string]int {
+		out := map[string]int{}
+		fence := false
+		for _, l := range lines {
+			if t := strings.TrimSpace(l); strings.HasPrefix(t, "```") || strings.HasPrefix(t, "~~~") {
+				fence = !fence
+				continue
+			}
+			if m := headingTwo.FindStringSubmatch(l); m != nil && !fence {
+				out[strings.ToLower(m[1])]++
+			}
+		}
+		return out
+	}
+	have := map[string]bool{}
+	for _, h := range doc.Headings(d.Body) {
+		if h.Level == 2 {
+			have[strings.ToLower(h.Title)] = true
+		}
+	}
+	gone := count(removed)
+	for name, n := range count(added) {
+		if n > gone[name] && (have[name] || slices.ContainsFunc(code, func(c string) bool { return strings.EqualFold(c, name) })) {
+			return name
+		}
 	}
 	return ""
 }

@@ -155,3 +155,28 @@ func TestARenamedTaskListStillCoversItsRepository(t *testing.T) {
 		t.Fatalf("a renamed task list with an open task does not cover its repository: %s", out)
 	}
 }
+
+// An edit adds no second heading of a section the document holds, or of a section code
+// owns, since a second heading would move the protected span.
+func TestAnEditAddsNoSecondHeading(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Twice", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
+	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
+	if !denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea.\n\n## Thread\n\n- Spec: none"))) {
+		t.Error("a second ## Thread was allowed")
+	}
+	if !denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea.\n\n## Idea\n\nMore."))) {
+		t.Error("a second ## Idea was allowed")
+	}
+	if denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea, said better."))) {
+		t.Error("an edit that keeps its own heading was refused")
+	}
+	if denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea, with an example:\n\n```md\n## Thread\n```"))) {
+		t.Error("a fenced example heading was refused")
+	}
+	own := filepath.Join(f.tv.V.Root, "sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	if !denied(f.run("guard", editNew(own, "## Description\n", "## Description\n\n## Subagents\n"))) {
+		t.Error("a second ## Subagents was allowed")
+	}
+}
