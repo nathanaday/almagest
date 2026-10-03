@@ -137,7 +137,7 @@ func TestProposeSaysSoWhenItCannotReadItsDocumentBack(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := change.Propose(tv.V, change.Plan{Title: "Hidden", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "Alpha", Fields: map[string]any{"description": "A topic.", "status": "stable"}, Body: str("## Definition\n\nA topic.\n")}}}, now)
-	if err == nil || !strings.Contains(err.Error(), "cannot read it back") || !strings.Contains(err.Error(), "scratchpad/months") || !strings.Contains(err.Error(), "is a link") {
+	if err == nil || !strings.Contains(err.Error(), "cannot read it back") || !strings.Contains(err.Error(), "scratchpad/months") || !strings.Contains(err.Error(), "is a link") || strings.Contains(err.Error(), "propose again") {
 		t.Fatalf("propose: %v", err)
 	}
 }

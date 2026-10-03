@@ -123,7 +123,7 @@ func readBack(v *vault.Vault, rel string) error {
 				where = r
 			}
 		}
-		return fmt.Errorf("the change document %s was written, at %s, but the vault's index cannot read it back: the folder %s is a link, and the index does not read a linked folder. Make %s a plain folder, move the document into it, and propose again", rel, where, folder, folder)
+		return fmt.Errorf("the change document %s was written, at %s, but the vault's index cannot read it back: the folder %s is a link, and the index does not read a linked folder. Make %s a plain folder and move the document into it; the proposal is then ready to review with change show", rel, where, folder, folder)
 	}
 	return fmt.Errorf("the change document %s was written but the vault's index cannot read it back; check that its frontmatter parses, and propose again", rel)
 }
