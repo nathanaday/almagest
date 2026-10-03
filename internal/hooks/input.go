@@ -39,7 +39,6 @@ var Events = map[string]string{
 type Input struct {
 	SessionID        string          `json:"session_id"`
 	Cwd              string          `json:"cwd"`
-	HookEventName    string          `json:"hook_event_name"`
 	Source           string          `json:"source"`
 	Prompt           string          `json:"prompt"`
 	ToolName         string          `json:"tool_name"`
@@ -47,12 +46,9 @@ type Input struct {
 	ToolResponse     json.RawMessage `json:"tool_response"`
 	AgentID          string          `json:"agent_id"`
 	AgentType        string          `json:"agent_type"`
-	ParentSessionID  string          `json:"parentSessionId"`
-	ParentSession2   string          `json:"parent_session_id"`
 	NotificationType string          `json:"notification_type"`
 	Message          string          `json:"message"`
 	StopHookActive   bool            `json:"stop_hook_active"`
-	Reason           string          `json:"reason"`
 	TurnID           string          `json:"turn_id"`
 	TranscriptPath   string          `json:"transcript_path"`
 	Description      string          `json:"description"`
@@ -92,14 +88,7 @@ func (in Input) event() sessions.Event {
 	if in.TurnID != "" || in.ToolName == "apply_patch" {
 		harness = "codex"
 	}
-	sessionID := in.SessionID
-	if sessionID == "" {
-		sessionID = in.ParentSessionID
-	}
-	if sessionID == "" {
-		sessionID = in.ParentSession2
-	}
-	return sessions.Event{Harness: harness, SessionID: sessionID, AgentID: in.AgentID, AgentType: in.AgentType, Cwd: in.Cwd, Source: in.Source, Detail: in.Description, Transcript: in.TranscriptPath}
+	return sessions.Event{Harness: harness, SessionID: in.SessionID, AgentID: in.AgentID, AgentType: in.AgentType, Cwd: in.Cwd, Source: in.Source, Detail: in.Description, Transcript: in.TranscriptPath}
 }
 
 // findVault resolves the vault of a hook's session, or nil.

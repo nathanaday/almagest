@@ -28,7 +28,6 @@ var Hosts = []string{"claude", "codex"}
 // Install is one installed plugin, as its host records it.
 type Install struct {
 	Version string `json:"version"`
-	Path    string `json:"installPath,omitempty"`
 	Enabled bool   `json:"enabled"`
 }
 

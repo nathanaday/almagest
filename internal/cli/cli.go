@@ -785,7 +785,7 @@ func (c *CLI) threadCmd(argv []string) error {
 }
 
 func (c *CLI) chordCmd(argv []string) error {
-	a := parse(argv, "new-tags", "save", "write", "tidy")
+	a := parse(argv, "save", "write", "tidy")
 	v, err := c.open(a)
 	if err != nil {
 		return err
