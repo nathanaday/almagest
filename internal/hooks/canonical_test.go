@@ -80,3 +80,19 @@ func TestAFencedHeadingMovesNoProtectedSpan(t *testing.T) {
 		t.Error("an edit inside the fence was refused")
 	}
 }
+
+// A Codex hunk that only inserts lines is placed by its context lines.
+func TestAnInsertOnlyPatchHunkIsPlacedByItsContext(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Patched", Text: "The first idea line."}, thread.Opts{Now: f.tv.Clock}))
+	patch := func(context, added string) map[string]any {
+		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n@@\n " + context + "\n+" + added + "\n*** End Patch"}}
+	}
+	if !denied(f.run("guard", patch("- Spec: none", "- Spec: [[Forged]]"))) {
+		t.Errorf("an insert into ## Thread was allowed:\n%s", f.tv.Read(r.State.Thread.Path))
+	}
+	if denied(f.run("guard", patch("The first idea line.", "A second idea line."))) {
+		t.Error("an insert into ## Idea was refused")
+	}
+}

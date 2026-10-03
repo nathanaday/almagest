@@ -304,16 +304,10 @@ func touchesPrefix(in Input, f patchFile, d *doc.Doc) bool {
 }
 
 // touchesRange reports whether an edit's old text overlaps content[start:end]. A patch
-// is judged by the lines it removes.
+// is judged hunk by hunk, where each lands in the file.
 func touchesRange(in Input, f patchFile, content string, start, end int) bool {
 	if in.ToolName == "apply_patch" {
-		region := content[start:end]
-		for _, l := range f.Removed {
-			if strings.TrimSpace(l) != "" && strings.Contains(region, l) {
-				return true
-			}
-		}
-		return false
+		return slices.ContainsFunc(f.Hunks, func(h hunk) bool { return h.touches(content, start, end) })
 	}
 	for _, old := range in.oldStrings() {
 		offset := 0

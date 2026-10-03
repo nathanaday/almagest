@@ -163,6 +163,73 @@ type patchFile struct {
 	Op      string // add, update, delete, move
 	Removed []string
 	Added   []string
+	Hunks   []hunk
+}
+
+// hunk is one @@ block of a patch: its header's text and its lines, each with its mark
+// (' ' context, '-' removed, '+' added).
+type hunk struct {
+	Header string
+	Lines  []string
+}
+
+// touches reports whether the hunk changes content[start:end]. It is placed where its
+// context and removed lines stand in the file; a removed line inside the range touches
+// it, and so does an added line that lands after the range's first byte and up to its
+// end. A hunk that cannot be placed is judged by its removed lines alone.
+func (h hunk) touches(content string, start, end int) bool {
+	var old []string
+	for _, l := range h.Lines {
+		if l[0] != '+' {
+			old = append(old, l[1:])
+		}
+	}
+	text := strings.Join(old, "\n")
+	from := 0
+	if header := strings.TrimSpace(h.Header); header != "" {
+		if i := strings.Index(content, header); i >= 0 {
+			from = i
+		}
+	}
+	placed := false
+	for at := from; text != "" && at <= len(content); {
+		i := strings.Index(content[at:], text)
+		if i < 0 {
+			break
+		}
+		p := at + i
+		at = p + 1
+		if p > 0 && content[p-1] != '\n' {
+			continue
+		}
+		placed = true
+		offset := p
+		for _, l := range h.Lines {
+			switch l[0] {
+			case '+':
+				if offset > start && offset <= end {
+					return true
+				}
+			case '-':
+				if offset < end && offset+len(l)-1 > start {
+					return true
+				}
+				offset += len(l)
+			default:
+				offset += len(l)
+			}
+		}
+	}
+	if placed {
+		return false
+	}
+	region := content[start:end]
+	for _, l := range h.Lines {
+		if l[0] == '-' && strings.TrimSpace(l[1:]) != "" && strings.Contains(region, l[1:]) {
+			return true
+		}
+	}
+	return false
 }
 
 // paths are the files a write tool touches: the file of an edit, or every file of a
@@ -179,12 +246,30 @@ func (in Input) paths() []patchFile {
 					cur = &out[len(out)-1]
 				}
 			}
-			if cur != nil && strings.HasPrefix(line, "-") && !strings.HasPrefix(line, "---") {
-				cur.Removed = append(cur.Removed, strings.TrimPrefix(line, "-"))
+			if cur == nil || strings.HasPrefix(line, "*** ") {
+				continue
 			}
-			if cur != nil && strings.HasPrefix(line, "+") && !strings.HasPrefix(line, "+++") {
-				cur.Added = append(cur.Added, strings.TrimPrefix(line, "+"))
+			if header, ok := strings.CutPrefix(line, "@@"); ok {
+				cur.Hunks = append(cur.Hunks, hunk{Header: header})
+				continue
 			}
+			if line == "" {
+				line = " "
+			}
+			switch line[0] {
+			case '-':
+				cur.Removed = append(cur.Removed, line[1:])
+			case '+':
+				cur.Added = append(cur.Added, line[1:])
+			case ' ':
+			default:
+				continue
+			}
+			if len(cur.Hunks) == 0 {
+				cur.Hunks = append(cur.Hunks, hunk{})
+			}
+			h := &cur.Hunks[len(cur.Hunks)-1]
+			h.Lines = append(h.Lines, line)
 		}
 	} else {
 		for _, p := range []string{t.FilePath, t.NotebookPath} {
