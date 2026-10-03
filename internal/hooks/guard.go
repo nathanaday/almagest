@@ -332,25 +332,19 @@ func touchesRange(in Input, f patchFile, content string, start, end int) bool {
 	return false
 }
 
-// sectionBounds are the offsets of a level-two section, heading included, or -1.
+// sectionBounds are the offsets in content of a level-two section of the body, heading
+// included, or -1.
 func sectionBounds(content, title string) (int, int) {
-	lines := strings.SplitAfter(content, "\n")
-	offset, start := 0, -1
-	for _, l := range lines {
-		if strings.HasPrefix(l, "## ") {
-			if start >= 0 {
-				return start, offset
-			}
-			if strings.EqualFold(strings.TrimSpace(strings.TrimPrefix(l, "## ")), title) {
-				start = offset
-			}
-		}
-		offset += len(l)
+	base := 0
+	body := content
+	if _, b, ok := doc.Split(content); ok {
+		base, body = len(content)-len(b), b
 	}
-	if start >= 0 {
-		return start, len(content)
+	start, end := doc.SectionOffsets(body, title)
+	if start < 0 {
+		return -1, -1
 	}
-	return -1, -1
+	return base + start, base + end
 }
 
 // repositoryRefusal is the edit rule: an edit inside a linked repository needs a thread

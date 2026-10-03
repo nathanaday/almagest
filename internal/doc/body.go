@@ -159,6 +159,24 @@ func Section(body, title string) (string, bool) {
 	return strings.TrimSpace(strings.Join(lines[start:end], "\n")), true
 }
 
+// SectionOffsets are the byte offsets in body of the level-two section title, heading
+// included, or -1 and -1. Like Section, it skips headings inside code fences.
+func SectionOffsets(body, title string) (int, int) {
+	lines := strings.Split(body, "\n")
+	head, _, end := sectionSpan(lines, Headings(body), 2, title)
+	if head < 0 {
+		return -1, -1
+	}
+	offset := func(line int) int {
+		n := 0
+		for _, l := range lines[:line] {
+			n += len(l) + 1
+		}
+		return min(n, len(body))
+	}
+	return offset(head), offset(end)
+}
+
 // SetSection replaces the text under the level-two heading title, or appends the heading
 // and text at the end when the body has none.
 func SetSection(body, title, text string) string {

@@ -5,6 +5,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 )
 
 // foldsCase reports whether the file system under dir ignores case, as APFS does.
@@ -58,5 +60,23 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 		if !denied(f.run("guard", c.event)) {
 			t.Errorf("%s: allowed", c.name)
 		}
+	}
+}
+
+// A heading inside a code fence moves no protected span: the real ## Thread of a stub
+// stays code's, and the fenced lines stay the model's prose.
+func TestAFencedHeadingMovesNoProtectedSpan(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Fenced", Text: "An idea with an example:\n\n```md\n## Thread\n\nexample line\n```"}, thread.Opts{Now: f.tv.Clock}))
+	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
+	if got := f.tv.Read(r.State.Thread.Path); !strings.Contains(got, "example line") || !strings.Contains(got, "- Spec: none") {
+		t.Fatalf("the stub is not as the test needs:\n%s", got)
+	}
+	if !denied(f.run("guard", edit(stub, "- Spec: none"))) {
+		t.Error("an edit inside the real ## Thread was allowed")
+	}
+	if denied(f.run("guard", edit(stub, "example line"))) {
+		t.Error("an edit inside the fence was refused")
 	}
 }
