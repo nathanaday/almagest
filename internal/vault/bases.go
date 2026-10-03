@@ -3,6 +3,7 @@ package vault
 import (
 	"path"
 	"reflect"
+	"slices"
 
 	"gopkg.in/yaml.v3"
 )
@@ -29,16 +30,27 @@ func OldTemplate(name string) (string, error) {
 	return string(data), err
 }
 
-// upgradeBases replaces each Base of an earlier release that nobody edited with the one
-// this binary ships.
+// shippedBases are the copies of a Base that earlier releases shipped: 6.5's, and the one
+// 7.0 to 8.1 shipped.
+func shippedBases(name string) []string {
+	var out []string
+	for _, p := range []string{"template/old/" + name, "template/old/7.0/" + name} {
+		if data, err := templates.ReadFile(p); err == nil {
+			out = append(out, string(data))
+		}
+	}
+	return out
+}
+
+// upgradeBases replaces each Base that equals a copy an earlier release shipped, which
+// nobody edited, with the one this binary ships.
 func upgradeBases(v *Vault) error {
 	for name, rel := range Bases {
 		data, err := v.Read(rel)
 		if err != nil {
 			continue
 		}
-		old, err := OldTemplate(path.Base(rel))
-		if err != nil || !SameYAML(string(data), old) {
+		if !slices.ContainsFunc(shippedBases(path.Base(rel)), func(old string) bool { return SameYAML(string(data), old) }) {
 			continue
 		}
 		current, err := templates.ReadFile("template/" + name)
