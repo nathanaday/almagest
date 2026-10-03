@@ -333,3 +333,30 @@ func TestALandedApplysRecoveryStoppedPartwayFinishesNextTime(t *testing.T) {
 		t.Fatalf("the document is not the applied one:\n%s", got)
 	}
 }
+
+// A save to a restored path while an undo runs survives the undo's failure.
+func TestAFailedUndoKeepsASaveMadeDuringIt(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	apply(t, tv, pv.Ref.ID)
+	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}}}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
+	os.MkdirAll(away, 0o755)
+	os.RemoveAll(tv.V.Abs("chords"))
+	if err := os.Symlink(away, tv.V.Abs("chords")); err != nil {
+		t.Fatal(err)
+	}
+	tv.Commit()
+	saved := "a save made while the undo ran\n"
+	change.SetAfterUndoRestore(func() { tv.Write("wiki/documents/Motion scoring.md", saved) })
+	defer change.SetAfterUndoRestore(nil)
+	_, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute))
+	if err == nil || !strings.Contains(err.Error(), "left as saved") || !strings.Contains(err.Error(), "Motion scoring.md") {
+		t.Fatalf("the failed undo: %v", err)
+	}
+	if got := tv.Read("wiki/documents/Motion scoring.md"); got != saved {
+		t.Fatalf("the save was rolled back:\n%s", got)
+	}
+}

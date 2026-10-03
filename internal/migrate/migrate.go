@@ -207,6 +207,7 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 			p.report.Plugin = vault.PluginVersion()
 		}
 	}
+	tx.Settle(machine...)
 	if err := syncDerived(fresh, tx, now); err != nil {
 		return nil, err
 	}

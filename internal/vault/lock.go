@@ -394,6 +394,20 @@ func (tx *Tx) Move(from, to string) error {
 	return nil
 }
 
+// Settle records what another function left at paths (a git checkout, a migration's own
+// writes) as this write's own bytes, so rollback can tell a save that lands later from
+// them, as it does for Write.
+func (tx *Tx) Settle(paths ...string) {
+	for _, rel := range paths {
+		data, err := os.ReadFile(tx.V.Abs(rel))
+		if err != nil {
+			tx.after[rel] = &found{}
+			continue
+		}
+		tx.after[rel] = &found{exists: true, data: data}
+	}
+}
+
 // Indexed marks that git changed the index for this write (a checkout stages what it
 // restores), so a rollback unstages the kept paths even before the commit staged them.
 func (tx *Tx) Indexed() { tx.added = true }

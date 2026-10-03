@@ -597,6 +597,9 @@ func (p *plan) execute(tx *vault.Tx) error {
 			return err
 		}
 	}
+	// What the plan left is the migration's own, so a save that lands later survives a
+	// rollback.
+	tx.Settle(paths...)
 	for _, top := range []string{"threads", "wiki"} {
 		pruneEmpty(v.Abs(top), top == "threads")
 	}

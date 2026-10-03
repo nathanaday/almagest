@@ -550,6 +550,10 @@ type guardWriter interface {
 	WriteIfUnchanged(rel string, content []byte, want string) (bool, error)
 }
 
+// afterUndoRestore lets a test act right after an undo restored its paths. It is nil
+// outside tests.
+var afterUndoRestore func()
+
 // beforeApplyCommit lets a test see the vault as a crash right before the apply's commit
 // would leave it. It is nil outside tests.
 var beforeApplyCommit func()
@@ -956,6 +960,10 @@ func Undo(v *vault.Vault, key string, now time.Time) (_ *Preview, err error) {
 	tx.Indexed()
 	if err := g.RestoreFrom(g.Parent(sha), paths...); err != nil {
 		return nil, err
+	}
+	tx.Settle(paths...)
+	if afterUndoRestore != nil {
+		afterUndoRestore()
 	}
 	v.Prune(paths...)
 	tx.Mark(paths...)
