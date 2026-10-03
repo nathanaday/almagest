@@ -3,6 +3,7 @@ package doc
 import (
 	"strings"
 	"testing"
+	"unicode/utf8"
 )
 
 func TestParseAndAccessors(t *testing.T) {
@@ -177,5 +178,19 @@ func TestPutSection(t *testing.T) {
 	}
 	if end := PutSection("## Goal\n\nx\n", "Notes", "n", order); end != "## Goal\n\nx\n\n## Notes\n\nn\n" {
 		t.Fatalf("%q", end)
+	}
+}
+
+func TestCutTitleStopsAtACharacterBoundary(t *testing.T) {
+	for _, s := range []string{strings.Repeat("é", 100), strings.Repeat("日", 100), strings.Repeat("🙂", 60), strings.Repeat("a", 200)} {
+		for _, n := range []int{1, 2, 3, 145, 150} {
+			got := CutTitle(s, n)
+			if len(got) > n || !utf8.ValidString(got) || !strings.HasPrefix(s, got) {
+				t.Errorf("CutTitle(%.6q…, %d) = %d bytes %q", s, n, len(got), got)
+			}
+		}
+	}
+	if got := CutTitle("short", 150); got != "short" {
+		t.Errorf("a short title changed: %q", got)
 	}
 }

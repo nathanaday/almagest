@@ -3,7 +3,9 @@ package source_test
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
@@ -45,6 +47,21 @@ func TestACaptureBesideATitleInAnotherUnicodeFormTakesTheNextTitle(t *testing.T)
 	}
 	if tv.Read("wiki/documents/"+cafeNFC+".md") != stub {
 		t.Fatal("the stub changed")
+	}
+	tv.Clean()
+}
+
+func TestALongWideFileNameIsCutAtACharacterBoundary(t *testing.T) {
+	tv := testvault.New(t)
+	name := strings.Repeat("日", 80) + ".md"
+	tv.Write("inbox/"+name, "# Notes\n")
+	res, err := source.Capture(tv.V, source.Request{Inbox: []string{name}}, at)
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := res.Captured[0].Ref.Title
+	if len(title) > 150 || !utf8.ValidString(title) || !strings.HasPrefix(name, title) {
+		t.Fatalf("the title has %d bytes: %q", len(title), title)
 	}
 	tv.Clean()
 }
