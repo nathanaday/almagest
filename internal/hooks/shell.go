@@ -299,6 +299,55 @@ func inner(cmds []simple) []simple {
 // expandBraces is a word with its brace lists expanded, as bash and zsh do: a{b,c}d is
 // abd and acd. A word with no list is itself.
 func expandBraces(w string) []string {
+	if braceCount(w) > maxBraceWords {
+		return []string{w}
+	}
+	return expandAll(w)
+}
+
+// braceCount is how many words a word's brace lists give, counted without expanding
+// them, and more than maxBraceWords once it passes that.
+func braceCount(w string) int {
+	n := 1
+	for i := 0; i < len(w); i++ {
+		if w[i] != '{' || i > 0 && w[i-1] == '$' {
+			continue
+		}
+		level, end, parts := 0, -1, 1
+		for j := i; j < len(w) && end < 0; j++ {
+			switch w[j] {
+			case '{':
+				level++
+			case '}':
+				level--
+				if level == 0 {
+					end = j
+				}
+			case ',':
+				if level == 1 {
+					parts++
+				}
+			}
+		}
+		if end < 0 {
+			break
+		}
+		if r := braceRange(w[i+1 : end]); r != nil {
+			parts = len(r)
+		} else if inner := braceCount(w[i+1 : end]); inner > 1 {
+			parts *= inner
+		}
+		n *= parts
+		if n > maxBraceWords {
+			return maxBraceWords + 1
+		}
+		i = end
+	}
+	return n
+}
+
+// expandAll expands every brace list of a word.
+func expandAll(w string) []string {
 	start, end := -1, -1
 	level := 0
 	comma := false
@@ -355,14 +404,10 @@ func expandBraces(w string) []string {
 	}
 	var out []string
 	for _, p := range parts {
-		for _, e := range expandBraces(w[:start] + p + w[end+1:]) {
+		for _, e := range expandAll(w[:start] + p + w[end+1:]) {
 			if e != "" {
 				out = append(out, e)
 			}
-		}
-		// A list this long holds no command; the cap keeps the hook fast.
-		if len(out) > maxBraceWords {
-			return []string{w}
 		}
 	}
 	return out
