@@ -294,3 +294,15 @@ func TestAnEditIsJudgedByTheDocumentItLeaves(t *testing.T) {
 		t.Error("an ordinary Edit of ## Idea with a closed fence was refused")
 	}
 }
+
+// A hunk that fits nowhere is refused for that, not for a rule it may not break.
+func TestAnUnplacedHunkSaysSo(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Lost", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
+	patch := "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n@@\n no such line\n+more\n*** End Patch"
+	out := f.run("guard", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": patch}})
+	if !denied(out) || !strings.Contains(out, "cannot tell where a hunk") {
+		t.Fatalf("an unplaced hunk: %s", out)
+	}
+}

@@ -264,6 +264,8 @@ func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 		return rel + " is a " + d.Type() + ", which changes only through a change: build a plan, call change propose, show the preview, and apply after the user's yes"
 	case f.Op != "update" || in.ToolName == "Write":
 		return rel + " is a " + d.Type() + "; revise its prose with Edit, and its fields with thread set"
+	case unplaced(in, f, d.Content):
+		return unplacedWhy(rel)
 	case touchesPrefix(in, f, d):
 		return "the frontmatter and the lead callout of " + d.Title() + " are code's; use thread set, or the thread action that fits"
 	}
@@ -333,6 +335,9 @@ func sessionRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 	if d.Str("harness_id") != key {
 		return rel + " is another session's document; " + allowed
 	}
+	if unplaced(in, f, d.Content) {
+		return unplacedWhy(rel)
+	}
 	if touchesPrefix(in, f, d) {
 		return "the frontmatter and the lead callout are the hooks'; " + allowed
 	}
@@ -349,6 +354,20 @@ func sessionRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 		}
 	}
 	return ""
+}
+
+// unplaced reports whether a patch holds a hunk that fits nowhere in the file, so the
+// guard cannot tell where it lands.
+func unplaced(in Input, f patchFile, content string) bool {
+	if in.ToolName != "apply_patch" {
+		return false
+	}
+	_, ok := in.leaves(content, f)
+	return !ok
+}
+
+func unplacedWhy(rel string) string {
+	return "the guard cannot tell where a hunk of this patch lands in " + rel + ": its context and removed lines match no lines of the file. Read the file again, and give each hunk context lines as the file holds them"
 }
 
 // secondHeading is a level-two heading that the content after an edit holds more than
