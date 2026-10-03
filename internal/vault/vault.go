@@ -18,6 +18,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 )
 
 // The layout, relative to the vault.
@@ -593,17 +594,36 @@ func ReadFront(file string) (*doc.Front, error) {
 	}
 }
 
-// TimeFormat is the format of code-owned times.
-const TimeFormat = "2006-01-02T15:04:05"
-
-// DateFormat is the format of a day.
-const DateFormat = "2006-01-02"
+// The layouts of times that code writes for a reader or in a file name.
+const (
+	MonthFormat      = "2006-01"
+	MinuteFormat     = "2006-01-02 15:04"
+	SecondFormat     = "2006-01-02 15:04:05"
+	FileMinuteFormat = "2006-01-02 1504"
+	FileSecondFormat = "2006-01-02 150405"
+)
 
 // Stamp is t as a code-owned time.
-func Stamp(t time.Time) string { return t.Format(TimeFormat) }
+func Stamp(t time.Time) string { return t.Format(schema.TimeFormat) }
 
 // Date is t as a day.
-func Date(t time.Time) string { return t.Format(DateFormat) }
+func Date(t time.Time) string { return t.Format(schema.DateFormat) }
+
+// Day is a stored time as a day, or the stamp as given when it does not parse.
+func Day(stamp string) string {
+	if t, ok := schema.ParseTime(stamp); ok {
+		return Date(t)
+	}
+	return stamp
+}
+
+// Minute is a stored time to the minute, or the stamp as given when it does not parse.
+func Minute(stamp string) string {
+	if t, ok := schema.ParseTime(stamp); ok {
+		return t.Format(MinuteFormat)
+	}
+	return stamp
+}
 
 // ErrChangedSince is a guarded write's refusal of a file whose bytes changed after the
 // write read it.

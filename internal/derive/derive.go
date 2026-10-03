@@ -133,7 +133,7 @@ func SourceLead(idx *vault.Index, d *doc.Doc) string {
 	if len(by) > 0 {
 		lines = append(lines, strings.Join(by, " · "))
 	}
-	where := "Captured " + day(d.Str("captured"))
+	where := "Captured " + vault.Day(d.Str("captured"))
 	switch origin, loc := d.Str("origin"), d.Str("locator"); {
 	case origin == "url" && loc != "":
 		where += " from " + loc
@@ -257,7 +257,7 @@ func RepositoryLead(d *doc.Doc) string {
 	if h := d.Str("head"); h != "" {
 		head += " at `" + h + "`"
 		if t, ok := schema.ParseTime(d.Str("head_time")); ok {
-			head += ", " + t.Format("2006-01-02 15:04")
+			head += ", " + t.Format(vault.MinuteFormat)
 		}
 	}
 	if r := d.Str("remote"); r != "" {
@@ -337,7 +337,7 @@ func TopicLead(idx *vault.Index, d *doc.Doc) string {
 	n := len(d.List("sources"))
 	meta := fmt.Sprintf("%d %s", n, doc.Plural(n, "source", "sources"))
 	if r := d.Str("refreshed"); r != "" {
-		meta += " · refreshed " + day(r)
+		meta += " · refreshed " + vault.Day(r)
 	}
 	if kind != "policy" {
 		if t := tagLine(d.List("tags")); t != "" {
@@ -503,11 +503,4 @@ func tagLine(list []string) string {
 	}
 	sort.Strings(out)
 	return strings.Join(out, " · ")
-}
-
-func day(stamp string) string {
-	if t, ok := schema.ParseTime(stamp); ok {
-		return vault.Date(t)
-	}
-	return stamp
 }

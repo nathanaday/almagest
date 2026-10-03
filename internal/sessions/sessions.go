@@ -237,8 +237,8 @@ func Start(v *vault.Vault, e Event, now time.Time) (string, error) {
 		content = process(doc.SetField(content, "pid", 0), e)
 		return d.Path, write(v, d.Path, content)
 	}
-	name := now.Format("2006-01-02 1504") + " " + Short(e.Key())
-	rel := fmt.Sprintf("%s/%s/%s.md", vault.Sessions, now.Format("2006-01"), name)
+	name := now.Format(vault.FileMinuteFormat) + " " + Short(e.Key())
+	rel := fmt.Sprintf("%s/%s/%s.md", vault.Sessions, now.Format(vault.MonthFormat), name)
 	content := process(doc.Render(fields("ses-"+Short(e.Key()), e, now, "", ""), newBody), e)
 	return rel, write(v, rel, content)
 }

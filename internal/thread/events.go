@@ -68,13 +68,13 @@ func (t *Titles) Release(title string) { delete(t.taken, strings.ToLower(title))
 // the seconds when the minute is taken; then a number.
 func EventTitle(t *Titles, subject, kind string, at time.Time) string {
 	base := subject + " · " + kind + " "
-	for _, candidate := range []string{base + at.Format("2006-01-02 1504"), base + at.Format("2006-01-02 150405")} {
+	for _, candidate := range []string{base + at.Format(vault.FileMinuteFormat), base + at.Format(vault.FileSecondFormat)} {
 		if c := doc.CleanTitle(candidate); t.Free(c) {
 			return c
 		}
 	}
 	for n := 2; ; n++ {
-		if c := doc.CleanTitle(fmt.Sprintf("%s%s (%d)", base, at.Format("2006-01-02 150405"), n)); t.Free(c) {
+		if c := doc.CleanTitle(fmt.Sprintf("%s%s (%d)", base, at.Format(vault.FileSecondFormat), n)); t.Free(c) {
 			return c
 		}
 	}
@@ -148,7 +148,7 @@ func NewEvent(t *Titles, in EventIn) (rel, content, id string) {
 func EventLead(e *doc.Doc, subject, chord string) string {
 	kind := e.Str("kind")
 	at, _ := schema.ParseTime(e.Str("at"))
-	title := doc.Capital(kind) + " · " + doc.Link(subject) + " · " + at.Format("2006-01-02 15:04:05")
+	title := doc.Capital(kind) + " · " + doc.Link(subject) + " · " + at.Format(vault.SecondFormat)
 	var line []string
 	switch kind {
 	case "promoted":

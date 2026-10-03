@@ -408,9 +408,17 @@ func (v Values) list(k string) []string {
 	return nil
 }
 
+// The layouts of stored times: a code-owned time, a time from before times carried
+// seconds, and a day.
+const (
+	TimeFormat       = "2006-01-02T15:04:05"
+	TimeFormatMinute = "2006-01-02T15:04"
+	DateFormat       = "2006-01-02"
+)
+
 // ParseTime reads a time as code writes it, or a date, or a time without seconds.
 func ParseTime(s string) (time.Time, bool) {
-	for _, layout := range []string{"2006-01-02T15:04:05", "2006-01-02T15:04", "2006-01-02", time.RFC3339} {
+	for _, layout := range []string{TimeFormat, TimeFormatMinute, DateFormat, time.RFC3339} {
 		if t, err := time.ParseInLocation(layout, strings.TrimSpace(s), time.Local); err == nil {
 			return t, true
 		}

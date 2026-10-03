@@ -519,7 +519,7 @@ func (p *plan) absorbChange(o *old) {
 		{Key: "supersedes", Value: ""},
 		{Key: "reason", Value: ""},
 	}, b.String())
-	rel := fmt.Sprintf("%s/%s/%s Migrate to 7.0.md", vault.Changes, p.now.Format("2006-01"), vault.Date(p.now))
+	rel := fmt.Sprintf("%s/%s/%s Migrate to 7.0.md", vault.Changes, p.now.Format(vault.MonthFormat), vault.Date(p.now))
 	p.writes = append(p.writes, &write{to: rel, content: content})
 }
 

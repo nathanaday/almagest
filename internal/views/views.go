@@ -428,7 +428,7 @@ func (r *renderer) threadsView() string {
 	for _, ref := range bv.Ended {
 		at := r.b.EndedAt(idx.ByID(ref.ID))
 		if t, ok := schema.ParseTime(at); ok && r.now.Sub(t) <= EndedAge {
-			ended = append(ended, fmt.Sprintf("- %s · %s %s", minute(at), ref.Status, doc.Link(ref.Title)))
+			ended = append(ended, fmt.Sprintf("- %s · %s %s", vault.Minute(at), ref.Status, doc.Link(ref.Title)))
 		}
 	}
 	loose := ""
@@ -602,7 +602,7 @@ func (r *renderer) timeline() (string, map[string]string) {
 		if r.now.Sub(e.at) <= TimelineAge {
 			recent = append(recent, e)
 		} else {
-			m := e.at.Format("2006-01")
+			m := e.at.Format(vault.MonthFormat)
 			months[m] = append(months[m], e)
 		}
 	}
@@ -625,7 +625,7 @@ func byDay(list []timelineEntry) string {
 	var b strings.Builder
 	day := ""
 	for _, e := range list {
-		if d := e.at.Format("2006-01-02"); d != day {
+		if d := vault.Date(e.at); d != day {
 			if day != "" {
 				b.WriteString("\n")
 			}
@@ -643,7 +643,7 @@ func (r *renderer) recentLines(n int) []string {
 		if i == n {
 			break
 		}
-		out = append(out, "- "+e.at.Format("2006-01-02")+" "+e.line)
+		out = append(out, "- "+vault.Date(e.at)+" "+e.line)
 	}
 	return out
 }
@@ -733,11 +733,4 @@ func (r *renderer) tagView(t string) string {
 		sections = append(sections, section("History", base("History", []string{filter, `type == "event"`, `at >= now() - "30 days"`}, []string{"file.name", "kind", "at", "session"}, "", "at DESC")))
 	}
 	return r.note(TagTitle(t), sections...)
-}
-
-func minute(stamp string) string {
-	if t, ok := schema.ParseTime(stamp); ok {
-		return t.Format("2006-01-02 15:04")
-	}
-	return stamp
 }

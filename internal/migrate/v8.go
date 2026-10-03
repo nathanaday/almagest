@@ -713,6 +713,6 @@ func (s *step2) keep() {
 		{Key: "supersedes", Value: ""},
 		{Key: "reason", Value: ""},
 	}, b.String())
-	rel := fmt.Sprintf("%s/%s/%s Migrate to 8.0.md", vault.Changes, s.now.Format("2006-01"), vault.Date(s.now))
+	rel := fmt.Sprintf("%s/%s/%s Migrate to 8.0.md", vault.Changes, s.now.Format(vault.MonthFormat), vault.Date(s.now))
 	s.writes = append(s.writes, &write{to: rel, content: content})
 }

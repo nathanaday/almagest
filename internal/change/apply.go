@@ -129,7 +129,7 @@ func readBack(v *vault.Vault, rel string) error {
 func freePath(idx *vault.Index, now time.Time, title string) string {
 	base := vault.Date(now) + " " + title
 	name := base
-	folder := vault.Changes + "/" + now.Format("2006-01") + "/"
+	folder := vault.Changes + "/" + now.Format(vault.MonthFormat) + "/"
 	taken := func(name string) bool {
 		return len(idx.TitleHolders(name)) > 0 || (idx.V != nil && idx.V.Occupied(folder+name+".md"))
 	}

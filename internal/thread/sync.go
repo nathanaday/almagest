@@ -161,7 +161,7 @@ func (b *Board) derivedPart(d *doc.Doc) string {
 		if s := d.Str("session"); s != "" {
 			who += " in " + s
 		}
-		lead = doc.Callout(kind, title, back, minute(d.Str("at"))+" · "+who)
+		lead = doc.Callout(kind, title, back, vault.Minute(d.Str("at"))+" · "+who)
 	}
 	return doc.ReplaceLead(setFields(d, set), lead)
 }
@@ -257,7 +257,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 	case Resolved:
 		title := "Resolved"
 		if e := b.Result(d); e != nil {
-			title += " " + day(e.Str("at"))
+			title += " " + vault.Day(e.Str("at"))
 		}
 		if became := d.List("became"); len(became) > 0 {
 			title += " → " + strings.Join(became, ", ")
@@ -266,7 +266,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 	case Dropped:
 		title, why, see := "Dropped", "", ""
 		if e := b.Result(d); e != nil {
-			title += " " + day(e.Str("at"))
+			title += " " + vault.Day(e.Str("at"))
 			text, _ := doc.Section(e.Body, "Why")
 			why = doc.OneLine(doc.FirstLine(text), 160)
 			see = "See " + doc.Link(e.Title())
@@ -275,7 +275,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 	case Closed:
 		title := "Closed"
 		if at := b.EndedAt(d); at != "" {
-			title += " " + day(at)
+			title += " " + vault.Day(at)
 		}
 		if c := b.Closer(d); c != nil {
 			title += " · absorbed by " + doc.Link(vault.Title(c))
@@ -288,7 +288,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 	priority := cmp.Or(d.Str("priority"), "normal")
 	var title, tagsLine string
 	if status == StatusStub {
-		title = "Stub · " + priority + " · planted " + day(d.Str("created"))
+		title = "Stub · " + priority + " · planted " + vault.Day(d.Str("created"))
 		if s := b.plantedIn(d); s != "" {
 			title += " in " + doc.Link(s)
 		}
@@ -548,18 +548,4 @@ func tagLine(d *doc.Doc) string {
 	}
 	sort.Strings(out)
 	return strings.Join(out, " · ")
-}
-
-func day(stamp string) string {
-	if t, ok := schema.ParseTime(stamp); ok {
-		return vault.Date(t)
-	}
-	return stamp
-}
-
-func minute(stamp string) string {
-	if t, ok := schema.ParseTime(stamp); ok {
-		return t.Format("2006-01-02 15:04")
-	}
-	return stamp
 }
