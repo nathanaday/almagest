@@ -192,3 +192,39 @@ func TestThePluginInstallsThroughALinkedObsidianFolder(t *testing.T) {
 		t.Fatal("the machine writer took a document path")
 	}
 }
+
+// A file the user saves while a write that will fail is open keeps the save: rollback
+// puts back only what still holds the write's own bytes.
+func TestRollbackLeavesASaveMadeDuringTheWrite(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("wiki/documents/A.md", "before\n")
+	tv.Write("wiki/documents/B.md", "before\n")
+	tv.Commit()
+	tx, err := vault.BeginWrite(tv.V)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Write("wiki/documents/A.md", []byte("written by the call\n")); err != nil {
+		t.Fatal(err)
+	}
+	if err := tx.Write("wiki/documents/B.md", []byte("written by the call\n")); err != nil {
+		t.Fatal(err)
+	}
+	tv.Write("wiki/documents/A.md", "saved in Obsidian\n")
+	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err = tx.Commit("a write that fails")
+	os.Remove(lock)
+	tx.Close()
+	if err == nil || !strings.Contains(err.Error(), "left as saved") || !strings.Contains(err.Error(), "wiki/documents/A.md") {
+		t.Fatalf("the failure message: %v", err)
+	}
+	if got := tv.Read("wiki/documents/A.md"); got != "saved in Obsidian\n" {
+		t.Fatalf("the save was rolled back: %q", got)
+	}
+	if got := tv.Read("wiki/documents/B.md"); got != "before\n" {
+		t.Fatalf("B was not put back: %q", got)
+	}
+}

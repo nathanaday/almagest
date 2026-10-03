@@ -75,11 +75,16 @@ type Tx struct {
 	written map[string]bool
 	// before holds each touched path as the write found it, so a write that ends without
 	// its commit puts the vault back.
-	before     map[string]*found
+	before map[string]*found
+	// after holds what the write last left at each path, so rollback can tell a save
+	// that landed since from the write's own bytes.
+	after      map[string]*found
 	committed  bool
 	rolledBack bool
 	// added is set once the commit staged the paths, so rollback knows to unstage them.
 	added bool
+	// saved are the paths rollback left as saved, because they changed after the write.
+	saved []string
 	// staged are contents the commit records in place of what the disk holds.
 	staged map[string][]byte
 	// Snapshot is the commit of the hand edits the write found, or "".
@@ -103,7 +108,7 @@ func Begin(v *Vault, recover func() error) (*Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	tx := &Tx{V: v, unlock: unlock, written: map[string]bool{}, before: map[string]*found{}}
+	tx := &Tx{V: v, unlock: unlock, written: map[string]bool{}, before: map[string]*found{}, after: map[string]*found{}}
 	if err := v.Git().CheckIdle(); err != nil {
 		tx.Close()
 		return nil, err
@@ -174,6 +179,11 @@ func (tx *Tx) rollback() []string {
 	}
 	sort.Strings(paths)
 	for _, rel := range paths {
+		if a := tx.after[rel]; a != nil && !tx.holds(rel, a) {
+			// Someone saved the path after this write wrote it: the save stays.
+			tx.saved = append(tx.saved, rel)
+			continue
+		}
 		if err := tx.putBack(rel, tx.before[rel]); err != nil {
 			failed = append(failed, fmt.Sprintf("%s (%v)", rel, firstLine(err)))
 		}
@@ -185,6 +195,15 @@ func (tx *Tx) rollback() []string {
 		}
 	}
 	return failed
+}
+
+// holds reports whether a path is still what the write left there.
+func (tx *Tx) holds(rel string, a *found) bool {
+	data, err := os.ReadFile(tx.V.Abs(rel))
+	if !a.exists {
+		return errors.Is(err, os.ErrNotExist)
+	}
+	return err == nil && string(data) == string(a.data)
 }
 
 // putBack makes one path what it was.
@@ -252,7 +271,11 @@ func (tx *Tx) Write(rel string, content []byte) error {
 		return err
 	}
 	tx.written[rel] = true
-	return tx.V.Write(rel, content)
+	if err := tx.V.Write(rel, content); err != nil {
+		return err
+	}
+	tx.after[rel] = &found{exists: true, data: content}
+	return nil
 }
 
 // WriteIfChanged writes a file only when it differs, and marks it when it wrote.
@@ -266,6 +289,9 @@ func (tx *Tx) WriteIfChanged(rel string, content []byte) (bool, error) {
 	wrote, err := tx.V.WriteIfChanged(rel, content)
 	if wrote {
 		tx.written[rel] = true
+		if err == nil {
+			tx.after[rel] = &found{exists: true, data: content}
+		}
 	}
 	return wrote, err
 }
@@ -279,7 +305,11 @@ func (tx *Tx) Remove(rel string) error {
 		return err
 	}
 	tx.written[rel] = true
-	return tx.V.Remove(rel)
+	if err := tx.V.Remove(rel); err != nil {
+		return err
+	}
+	tx.after[rel] = &found{}
+	return nil
 }
 
 // Move renames a file and marks both paths.
@@ -301,11 +331,18 @@ func (tx *Tx) Move(from, to string) error {
 	if err := os.Rename(tx.V.Abs(from), tx.V.Abs(to)); err != nil {
 		return err
 	}
+	if b := tx.before[from]; b != nil && b.exists {
+		tx.after[to] = &found{exists: true, data: b.data}
+	}
 	if strings.EqualFold(from, to) {
 		// A new case of one name: on a disk that ignores case, from is still the file.
 		return nil
 	}
-	return tx.V.Remove(from)
+	if err := tx.V.Remove(from); err != nil {
+		return err
+	}
+	tx.after[from] = &found{}
+	return nil
 }
 
 // Mark adds paths another function wrote to the commit. Call Keep on them before that
@@ -341,10 +378,15 @@ func (tx *Tx) Paths() []string {
 func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
 	sha, err := tx.commit(subject, trailers)
 	if err != nil {
-		if failed := tx.rollback(); len(failed) > 0 {
-			return "", fmt.Errorf("%s; nothing was saved, and these could not be put back as they were: %s", firstLine(err), strings.Join(failed, "; "))
+		failed := tx.rollback()
+		kept := ""
+		if len(tx.saved) > 0 {
+			kept = "; left as saved, since they changed after this call wrote them: " + strings.Join(tx.saved, ", ")
 		}
-		return "", fmt.Errorf("%s; nothing was saved: the vault is back as it was before this call", firstLine(err))
+		if len(failed) > 0 {
+			return "", fmt.Errorf("%s; nothing was saved, and these could not be put back as they were: %s%s", firstLine(err), strings.Join(failed, "; "), kept)
+		}
+		return "", fmt.Errorf("%s; nothing was saved: the vault is back as it was before this call%s", firstLine(err), kept)
 	}
 	tx.committed = true
 	return sha, nil
