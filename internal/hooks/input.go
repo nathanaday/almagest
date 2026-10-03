@@ -139,9 +139,11 @@ type toolInput struct {
 	Command      string `json:"command"`
 	OldString    string `json:"old_string"`
 	NewString    string `json:"new_string"`
+	ReplaceAll   bool   `json:"replace_all"`
 	Edits        []struct {
-		OldString string `json:"old_string"`
-		NewString string `json:"new_string"`
+		OldString  string `json:"old_string"`
+		NewString  string `json:"new_string"`
+		ReplaceAll bool   `json:"replace_all"`
 	} `json:"edits"`
 	Action string `json:"action"`
 	ID     string `json:"id"`
@@ -171,6 +173,52 @@ type patchFile struct {
 // removed, '+' added).
 type hunk struct {
 	Lines []string
+}
+
+// apply is content with the hunk applied where its old side first fits, matched as
+// touches matches it; a hunk with no old side goes at the end.
+func (h hunk) apply(content string) (string, bool) {
+	var old []string
+	for _, l := range h.Lines {
+		if l[0] != '+' {
+			old = append(old, l[1:])
+		}
+	}
+	lines := strings.SplitAfter(content, "\n")
+	if len(old) == 0 {
+		var b strings.Builder
+		b.WriteString(content)
+		if content != "" && !strings.HasSuffix(content, "\n") {
+			b.WriteString("\n")
+		}
+		for _, l := range h.Lines {
+			b.WriteString(l[1:] + "\n")
+		}
+		return b.String(), true
+	}
+	trim := func(l string) string { return strings.TrimRight(l, " \t\r\n") }
+	for i := 0; i+len(old) <= len(lines); i++ {
+		if !slices.EqualFunc(lines[i:i+len(old)], old, func(a, b string) bool { return trim(a) == trim(b) }) {
+			continue
+		}
+		var b strings.Builder
+		b.WriteString(strings.Join(lines[:i], ""))
+		at := i
+		for _, l := range h.Lines {
+			switch l[0] {
+			case '+':
+				b.WriteString(l[1:] + "\n")
+			case '-':
+				at++
+			default:
+				b.WriteString(lines[at])
+				at++
+			}
+		}
+		b.WriteString(strings.Join(lines[at:], ""))
+		return b.String(), true
+	}
+	return "", false
 }
 
 // touches reports whether the hunk can change content[start:end], placed as Codex places
@@ -282,6 +330,44 @@ func (in Input) paths() []patchFile {
 		out[i].Path = filepath.Clean(p)
 	}
 	return out
+}
+
+// leaves is the content an edit leaves in a file that holds content, and whether the
+// edit applies: an Edit or a MultiEdit replaces its old strings in order, and a patch
+// applies each hunk where it first fits.
+func (in Input) leaves(content string, f patchFile) (string, bool) {
+	if in.ToolName == "apply_patch" {
+		for _, h := range f.Hunks {
+			var ok bool
+			if content, ok = h.apply(content); !ok {
+				return "", false
+			}
+		}
+		return content, true
+	}
+	t := in.tool()
+	type edit struct {
+		old, new string
+		all      bool
+	}
+	edits := []edit{{t.OldString, t.NewString, t.ReplaceAll}}
+	for _, e := range t.Edits {
+		edits = append(edits, edit{e.OldString, e.NewString, e.ReplaceAll})
+	}
+	for _, e := range edits {
+		if e.old == "" {
+			continue
+		}
+		if !strings.Contains(content, e.old) {
+			return "", false
+		}
+		if e.all {
+			content = strings.ReplaceAll(content, e.old, e.new)
+		} else {
+			content = strings.Replace(content, e.old, e.new, 1)
+		}
+	}
+	return content, true
 }
 
 // oldStrings are the texts an Edit or a MultiEdit replaces.

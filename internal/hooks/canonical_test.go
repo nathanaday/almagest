@@ -248,3 +248,29 @@ func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
 		}
 	}
 }
+
+// An edit is judged by the document it leaves, read by doc.Headings: no heading trick,
+// fence, or tab moves or hides a section code owns.
+func TestAnEditIsJudgedByTheDocumentItLeaves(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Tricks", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
+	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
+	for name, added := range map[string]string{
+		"a heading after a tab":                "##\tThread\n\n- Spec: none",
+		"a heading between indented fences":    "    ```\n## Thread\n    ```",
+		"an unclosed fence":                    "```",
+		"a level-two heading of a new section": "##\tProgress\n\n- did a thing",
+	} {
+		if !denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea.\n\n"+added))) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
+	patch := "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n@@\n An idea.\n+```\n*** End Patch"
+	if !denied(f.run("guard", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": patch}})) {
+		t.Error("a patch that leaves an unclosed fence: allowed")
+	}
+	if denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea, said better.\n\n```go\nx := 1\n```"))) {
+		t.Error("an ordinary Edit of ## Idea with a closed fence was refused")
+	}
+}
