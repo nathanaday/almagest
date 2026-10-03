@@ -229,3 +229,22 @@ func TestFixedNamesCompareWithoutCase(t *testing.T) {
 		}
 	}
 }
+
+// Codex takes a file marker with whitespace before it, and so does the guard.
+func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Marked", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
+	f.tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	f.tv.Commit()
+	for name, body := range map[string]string{
+		"an insert into ## Thread": " *** Update File: " + r.State.Thread.Path + "\n@@\n - Verification: none\n+- Forged: yes",
+		"the vault's config":       "\t*** Add File: .atlas/config.json\n+{}",
+		"a document deleted":       " *** Delete File: wiki/documents/Alpha.md",
+	} {
+		patch := map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n" + body + "\n*** End Patch"}}
+		if !denied(f.run("guard", patch)) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
+}

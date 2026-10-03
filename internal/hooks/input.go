@@ -230,13 +230,15 @@ func (in Input) paths() []patchFile {
 	if in.ToolName == "apply_patch" {
 		var cur *patchFile
 		for _, line := range strings.Split(t.Command, "\n") {
+			// Codex takes a marker with whitespace before it.
+			marker := strings.TrimLeft(line, " \t")
 			for prefix, op := range map[string]string{"*** Add File: ": "add", "*** Update File: ": "update", "*** Delete File: ": "delete", "*** Move to: ": "move"} {
-				if rest, ok := strings.CutPrefix(line, prefix); ok {
+				if rest, ok := strings.CutPrefix(marker, prefix); ok {
 					out = append(out, patchFile{Path: strings.TrimSpace(rest), Op: op})
 					cur = &out[len(out)-1]
 				}
 			}
-			if cur == nil || strings.HasPrefix(line, "*** ") {
+			if cur == nil || strings.HasPrefix(marker, "*** ") {
 				continue
 			}
 			if strings.HasPrefix(line, "@@") {
