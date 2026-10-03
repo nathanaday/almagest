@@ -185,9 +185,6 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	for _, f := range vault.PluginFiles {
 		machine = append(machine, path.Join(vault.PluginDir, f))
 	}
-	for _, rel := range vault.Bases {
-		machine = append(machine, rel)
-	}
 	if err := tx.Keep(machine...); err != nil {
 		return nil, err
 	}

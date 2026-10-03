@@ -4,6 +4,8 @@ import (
 	"path"
 	"reflect"
 	"slices"
+	"sort"
+	"strings"
 
 	"gopkg.in/yaml.v3"
 )
@@ -43,24 +45,34 @@ func shippedBases(name string) []string {
 }
 
 // upgradeBases replaces each Base that equals a copy an earlier release shipped, which
-// nobody edited, with the one this binary ships. It writes through the transaction after
-// its snapshot, so the write's own commit holds the new copy, not a "hand edit".
-func (tx *Tx) upgradeBases() error {
+// nobody edited, with the one this binary ships, and commits the new copies alone: no
+// snapshot calls them a hand edit, and no change's undo counts them. When that commit
+// fails, the old copies go back, and the next write tries again.
+func upgradeBases(v *Vault) {
+	old := map[string][]byte{}
+	var paths []string
 	for name, rel := range Bases {
-		data, err := tx.V.Read(rel)
-		if err != nil {
-			continue
-		}
-		if !slices.ContainsFunc(shippedBases(path.Base(rel)), func(old string) bool { return SameYAML(string(data), old) }) {
+		data, err := v.Read(rel)
+		if err != nil || !slices.ContainsFunc(shippedBases(path.Base(rel)), func(c string) bool { return SameYAML(string(data), c) }) {
 			continue
 		}
 		current, err := templates.ReadFile("template/" + name)
-		if err != nil {
-			return err
+		if err != nil || string(current) == string(data) {
+			continue
 		}
-		if _, err := tx.WriteIfChanged(rel, current); err != nil {
-			return err
+		if err := v.Write(rel, current); err != nil {
+			continue
+		}
+		old[rel] = data
+		paths = append(paths, rel)
+	}
+	if len(paths) == 0 {
+		return
+	}
+	sort.Strings(paths)
+	if _, err := v.Git().CommitOnly("layout: upgrade "+strings.Join(paths, ", "), paths...); err != nil {
+		for rel, data := range old {
+			v.Write(rel, data)
 		}
 	}
-	return nil
 }

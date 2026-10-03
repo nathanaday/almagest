@@ -114,9 +114,9 @@ type found struct {
 	link   string
 }
 
-// Begin takes the lock, runs recover (the repair of a write a crash left half done), and
-// commits a dirty tree as a snapshot, so the write's own commit holds only its paths and
-// an undo never takes back a hand edit.
+// Begin takes the lock, runs recover (the repair of a write a crash left half done),
+// commits a dirty tree as a snapshot, and commits a Base upgrade on its own, so the
+// write's own commit holds only its paths and an undo never takes back a hand edit.
 func Begin(v *Vault, recover func() error) (*Tx, error) {
 	unlock, err := v.Lock()
 	if err != nil {
@@ -143,10 +143,7 @@ func Begin(v *Vault, recover func() error) (*Tx, error) {
 		return nil, fmt.Errorf("commit the hand edits before this write: %w; nothing was written, so the vault is as it was", err)
 	}
 	tx.Snapshot = sha
-	if err := tx.upgradeBases(); err != nil {
-		tx.End(&err)
-		return nil, err
-	}
+	upgradeBases(v)
 	return tx, nil
 }
 

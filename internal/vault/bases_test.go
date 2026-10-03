@@ -34,9 +34,10 @@ func TestABaseUpgradesFromEveryShippedCopy(t *testing.T) {
 				t.Fatal(err)
 			}
 			got := tv.Read("sessions/Sessions.base")
-			// The write's own commit holds the new copy; no snapshot calls it a hand edit.
+			// A commit of its own holds the new copy: no snapshot calls it a hand edit, and the
+			// write's commit leaves it out.
 			touched := git("log", "--format=%s", setup+"..HEAD", "--", "sessions/Sessions.base")
-			if want := map[bool]string{true: "", false: "thread: stub Next"}[name == "an edited copy"]; touched != want {
+			if want := map[bool]string{true: "", false: "layout: upgrade sessions/Sessions.base"}[name == "an edited copy"]; touched != want {
 				t.Fatalf("the commits that touch the Base: %q, want %q", touched, want)
 			}
 			if name == "an edited copy" {
