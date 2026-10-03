@@ -87,9 +87,10 @@ func Recover(v *Vault) error {
 			}
 			v.Prune(p)
 		}
-		// The checkout staged the reversal; it waits in the work tree for the next write's
-		// snapshot instead, so the user's own next commit does not take it.
-		if err := g.Unstage(local...); err != nil {
+		// The checkout staged the reversal, and a crash inside a commit leaves the change
+		// document staged as applied; both wait in the work tree for the next write's
+		// snapshot instead, so the user's own next commit takes neither.
+		if err := g.Unstage(append(local, d.Path)...); err != nil {
 			return fmt.Errorf("recover %s: %w", Title(d), err)
 		}
 		content := doc.RemoveField(doc.RemoveField(doc.SetField(d.Content, "status", "proposed"), "paths"), "recovering")

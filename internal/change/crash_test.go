@@ -173,6 +173,9 @@ func TestTheRecoveryCommitHoldsOnlyItsPaths(t *testing.T) {
 	if strings.Join(got, "|") != "wiki/documents/Motion scoring.md|wiki/documents/Radar.md" {
 		t.Fatalf("the recovery commit holds:\n%s", out)
 	}
+	if staged, err := exec.Command("git", "-C", tv.V.Root, "diff", "--cached", "--name-only").CombinedOutput(); err != nil || strings.TrimSpace(string(staged)) != "" {
+		t.Fatalf("recovery left staged: %q %v", staged, err)
+	}
 }
 
 func TestRecoveryLeavesNothingStaged(t *testing.T) {
