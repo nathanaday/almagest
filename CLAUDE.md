@@ -94,10 +94,13 @@ The design pages are the spec. When the code departs from them, the reason is be
   field when it ends.
 - **Every path built from input is contained.** `Vault.Contain` refuses an absolute or
   unclean path, `..`, `.git` in any case, a name over 255 bytes, and a path whose folders
-  or final link resolve outside the vault. Every write, remove, and move of `vault.Tx`
-  passes it, so no document write lands outside the vault whatever its caller.
-  `Vault.Write` with a fixed machine path (`.obsidian/`, `.claude/`) does not, so a user
-  who links `.obsidian` to a shared folder keeps a working vault. Inbox files pass
+  or final link resolve outside the vault. `Vault.Write`, `WriteIfChanged`, and `Remove`
+  run it by default, so a caller cannot forget it; `vault.Tx` checks before it marks a
+  path, and the moves of the misplaced-file sync and of the migration check both paths.
+  The one unchecked writer, `WriteMachineIfChanged`, takes only fixed paths under
+  `.obsidian/` and `.claude/`, so a user who links `.obsidian` to a shared folder keeps a
+  working vault; `settings.go` and `prefs.go` write their machine files with
+  `writeAtomic` directly. Inbox files pass
   `Vault.InboxFile` (a regular file kept in `inbox/`), a mention's note must be one the
   index holds, and a repository's files and a source's captured file are read through
   `os.Root`. Go 1.24's `os.Root` has no rename, so writes check the path before the

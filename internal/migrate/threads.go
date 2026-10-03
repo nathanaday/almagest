@@ -551,6 +551,23 @@ func (p *plan) absorbChange(o *old) {
 // execute writes the plan to disk. The caller holds the lock and commits.
 func (p *plan) execute() error {
 	v := p.v
+	// Every path is checked before anything moves, so a refusal leaves the vault as it was.
+	var paths []string
+	for _, w := range p.writes {
+		paths = append(paths, w.to)
+		if w.from != "" {
+			paths = append(paths, w.from)
+		}
+	}
+	for _, m := range p.moves {
+		paths = append(paths, m.from, m.to)
+	}
+	paths = append(paths, p.removes...)
+	for _, rel := range paths {
+		if err := v.Contain(rel); err != nil {
+			return fmt.Errorf("migrate: %w", err)
+		}
+	}
 	for _, w := range p.writes {
 		if err := v.Write(w.to, []byte(w.content)); err != nil {
 			return err
