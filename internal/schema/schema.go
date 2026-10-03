@@ -363,14 +363,16 @@ func AllKinds() []string {
 	return out
 }
 
-// Statuses lists every status any type has.
+// Statuses lists every status any type has; a verification's status is its verdict.
 func Statuses() []string {
 	var out []string
 	for _, t := range Types {
-		if f := t.Field("status"); f != nil {
-			for _, v := range f.Values {
-				if !slices.Contains(out, v) {
-					out = append(out, v)
+		for _, name := range []string{"status", "verdict"} {
+			if f := t.Field(name); f != nil {
+				for _, v := range f.Values {
+					if !slices.Contains(out, v) {
+						out = append(out, v)
+					}
 				}
 			}
 		}

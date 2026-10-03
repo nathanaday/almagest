@@ -74,3 +74,15 @@ func TestTokens(t *testing.T) {
 		}
 	}
 }
+
+// A verification's status is its verdict, and the status filter selects by it.
+func TestTheStatusFilterSelectsAVerification(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("stub", "Fix alarms", map[string]any{"status": "unverified"}, "## Idea\n\nvehicle false alarms\n")
+	tv.Doc("verification", "Fix alarms · Verification 1", map[string]any{"thread": "[[Fix alarms]]", "round": 1, "verdict": "pass"}, "## Scope\n\nx\n")
+	tv.Doc("verification", "Fix alarms · Verification 2", map[string]any{"thread": "[[Fix alarms]]", "round": 2, "verdict": "findings"}, "## Scope\n\nx\n")
+	hits, err := search.Search(tv.Index(), search.Query{Status: []string{"findings"}})
+	if err != nil || hits.Total != 1 || hits.Hits[0].Ref.Title != "Fix alarms · Verification 2" {
+		t.Fatalf("status findings: %+v %v", hits, err)
+	}
+}
