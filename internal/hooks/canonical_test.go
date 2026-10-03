@@ -306,3 +306,30 @@ func TestAnUnplacedHunkSaysSo(t *testing.T) {
 		t.Fatalf("an unplaced hunk: %s", out)
 	}
 }
+
+// A Codex move takes a file from its place: the source is judged as a delete, the
+// target as a new file.
+func TestACodexMoveIsADeleteAndAnAdd(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	f.thread("Moved", "")
+	stub := "wiki/documents/Moved.md"
+	tasks := "wiki/documents/Moved · Tasks.md"
+	own := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	f.tv.Write("inbox/note.md", "A note.\n")
+	move := func(from, to, hunk string) map[string]any {
+		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + from + "\n*** Move to: " + to + "\n" + hunk + "*** End Patch"}}
+	}
+	for name, ev := range map[string]map[string]any{
+		"a task list out with a box checked": move(tasks, "inbox/x.md", "@@\n-- [ ] T1 Do it\n+- [x] T1 Do it\n"),
+		"a stub out":                         move(stub, "inbox/y.md", ""),
+		"the session's own document out":     move(own, "inbox/z.md", ""),
+	} {
+		if !denied(f.run("guard", ev)) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
+	if denied(f.run("guard", move("inbox/note.md", "inbox/kept.md", ""))) {
+		t.Error("a move of a note in inbox/ was refused")
+	}
+}

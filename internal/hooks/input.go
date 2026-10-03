@@ -163,7 +163,7 @@ var editTools = map[string]bool{"Write": true, "Edit": true, "MultiEdit": true, 
 // patchFile is one file of a Codex patch.
 type patchFile struct {
 	Path    string
-	Op      string // add, update, delete, move
+	Op      string // add, update, delete (a moved file is a delete and an add)
 	Removed []string
 	Added   []string
 	Hunks   []hunk
@@ -276,19 +276,27 @@ func (in Input) paths() []patchFile {
 	t := in.tool()
 	var out []patchFile
 	if in.ToolName == "apply_patch" {
-		var cur *patchFile
+		at := -1 // the entry the hunks that follow belong to
 		for _, line := range strings.Split(t.Command, "\n") {
 			// Codex takes a marker with whitespace before it.
 			marker := strings.TrimLeft(line, " \t")
-			for prefix, op := range map[string]string{"*** Add File: ": "add", "*** Update File: ": "update", "*** Delete File: ": "delete", "*** Move to: ": "move"} {
+			for prefix, op := range map[string]string{"*** Add File: ": "add", "*** Update File: ": "update", "*** Delete File: ": "delete"} {
 				if rest, ok := strings.CutPrefix(marker, prefix); ok {
 					out = append(out, patchFile{Path: strings.TrimSpace(rest), Op: op})
-					cur = &out[len(out)-1]
+					at = len(out) - 1
 				}
 			}
-			if cur == nil || strings.HasPrefix(marker, "*** ") {
+			// A move takes the file from its place and writes it at the target: the
+			// source is judged as a delete, the target as a new file, and the hunks stay
+			// with the source.
+			if rest, ok := strings.CutPrefix(marker, "*** Move to: "); ok && at >= 0 {
+				out[at].Op = "delete"
+				out = append(out, patchFile{Path: strings.TrimSpace(rest), Op: "add"})
+			}
+			if at < 0 || strings.HasPrefix(marker, "*** ") {
 				continue
 			}
+			cur := &out[at]
 			if strings.HasPrefix(line, "@@") {
 				cur.Hunks = append(cur.Hunks, hunk{})
 				continue
