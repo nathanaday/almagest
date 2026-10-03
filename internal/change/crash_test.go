@@ -377,3 +377,44 @@ func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
 		t.Fatal("recovery changed a listed path")
 	}
 }
+
+// A promote of a stub in a chord rewrites the chord's canvas. A crash before the commit
+// leaves the canvas listed, and recovery puts it back with the documents.
+func TestACrashBeforeTheCommitPutsTheCanvasBack(t *testing.T) {
+	tv := testvault.New(t)
+	_, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Motion helps to score boxes."}, {Title: "Second", Text: "Then this.", After: []string{"First"}}}}, thread.Opts{Now: tv.Tick(time.Minute)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tv.Commit()
+	canvas := "chords/Plan C.canvas"
+	before := tv.Read(canvas)
+	first := tv.Index().ByPath("wiki/documents/First.md")
+	pv := propose(t, tv, change.Plan{Title: "Promote", Writes: []change.Write{{Op: "promote", ID: first.ID(), Kind: "concept", Title: "Motion scoring", Fields: map[string]any{"description": "Scoring boxes by motion."}, Body: str("## Definition\n\nMotion.\n")}}})
+	crashed := filepath.Join(t.TempDir(), "crashed")
+	change.SetBeforeApplyCommit(func() {
+		if err := os.CopyFS(crashed, os.DirFS(tv.V.Root)); err != nil {
+			t.Fatal(err)
+		}
+	})
+	defer change.SetBeforeApplyCommit(nil)
+	apply(t, tv, pv.Ref.ID)
+	if tv.Read(canvas) == before {
+		t.Fatal("the promote did not rewrite the canvas, so the test proves nothing")
+	}
+	inFlight, _ := os.ReadFile(filepath.Join(crashed, pv.Ref.Path))
+	if !strings.Contains(string(inFlight), canvas) {
+		t.Fatalf("the in-flight paths do not list the canvas:\n%s", inFlight)
+	}
+	v, err := vault.Open(crashed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// Recovery alone, before any sync could derive the canvas back.
+	if err := vault.Recover(v); err != nil {
+		t.Fatal(err)
+	}
+	if got, _ := os.ReadFile(filepath.Join(crashed, canvas)); string(got) != before {
+		t.Fatalf("recovery did not put the canvas back:\n%s", got)
+	}
+}

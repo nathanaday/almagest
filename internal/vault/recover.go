@@ -54,7 +54,7 @@ func Recover(v *Vault) error {
 		}
 		var local []string
 		for _, p := range d.List("paths") {
-			if v.Local(p) {
+			if v.Local(p) || chordCanvas(v, p) {
 				local = append(local, p)
 			}
 		}
@@ -161,4 +161,10 @@ func commitFound(v *Vault, d *doc.Doc, paths []string) (string, error) {
 		return "", err
 	}
 	return before, nil
+}
+
+// chordCanvas reports whether a listed path is a chord's canvas, which an apply's derived
+// sync writes and recovery puts back with the documents.
+func chordCanvas(v *Vault, p string) bool {
+	return strings.HasPrefix(p, Chords+"/") && strings.HasSuffix(p, ".canvas") && !strings.Contains(strings.TrimPrefix(p, Chords+"/"), "/") && v.Contain(p) == nil
 }
