@@ -19,10 +19,10 @@ import (
 // setupCmd installs the binary under ~/.atlas/bin, adds the agent plugin to the host, and
 // makes a first vault when asked.
 func (c *CLI) setupCmd(argv []string) error {
-	if err := removed(argv, "yes", "setup asks nothing; run it without --yes"); err != nil {
+	a := parse(argv, "no-plugin", "allow-vault", "yes")
+	if err := a.removed("yes", "setup asks nothing; run it without --yes"); err != nil {
 		return err
 	}
-	a := parse(argv, "no-plugin", "allow-vault")
 	agent := a.get("agent")
 	if agent == "" {
 		agent = "claude"

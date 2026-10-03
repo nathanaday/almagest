@@ -149,16 +149,11 @@ type args struct {
 	flags map[string][]string
 }
 
-// removed refuses an option a command no longer takes, so parse cannot take the next
-// word as its value.
-func removed(argv []string, name, why string) error {
-	for _, s := range argv {
-		if s == "--" {
-			break
-		}
-		if s == "--"+name || strings.HasPrefix(s, "--"+name+"=") {
-			return fmt.Errorf("--%s is gone: %s", name, why)
-		}
+// removed refuses an option a command no longer takes. The command lists it among
+// parse's booleans, so it never takes the next word as its value.
+func (a args) removed(name, why string) error {
+	if a.has(name) {
+		return fmt.Errorf("--%s is gone: %s", name, why)
 	}
 	return nil
 }
@@ -799,10 +794,10 @@ func (c *CLI) threadCmd(argv []string) error {
 }
 
 func (c *CLI) chordCmd(argv []string) error {
-	if err := removed(argv, "new-tags", `chord create reads "new_tags": true from its JSON`); err != nil {
+	a := parse(argv, "save", "write", "tidy", "new-tags")
+	if err := a.removed("new-tags", `chord takes new_tags only in the JSON of chord create, as "new_tags": true`); err != nil {
 		return err
 	}
-	a := parse(argv, "save", "write", "tidy")
 	v, err := c.open(a)
 	if err != nil {
 		return err

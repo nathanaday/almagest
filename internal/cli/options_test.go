@@ -19,7 +19,8 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 		args []string
 		want string
 	}{
-		{[]string{"chord", "create", "--new-tags", "chord.json"}, `--new-tags is gone: chord create reads "new_tags": true from its JSON`},
+		{[]string{"chord", "create", "--new-tags", "chord.json"}, `--new-tags is gone: chord takes new_tags only in the JSON of chord create`},
+		{[]string{"chord", "list", "--new-tags"}, "--new-tags is gone"},
 		{[]string{"chord", "create", "chord.json", "--new-tags=true"}, "--new-tags is gone"},
 		{[]string{"setup", "--yes", "--no-plugin"}, "--yes is gone: setup asks nothing"},
 	} {
@@ -33,5 +34,15 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 	}
 	if _, err := os.Stat(filepath.Join(tv.Home.Root, "bin")); !os.IsNotExist(err) {
 		t.Fatalf("setup --yes installed the binary: %v", err)
+	}
+
+	// The same word as the value of another option is that option's value.
+	for _, args := range [][]string{
+		{"chord", "list", "--tag", "--new-tags"},
+		{"setup", "--name", "--yes", "--no-plugin"},
+	} {
+		if _, _, errOut := r.atlas("", args...); strings.Contains(errOut, "is gone") {
+			t.Fatalf("%v: %s", args, errOut)
+		}
 	}
 }
