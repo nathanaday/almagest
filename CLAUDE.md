@@ -174,14 +174,17 @@ The design pages are the spec. When the code departs from them, the reason is be
   `atlas-obsidian hook`.** The guard refuses them, in every folder: two skip the gate,
   the other forges a user's turn. It is no sandbox; a shell can still write any file. To
   try one by hand from a session, type the command with `!`. `shellCommands`
-  (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes,
-  backslashes and backslash-newlines, separators, and redirects whose targets leave the
-  words (`&>`, `{fd}>`, `<<<`, quoted targets); a quoted word that holds a command
-  (`sh -c "…"`) is read too, and zsh's `=name` counts as the name. The binary's name
-  compares without case, and options drop out; an option's value stays, so `apply` and
-  `migrate` count anywhere after their subcommand. A word built at run time (a variable,
-  `$(…)`, a glob, xargs) is out of its reach. `config set` of `terminal_command` or
-  `agent_commands` is refused too.
+  (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes
+  (`\x{…}` too), backslashes and backslash-newlines, brace lists, separators, process
+  substitutions (`<(…)` runs a command of its own), and redirects whose targets leave
+  the words (`&>`, `{fd}>`, `<<<`, quoted targets); zsh's `=name` counts as the name. A
+  quoted word or a heredoc body is read as a command only when a shell or `eval` runs it
+  (`runners`: sh -c, bash <<EOF, eval, ssh, …), so a commit message or a grep pattern
+  that names a refused subcommand is text. The binary's name compares without case, and
+  options drop out; an option's value stays, so `apply` and `migrate` count anywhere
+  after their subcommand. A word built at run time (a variable, `$(…)`, a glob, xargs,
+  `env -S`) is out of its reach. `config set` and `config unset` of `terminal_command` or
+  `agent_commands` are refused too.
 - **The guard takes the vault above the file**, not the vault of the session's folder,
   so a session outside the vault gets the same refusals. A file in no vault belongs to
   the vault that links its repository (the session's first, then the machine's
@@ -194,10 +197,13 @@ The design pages are the spec. When the code departs from them, the reason is be
   Edit, a MultiEdit, or a patch is judged by the document it leaves (`Input.leaves`,
   `codeChanged`): the frontmatter, the lead, and each code section come out as they went
   in, with each code heading as often as before by `doc.Headings`, and no second heading
-  of any section. A Codex patch is read as Codex 0.155.1 reads it: file markers with
+  of any section. An Edit that applies is judged by that alone, so its anchor may hold a
+  code heading it keeps; its old text matches with curly and straight quotes as one, as
+  the host's Edit may. A Codex patch is read as Codex 0.155.1 reads it: file markers with
   whitespace before them, context and removed lines that match with trailing whitespace
   ignored, every match counting, a hunk with neither at the end of the file; a hunk that
-  matches nowhere is refused and the refusal says so.
+  matches nowhere is refused and the refusal says so. A move is judged as a delete of
+  its source and a new file at its target.
 - **The files that decide what runs are the user's.** The guard refuses an edit of the
   home's `config.json` and the vault's `.atlas/config.json` (`terminal_command`,
   `agent_commands`), and of anything under `.obsidian/plugins/atlas/`; fixed names
