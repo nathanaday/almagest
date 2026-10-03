@@ -279,3 +279,54 @@ func TestACrashAfterTheDerivedSyncPutsTheSourceBack(t *testing.T) {
 		t.Fatalf("the change is not proposed again:\n%s", doc)
 	}
 }
+
+// Recovery that a crash stops after its recovery commit, before it put the paths back:
+// the change document records the base revision. The next recovery puts the paths back
+// from that revision, not from its own recovery commit.
+func TestARecoveryStoppedPartwayFinishesNextTime(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	tv.Commit()
+	head, err := tv.V.Git().Head()
+	if err != nil {
+		t.Fatal(err)
+	}
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", head))
+	tv.Write("wiki/documents/Motion scoring.md", "half written")
+	tv.Write("wiki/documents/Radar.md", "half written")
+	// The state the first recovery left: its recovery commit of the crash state.
+	g := tv.V.Git()
+	if err := g.Add("wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.CommitOnly("recovery: 2 files as found after a crash", "wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	// The sync also derives the topic's lead, so the test checks the text it put back.
+	if got := tv.Read("wiki/documents/Motion scoring.md"); !strings.Contains(got, "Old.") || strings.Contains(got, "half written") || tv.V.Exists("wiki/documents/Radar.md") {
+		t.Fatalf("the second recovery did not put the paths back:\n%s", got)
+	}
+	got := tv.Read(pv.Ref.Path)
+	if !strings.Contains(got, "status: proposed") || strings.Contains(got, "paths:") || strings.Contains(got, "recovering:") {
+		t.Fatalf("the change is not proposed again:\n%s", got)
+	}
+}
+
+// Recovery that a crash stops after it committed an edited, landed change document: the
+// next recovery takes the document from the apply's commit, and it ends without paths.
+func TestALandedApplysRecoveryStoppedPartwayFinishesNextTime(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	apply(t, tv, pv.Ref.ID)
+	applied := tv.Read(pv.Ref.Path)
+	tv.Write(pv.Ref.Path, doc.SetField(applied, "paths", []string{"wiki/documents/Motion scoring.md"})+"\nAn edit after the crash.\n")
+	tv.Commit() // the state the first recovery left: the edited document in a commit
+	nextWrite(t, tv)
+	if got := tv.Read(pv.Ref.Path); got != applied {
+		t.Fatalf("the document is not the applied one:\n%s", got)
+	}
+}

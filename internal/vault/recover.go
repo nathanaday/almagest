@@ -33,17 +33,18 @@ func Recover(v *Vault) error {
 		if !d.Front.Has("paths") || d.ID() == "" {
 			continue
 		}
-		if sha, err := g.FindTrailer(ChangeTrailer, d.ID()); err == nil && sha != "" && g.Has("HEAD:"+d.Path) {
-			// The apply landed. The file differs from its commit by paths alone, unless
-			// someone edited it after the crash; such an edit goes into git first.
-			from := "HEAD"
-			head, _ := g.ShowFile("HEAD", d.Path)
-			if doc.RemoveField(d.Content, "paths") != string(head) {
-				if from, err = commitFound(v, d, []string{d.Path}); err != nil {
+		if sha, err := g.FindTrailer(ChangeTrailer, d.ID()); err == nil && sha != "" && g.Has(sha+":"+d.Path) {
+			// The apply landed: its commit holds the document as applied. The file differs
+			// from it by paths alone, unless someone edited it after the crash; such an
+			// edit goes into git first. The document comes from the apply's own commit, so
+			// a recovery that a crash stops here does the same again.
+			landed, _ := g.ShowFile(sha, d.Path)
+			if doc.RemoveField(d.Content, "paths") != string(landed) {
+				if _, err := commitFound(v, d, []string{d.Path}); err != nil {
 					return fmt.Errorf("recover %s: %w", Title(d), err)
 				}
 			}
-			if err := g.RestoreFrom(from, d.Path); err != nil {
+			if err := g.RestoreFrom(sha, d.Path); err != nil {
 				return fmt.Errorf("recover %s: %w", Title(d), err)
 			}
 			if err := g.Unstage(d.Path); err != nil {
@@ -57,10 +58,27 @@ func Recover(v *Vault) error {
 				local = append(local, p)
 			}
 		}
+		// The revision to put the paths back from is HEAD as the crash left it. It goes
+		// into the document before anything else, so a recovery that a crash stops
+		// partway restores from the same revision, not from its own recovery commit.
+		base := d.Str("recovering")
+		if base == "" {
+			base = recoveringNone
+			if head, err := g.Head(); err == nil && head != "" {
+				base = head
+			}
+			d.Content = doc.SetField(d.Content, "recovering", base)
+			if err := v.Write(d.Path, []byte(d.Content)); err != nil {
+				return fmt.Errorf("recover %s: %w", Title(d), err)
+			}
+		}
+		from := base
+		if from == recoveringNone {
+			from = ""
+		}
 		// What the crash left, and any edit made since, goes into git before the paths
-		// go back, so no text is lost. The paths then go back to the commit before it.
-		from, err := commitFound(v, d, local)
-		if err != nil {
+		// go back, so no text is lost.
+		if _, err := commitFound(v, d, local); err != nil {
 			return fmt.Errorf("recover %s: %w", Title(d), err)
 		}
 		for _, p := range local {
@@ -74,7 +92,7 @@ func Recover(v *Vault) error {
 		if err := g.Unstage(local...); err != nil {
 			return fmt.Errorf("recover %s: %w", Title(d), err)
 		}
-		content := doc.RemoveField(doc.SetField(d.Content, "status", "proposed"), "paths")
+		content := doc.RemoveField(doc.RemoveField(doc.SetField(d.Content, "status", "proposed"), "paths"), "recovering")
 		content = doc.ReplaceLead(content, doc.Callout("change", "Proposed", "Recovered after a crash. Review the documents below, then say yes in the chat, or press Apply."))
 		if err := v.Write(d.Path, []byte(content)); err != nil {
 			return err
@@ -92,6 +110,9 @@ func BeginWrite(v *Vault) (*Tx, error) {
 	}
 	return Begin(v, func() error { return Recover(v) })
 }
+
+// recoveringNone records a recovery in a repository that had no commit before the crash.
+const recoveringNone = "none"
 
 // RecoveredTrailer is the trailer of the commit that keeps what a crash left, which names
 // the change's id.
