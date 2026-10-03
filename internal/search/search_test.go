@@ -98,37 +98,65 @@ func TestTheSearchHintsFollowTheSchema(t *testing.T) {
 		f, _ := reflect.TypeOf(search.Query{}).FieldByName(field)
 		return f.Tag.Get("jsonschema")
 	}
-	// byType reads "type: a, b; type: c" into its values, checking each type.
-	byType := func(text string) []string {
-		var out []string
+	// byType reads "type: a, b; type: c" into each type's values.
+	byType := func(text string) map[string][]string {
+		out := map[string][]string{}
 		for _, group := range strings.Split(text, "; ") {
 			name, values, ok := strings.Cut(group, ": ")
-			if !ok || schema.Get(name[strings.LastIndex(name, " ")+1:]) == nil {
+			if !ok || schema.Get(name) == nil {
 				t.Fatalf("%q names no type", group)
 			}
-			out = append(out, strings.Split(values, ", ")...)
+			out[name] = strings.Split(values, ", ")
 		}
 		return out
 	}
-	same := func(field string, got, want []string) {
-		for _, v := range want {
-			if !slices.Contains(got, v) {
-				t.Errorf("the %s hint lacks %q", field, v)
+	same := func(what string, got, want []string) {
+		a, b := slices.Clone(got), slices.Clone(want)
+		slices.Sort(a)
+		slices.Sort(b)
+		if !slices.Equal(a, b) {
+			t.Errorf("the hint names %v for %s; the schema has %v", got, what, want)
+		}
+	}
+	// Each type's own values, under its own name, and every type that has values.
+	values := func(field string) map[string][]string {
+		out := map[string][]string{}
+		for _, ty := range schema.Types {
+			for _, name := range []string{field, map[string]string{"status": "verdict"}[field]} {
+				if f := ty.Field(name); name != "" && f != nil && len(f.Values) > 0 {
+					out[ty.Name] = f.Values
+				}
 			}
 		}
-		for _, v := range got {
-			if !slices.Contains(want, v) {
-				t.Errorf("the %s hint names %q, which the call refuses", field, v)
+		return out
+	}
+	kinds := byType(strings.TrimPrefix(hint("Kinds"), "kinds by type: "))
+	statuses := byType(strings.TrimPrefix(hint("Status"), "the statuses to keep, by type: "))
+	for want, got := range map[string]map[string][]string{"kind": kinds, "status": statuses} {
+		have := values(want)
+		for name, vs := range have {
+			same("the "+want+" values of "+name, got[name], vs)
+		}
+		for name := range got {
+			if have[name] == nil {
+				t.Errorf("the %s hint names %s, which has no %s", want, name, want)
 			}
 		}
 	}
+	// The document types, then the other types the call takes.
 	types, rest, _ := strings.Cut(strings.TrimPrefix(hint("Types"), "document types: "), "; or ")
-	same("types", strings.Split(types, ", "), schema.DocumentTypes)
-	if !strings.HasPrefix(rest, "session, change. Empty: the nine document types") {
-		t.Errorf("the types hint ends %q", rest)
+	same("the document types", strings.Split(types, ", "), schema.DocumentTypes)
+	extra, tail, _ := strings.Cut(rest, ". ")
+	var others []string
+	for _, ty := range schema.Types {
+		if !schema.IsDocument(ty.Name) && ty.Name != "vault" {
+			others = append(others, ty.Name)
+		}
 	}
-	same("kinds", byType(strings.TrimPrefix(hint("Kinds"), "kinds by type: ")), schema.AllKinds())
-	same("status", byType(strings.TrimPrefix(hint("Status"), "the statuses to keep, by type: ")), schema.Statuses())
+	same("the other types", strings.Split(extra, ", "), others)
+	if tail != "Empty: the nine document types" {
+		t.Errorf("the types hint ends %q", tail)
+	}
 }
 
 // A task list for a repository belongs to it.
