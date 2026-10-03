@@ -142,3 +142,14 @@ func TestARepositoryHoldsItsTaskLists(t *testing.T) {
 		t.Fatalf("the task list of p3-edge: %+v %v", hits, err)
 	}
 }
+
+// The facets list only statuses the filter takes.
+func TestTheFacetsListOnlyStatusesTheFilterTakes(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("stub", "Fix alarms", map[string]any{"status": "planned"}, "## Idea\n\nx\n")
+	tv.Doc("tasks", "Fix alarms · Tasks", map[string]any{"thread": "[[Fix alarms]]", "status": "0/1"}, "## Tasks\n\n- [ ] T1 Do it\n")
+	hits, err := search.Search(tv.Index(), search.Query{})
+	if err != nil || hits.Facets.Status["planned"] != 1 || len(hits.Facets.Status) != 1 {
+		t.Fatalf("status facets: %+v %v", hits.Facets.Status, err)
+	}
+}

@@ -180,7 +180,7 @@ func Search(idx *vault.Index, q Query) (*Hits, error) {
 }
 
 // facets counts the tags beyond those asked for, the types, and the statuses of the
-// matches. The tags keep the most used, and a tag above one asked for is left out.
+// matches that the status filter takes. The tags keep the most used, and a tag above one asked for is left out.
 func facets(docs []*doc.Doc, refs []vault.Ref, order []int, asked []string) Facets {
 	f := Facets{Tags: map[string]int{}, Types: map[string]int{}, Status: map[string]int{}}
 	skip := map[string]bool{}
@@ -193,7 +193,8 @@ func facets(docs []*doc.Doc, refs []vault.Ref, order []int, asked []string) Face
 	all := map[string]int{}
 	for _, i := range order {
 		f.Types[refs[i].Type]++
-		if refs[i].Status != "" {
+		// Only a status the filter takes narrows a query; a task list's done/total does not.
+		if refs[i].Status != "" && slices.Contains(schema.Statuses(), refs[i].Status) {
 			f.Status[refs[i].Status]++
 		}
 		for _, t := range tags.Expand(vault.DocTags(docs[i])) {
