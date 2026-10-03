@@ -18,7 +18,6 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
 )
 
 // The layout, relative to the vault.
@@ -605,9 +604,6 @@ func Stamp(t time.Time) string { return t.Format(TimeFormat) }
 
 // Date is t as a day.
 func Date(t time.Time) string { return t.Format(DateFormat) }
-
-// ParseTime reads a code-owned time, a date, or a time without seconds.
-func ParseTime(s string) (time.Time, bool) { return schema.ParseTime(s) }
 
 // ErrChangedSince is a guarded write's refusal of a file whose bytes changed after the
 // write read it.

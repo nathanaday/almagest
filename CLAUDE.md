@@ -312,7 +312,7 @@ badges, and sessions pane have not run in the app).
 - The SDK validates tool output against the schema it infers: a field without
   `omitempty` is required, so an optional pointer or a union needs `omitempty`.
 - Every write takes `.git/atlas.lock`. The lock is not re-entrant: a write takes it once
-  (`vault.Begin`, `change.Begin`, or `v.Lock()`), and inner functions assume it held.
+  (`vault.Begin`, `vault.BeginWrite`, or `v.Lock()`), and inner functions assume it held.
 - A document is found by id or title, never by a path a tool was given.
 - Tests never touch a real `~/.atlas`: `testvault.New` sets `ATLAS_HOME`. They skip
   without git.

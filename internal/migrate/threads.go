@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -254,9 +255,9 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		}
 		p.put(task, nt, doc.Render(append(fields, p.keepUser(task, "spec")...), strings.TrimSpace(tb)+"\n"))
 		base := thread.EventIn{SubjectTitle: nt, SubjectID: task.ID(), SubjectTags: rootTags}
-		at, _ := vault.ParseTime(tUpdated)
+		at, _ := schema.ParseTime(tUpdated)
 		if first := progressDate.FindString(progress); first != "" {
-			if st, ok := vault.ParseTime(first + "T09:00:00"); ok {
+			if st, ok := schema.ParseTime(first + "T09:00:00"); ok {
 				in := base
 				in.Kind, in.At = "started", st
 				taskEvents = append(taskEvents, pending{in: in})
@@ -291,7 +292,7 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		ev.add(in)
 	}
 	for _, r := range t.receipts {
-		at, _ := vault.ParseTime(stamp(r.Str("created"), p.now))
+		at, _ := schema.ParseTime(stamp(r.Str("created"), p.now))
 		in := rootIn
 		in.At = at
 		if r.Str("outcome") == "killed" {
@@ -319,7 +320,7 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		if r.Front.Bool("superseded") {
 			reopenAt := at.Add(time.Second)
 			if m := reopenedDate.FindStringSubmatch(vault.Title(r)); m != nil {
-				if rt, ok := vault.ParseTime(m[1] + "T12:00:00"); ok && rt.After(at) {
+				if rt, ok := schema.ParseTime(m[1] + "T12:00:00"); ok && rt.After(at) {
 					reopenAt = rt
 				}
 			}
@@ -336,7 +337,7 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 }
 
 func mustTime(s string) time.Time {
-	t, _ := vault.ParseTime(s)
+	t, _ := schema.ParseTime(s)
 	return t
 }
 

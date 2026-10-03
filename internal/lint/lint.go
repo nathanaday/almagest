@@ -490,7 +490,7 @@ func (r *run) knowledge(d *doc.Doc, incoming map[string]int) {
 		r.add("uncited", Warning, d, "wiki-edit: cite the documents it rests on", "its sources are empty")
 	}
 	if d.Type() == "topic" {
-		refreshed, ok := vault.ParseTime(orDefault(d.Str("refreshed"), d.Str("updated")))
+		refreshed, ok := schema.ParseTime(orDefault(d.Str("refreshed"), d.Str("updated")))
 		if !ok {
 			return
 		}
@@ -499,7 +499,7 @@ func (r *run) knowledge(d *doc.Doc, incoming map[string]int) {
 			if c == nil {
 				continue
 			}
-			if t, ok := vault.ParseTime(orDefault(c.Str("refreshed"), c.Str("updated"))); ok && t.After(refreshed) {
+			if t, ok := schema.ParseTime(orDefault(c.Str("refreshed"), c.Str("updated"))); ok && t.After(refreshed) {
 				r.add("stale", Warning, d, "wiki-review, then wiki-edit (a modify, or a confirm)", "it cites %s, which changed after it was refreshed", vault.Title(c))
 				break
 			}
@@ -574,7 +574,7 @@ func (r *run) info(d *doc.Doc) {
 		}
 	case "change":
 		if d.Str("status") == "proposed" {
-			if t, ok := vault.ParseTime(d.Str("proposed")); ok && now.Sub(t) > ProposedAge {
+			if t, ok := schema.ParseTime(d.Str("proposed")); ok && now.Sub(t) > ProposedAge {
 				r.add("change-stale", Info, d, "apply or reject it", "proposed %s and still waiting", d.Str("proposed"))
 			}
 		}
@@ -589,7 +589,7 @@ func (r *run) info(d *doc.Doc) {
 		}
 	}
 	if r.idx.Pending(d) {
-		if t, ok := vault.ParseTime(d.Str("created")); ok && now.Sub(t) > PendingAge {
+		if t, ok := schema.ParseTime(d.Str("created")); ok && now.Sub(t) > PendingAge {
 			r.add("pending", Info, d, "wiki-sync", "the wiki has not absorbed it since %s", d.Str("created"))
 		}
 	}

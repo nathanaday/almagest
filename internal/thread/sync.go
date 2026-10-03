@@ -550,14 +550,14 @@ func tagLine(d *doc.Doc) string {
 }
 
 func day(stamp string) string {
-	if t, ok := vault.ParseTime(stamp); ok {
+	if t, ok := schema.ParseTime(stamp); ok {
 		return vault.Date(t)
 	}
 	return stamp
 }
 
 func minute(stamp string) string {
-	if t, ok := vault.ParseTime(stamp); ok {
+	if t, ok := schema.ParseTime(stamp); ok {
 		return t.Format("2006-01-02 15:04")
 	}
 	return stamp

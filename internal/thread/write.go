@@ -225,7 +225,7 @@ func (w *writer) event(in EventIn) error {
 	if !ok {
 		if d := w.idx.ByID(in.SubjectID); d != nil {
 			if e := w.b.LastEvent(d); e != nil {
-				last, _ = vault.ParseTime(e.Str("at"))
+				last, _ = schema.ParseTime(e.Str("at"))
 			}
 		}
 	}

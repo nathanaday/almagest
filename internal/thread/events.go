@@ -147,7 +147,7 @@ func NewEvent(t *Titles, in EventIn) (rel, content, id string) {
 // chord is the chord the subject belongs to, or "".
 func EventLead(e *doc.Doc, subject, chord string) string {
 	kind := e.Str("kind")
-	at, _ := vault.ParseTime(e.Str("at"))
+	at, _ := schema.ParseTime(e.Str("at"))
 	title := capital(kind) + " · " + doc.Link(subject) + " · " + at.Format("2006-01-02 15:04:05")
 	var line []string
 	switch kind {

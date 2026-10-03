@@ -55,13 +55,6 @@ type WriteLine struct {
 	Note  string   `json:"note,omitempty"`
 }
 
-// Begin starts a write that ends in one commit: the layout check, the lock, the repair
-// of a change a crash left applying, and the snapshot of hand edits.
-func Begin(v *vault.Vault) (*vault.Tx, error) { return vault.BeginWrite(v) }
-
-// Recover repairs a change a crash left applying. The caller holds the lock.
-func Recover(v *vault.Vault) error { return vault.Recover(v) }
-
 // Propose validates a plan and writes its change document. It commits nothing; the next
 // commit of any kind keeps the document.
 func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
@@ -74,7 +67,7 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	defer unlock()
-	if err := Recover(v); err != nil {
+	if err := vault.Recover(v); err != nil {
 		return nil, err
 	}
 	idx, err := vault.Load(v)
@@ -369,7 +362,7 @@ type newEvent struct {
 // resolved, under the lock, before anything is written.
 func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, err error) {
 	now = now.Truncate(time.Second)
-	tx, err := Begin(v)
+	tx, err := vault.BeginWrite(v)
 	if err != nil {
 		return nil, err
 	}
@@ -522,7 +515,7 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 }
 
 func createdOf(d *doc.Doc) time.Time {
-	t, _ := vault.ParseTime(d.Str("created"))
+	t, _ := schema.ParseTime(d.Str("created"))
 	return t
 }
 
@@ -877,7 +870,7 @@ func Reject(v *vault.Vault, key, reason string, now time.Time) (*Preview, error)
 		return nil, err
 	}
 	defer unlock()
-	if err := Recover(v); err != nil {
+	if err := vault.Recover(v); err != nil {
 		return nil, err
 	}
 	idx, err := vault.Load(v)
@@ -906,7 +899,7 @@ func Reject(v *vault.Vault, key, reason string, now time.Time) (*Preview, error)
 // when a path changed since, so it never takes back a later edit. It never uses git
 // revert, so it needs no clean tree and touches no other path.
 func Undo(v *vault.Vault, key string, now time.Time) (_ *Preview, err error) {
-	tx, err := Begin(v)
+	tx, err := vault.BeginWrite(v)
 	if err != nil {
 		return nil, err
 	}

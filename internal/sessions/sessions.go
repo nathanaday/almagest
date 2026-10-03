@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -145,7 +146,7 @@ func UserAnswered(v *vault.Vault) func(d *doc.Doc, writes int) error {
 			return nil
 		}
 		wait := fmt.Errorf("show the preview of %s and wait for the user's yes; apply runs once the user has answered after the proposal", vault.Title(d))
-		proposed, ok := vault.ParseTime(d.Str("proposed"))
+		proposed, ok := schema.ParseTime(d.Str("proposed"))
 		if !ok {
 			return wait
 		}
@@ -153,7 +154,7 @@ func UserAnswered(v *vault.Vault) func(d *doc.Doc, writes int) error {
 		if s == nil {
 			return fmt.Errorf("%s names no session that proposed it, so no user answered it here; the user applies it with Apply in Obsidian", vault.Title(d))
 		}
-		if last, ok := vault.ParseTime(s.Str("last_prompt")); ok && last.After(proposed) {
+		if last, ok := schema.ParseTime(s.Str("last_prompt")); ok && last.After(proposed) {
 			return nil
 		}
 		return wait
@@ -349,7 +350,7 @@ func Touch(v *vault.Vault, e Event, now time.Time, fn func(content string) strin
 	// The agent may write its Description by any means; the field follows it.
 	content = doc.SetField(content, "description", DescriptionLine(doc.Parse("", []byte(content)).Body))
 	next := doc.Parse(d.Path, []byte(content))
-	last, _ := vault.ParseTime(d.Str("updated"))
+	last, _ := schema.ParseTime(d.Str("updated"))
 	if next.Str("status") != d.Str("status") || now.Sub(last) >= time.Minute {
 		content = doc.SetField(content, "updated", vault.Stamp(now))
 	}
@@ -394,7 +395,7 @@ func MarkLost(v *vault.Vault, now time.Time, staleHours int) ([]string, error) {
 			out = append(out, d.Path)
 			continue
 		}
-		last, ok := vault.ParseTime(d.Str("updated"))
+		last, ok := schema.ParseTime(d.Str("updated"))
 		if !ok || now.Sub(last) < time.Duration(staleHours)*time.Hour {
 			continue
 		}

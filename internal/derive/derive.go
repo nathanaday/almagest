@@ -255,7 +255,7 @@ func RepositoryLead(d *doc.Doc) string {
 	head := "`" + orDefault(d.Str("branch"), "?") + "`"
 	if h := d.Str("head"); h != "" {
 		head += " at `" + h + "`"
-		if t, ok := vault.ParseTime(d.Str("head_time")); ok {
+		if t, ok := schema.ParseTime(d.Str("head_time")); ok {
 			head += ", " + t.Format("2006-01-02 15:04")
 		}
 	}
@@ -505,7 +505,7 @@ func tagLine(list []string) string {
 }
 
 func day(stamp string) string {
-	if t, ok := vault.ParseTime(stamp); ok {
+	if t, ok := schema.ParseTime(stamp); ok {
 		return vault.Date(t)
 	}
 	return stamp

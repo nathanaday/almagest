@@ -10,6 +10,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/links"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -84,7 +85,7 @@ func build8(v *vault.Vault, now time.Time, report *Report) (*plan, error) {
 	}
 	for id, list := range s.events {
 		sort.SliceStable(list, func(i, j int) bool { return list[i].Str("at") < list[j].Str("at") })
-		if at, ok := vault.ParseTime(list[len(list)-1].Str("at")); ok {
+		if at, ok := schema.ParseTime(list[len(list)-1].Str("at")); ok {
 			s.ev.last[id] = at
 		}
 	}

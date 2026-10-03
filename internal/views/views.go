@@ -18,6 +18,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -425,7 +426,7 @@ func (r *renderer) threadsView() string {
 	var ended []string
 	for _, ref := range bv.Ended {
 		at := r.b.EndedAt(idx.ByID(ref.ID))
-		if t, ok := vault.ParseTime(at); ok && r.now.Sub(t) <= EndedAge {
+		if t, ok := schema.ParseTime(at); ok && r.now.Sub(t) <= EndedAge {
 			ended = append(ended, fmt.Sprintf("- %s · %s %s", minute(at), ref.Status, doc.Link(ref.Title)))
 		}
 	}
@@ -532,7 +533,7 @@ type timelineEntry struct {
 func (r *renderer) entries() []timelineEntry {
 	var out []timelineEntry
 	for _, e := range r.idx.Of("event") {
-		t, ok := vault.ParseTime(e.Str("at"))
+		t, ok := schema.ParseTime(e.Str("at"))
 		if !ok {
 			continue
 		}
@@ -552,7 +553,7 @@ func (r *renderer) entries() []timelineEntry {
 	}
 	words := map[string]string{"stub": "planted", "spec": "spec written", "tasks": "tasks written", "verification": "verified", "chord": "chord made"}
 	for _, d := range r.idx.Of("stub", "spec", "tasks", "verification", "chord") {
-		t, ok := vault.ParseTime(d.Str("created"))
+		t, ok := schema.ParseTime(d.Str("created"))
 		if !ok {
 			continue
 		}
@@ -571,7 +572,7 @@ func (r *renderer) entries() []timelineEntry {
 		if c.Str("status") != "applied" {
 			continue
 		}
-		t, ok := vault.ParseTime(c.Str("applied"))
+		t, ok := schema.ParseTime(c.Str("applied"))
 		if !ok {
 			continue
 		}
@@ -734,7 +735,7 @@ func (r *renderer) tagView(t string) string {
 }
 
 func minute(stamp string) string {
-	if t, ok := vault.ParseTime(stamp); ok {
+	if t, ok := schema.ParseTime(stamp); ok {
 		return t.Format("2006-01-02 15:04")
 	}
 	return stamp

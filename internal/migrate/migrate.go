@@ -500,7 +500,7 @@ func (p *plan) keepUser(d *doc.Doc, typ string, skip ...string) []doc.Field {
 }
 
 func stamp(s string, fallback time.Time) string {
-	if t, ok := vault.ParseTime(s); ok {
+	if t, ok := schema.ParseTime(s); ok {
 		return vault.Stamp(t)
 	}
 	return vault.Stamp(fallback)

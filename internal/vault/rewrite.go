@@ -2,6 +2,7 @@ package vault
 
 import (
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 
@@ -114,7 +115,7 @@ func RewriteContent(d *doc.Doc, content string, rename links.Rename, redirects m
 			}
 			note(doc.LinkTarget(v))
 			if redirectType, isRedirect := redirects[links.Key(k)]; isRedirect && t != nil {
-				if field := t.Field(key); field != nil && len(field.Targets) > 0 && !contains(field.Targets, redirectType) {
+				if field := t.Field(key); field != nil && len(field.Targets) > 0 && !slices.Contains(field.Targets, redirectType) {
 					warnings = append(warnings, fmt.Sprintf("%s: %s still links %s; a %s cannot take its place", Title(d), key, v, redirectType))
 					continue
 				}
@@ -127,7 +128,7 @@ func RewriteContent(d *doc.Doc, content string, rename links.Rename, redirects m
 		if !changed {
 			continue
 		}
-		if isList(f, key) && !(t != nil && t.Field(key) != nil && t.Field(key).Kind == schema.Link) {
+		if f.IsList(key) && !(t != nil && t.Field(key) != nil && t.Field(key).Kind == schema.Link) {
 			out = doc.SetField(out, key, next)
 		} else {
 			out = doc.SetField(out, key, next[0])
@@ -145,19 +146,6 @@ func oldKey(rename links.Rename, target string) string {
 		}
 	}
 	return ""
-}
-
-func isList(f *doc.Front, key string) bool {
-	return f.IsList(key)
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // skipWrites splits a change document's body at its Writes section, which records what
