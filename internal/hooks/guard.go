@@ -96,26 +96,43 @@ var binaryNames = []string{"atlas-obsidian", "atlas"}
 // a change apply, which would skip the gate, and a hook, which would forge an event.
 func atlasCommandRefusal(cmd string) string {
 	for _, part := range shellSeparator.Split(cmd, -1) {
-		words := strings.Fields(strings.NewReplacer(`"`, "", "'", "").Replace(part))
+		words := strings.Fields(shellUnquote.Replace(part))
 		for i, word := range words {
-			if !slices.Contains(binaryNames, path.Base(word)) {
+			if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, path.Base(word)) }) {
 				continue
 			}
-			rest := words[i+1:]
-			for len(rest) > 0 && strings.HasPrefix(rest[0], "-") {
-				rest = rest[1:]
+			rest := positional(words[i+1:])
+			if len(rest) == 0 {
+				continue
 			}
 			switch {
-			case len(rest) > 0 && rest[0] == "hook":
+			case rest[0] == "hook":
 				return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
-			case len(rest) > 0 && rest[0] == "change" && slices.Contains(rest[1:], "apply"):
+			case rest[0] == "change" && slices.Contains(rest[1:], "apply"):
 				return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
-			case len(rest) > 1 && rest[0] == "vault" && rest[1] == "migrate":
+			case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
 				return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
 			}
 		}
 	}
 	return ""
+}
+
+// shellUnquote drops what the shell drops from a word before it runs it: quotes and
+// backslashes.
+var shellUnquote = strings.NewReplacer(`"`, "", "'", "", `\`, "")
+
+// positional are the words after the binary without its options. An option's value, such
+// as W in --vault W, stays, so the rule looks for an action anywhere after its
+// subcommand.
+func positional(words []string) []string {
+	var out []string
+	for _, w := range words {
+		if !strings.HasPrefix(w, "-") {
+			out = append(out, w)
+		}
+	}
+	return out
 }
 
 // readOnlyRefusal is why a read-only agent may not make a call, or "".
