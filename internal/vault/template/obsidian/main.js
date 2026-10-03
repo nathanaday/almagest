@@ -221,6 +221,10 @@ function linkTitle(value) {
   const m = /^\s*\[\[([^\]|#]*)(?:[#|][^\]]*)?\]\]\s*$/.exec(value);
   return (m ? m[1] : value).trim();
 }
+var DOCUMENT_TYPES = ["source", "repository", "topic", "stub", "spec", "tasks", "verification", "chord", "event"];
+function isDocumentType(type) {
+  return DOCUMENT_TYPES.includes(String(type));
+}
 function asList(value) {
   if (Array.isArray(value)) return value.filter((v) => typeof v === "string");
   if (typeof value === "string" && value !== "") return [value];
@@ -1863,14 +1867,13 @@ var AtlasSettingTab = class extends import_obsidian9.PluginSettingTab {
 var import_obsidian10 = require("obsidian");
 var TAG_NAV_VIEW = "atlas-tag-navigator";
 var NAV_ICON = "compass";
-var DOC_TYPES = /* @__PURE__ */ new Set(["source", "repository", "topic", "stub", "spec", "event"]);
 var MAX_WITH = 30;
 function tagDocs(app) {
   const out = [];
   for (const file of app.vault.getMarkdownFiles()) {
     if (!file.path.startsWith("wiki/documents/")) continue;
     const fm = app.metadataCache.getFileCache(file)?.frontmatter;
-    if (!fm || !DOC_TYPES.has(String(fm.type))) continue;
+    if (!fm || !isDocumentType(fm.type)) continue;
     const own = asList(fm.tags).map(normalTag);
     if (typeof fm.defines === "string" && fm.defines) own.push(normalTag(fm.defines));
     out.push({
