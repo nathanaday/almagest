@@ -43,10 +43,11 @@ func shippedBases(name string) []string {
 }
 
 // upgradeBases replaces each Base that equals a copy an earlier release shipped, which
-// nobody edited, with the one this binary ships.
-func upgradeBases(v *Vault) error {
+// nobody edited, with the one this binary ships. It writes through the transaction after
+// its snapshot, so the write's own commit holds the new copy, not a "hand edit".
+func (tx *Tx) upgradeBases() error {
 	for name, rel := range Bases {
-		data, err := v.Read(rel)
+		data, err := tx.V.Read(rel)
 		if err != nil {
 			continue
 		}
@@ -57,7 +58,7 @@ func upgradeBases(v *Vault) error {
 		if err != nil {
 			return err
 		}
-		if _, err := v.WriteIfChanged(rel, current); err != nil {
+		if _, err := tx.WriteIfChanged(rel, current); err != nil {
 			return err
 		}
 	}

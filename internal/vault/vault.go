@@ -413,16 +413,13 @@ func (v *Vault) Prune(paths ...string) {
 	}
 }
 
-// EnsureFolders makes every folder of the layout that is missing, replaces a Base of an
-// earlier release that nobody edited, and keeps the machine files out of git.
+// EnsureFolders makes every folder of the layout that is missing, and keeps the machine
+// files out of git.
 func (v *Vault) EnsureFolders() error {
 	for _, f := range Folders {
 		if err := os.MkdirAll(v.Abs(f), 0o755); err != nil {
 			return err
 		}
-	}
-	if err := upgradeBases(v); err != nil {
-		return err
 	}
 	g := v.Git()
 	if err := g.Exclude(Excluded...); err != nil {

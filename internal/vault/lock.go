@@ -143,6 +143,10 @@ func Begin(v *Vault, recover func() error) (*Tx, error) {
 		return nil, fmt.Errorf("commit the hand edits before this write: %w; nothing was written, so the vault is as it was", err)
 	}
 	tx.Snapshot = sha
+	if err := tx.upgradeBases(); err != nil {
+		tx.End(&err)
+		return nil, err
+	}
 	return tx, nil
 }
 
