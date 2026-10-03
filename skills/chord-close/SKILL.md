@@ -19,8 +19,8 @@ Tools: `chord` (load, drop), `search`, `change`. References:
 
 **Close**
 
-1. `chord` load with `chord`. Its status must be `done`. Else say which threads are not
-   closed, and hand to [chord-work](../chord-work/SKILL.md).
+1. `chord` load with `chord`. Its status must be `done`. Else say which threads have
+   not ended, and hand to [chord-work](../chord-work/SKILL.md).
 2. Read each thread's spec and last verification, and the wiki pages their changes
    wrote.
 3. Build one Wiki Change Plan:

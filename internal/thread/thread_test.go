@@ -626,7 +626,8 @@ func TestTheCanvasShowsTheOrderAndSavesIt(t *testing.T) {
 
 func TestAChordClosesWhenItsThreadsDo(t *testing.T) {
 	tv := testvault.New(t)
-	ok(t)(thread.ChordCreate(tv.V, thread.ChordIn{Title: "Small chord", Text: "One thing is done.", Threads: []thread.ChordThreadIn{{Title: "Only thread", Text: "Do it."}}}, opts(tv)))
+	ok(t)(thread.ChordCreate(tv.V, thread.ChordIn{Title: "Small chord", Text: "One thing is done.", Threads: []thread.ChordThreadIn{{Title: "Only thread", Text: "Do it."}, {Title: "Dropped thread", Text: "Not needed."}}}, opts(tv)))
+	ok(t)(thread.Drop(tv.V, "Dropped thread", "Not needed after all.", opts(tv)))
 	name := "Only thread"
 	ok(t)(thread.Spec(tv.V, thread.SpecIn{Thread: name, Text: "## Goal\n\nDo it.\n\n## Requirements\n\n- R1: It is done.\n"}, opts(tv)))
 	ok(t)(thread.TasksWrite(tv.V, thread.TasksIn{Thread: name, Tasks: []thread.TaskIn{{Text: "Do it", Requirements: []string{"R1"}}}}, opts(tv)))
@@ -661,6 +662,52 @@ func TestAChordClosesWhenItsThreadsDo(t *testing.T) {
 	absorb("Close the chord", c.ID())
 	if _, c = load(tv, "Small chord"); c.Str("status") != thread.ChordClosed || !strings.Contains(c.Content, "> [!chord-closed] Closed · 1/1 threads closed · absorbed by [[2026-09-27 Close the chord]]") {
 		t.Fatalf("closed:\n%s", c.Content)
+	}
+}
+
+// A chord whose threads all ended without one closing is done too, so chord-close can
+// close it; a chord with no thread, and a chord the user dropped, are not.
+func TestAChordWhoseThreadsAllEndedIsDone(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("topic", "Motion", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	tv.Commit()
+	create := func(title string, threads ...string) {
+		var in []thread.ChordThreadIn
+		for _, th := range threads {
+			in = append(in, thread.ChordThreadIn{Title: th, Text: "The idea of " + th + "."})
+		}
+		ok(t)(thread.ChordCreate(tv.V, thread.ChordIn{Title: title, Text: "A goal.", Threads: in}, opts(tv)))
+	}
+	done := func(title string) {
+		t.Helper()
+		b, c := load(tv, title)
+		if b.Status(c) != thread.ChordDone || b.ChordNext(c).Step != "close" || !tv.Index().Pending(c) {
+			t.Fatalf("%s: %s, next %+v, pending %v", title, b.Status(c), b.ChordNext(c), tv.Index().Pending(c))
+		}
+	}
+	create("All dropped", "Drop one", "Drop two")
+	ok(t)(thread.Drop(tv.V, "Drop one", "No.", opts(tv)))
+	if status(tv, "All dropped") != thread.ChordOpen {
+		t.Fatal("a chord with a thread still open is done")
+	}
+	ok(t)(thread.Drop(tv.V, "Drop two", "No.", opts(tv)))
+	done("All dropped")
+
+	create("Dropped and resolved", "Drop three", "Resolve one")
+	ok(t)(thread.Drop(tv.V, "Drop three", "No.", opts(tv)))
+	ok(t)(thread.Resolve(tv.V, "Resolve one", []string{"Motion"}, opts(tv)))
+	done("Dropped and resolved")
+
+	create("Emptied", "Moved away")
+	ok(t)(thread.ChordRemove(tv.V, "Emptied", "Moved away", opts(tv)))
+	if status(tv, "Emptied") != thread.ChordOpen {
+		t.Fatalf("a chord with no thread: %s", status(tv, "Emptied"))
+	}
+
+	create("Given up", "Drop four")
+	ok(t)(thread.Drop(tv.V, "Given up", "Another team has it.", opts(tv)))
+	if status(tv, "Given up") != thread.ChordDropped {
+		t.Fatalf("a dropped chord: %s", status(tv, "Given up"))
 	}
 }
 

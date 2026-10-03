@@ -581,6 +581,20 @@ func (b *Board) ChordCounts(chord *doc.Doc) (closed, total int) {
 	return
 }
 
+// chordEnded reports whether a chord has threads and each of them has ended: closed,
+// dropped, or resolved.
+func (b *Board) chordEnded(chord *doc.Doc) bool {
+	members := b.members[chord.ID()]
+	for _, s := range members {
+		switch b.Status(s) {
+		case Closed, Dropped, Resolved:
+		default:
+			return false
+		}
+	}
+	return len(members) > 0
+}
+
 func (b *Board) chordStatus(chord *doc.Doc) string {
 	dropped := false
 	for _, e := range b.events[chord.ID()] {
@@ -594,8 +608,7 @@ func (b *Board) chordStatus(chord *doc.Doc) string {
 	if dropped {
 		return ChordDropped
 	}
-	closed, total := b.ChordCounts(chord)
-	if total > 0 && closed == total {
+	if b.chordEnded(chord) {
 		if slices.Contains(b.Idx.V.Wikify(), "chord") && b.Idx.AbsorbedBy(chord) == nil {
 			return ChordDone
 		}
@@ -680,7 +693,7 @@ func (b *Board) ChordNext(chord *doc.Doc) Step {
 	case ChordDropped, ChordClosed:
 		return Step{Step: "none", Reason: "the chord is " + b.Status(chord)}
 	case ChordDone:
-		return Step{Step: "close", Skill: "chord-close", Reason: "every thread is closed and the wiki has no overview of the chord"}
+		return Step{Step: "close", Skill: "chord-close", Reason: "every thread is closed or dropped, and the wiki has no overview of the chord"}
 	}
 	if len(b.members[chord.ID()]) == 0 {
 		return Step{Step: "create", Skill: "chord-create", Reason: "the chord has no thread"}
