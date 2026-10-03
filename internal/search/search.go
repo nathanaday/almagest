@@ -248,8 +248,8 @@ func names(idx *vault.Index, d, repo *doc.Doc) bool {
 			return true
 		}
 	}
-	// A spec or a verification belongs where its thread does.
-	if t := d.Str("thread"); t != "" {
+	// A spec or a verification belongs where its thread does; a task list names its own.
+	if t := d.Str("thread"); t != "" && d.Str("repository") == "" && len(d.List("repositories")) == 0 {
 		if s := idx.Linked(t); s != nil && lists(s) {
 			return true
 		}

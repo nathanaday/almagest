@@ -189,3 +189,17 @@ func TestTheFacetsListOnlyStatusesTheFilterTakes(t *testing.T) {
 		t.Fatalf("status facets: %+v %v", hits.Facets.Status, err)
 	}
 }
+
+// A task list belongs to its own repository, not to every repository of its thread.
+func TestATaskListBelongsToItsOwnRepository(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("repository", "alpha", map[string]any{"path": "/a"}, "")
+	tv.Doc("repository", "beta", map[string]any{"path": "/b"}, "")
+	tv.Doc("stub", "Both", map[string]any{"status": "planned", "repositories": []string{"[[alpha]]", "[[beta]]"}}, "## Idea\n\nx\n")
+	tv.Doc("tasks", "Both · Tasks (alpha)", map[string]any{"thread": "[[Both]]", "repository": "[[alpha]]"}, "## Tasks\n\n- [ ] T1 Do it\n")
+	tv.Doc("tasks", "Both · Tasks (beta)", map[string]any{"thread": "[[Both]]", "repository": "[[beta]]"}, "## Tasks\n\n- [ ] T1 Do it\n")
+	hits, err := search.Search(tv.Index(), search.Query{Repository: "alpha", Types: []string{"tasks"}})
+	if err != nil || hits.Total != 1 || hits.Hits[0].Ref.Title != "Both · Tasks (alpha)" {
+		t.Fatalf("the task lists of alpha: %+v %v", hits, err)
+	}
+}
