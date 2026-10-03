@@ -88,10 +88,22 @@ The design pages are the spec. When the code departs from them, the reason is be
   repositories, and topics (lead callouts, the `atlas-repo` block, git facts).
 - **Recovery needs the paths.** A change document gets a code-owned `paths` field while
   it is `applying`: every path the apply may write. Recovery restores those that are
-  local documents (`Vault.Local`: a clean relative `.md` path, outside `.git`,
-  `.obsidian`, and `.claude`, with no folder that links out), and skips the rest.
-  Frontmatter comes from a pull or a shell too, and recovery runs at every session
-  start. Apply removes the field when it ends.
+  local documents (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside
+  `.git`, `.obsidian`, and `.claude` in any case), and skips the rest. Frontmatter comes
+  from a pull or a shell too, and recovery runs at every session start. Apply removes the
+  field when it ends.
+- **Every path built from input is contained.** `Vault.Contain` refuses an absolute or
+  unclean path, `..`, `.git` in any case, a name over 255 bytes, and a path whose folders
+  or final link resolve outside the vault. Every write, remove, and move of `vault.Tx`
+  passes it, so no document write lands outside the vault whatever its caller.
+  `Vault.Write` with a fixed machine path (`.obsidian/`, `.claude/`) does not, so a user
+  who links `.obsidian` to a shared folder keeps a working vault. Inbox files pass
+  `Vault.InboxFile` (a regular file kept in `inbox/`), a mention's note must be one the
+  index holds, and a repository's files and a source's captured file are read through
+  `os.Root`. Go 1.24's `os.Root` has no rename, so writes check the path before the
+  atomic rename instead.
+- **Each MCP tool handler recovers a panic** (`safe`), so one bad call returns an error
+  and the server keeps serving.
 - **The change tool keeps the gate, not the guard.** `change.Apply` takes a `Gate`; the
   MCP server passes `sessions.UserAnswered`, which reads the change's `session` and that
   session's `last_prompt`. It judges the document Apply resolved, under the lock, so no
@@ -135,7 +147,14 @@ The design pages are the spec. When the code departs from them, the reason is be
   `.claude/settings.local.json`, `.obsidian/workspace*.json`, `.obsidian/graph.json`), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
   and untracks an excluded file that an older vault tracked, in a commit of its own.
-- **Titles also drop `[ ] # ^`**, which break a wikilink.
+- **Titles also drop `[ ] # ^`**, which break a wikilink, `→`, which splits the old and
+  new titles of a change heading, and control characters. A title the caller gives holds
+  at most 150 bytes (`doc.CheckTitle`), so the titles code derives from it fit a file
+  name; a captured file's name is cut instead, and one that cleans to nothing takes the
+  source's id. " · " stays allowed: the heading parser finds the id at the end.
+- **A create or a rename checks the disk** (`Vault.Occupied`), because the index compares
+  titles by lower case only, and APFS also folds Unicode forms: "Café" in NFC and in NFD
+  is one file. Capture numbers such a title; every other writer refuses it.
 - **Match merges subjects that hit one document**, so one drafter writes each document.
 - **A dropped thread does not block** the threads after it.
 - **The binary is `atlas-obsidian`, not `atlas`.** Other programs install a binary named
