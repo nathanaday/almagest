@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 )
 
 // Applying is the status of a change document while its apply writes.
@@ -71,7 +72,7 @@ func Recover(v *Vault) error {
 			if err := v.Write(d.Path, []byte(d.Content)); err != nil {
 				return fmt.Errorf("recover %s: %w", Title(d), err)
 			}
-		} else if base != recoveringNone && !g.InHistory(base) {
+		} else if !validBase(g, base) {
 			// The field is frontmatter, which a hand or a pull can change. Recovery wrote
 			// a full commit id from the history; anything else, such as HEAD or a short
 			// id, could put back nothing, or delete what it lacks.
@@ -168,4 +169,14 @@ func commitFound(v *Vault, d *doc.Doc, paths []string) (string, error) {
 // sync writes and recovery puts back with the documents.
 func chordCanvas(v *Vault, p string) bool {
 	return strings.HasPrefix(p, Chords+"/") && strings.HasSuffix(p, ".canvas") && !strings.Contains(strings.TrimPrefix(p, Chords+"/"), "/") && v.Contain(p) == nil
+}
+
+// validBase reports whether a recovering value can be the base recovery wrote: none only
+// in a repository with no commit, else the full id of a commit in the history.
+func validBase(g gitx.Repo, base string) bool {
+	if base == recoveringNone {
+		head, err := g.Head()
+		return err != nil || head == ""
+	}
+	return g.InHistory(base)
 }

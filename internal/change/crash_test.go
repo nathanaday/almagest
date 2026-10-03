@@ -363,7 +363,7 @@ func TestAFailedUndoKeepsASaveMadeDuringIt(t *testing.T) {
 
 // A recovering field that names no commit stops recovery before it changes anything.
 func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
-	for _, bogus := range []string{"deadbeef", "HEAD", "short", "a commit outside the history"} {
+	for _, bogus := range []string{"deadbeef", "HEAD", "short", "a commit outside the history", "none"} {
 		t.Run(bogus, func(t *testing.T) {
 			tv := testvault.New(t)
 			pv, _ := crashPlan(t, tv)
