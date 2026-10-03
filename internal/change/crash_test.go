@@ -54,18 +54,27 @@ func TestAnApplyWhoseCommitFailsStaysProposed(t *testing.T) {
 	apply(t, tv, pv.Ref.ID)
 }
 
-// A crash after the last write and before the commit: the document says applied and
-// still holds paths, and no commit exists. Recovery puts the change back.
+// A crash after the last write and before the commit: the files hold what the apply
+// wrote, and the document says applied, with its real Writes section, and still holds
+// paths; no commit exists. The state is the real one: the apply's commit taken off again.
+// Recovery puts the change back.
 func TestACrashBeforeTheCommitIsPutBack(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
-	content := tv.Read(pv.Ref.Path)
-	content = doc.SetField(doc.SetField(content, "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
-	tv.Write(pv.Ref.Path, content)
-	tv.Write("wiki/documents/Motion scoring.md", "half written")
-	tv.Write("wiki/documents/Radar.md", "half written")
+	before := tv.Read("wiki/documents/Motion scoring.md")
+	apply(t, tv, pv.Ref.ID)
+	final := tv.Read(pv.Ref.Path)
+	git := func(args ...string) {
+		t.Helper()
+		if out, err := exec.Command("git", append([]string{"-C", tv.V.Root}, args...)...).CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git("reset", "-q", "--soft", "HEAD~1")
+	git("reset", "-q")
+	tv.Write(pv.Ref.Path, doc.SetField(final, "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"}))
 	nextWrite(t, tv)
-	if !strings.Contains(tv.Read("wiki/documents/Motion scoring.md"), "Old.") || tv.V.Exists("wiki/documents/Radar.md") {
+	if tv.Read("wiki/documents/Motion scoring.md") != before || tv.V.Exists("wiki/documents/Radar.md") {
 		t.Fatal("recovery did not put the documents back")
 	}
 	got := tv.Read(pv.Ref.Path)
@@ -125,6 +134,12 @@ func TestRecoveryKeepsAnEditMadeAfterTheCrash(t *testing.T) {
 	}
 	if got := tv.Read("wiki/documents/Motion scoring.md"); strings.Contains(got, "after the crash") {
 		t.Fatalf("the file was not put back:\n%s", got)
+	}
+	if got := tv.Read(pv.Ref.Path); !strings.Contains(got, "status: proposed") || strings.Contains(got, "paths:") {
+		t.Fatalf("the change is not proposed again:\n%s", got)
+	}
+	if tv.V.Exists("wiki/documents/Radar.md") {
+		t.Fatal("the created document stayed")
 	}
 	out, err := exec.Command("git", "-C", tv.V.Root, "log", "-p", "--", "wiki/documents/Motion scoring.md").CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "+A paragraph the user wrote after the crash.") || !strings.Contains(string(out), "recovery: ") {

@@ -2,6 +2,7 @@ package source_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -79,5 +80,8 @@ func TestACaptureWhoseCommitFailsPutsTheInboxBack(t *testing.T) {
 	}
 	if entries, _ := os.ReadDir(tv.V.Abs("wiki/assets")); len(entries) != 0 {
 		t.Fatalf("an asset stayed: %v", entries)
+	}
+	if out, err := exec.Command("git", "-C", tv.V.Root, "status", "--porcelain").CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("the tree is not clean:\n%s %v", out, err)
 	}
 }

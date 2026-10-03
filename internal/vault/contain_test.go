@@ -1,13 +1,16 @@
 package vault_test
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -226,5 +229,72 @@ func TestRollbackLeavesASaveMadeDuringTheWrite(t *testing.T) {
 	}
 	if got := tv.Read("wiki/documents/B.md"); got != "before\n" {
 		t.Fatalf("B was not put back: %q", got)
+	}
+}
+
+// The harness writes .claude/settings.local.json too. A change that lands while Atlas
+// merges the file makes the merge run again, so both writes keep their keys.
+func TestSyncSettingsMergesAgainWhenTheFileChanges(t *testing.T) {
+	tv := testvault.New(t)
+	repo := tv.Repo("p3-edge", nil)
+	tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
+	tv.Commit()
+	file := tv.V.Abs(".claude/settings.local.json")
+	tv.WriteFile(file, "{\n  \"mine\": 1\n}\n")
+	once := false
+	vault.SetBeforeRename(func(f string) {
+		if f == file && !once {
+			once = true
+			os.WriteFile(file, []byte("{\n  \"mine\": 1,\n  \"theirs\": 2\n}\n"), 0o644)
+		}
+	})
+	defer vault.SetBeforeRename(nil)
+	wrote, err := tv.V.SyncSettings(nil)
+	if err != nil || !wrote {
+		t.Fatalf("sync settings: %v %v", wrote, err)
+	}
+	got, _ := os.ReadFile(file)
+	for _, want := range []string{`"mine": 1`, `"theirs": 2`, repo} {
+		if !strings.Contains(string(got), want) {
+			t.Errorf("the settings lack %s:\n%s", want, got)
+		}
+	}
+}
+
+// A canvas the user saves while a sync writes it keeps the save.
+func TestASyncKeepsACanvasSavedDuringItsWrite(t *testing.T) {
+	tv := testvault.New(t)
+	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}, {Title: "Second", Text: "Then this.", After: []string{"First"}}}}, thread.Opts{Now: testvault.Now}); err != nil {
+		t.Fatal(err)
+	}
+	canvas := tv.V.Abs("chords/Plan C.canvas")
+	// Cards painted the wrong color: the sync paints them again, so it writes the canvas.
+	data, _ := os.ReadFile(canvas)
+	var c map[string]any
+	if err := json.Unmarshal(data, &c); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range c["nodes"].([]any) {
+		n.(map[string]any)["color"] = "#123456"
+	}
+	moved, _ := json.Marshal(c)
+	os.WriteFile(canvas, moved, 0o644)
+	tv.Commit()
+	saved := []byte(strings.Replace(string(moved), "#123456", "#654321", 1))
+	vault.SetBeforeRename(func(f string) {
+		if f == canvas {
+			os.WriteFile(canvas, saved, 0o644)
+		}
+	})
+	defer vault.SetBeforeRename(nil)
+	synced, err := core.Sync(tv.V, testvault.Now, core.SyncOptions{Views: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := os.ReadFile(canvas); string(got) != string(saved) {
+		t.Fatalf("the canvas save was overwritten (%v, skipped %v):\n%s", err, synced.Skipped, got)
+	}
+	if !strings.Contains(strings.Join(synced.Skipped, "|"), "chords/Plan C.canvas") {
+		t.Fatalf("skipped %v", synced.Skipped)
 	}
 }
