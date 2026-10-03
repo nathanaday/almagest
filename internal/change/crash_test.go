@@ -363,18 +363,30 @@ func TestAFailedUndoKeepsASaveMadeDuringIt(t *testing.T) {
 
 // A recovering field that names no commit stops recovery before it changes anything.
 func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
-	tv := testvault.New(t)
-	pv, _ := crashPlan(t, tv)
-	tv.Commit()
-	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
-	tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", "deadbeef"))
-	tv.Write("wiki/documents/Motion scoring.md", "half written")
-	_, err := thread.Stub(tv.V, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)})
-	if err == nil || !strings.Contains(err.Error(), "names no commit") {
-		t.Fatalf("the write after a bogus recovering field: %v", err)
-	}
-	if tv.Read("wiki/documents/Motion scoring.md") != "half written" {
-		t.Fatal("recovery changed a listed path")
+	for _, bogus := range []string{"deadbeef", "HEAD", "short", "a commit outside the history"} {
+		t.Run(bogus, func(t *testing.T) {
+			tv := testvault.New(t)
+			pv, _ := crashPlan(t, tv)
+			tv.Commit()
+			value := bogus
+			switch bogus {
+			case "short":
+				value = strings.TrimSpace(git(t, tv.V.Root, "rev-parse", "--short", "HEAD"))
+			case "a commit outside the history":
+				value = strings.TrimSpace(git(t, tv.V.Root, "commit-tree", "HEAD^{tree}", "-m", "loose"))
+			}
+			content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+			tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", value))
+			tv.Write("wiki/documents/Motion scoring.md", "half written")
+			head := git(t, tv.V.Root, "rev-parse", "HEAD")
+			_, err := thread.Stub(tv.V, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)})
+			if err == nil || !strings.Contains(err.Error(), "not the full id of a commit") {
+				t.Fatalf("the write after recovering: %s: %v", value, err)
+			}
+			if tv.Read("wiki/documents/Motion scoring.md") != "half written" || git(t, tv.V.Root, "rev-parse", "HEAD") != head {
+				t.Fatal("recovery changed the vault")
+			}
+		})
 	}
 }
 
@@ -417,4 +429,14 @@ func TestACrashBeforeTheCommitPutsTheCanvasBack(t *testing.T) {
 	if got, _ := os.ReadFile(filepath.Join(crashed, canvas)); string(got) != before {
 		t.Fatalf("recovery did not put the canvas back:\n%s", got)
 	}
+}
+
+// git runs git in dir and returns its output.
+func git(t *testing.T, dir string, args ...string) string {
+	t.Helper()
+	out, err := exec.Command("git", append([]string{"-C", dir}, args...)...).CombinedOutput()
+	if err != nil {
+		t.Fatalf("git %v: %v: %s", args, err, out)
+	}
+	return string(out)
 }

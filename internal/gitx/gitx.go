@@ -494,9 +494,12 @@ func (r Repo) ShowFile(rev, p string) ([]byte, error) {
 	return stdout.Bytes(), nil
 }
 
-// HasCommit reports whether rev names a commit here.
-func (r Repo) HasCommit(rev string) bool {
-	_, err := r.run("rev-parse", "--verify", "--quiet", rev+"^{commit}")
+// InHistory reports whether id is the full id of a commit that HEAD contains.
+func (r Repo) InHistory(id string) bool {
+	if len(id) != 40 && len(id) != 64 || strings.Trim(id, "0123456789abcdef") != "" {
+		return false
+	}
+	_, err := r.run("merge-base", "--is-ancestor", id, "HEAD")
 	return err == nil
 }
 

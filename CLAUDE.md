@@ -100,7 +100,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   and `.claude` in any case, and a listed chord canvas) back from the base, and sets the
   change to proposed without `paths` or `recovering`. So a recovery that a crash stops
   partway does the same again.
-  A `recovering` value that names no commit stops recovery before it changes anything.
+  A `recovering` value that is not the full id of a commit in the history stops recovery
+  before it changes anything.
   Both ways it unstages what it restored and the change document. Frontmatter comes from
   a pull or a shell too, and recovery runs at every session start.
 - **A write that ends without its commit is put back.** `vault.Tx` keeps each path's
