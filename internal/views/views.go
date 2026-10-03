@@ -58,7 +58,7 @@ func Write(idx *vault.Index, now time.Time) ([]string, error) {
 	v := idx.V
 	var out []string
 	for rel, content := range files {
-		wrote, err := v.WriteIfChanged(rel, []byte(content))
+		wrote, err := v.WriteDocIfChanged(rel, []byte(content))
 		if err != nil {
 			return out, err
 		}

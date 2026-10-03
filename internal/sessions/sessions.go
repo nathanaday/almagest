@@ -500,14 +500,14 @@ func TaskLists(v *vault.Vault, title string) []*doc.Doc {
 func write(v *vault.Vault, rel, content string) error {
 	d := doc.Parse(rel, []byte(content))
 	content = doc.ReplaceLead(content, Lead(v, d))
-	_, err := v.WriteIfChanged(rel, []byte(content))
+	_, err := v.WriteDocIfChanged(rel, []byte(content))
 	return err
 }
 
 // Refresh rewrites a session's lead callout, for sync. The caller holds the lock.
 func Refresh(v *vault.Vault, d *doc.Doc) (bool, error) {
 	content := doc.ReplaceLead(d.Content, Lead(v, d))
-	return v.WriteIfChanged(d.Path, []byte(content))
+	return v.WriteDocIfChanged(d.Path, []byte(content))
 }
 
 func nonNil(list []string) []string {

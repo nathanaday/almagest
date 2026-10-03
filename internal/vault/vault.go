@@ -328,6 +328,23 @@ func (v *Vault) Write(rel string, content []byte) error {
 	return writeAtomic(v.Abs(rel), content)
 }
 
+// WriteDoc writes a document outside a Tx, after Contain accepts its path. Fixed machine
+// paths (.obsidian/, .claude/) use Write.
+func (v *Vault) WriteDoc(rel string, content []byte) error {
+	if err := v.Contain(rel); err != nil {
+		return err
+	}
+	return v.Write(rel, content)
+}
+
+// WriteDocIfChanged is WriteIfChanged after Contain accepts the path.
+func (v *Vault) WriteDocIfChanged(rel string, content []byte) (bool, error) {
+	if err := v.Contain(rel); err != nil {
+		return false, err
+	}
+	return v.WriteIfChanged(rel, content)
+}
+
 // WriteIfChanged writes the file only when its content differs, and reports whether it
 // wrote.
 func (v *Vault) WriteIfChanged(rel string, content []byte) (bool, error) {

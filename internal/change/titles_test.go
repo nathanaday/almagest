@@ -77,3 +77,24 @@ func TestAHandEditedHeadingCannotWriteOutsideTheDocuments(t *testing.T) {
 		}
 	}
 }
+
+func TestProposeWritesNoChangeDocumentThroughALinkOut(t *testing.T) {
+	tv := testvault.New(t)
+	now := tv.Tick(time.Minute)
+	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
+	if err := os.MkdirAll(away, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	month := tv.V.Abs("changes/" + now.Add(time.Minute).Format("2006-01"))
+	os.RemoveAll(month)
+	if err := os.Symlink(away, month); err != nil {
+		t.Fatal(err)
+	}
+	_, err := change.Propose(tv.V, change.Plan{Title: "Linked", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "Alpha", Fields: map[string]any{"description": "A topic.", "status": "stable"}, Body: str("## Definition\n\nA topic.\n")}}}, now.Add(time.Minute))
+	if err == nil || !strings.Contains(err.Error(), "not a path inside the vault") {
+		t.Fatalf("propose through a linked month folder: %v", err)
+	}
+	if entries, _ := os.ReadDir(away); len(entries) != 0 {
+		t.Fatalf("propose wrote outside the vault: %v", entries)
+	}
+}

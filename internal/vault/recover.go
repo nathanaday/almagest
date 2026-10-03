@@ -38,7 +38,7 @@ func Recover(v *Vault) error {
 		}
 		content := doc.RemoveField(doc.SetField(d.Content, "status", "proposed"), "paths")
 		content = doc.ReplaceLead(content, doc.Callout("change", "Proposed", "Recovered after a crash. Review the documents below, then say yes in the chat, or press Apply."))
-		if err := v.Write(d.Path, []byte(content)); err != nil {
+		if err := v.WriteDoc(d.Path, []byte(content)); err != nil {
 			return err
 		}
 	}

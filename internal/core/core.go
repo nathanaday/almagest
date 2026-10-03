@@ -320,7 +320,7 @@ func CloseMention(v *vault.Vault, rel string, line int, link string) (*Mention, 
 		return nil, fmt.Errorf("line %d of %s is no open @atlas mention; it may be closed already", line, rel)
 	}
 	lines[line-1] = strings.Replace(lines[line-1], "[ ]", "[x]", 1) + " → " + doc.Link(vault.Title(answer))
-	if err := v.Write(rel, []byte(strings.Join(lines, "\n"))); err != nil {
+	if err := v.WriteDoc(rel, []byte(strings.Join(lines, "\n"))); err != nil {
 		return nil, err
 	}
 	return &Mention{Doc: vault.Ref{Title: vault.NoteTitle(rel), Path: rel, Tags: []string{}}, Line: line, Text: strings.TrimSpace(lines[line-1])}, nil
@@ -447,6 +447,9 @@ func FileByHand(v *vault.Vault) ([]string, error) {
 		to := vault.DocPath(path.Base(strings.TrimSuffix(d.Path, ".md")))
 		if v.Exists(to) {
 			continue // lint reports it
+		}
+		if v.Contain(d.Path) != nil || v.Contain(to) != nil {
+			continue // a path through a link out of the vault is never moved
 		}
 		if err := os.MkdirAll(filepath.Dir(v.Abs(to)), 0o755); err != nil {
 			return out, err

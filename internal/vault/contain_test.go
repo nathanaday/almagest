@@ -153,3 +153,18 @@ func TestAFailedRenameLeavesNoTemporaryFile(t *testing.T) {
 		t.Fatalf("Excluded holds no .atlas-*: %v", vault.Excluded)
 	}
 }
+
+func TestWriteDocRefusesAPathThroughALinkOut(t *testing.T) {
+	tv := testvault.New(t)
+	out := outside(t)
+	link(t, out, tv.V.Abs("sessions/2026-10"))
+	if err := tv.V.WriteDoc("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("WriteDoc: %v", err)
+	}
+	if _, err := tv.V.WriteDocIfChanged("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("WriteDocIfChanged: %v", err)
+	}
+	if entries, _ := os.ReadDir(out); len(entries) != 1 {
+		t.Fatalf("the outside folder changed: %v", entries)
+	}
+}
