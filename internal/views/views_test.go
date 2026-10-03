@@ -35,8 +35,8 @@ func TestViews(t *testing.T) {
 	step(thread.Spec(tv.V, thread.SpecIn{Thread: "Build the grid", Text: "## Goal\n\nA grid.\n\n## Requirements\n\n- R1: The grid is built.\n\n## Knowledge\n\n- [[Occupancy grids]]\n"}, thread.Opts{Now: at}))
 	step(thread.TasksWrite(tv.V, thread.TasksIn{Thread: "Build the grid", Repository: "grid-sim", Tasks: []thread.TaskIn{{Text: "Build it", Requirements: []string{"R1"}}}}, thread.Opts{Now: at}))
 	step(thread.Start(tv.V, "Build the grid", false, thread.Opts{Now: testvault.Now.Add(time.Hour)}))
-	tv.Write("views/tags/gone/Tag · gone.md", "old\n")
-	wrote, err := views.Write(tv.Index(), testvault.Now.Add(2*time.Hour))
+	tv.Write("views/tags/gone/Tag · gone.md", views.Notice+"\n\nold\n")
+	wrote, _, err := views.Write(tv.Index(), testvault.Now.Add(2*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -71,7 +71,7 @@ func TestViews(t *testing.T) {
 	if len(wrote) < 8 {
 		t.Fatalf("wrote %v", wrote)
 	}
-	again, _ := views.Write(tv.Index(), testvault.Now.Add(2*time.Hour))
+	again, _, _ := views.Write(tv.Index(), testvault.Now.Add(2*time.Hour))
 	if len(again) != 0 {
 		t.Fatalf("a second write writes nothing: %v", again)
 	}

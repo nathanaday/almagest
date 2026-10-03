@@ -296,6 +296,9 @@ func (c *CLI) vaultCmd(argv []string) error {
 				fmt.Fprint(w, ", the harness settings")
 			}
 			fmt.Fprintln(w, ".")
+			for _, p := range s.Strays {
+				fmt.Fprintf(w, "Moved %s out of views/, where code writes every file, into inbox/.\n", p)
+			}
 		})
 	case "mention":
 		v, err := c.open(a)

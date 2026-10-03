@@ -9,6 +9,7 @@ import (
 	"io/fs"
 	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"sort"
@@ -51,19 +52,19 @@ func TagPath(t string) string {
 }
 
 // Write writes every view from an index of the vault, a file only when its content
-// differs, and removes the view files that stand for nothing now. It returns the paths it
-// wrote or removed. The caller holds the lock.
-func Write(idx *vault.Index, now time.Time) ([]string, error) {
+// differs, and removes the views that stand for nothing now. It returns the paths it wrote
+// or removed, and the strays: notes in views/ that code did not write, which it moves to
+// inbox/ instead of deleting, since git does not hold views/. The caller holds the lock.
+func Write(idx *vault.Index, now time.Time) (written, strays []string, err error) {
 	files := Render(idx, now)
 	v := idx.V
-	var out []string
 	for rel, content := range files {
 		wrote, err := v.WriteIfChanged(rel, []byte(content))
 		if err != nil {
-			return out, err
+			return written, strays, err
 		}
 		if wrote {
-			out = append(out, rel)
+			written = append(written, rel)
 		}
 	}
 	var stale []string
@@ -78,13 +79,45 @@ func Write(idx *vault.Index, now time.Time) ([]string, error) {
 		return nil
 	})
 	for _, rel := range stale {
-		if err := os.Remove(v.Abs(rel)); err == nil {
-			out = append(out, rel)
+		data, err := os.ReadFile(v.Abs(rel))
+		if err != nil {
+			continue
 		}
+		if strings.Contains(string(data), Notice) {
+			if err := v.Remove(rel); err == nil {
+				written = append(written, rel)
+			}
+			continue
+		}
+		to, err := moveToInbox(v, rel)
+		if err != nil {
+			return written, strays, err
+		}
+		strays = append(strays, to)
 	}
 	pruneEmpty(v.Abs(vault.Views))
-	sort.Strings(out)
-	return out, nil
+	sort.Strings(written)
+	sort.Strings(strays)
+	return written, strays, nil
+}
+
+// moveToInbox moves a note to inbox/ under a free name, and returns where it went.
+func moveToInbox(v *vault.Vault, rel string) (string, error) {
+	base := strings.TrimSuffix(path.Base(rel), ".md")
+	to := vault.Inbox + "/" + base + ".md"
+	for n := 2; v.Exists(to); n++ {
+		to = fmt.Sprintf("%s/%s (%d).md", vault.Inbox, base, n)
+	}
+	if err := v.Contain(rel); err != nil {
+		return "", err
+	}
+	if err := v.Contain(to); err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(v.Abs(vault.Inbox), 0o755); err != nil {
+		return "", err
+	}
+	return to, os.Rename(v.Abs(rel), v.Abs(to))
 }
 
 // pruneEmpty removes the empty folders under root, and keeps root.

@@ -69,3 +69,31 @@ func TestSyncWritesNoCanvasThroughALinkedChordsFolder(t *testing.T) {
 		t.Fatalf("sync wrote outside the vault: %v", entries)
 	}
 }
+
+func TestTheViewsSyncMovesAStrayNoteToTheInbox(t *testing.T) {
+	tv := testvault.New(t)
+	note := "# Meeting notes\n\nWritten while View · Home was open.\n"
+	tv.Write("views/Meeting notes.md", note)
+	tv.Write("inbox/Meeting notes.md", "an older note of that name\n")
+	stale := "views/tags/gone/Tag · gone.md"
+	tv.Write(stale, "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync.\n")
+	synced, err := core.Sync(tv.V, testvault.Now, core.SyncOptions{Views: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tv.V.Exists("views/Meeting notes.md") {
+		t.Fatal("the stray note stayed in views/")
+	}
+	if got := tv.Read("inbox/Meeting notes (2).md"); got != note {
+		t.Fatalf("the stray note in the inbox: %q", got)
+	}
+	if tv.Read("inbox/Meeting notes.md") != "an older note of that name\n" {
+		t.Fatal("the move overwrote a note in the inbox")
+	}
+	if len(synced.Strays) != 1 || synced.Strays[0] != "inbox/Meeting notes (2).md" {
+		t.Fatalf("strays %v", synced.Strays)
+	}
+	if tv.V.Exists(stale) {
+		t.Fatal("a stale view stayed")
+	}
+}

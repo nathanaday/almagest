@@ -335,6 +335,8 @@ type Synced struct {
 	Sessions  []string `json:"sessions"`
 	Settings  bool     `json:"settings"`
 	Views     int      `json:"views"`
+	// Strays are the notes found in views/ that code did not write, moved to inbox/.
+	Strays []string `json:"strays"`
 }
 
 // SyncOptions select a sync.
@@ -359,7 +361,7 @@ func Sync(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 
 // SyncLocked is Sync for a caller that holds the lock.
 func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
-	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}}
+	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}, Strays: []string{}}
 	if !o.Views {
 		if err := vault.Recover(v); err != nil {
 			return nil, err
@@ -423,7 +425,8 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if idx, err = vault.Load(v); err != nil {
 		return nil, err
 	}
-	written, err := views.Write(idx, now)
+	written, strays, err := views.Write(idx, now)
+	out.Strays = append(out.Strays, strays...)
 	if err != nil {
 		return out, err
 	}
@@ -474,7 +477,7 @@ func Views(v *vault.Vault, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	_, err = views.Write(idx, now)
+	_, _, err = views.Write(idx, now)
 	return err
 }
 
