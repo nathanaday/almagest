@@ -208,3 +208,31 @@ func TestRecoveryKeepsAnEditOfTheChangeDocument(t *testing.T) {
 		t.Fatalf("git does not keep the line:\n%s %v", out, err)
 	}
 }
+
+// An undo that fails before its commit leaves the files and the index as they were.
+func TestAnUndoThatFailsLeavesNothingStaged(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	apply(t, tv, pv.Ref.ID)
+	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}}}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	topic := tv.Read("wiki/documents/Motion scoring.md")
+	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
+	os.MkdirAll(away, 0o755)
+	os.RemoveAll(tv.V.Abs("chords"))
+	if err := os.Symlink(away, tv.V.Abs("chords")); err != nil {
+		t.Fatal(err)
+	}
+	tv.Commit()
+	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err == nil {
+		t.Fatal("the undo through a linked chords/ passed")
+	}
+	if tv.Read("wiki/documents/Motion scoring.md") != topic || !tv.V.Exists("wiki/documents/Radar.md") {
+		t.Fatal("the failed undo left files changed")
+	}
+	out, err := exec.Command("git", "-C", tv.V.Root, "diff", "--cached", "--name-only").CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("the failed undo left staged: %q %v", out, err)
+	}
+}

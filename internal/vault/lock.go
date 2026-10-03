@@ -369,6 +369,10 @@ func (tx *Tx) Move(from, to string) error {
 	return nil
 }
 
+// Indexed marks that git changed the index for this write (a checkout stages what it
+// restores), so a rollback unstages the kept paths even before the commit staged them.
+func (tx *Tx) Indexed() { tx.added = true }
+
 // Mark adds paths another function wrote to the commit. Call Keep on them before that
 // function writes, so a failed write can put them back.
 func (tx *Tx) Mark(paths ...string) {

@@ -895,6 +895,7 @@ func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 	if err := tx.Keep(paths...); err != nil {
 		return nil, err
 	}
+	tx.Indexed()
 	if err := g.RestoreFrom(g.Parent(sha), paths...); err != nil {
 		return nil, err
 	}
