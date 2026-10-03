@@ -314,7 +314,7 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			continue
 		}
 		if !idx.Wikified(d) {
-			c.refuse("absorbs: %s is a %s the wiki does not absorb now; the vault's wikify setting lists %s, and the wiki takes a spec once its thread is verified, a verification that passes, a chord whose threads are closed, and a dropped or note event", vault.Title(d), d.Type(), strings.Join(idx.V.Wikify(), ", "))
+			c.refuse("absorbs: %s is a %s the wiki does not absorb now; the vault's wikify setting lists %s, and the wiki takes a spec once its thread is verified, a verification that passes, a chord whose threads are closed or dropped, and a dropped or note event", vault.Title(d), d.Type(), strings.Join(idx.V.Wikify(), ", "))
 			continue
 		}
 		out.Absorbs = append(out.Absorbs, d)

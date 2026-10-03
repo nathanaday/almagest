@@ -585,8 +585,8 @@ var ProseEvents = []string{"dropped", "note"}
 
 // Wikified reports whether a document can be pending: its type is in the vault's wikify
 // list, and it is ready for the wiki. A spec is ready when its thread is verified, a
-// verification when it passes, a chord when every thread is closed, and an event when
-// its kind holds prose. Each reads the status sync wrote.
+// verification when it passes, a chord when every thread is closed or dropped, and an
+// event when its kind holds prose. Each reads the status sync wrote.
 func (idx *Index) Wikified(d *doc.Doc) bool {
 	if !slices.Contains(idx.V.Wikify(), d.Type()) {
 		return false

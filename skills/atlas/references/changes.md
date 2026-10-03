@@ -138,7 +138,7 @@ refuses when one of them changed since; then make the fix as a new change.
 
 A document of a type in `wikify` is pending until an applied change lists it in
 `absorbs` with its current content. By default that is every source; the spec of a
-verified thread and its passing verification; a chord whose threads are all closed; and
+verified thread and its passing verification; a chord whose threads are all closed or dropped; and
 the events of kind `dropped` and `note`. A spec edited after the wiki absorbed it is
 pending again, and its thread is no longer closed. A change that absorbs a spec, a
 verification, or a chord closes a thread or a chord, so its apply waits for the user's

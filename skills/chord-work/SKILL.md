@@ -28,7 +28,7 @@ Tools: `chord` (load, list), `thread` (load). References:
      first ([thread-close](../thread-close/SKILL.md)); then one that is started; then
      the first ready one. Run [thread-work](../thread-work/SKILL.md) on it.
    - `create` → the chord has no thread: [chord-create](../chord-create/SKILL.md).
-   - `close` → every thread is closed: [chord-close](../chord-close/SKILL.md).
+   - `close` → every thread is closed or dropped: [chord-close](../chord-close/SKILL.md).
    - `wait` → every open thread is blocked or waits. Say on what, and stop.
 6. Ready threads with no path between them may go to subagents, one thread each, each
    running thread-work. Each subagent gets its own session document and starts its own
@@ -43,4 +43,4 @@ The gates of the thread skills. None of its own.
 ## Hand off
 
 [thread-work](../thread-work/SKILL.md) on each thread;
-[chord-close](../chord-close/SKILL.md) when every thread is closed.
+[chord-close](../chord-close/SKILL.md) when every thread is closed or dropped.

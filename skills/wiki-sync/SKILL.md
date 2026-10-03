@@ -19,8 +19,8 @@ References: [changes.md](../atlas/references/changes.md),
 
 1. **Documents.** Take the ids given, or the `pending` list from `vault`. Pending
    documents are sources, the spec and the passing verification of a verified thread,
-   a chord whose threads are closed, and events of kind dropped and note. Sources come
-   first, then events, then specs with their verifications. A spec and its verification
+   a chord whose threads are closed or dropped, and events of kind dropped and note.
+   Sources come first, then events, then specs with their verifications. A spec and its verification
    go into one change: together they close their thread. One change holds at most about ten
    documents or forty chunks; more is several changes, one after another. From the
    same `vault` call, keep the tag list (every tag with its count), the `tagging` mode,

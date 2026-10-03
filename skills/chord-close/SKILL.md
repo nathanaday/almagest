@@ -1,6 +1,6 @@
 ---
 name: chord-close
-description: "Close a chord whose threads are all closed: write its overview into the wiki, what was built and the threads that built it; or drop a chord, with the reason. Use for close the chord, wrap up the project, the chord is done, summarize what we built, drop this chord, cancel this project. Closing one thread is thread-close."
+description: "Close a chord whose threads have all ended (closed or dropped): write its overview into the wiki, what was built and the threads that built it; or drop a chord, with the reason. Use for close the chord, wrap up the project, the chord is done, summarize what we built, drop this chord, cancel this project. Closing one thread is thread-close."
 ---
 
 # chord-close
