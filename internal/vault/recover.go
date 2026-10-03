@@ -39,11 +39,20 @@ func Recover(v *Vault) error {
 			}
 			continue
 		}
+		var local []string
 		for _, p := range d.List("paths") {
-			if !v.Local(p) {
-				continue
+			if v.Local(p) {
+				local = append(local, p)
 			}
-			if err := g.RestoreFrom("HEAD", p); err != nil {
+		}
+		// What the crash left, and any edit made since, goes into git before the paths
+		// go back, so no text is lost. The paths then go back to the commit before it.
+		from, err := commitFound(v, d, local)
+		if err != nil {
+			return fmt.Errorf("recover %s: %w", Title(d), err)
+		}
+		for _, p := range local {
+			if err := g.RestoreFrom(from, p); err != nil {
 				return fmt.Errorf("recover %s: %w", Title(d), err)
 			}
 			v.Prune(p)
@@ -65,4 +74,49 @@ func BeginWrite(v *Vault) (*Tx, error) {
 		return nil, err
 	}
 	return Begin(v, func() error { return Recover(v) })
+}
+
+// RecoveredTrailer is the trailer of the commit that keeps what a crash left, which names
+// the change's id.
+const RecoveredTrailer = "Atlas-Recovered"
+
+// commitFound commits each path whose bytes differ from HEAD, as found, and returns the
+// revision to put the paths back from: the commit before that one, or HEAD when nothing
+// differed.
+func commitFound(v *Vault, d *doc.Doc, paths []string) (string, error) {
+	g := v.Git()
+	if !g.HasHead() {
+		return "", nil
+	}
+	var differ []string
+	for _, p := range paths {
+		disk, diskErr := os.ReadFile(v.Abs(p))
+		head, headErr := g.ShowFile("HEAD", p)
+		switch {
+		case diskErr != nil && headErr != nil:
+		case diskErr != nil || headErr != nil || string(disk) != string(head):
+			differ = append(differ, p)
+		}
+	}
+	if len(differ) == 0 {
+		return "HEAD", nil
+	}
+	before, err := g.Head()
+	if err != nil {
+		return "", err
+	}
+	if err := g.Add(differ...); err != nil {
+		return "", err
+	}
+	if staged, err := g.Staged(); err != nil || !staged {
+		return "HEAD", err
+	}
+	noun := "files"
+	if len(differ) == 1 {
+		noun = "file"
+	}
+	if _, err := g.Commit(fmt.Sprintf("recovery: %d %s as found after a crash\n\n%s: %s", len(differ), noun, RecoveredTrailer, d.ID())); err != nil {
+		return "", err
+	}
+	return before, nil
 }

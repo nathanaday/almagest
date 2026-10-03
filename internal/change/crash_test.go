@@ -2,12 +2,14 @@ package change_test
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/change"
+	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
@@ -107,4 +109,25 @@ func TestAnAppliedChangeHoldsNoPaths(t *testing.T) {
 		t.Fatalf("the committed document:\n%s %v", head, err)
 	}
 	tv.Clean()
+}
+
+// The reviewer's probe: after a crash, the user appends a paragraph to a listed file, and
+// a sync runs. Recovery puts the file back, and git keeps the paragraph.
+func TestRecoveryKeepsAnEditMadeAfterTheCrash(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	before := tv.Read("wiki/documents/Motion scoring.md")
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applying"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	tv.Write(pv.Ref.Path, content)
+	tv.Write("wiki/documents/Motion scoring.md", before+"\nA paragraph the user wrote after the crash.\n")
+	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tv.Read("wiki/documents/Motion scoring.md"); strings.Contains(got, "after the crash") {
+		t.Fatalf("the file was not put back:\n%s", got)
+	}
+	out, err := exec.Command("git", "-C", tv.V.Root, "log", "-p", "--", "wiki/documents/Motion scoring.md").CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "+A paragraph the user wrote after the crash.") || !strings.Contains(string(out), "recovery: ") {
+		t.Fatalf("git does not keep the paragraph:\n%s %v", out, err)
+	}
 }
