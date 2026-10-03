@@ -9,7 +9,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
@@ -105,31 +104,6 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	return nil
 }
 
-var shellSeparator = regexp.MustCompile("[;&|()\n`]")
-
-// redirect matches a redirect and its target, which bash takes out of a command's words.
-var redirect = regexp.MustCompile(`\d*(?:<<<|<<|<>|>>|>\||<|>)&?\s*[^\s;&|()<>]*`)
-
-// ansiQuoted matches bash's $'…' quoting, whose escapes bash decodes, and $"…".
-var ansiQuoted = regexp.MustCompile(`\$'((?:[^'\\]|\\.)*)'|\$"`)
-
-// shellWords is a command as bash reads it before it runs it: a backslash-newline joins
-// two lines, redirects leave the words, and $'…' turns into its decoded text.
-func shellWords(cmd string) string {
-	cmd = strings.ReplaceAll(cmd, "\\\n", "")
-	cmd = redirect.ReplaceAllString(cmd, " ")
-	return ansiQuoted.ReplaceAllStringFunc(cmd, func(m string) string {
-		if m == `$"` {
-			return `"`
-		}
-		body := m[2 : len(m)-1]
-		if text, err := strconv.Unquote(`"` + strings.ReplaceAll(body, `"`, `\"`) + `"`); err == nil {
-			return "'" + text + "'"
-		}
-		return "'" + body + "'"
-	})
-}
-
 // binaryNames are the binary's name and the name it had in 6.0 to 6.2, which an older
 // install may still hold.
 var binaryNames = []string{"atlas-obsidian", "atlas"}
@@ -158,10 +132,11 @@ func linkingVault(file string, session *vault.Vault, env Env) *vault.Vault {
 // atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
 func atlasCommandRefusal(cmd string) string {
-	for _, part := range shellSeparator.Split(shellWords(cmd), -1) {
-		words := strings.Fields(shellUnquote.Replace(part))
+	for _, words := range shellCommands(cmd) {
 		for i, word := range words {
-			if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, path.Base(word)) }) {
+			// zsh runs =name as the path of name.
+			name := path.Base(strings.TrimPrefix(word, "="))
+			if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, name) }) {
 				continue
 			}
 			rest := positional(words[i+1:])
@@ -180,10 +155,6 @@ func atlasCommandRefusal(cmd string) string {
 	}
 	return ""
 }
-
-// shellUnquote drops what the shell drops from a word before it runs it: quotes and
-// backslashes.
-var shellUnquote = strings.NewReplacer(`"`, "", "'", "", `\`, "")
 
 // positional are the words after the binary without its options. An option's value, such
 // as W in --vault W, stays, so the rule looks for an action anywhere after its
