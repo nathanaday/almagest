@@ -611,3 +611,22 @@ func Date(t time.Time) string { return t.Format(DateFormat) }
 
 // ParseTime reads a code-owned time, a date, or a time without seconds.
 func ParseTime(s string) (time.Time, bool) { return schema.ParseTime(s) }
+
+// Guarded wraps a write of derived content so that it writes a document only while the
+// file still holds the bytes the index read. A file saved in between, by Obsidian or by an
+// agent's Edit, keeps the save: the write skips it, adds its path to skipped, and the next
+// sync derives it again.
+func Guarded(idx *Index, write func(string, []byte) (bool, error), skipped *[]string) func(string, []byte) (bool, error) {
+	return func(rel string, content []byte) (bool, error) {
+		if d := idx.ByPath(rel); d != nil {
+			disk, err := idx.V.Read(rel)
+			if err == nil && string(disk) != d.Content {
+				if skipped != nil {
+					*skipped = append(*skipped, rel)
+				}
+				return false, nil
+			}
+		}
+		return write(rel, content)
+	}
+}

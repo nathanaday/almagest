@@ -224,19 +224,19 @@ func syncDerived(v *vault.Vault, now time.Time) error {
 	if err != nil {
 		return err
 	}
-	if _, err := thread.Load(idx).Sync(v.WriteIfChanged); err != nil {
+	if _, err := thread.Load(idx).Sync(vault.Guarded(idx, v.WriteIfChanged, nil)); err != nil {
 		return err
 	}
 	if idx, err = vault.Load(v); err != nil {
 		return err
 	}
-	if _, err := derive.GitFacts(idx, v.WriteIfChanged, now); err != nil {
+	if _, err := derive.GitFacts(idx, vault.Guarded(idx, v.WriteIfChanged, nil), now); err != nil {
 		return err
 	}
 	if idx, err = vault.Load(v); err != nil {
 		return err
 	}
-	_, err = derive.Sync(idx, v.WriteIfChanged)
+	_, err = derive.Sync(idx, vault.Guarded(idx, v.WriteIfChanged, nil))
 	return err
 }
 

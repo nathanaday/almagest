@@ -231,6 +231,7 @@ func (b *Board) paint(node map[string]any, s *doc.Doc) {
 func (b *Board) syncCanvas(chord *doc.Doc, write WriteFunc) (string, bool, error) {
 	force, tidy := b.ForceCanvas[chord.ID()], b.TidyCanvas[chord.ID()]
 	rel := CanvasPath(chord)
+	raw, _ := b.Idx.V.Read(rel)
 	c, exists, err := b.readCanvas(chord)
 	if err != nil {
 		// A canvas that does not parse is the user's to repair; the chord still syncs.
@@ -269,6 +270,11 @@ func (b *Board) syncCanvas(chord *doc.Doc, write WriteFunc) (string, bool, error
 	dropLegend(c)
 	after := c.render()
 	if exists && sameJSON(before, after) {
+		return rel, false, nil
+	}
+	// A canvas the user saved after this sync read it keeps the save; the next sync
+	// reads it again.
+	if now, _ := b.Idx.V.Read(rel); string(now) != string(raw) {
 		return rel, false, nil
 	}
 	wrote, err := write(rel, after)

@@ -152,7 +152,7 @@ func syncWorkDocs(v *vault.Vault) error {
 	if err != nil {
 		return err
 	}
-	_, err = thread.Load(idx).Sync(v.WriteIfChanged)
+	_, err = thread.Load(idx).Sync(vault.Guarded(idx, v.WriteIfChanged, nil))
 	return err
 }
 

@@ -299,6 +299,9 @@ func (c *CLI) vaultCmd(argv []string) error {
 			for _, p := range s.Strays {
 				fmt.Fprintf(w, "Moved %s out of views/, where code writes every file, into inbox/.\n", p)
 			}
+			for _, p := range s.Skipped {
+				fmt.Fprintf(w, "Left %s as saved during the sync; the next sync derives it.\n", p)
+			}
 		})
 	case "mention":
 		v, err := c.open(a)

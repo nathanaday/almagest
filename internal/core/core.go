@@ -337,6 +337,8 @@ type Synced struct {
 	Views     int      `json:"views"`
 	// Strays are the notes found in views/ that code did not write, moved to inbox/.
 	Strays []string `json:"strays"`
+	// Skipped are the documents saved after the sync read them, which it left as saved.
+	Skipped []string `json:"skipped"`
 }
 
 // SyncOptions select a sync.
@@ -361,7 +363,7 @@ func Sync(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 
 // SyncLocked is Sync for a caller that holds the lock.
 func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
-	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}, Strays: []string{}}
+	out := &Synced{Moved: []string{}, Lost: []string{}, Threads: []string{}, Knowledge: []string{}, Sessions: []string{}, Strays: []string{}, Skipped: []string{}}
 	if !o.Views {
 		if err := vault.Recover(v); err != nil {
 			return nil, err
@@ -384,7 +386,7 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if err != nil {
 		return nil, err
 	}
-	wrote, err := thread.Load(idx).Sync(v.WriteIfChanged)
+	wrote, err := thread.Load(idx).Sync(vault.Guarded(idx, v.WriteIfChanged, &out.Skipped))
 	if err != nil {
 		return nil, err
 	}
@@ -393,7 +395,7 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 		if idx, err = vault.Load(v); err != nil {
 			return nil, err
 		}
-		facts, err := derive.GitFacts(idx, v.WriteIfChanged, now)
+		facts, err := derive.GitFacts(idx, vault.Guarded(idx, v.WriteIfChanged, &out.Skipped), now)
 		if err != nil {
 			return out, err
 		}
@@ -402,7 +404,7 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if idx, err = vault.Load(v); err != nil {
 		return nil, err
 	}
-	knowledge, err := derive.Sync(idx, v.WriteIfChanged)
+	knowledge, err := derive.Sync(idx, vault.Guarded(idx, v.WriteIfChanged, &out.Skipped))
 	if err != nil {
 		return out, err
 	}

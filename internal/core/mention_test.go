@@ -8,8 +8,10 @@ import (
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/core"
+	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 func TestCloseMentionWritesOnlyANoteOfTheVault(t *testing.T) {
@@ -95,5 +97,33 @@ func TestTheViewsSyncMovesAStrayNoteToTheInbox(t *testing.T) {
 	}
 	if tv.V.Exists(stale) {
 		t.Fatal("a stale view stayed")
+	}
+}
+
+// A save that lands after a sync read a document and before its derived write keeps the
+// save; the sync names it, and the next sync derives it with the save in place.
+func TestADerivedWriteKeepsASaveMadeAfterTheRead(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("source", "Paper", map[string]any{"sha256": "abcdef0123456789", "file": "[[x.pdf]]", "media": "pdf"}, "## Summary\n\nFirst.\n")
+	tv.Commit()
+	idx := tv.Index()
+	path := idx.ByID(tv.ID("Paper")).Path
+	saved := tv.Read(path) + "\nA line saved in Obsidian.\n"
+	tv.Write(path, saved)
+	var skipped []string
+	if _, err := derive.Sync(idx, vault.Guarded(idx, tv.V.WriteIfChanged, &skipped)); err != nil {
+		t.Fatal(err)
+	}
+	if tv.Read(path) != saved {
+		t.Fatal("the derived write overwrote the save")
+	}
+	if len(skipped) != 1 || skipped[0] != path {
+		t.Fatalf("skipped %v", skipped)
+	}
+	if _, err := core.Sync(tv.V, testvault.Now, core.SyncOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tv.Read(path); !strings.Contains(got, "A line saved in Obsidian.") || !strings.Contains(got, "> [!source]") {
+		t.Fatalf("the next sync did not derive the document with the save:\n%s", got)
 	}
 }

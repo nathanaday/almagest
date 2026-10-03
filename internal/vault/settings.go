@@ -16,6 +16,18 @@ import (
 // the pages name, removes the paths in drop that no page names any more, and keeps every
 // other key and entry. It reports whether it wrote.
 func (v *Vault) SyncSettings(drop []string) (bool, error) {
+	// The harness writes this file too. When it changes between the read and the write,
+	// the merge runs again on what it holds now, so neither write loses the other's keys.
+	for range 3 {
+		wrote, raced, err := v.syncSettings(drop)
+		if !raced {
+			return wrote, err
+		}
+	}
+	return false, errors.New(Settings + " kept changing while Atlas merged it; sync again")
+}
+
+func (v *Vault) syncSettings(drop []string) (wrote, raced bool, err error) {
 	var want []string
 	for _, r := range v.Repositories() {
 		if r.Path != "" {
@@ -28,14 +40,14 @@ func (v *Vault) SyncSettings(drop []string) (bool, error) {
 	switch {
 	case err == nil:
 		if err := json.Unmarshal(data, &settings); err != nil {
-			return false, errors.New(Settings + " is not valid JSON; fix it and sync again")
+			return false, false, errors.New(Settings + " is not valid JSON; fix it and sync again")
 		}
 	case errors.Is(err, os.ErrNotExist):
 		if len(want) == 0 {
-			return false, nil
+			return false, false, nil
 		}
 	default:
-		return false, err
+		return false, false, err
 	}
 	perms, _ := settings["permissions"].(map[string]any)
 	if perms == nil {
@@ -63,7 +75,7 @@ func (v *Vault) SyncSettings(drop []string) (bool, error) {
 		}
 	}
 	if slices.Equal(before, dirs) {
-		return false, nil
+		return false, false, nil
 	}
 	list := make([]any, len(dirs))
 	for i, d := range dirs {
@@ -73,9 +85,12 @@ func (v *Vault) SyncSettings(drop []string) (bool, error) {
 	settings["permissions"] = perms
 	out, err := json.MarshalIndent(settings, "", "  ")
 	if err != nil {
-		return false, err
+		return false, false, err
 	}
-	return true, writeAtomic(file, append(out, '\n'))
+	if now, _ := os.ReadFile(file); string(now) != string(data) {
+		return false, true, nil
+	}
+	return true, false, writeAtomic(file, append(out, '\n'))
 }
 
 // OpenNote is the vault-relative path of the note Obsidian shows in its active pane, read
