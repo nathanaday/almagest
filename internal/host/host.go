@@ -28,7 +28,15 @@ var Hosts = []string{"claude", "codex"}
 // Install is one installed plugin, as its host records it.
 type Install struct {
 	Version string `json:"version"`
-	Enabled bool   `json:"enabled"`
+	Enabled bool   `json:"-"`
+}
+
+// EnableHint says how to enable the plugin in a host that has it disabled.
+func EnableHint(host string) string {
+	if host == "codex" {
+		return fmt.Sprintf("set enabled = true under [plugins.%q] in ~/.codex/config.toml", PluginID)
+	}
+	return "run: claude plugin enable " + PluginID
 }
 
 // ClaudeDir is Claude Code's config folder: $CLAUDE_CONFIG_DIR or ~/.claude.
@@ -82,20 +90,46 @@ func claudeInstalled() (*Install, error) {
 	if !ok {
 		return nil, nil
 	}
+	var inst Install
 	var many []Install
 	if err := json.Unmarshal(raw, &many); err == nil {
 		if len(many) == 0 {
 			return nil, nil
 		}
-		many[0].Enabled = true
-		return &many[0], nil
-	}
-	var one Install
-	if err := json.Unmarshal(raw, &one); err != nil {
+		inst = many[0]
+	} else if err := json.Unmarshal(raw, &inst); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	one.Enabled = true
-	return &one, nil
+	enabled, err := claudeEnabled()
+	if err != nil {
+		return nil, err
+	}
+	inst.Enabled = enabled
+	return &inst, nil
+}
+
+// claudeEnabled reads the plugin's key in enabledPlugins of the user's settings, where
+// setup installs it. A missing key counts as enabled: only a manifest with
+// defaultEnabled: false starts a plugin turned off.
+func claudeEnabled() (bool, error) {
+	path := filepath.Join(ClaudeDir(), "settings.json")
+	data, err := os.ReadFile(path)
+	if errors.Is(err, os.ErrNotExist) {
+		return true, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	var settings struct {
+		EnabledPlugins map[string]bool `json:"enabledPlugins"`
+	}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return false, fmt.Errorf("%s: %w", path, err)
+	}
+	if enabled, ok := settings.EnabledPlugins[PluginID]; ok {
+		return enabled, nil
+	}
+	return true, nil
 }
 
 func codexInstalled() (*Install, error) {
@@ -108,6 +142,11 @@ func codexInstalled() (*Install, error) {
 	if err != nil {
 		return nil, fmt.Errorf("codex plugin list: %w", err)
 	}
+	return codexInstall(data)
+}
+
+// codexInstall reads the plugin's install from the output of codex plugin list --json.
+func codexInstall(data []byte) (*Install, error) {
 	var result struct {
 		Installed []struct {
 			PluginID string `json:"pluginId"`

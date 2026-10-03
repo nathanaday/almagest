@@ -139,6 +139,8 @@ func (c *CLI) doctorCmd(argv []string) int {
 			line(false, agent+" plugin", err.Error())
 		case inst == nil:
 			note(agent+" plugin", "not installed: atlas-obsidian setup --agent "+agent)
+		case !inst.Enabled:
+			line(false, agent+" plugin", inst.Version+" is installed but disabled; "+host.EnableHint(agent))
 		case inst.Version != Version && Version != "dev":
 			line(false, agent+" plugin", fmt.Sprintf("%s, but the binary is %s; update one so they match", inst.Version, Version))
 		default:
