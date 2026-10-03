@@ -97,7 +97,7 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		if v == nil {
 			continue
 		}
-		if reason := pathRefusal(v, in, f); reason != "" {
+		if reason := pathRefusal(v, in, f, session == nil || session.Root != v.Root); reason != "" {
 			return deny(w, reason)
 		}
 	}
@@ -190,10 +190,10 @@ func readOnlyRefusal(in Input, tool string) string {
 }
 
 // pathRefusal is why a write tool may not touch a file, or "".
-func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
+func pathRefusal(v *vault.Vault, in Input, f patchFile, elsewhere bool) string {
 	rel := v.Rel(f.Path)
 	if rel == "" {
-		return repositoryRefusal(v, in, f.Path)
+		return repositoryRefusal(v, in, f.Path, elsewhere)
 	}
 	// A part that does not exist yet keeps the case the agent typed, which a disk that
 	// ignores case folds into the real folder, so fixed names compare without case.
@@ -463,8 +463,10 @@ func sectionBounds(content, title string) (int, int) {
 }
 
 // repositoryRefusal is the edit rule: an edit inside a linked repository needs a thread
-// this session started that has a task list for the repository with an open task.
-func repositoryRefusal(v *vault.Vault, in Input, target string) string {
+// this session started that has a task list for the repository with an open task. When
+// the vault that links the repository is not the session's, the refusal says how to work
+// there.
+func repositoryRefusal(v *vault.Vault, in Input, target string, elsewhere bool) string {
 	var repo *vault.Repo
 	for _, r := range v.Repositories() {
 		if r.Path != "" && vault.Within(target, canonical(r.Path)) {
@@ -480,6 +482,9 @@ func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 	s := sessions.Find(v, in.event().Key())
 	if s == nil && in.AgentID != "" {
 		s = sessions.Find(v, in.event().SessionID)
+	}
+	if s == nil && elsewhere {
+		return fmt.Sprintf("an edit in %s needs a thread started in the vault that links it, %s (%s), and this session runs outside that vault. Start a session in %s, or set ATLAS_VAULT=%s, then find or plant the thread there (thread-work) and start it", repo.Title, v.Name(), v.Root, v.Root, v.Root)
 	}
 	why := ""
 	if s != nil {

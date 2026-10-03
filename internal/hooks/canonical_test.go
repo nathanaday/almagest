@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // foldsCase reports whether the file system under dir ignores case, as APFS does.
@@ -189,8 +190,27 @@ func TestTheEditRuleHoldsForASessionOutsideEveryVault(t *testing.T) {
 	f.tv.Commit()
 	outside := t.TempDir()
 	write := map[string]any{"cwd": outside, "tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(repo, "README.md"), "old_string": "a"}}
-	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "needs a thread this session started") {
+	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "Start a session in "+f.tv.V.Root) {
 		t.Fatalf("an edit in a linked repository from outside every vault: %s", out)
+	}
+}
+
+// A session in one vault, editing a repository only another vault links, is told to work
+// in that vault.
+func TestAnotherVaultsRepositoryNamesThatVault(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	other, err := vault.Init(vault.InitOptions{Path: filepath.Join(t.TempDir(), "other"), Name: "Other", Description: "Other notes.", Tagging: "open"}, f.tv.Home, f.tv.Clock)
+	if err != nil {
+		t.Fatal(err)
+	}
+	repo := f.tv.Repo("theirs", nil)
+	if err := os.WriteFile(filepath.Join(other.Root, "wiki", "documents", "theirs.md"), []byte("---\nid: doc-th0001\ntype: repository\ndescription: x\ncreated: 2026-09-27T14:32:00\nupdated: 2026-09-27T14:32:00\npath: "+repo+"\n---\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	out := f.run("guard", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(repo, "README.md"), "old_string": "a"}})
+	if !denied(out) || !strings.Contains(out, "Start a session in "+other.Root) {
+		t.Fatalf("an edit in another vault's repository: %s", out)
 	}
 }
 
