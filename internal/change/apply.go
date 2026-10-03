@@ -104,10 +104,14 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 func freePath(idx *vault.Index, now time.Time, title string) string {
 	base := vault.Date(now) + " " + title
 	name := base
-	for n := 2; len(idx.TitleHolders(name)) > 0; n++ {
+	folder := vault.Changes + "/" + now.Format("2006-01") + "/"
+	taken := func(name string) bool {
+		return len(idx.TitleHolders(name)) > 0 || (idx.V != nil && idx.V.Occupied(folder+name+".md"))
+	}
+	for n := 2; taken(name); n++ {
 		name = fmt.Sprintf("%s (%d)", base, n)
 	}
-	return fmt.Sprintf("%s/%s/%s.md", vault.Changes, now.Format("2006-01"), name)
+	return folder + name + ".md"
 }
 
 func outsideRefs(idx *vault.Index, outside []vault.Rewrite) []vault.Ref {

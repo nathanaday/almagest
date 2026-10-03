@@ -98,3 +98,26 @@ func TestProposeWritesNoChangeDocumentThroughALinkOut(t *testing.T) {
 		t.Fatalf("propose wrote outside the vault: %v", entries)
 	}
 }
+
+func TestAChangeDocumentNeverReplacesOneInAnotherUnicodeForm(t *testing.T) {
+	tv := testvault.New(t)
+	probe := tv.V.Abs("changes/probe-Café")
+	os.WriteFile(probe, nil, 0o644)
+	_, err := os.Lstat(tv.V.Abs("changes/probe-Café"))
+	os.Remove(probe)
+	if err != nil {
+		t.Skip("this file system keeps NFC and NFD names apart")
+	}
+	plan := func(title, topic string) change.Plan {
+		return change.Plan{Title: title, Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: topic, Fields: map[string]any{"description": "A topic.", "status": "stable"}, Body: str("## Definition\n\nA topic.\n")}}}
+	}
+	first := propose(t, tv, plan("Café", "Alpha"))
+	before := tv.Read(first.Ref.Path)
+	second := propose(t, tv, plan("Café", "Beta"))
+	if second.Ref.Path == first.Ref.Path || !strings.HasSuffix(second.Ref.Path, " (2).md") {
+		t.Fatalf("the second change document is %s", second.Ref.Path)
+	}
+	if tv.Read(first.Ref.Path) != before {
+		t.Fatal("the first change document changed")
+	}
+}
