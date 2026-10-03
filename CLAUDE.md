@@ -212,6 +212,12 @@ The design pages are the spec. When the code departs from them, the reason is be
   `.claude/settings.local.json`, `.obsidian/workspace*.json`, `.obsidian/graph.json`), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
   and untracks an excluded file that an older vault tracked, in a commit of its own.
+- **A Base that equals a shipped copy upgrades in a commit of its own.** `Begin` writes
+  the current copy after the snapshot and before the write, and commits it alone
+  (`layout: upgrade <paths>`, `CommitOnly`), so no snapshot calls it a hand edit and no
+  undo counts it. A refused commit puts the old copy back and the write goes on; the
+  upgrade commit stays when the write then fails. A sync does not upgrade. Each shipped
+  copy lives in `template/old/` (6.5) and `template/old/7.0/` (7.0 to 8.1).
 - **Titles also drop `[ ] # ^`**, which break a wikilink, `→`, which splits the old and
   new titles of a change heading, and control characters. A title the caller gives holds
   at most 150 bytes (`doc.CheckTitle`), so the titles code derives from it fit a file
