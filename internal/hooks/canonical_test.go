@@ -193,3 +193,24 @@ func TestTheEditRuleHoldsForASessionOutsideEveryVault(t *testing.T) {
 		t.Fatalf("an edit in a linked repository from outside every vault: %s", out)
 	}
 }
+
+// A link to a file that does not exist yet is judged by where a write through it lands.
+func TestADanglingLinkIsJudgedByItsTarget(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	link := filepath.Join(f.tv.V.Root, "inbox", "dang.md")
+	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../views/dang.md", link); err != nil {
+		t.Fatal(err)
+	}
+	if !denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": link}})) {
+		t.Error("a Write through a dangling link into views/ was allowed")
+	}
+	loop := filepath.Join(f.tv.V.Root, "inbox", "loop.md")
+	if err := os.Symlink("loop.md", loop); err != nil {
+		t.Fatal(err)
+	}
+	f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": loop}})
+}

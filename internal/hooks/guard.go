@@ -568,7 +568,11 @@ func restartRefusal(in Input, env Env) string {
 // and each part is spelled as its folder entry, which on a disk that ignores case or
 // Unicode form may differ from what was written. A part that does not exist yet keeps its
 // spelling.
-func canonical(p string) string {
+func canonical(p string) string { return canonicalWithin(p, 40) }
+
+// canonicalWithin is canonical that follows at most hops links whose target does not
+// exist.
+func canonicalWithin(p string, hops int) string {
 	p = filepath.Clean(p)
 	have, tail := p, ""
 	for {
@@ -584,7 +588,16 @@ func canonical(p string) string {
 	}
 	real, err := filepath.EvalSymlinks(have)
 	if err != nil {
-		return p
+		// The last part that exists is a link to nothing yet; a write through it lands at
+		// its target.
+		target, lerr := os.Readlink(have)
+		if lerr != nil || hops == 0 {
+			return p
+		}
+		if !filepath.IsAbs(target) {
+			target = filepath.Join(filepath.Dir(have), target)
+		}
+		return canonicalWithin(filepath.Join(target, tail), hops-1)
 	}
 	out := string(filepath.Separator)
 	for _, part := range strings.Split(strings.TrimPrefix(real, string(filepath.Separator)), string(filepath.Separator)) {
