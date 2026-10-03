@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 )
 
 // EnvHome overrides the machine folder, ~/.atlas. Tests always set it.
@@ -174,7 +175,9 @@ func Within(path, dir string) bool {
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
-// writeAtomic writes a file through a temporary file in the same folder and a rename.
+// writeAtomic writes a file through a temporary file in the same folder and a rename. It
+// syncs the file before the rename and the folder after it, so a power loss leaves the old
+// file or the new one, never an empty one.
 func writeAtomic(file string, data []byte) error {
 	dir := filepath.Dir(file)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -190,6 +193,11 @@ func writeAtomic(file string, data []byte) error {
 		os.Remove(name)
 		return err
 	}
+	if err := tmp.Sync(); err != nil {
+		tmp.Close()
+		os.Remove(name)
+		return err
+	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(name)
 		return err
@@ -200,6 +208,20 @@ func writeAtomic(file string, data []byte) error {
 	}
 	if err := os.Rename(name, file); err != nil {
 		os.Remove(name)
+		return err
+	}
+	return syncDir(dir)
+}
+
+// syncDir makes a rename in dir durable. A file system that cannot sync a folder says
+// EINVAL, and the rename stands as it is there.
+func syncDir(dir string) error {
+	d, err := os.Open(dir)
+	if err != nil {
+		return err
+	}
+	defer d.Close()
+	if err := d.Sync(); err != nil && !errors.Is(err, syscall.EINVAL) {
 		return err
 	}
 	return nil
