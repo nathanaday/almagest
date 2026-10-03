@@ -40,7 +40,7 @@ const (
 	ColorChecking = "2" // every task done, not verified yet
 )
 
-// Legend is what each card color means, in the order Obsidian's canvas bar shows them.
+// Legend is what each card color means, in the order the Atlas canvas bar shows them.
 var Legend = []struct{ Color, Label string }{
 	{ColorDone, "Verified"},
 	{ColorReady, "Ready"},

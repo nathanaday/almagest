@@ -442,11 +442,10 @@ func codeChanged(d *doc.Doc, after string, code []string) string {
 // prefixEnd is the offset where a document's own text begins: after the frontmatter and
 // the code-owned lead callout.
 func prefixEnd(d *doc.Doc) int {
-	front, body, ok := doc.Split(d.Content)
+	_, body, ok := doc.Split(d.Content)
 	end := 0
 	if ok {
 		end = len(d.Content) - len(body)
-		_ = front
 	}
 	if lead := doc.Lead(body); lead != "" {
 		if i := strings.Index(body, lead); i >= 0 {

@@ -832,11 +832,7 @@ func (c *CLI) chordCmd(argv []string) error {
 		}
 		return show(thread.ChordCreate(v, in, o))
 	case "add":
-		var after []string
-		if a.has("after") {
-			after = a.list("after")
-		}
-		return show(thread.ChordAdd(v, a.arg(1), a.arg(2), after, o))
+		return show(thread.ChordAdd(v, a.arg(1), a.arg(2), a.list("after"), o))
 	case "remove":
 		return show(thread.ChordRemove(v, a.arg(1), a.arg(2), o))
 	case "order":

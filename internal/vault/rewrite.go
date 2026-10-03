@@ -70,7 +70,7 @@ func Rewrites(idx *Index, retitles []Retitle, contents map[string]string, skip m
 	return out, warnings
 }
 
-// rewriteContent rewrites one document's text.
+// RewriteContent rewrites one document's text.
 func RewriteContent(d *doc.Doc, content string, rename links.Rename, redirects map[string]string) (string, []string, []string) {
 	front, body, hasFront := doc.Split(content)
 	var held, warnings []string

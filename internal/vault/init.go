@@ -214,5 +214,5 @@ func manifestVersion(data []byte) string {
 	return ""
 }
 
-// Template is the content of one template file, for tests and doctor.
+// Template is the content of one template file, for tests.
 func Template(name string) ([]byte, error) { return templates.ReadFile("template/" + name) }

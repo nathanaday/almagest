@@ -147,7 +147,7 @@ func (tv *T) Doc(typ, title string, fields map[string]any, body string) string {
 	return id
 }
 
-// ID is the id Page gave a title.
+// ID is the id Doc gave a title.
 func (tv *T) ID(title string) string { return tv.ids[title] }
 
 // Commit commits the vault's tree as a hand edit.
