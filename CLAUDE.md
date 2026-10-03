@@ -90,25 +90,36 @@ The design pages are the spec. When the code departs from them, the reason is be
   its apply is in flight: every path the apply may write. The field, not the status, is
   the mark: the file says `applied` for the derive step and keeps `paths` until the
   commit lands, and the commit records the final document, without `paths`, from the
-  index (`Tx.Stage`). Recovery takes a document that holds `paths` from `HEAD` when its
-  `Atlas-Change` commit exists. Otherwise it first commits each listed path that differs
-  from `HEAD` as `recovery: N files as found after a crash`, then puts the listed local
-  documents (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside `.git`,
-  `.obsidian`, and `.claude` in any case) back from the commit before that, and sets the
-  change to proposed. Frontmatter comes from a pull or a shell too, and recovery runs at
-  every session start.
+  index (`Tx.Stage`). Recovery takes a document that holds `paths` from its commit when
+  its `Atlas-Change` commit exists. Otherwise it puts the listed local documents
+  (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside `.git`, `.obsidian`,
+  and `.claude` in any case) back and sets the change to proposed. Either way, it first
+  commits what it finds that differs from `HEAD` (in the second case, the listed paths; in
+  the first, the change document when it holds more than `paths`) as `recovery: N files as
+  found after a crash`, with `CommitOnly`, so the commit holds those paths alone; then it
+  restores from the commit before that one, and unstages what it restored. Frontmatter
+  comes from a pull or a shell too, and recovery runs at every session start.
 - **A write that ends without its commit is put back.** `vault.Tx` keeps each path's
-  bytes before its first touch (`Keep`); `Close` on a transaction that did not commit
-  writes them back and unstages the paths. A crash in the middle of a thread write has no
-  journal: the snapshot before the next write commits what it left, so no text is lost.
+  bytes, or a link's target, before its first touch (`Keep`), and refuses a path it cannot
+  keep. A failed `Commit` rolls back at once and says so: "the vault is back as it was",
+  or the paths it could not put back. A path saved since the write wrote it (Obsidian, an
+  agent's Edit) stays as saved, and the message names it. `Close` rolls back a write that
+  failed before its commit. The migration keeps every path it touches and commits with
+  `Tx.CommitAll`. A crash in the middle of a thread write has no journal: the snapshot
+  before the next write commits what it left, so no text is lost.
 - **`writeAtomic` syncs** the file before the rename and the folder after it. On macOS
-  that is `F_FULLFSYNC`, about 0.2 s for a thread write.
-- **A derived write keeps a newer save.** `vault.Guarded` wraps the writer of every sync
-  (derive, git facts, thread documents): it skips a document whose bytes changed since
-  the index read it, and the next sync derives it. The canvas and `SyncSettings` compare
-  the bytes they read with the bytes just before their write.
+  that is `F_FULLFSYNC`, about 0.2 s for a thread write. `writeAtomicIf` runs a check
+  after the sync, right before the rename.
+- **A derived write keeps a newer save.** Every sync (derive, git facts, thread documents
+  and canvases) writes through a `vault.Guard`: `NewGuard(idx, v or tx)`, whose `Write`
+  calls `WriteIfUnchanged` with the bytes the index read (or the bytes a canvas registered
+  with `Expect`, through `Board.SyncWith`). It compares before the write and again right
+  before the rename, skips a file saved in between, and records it in `Skipped`; the next
+  sync derives it. `SyncSettings` merges again when the harness wrote the file meanwhile.
 - **The views sync never deletes a user's note.** A `.md` file in `views/` that no view
-  stands for and that lacks `views.Notice` moves to `inbox/` under a free name.
+  stands for and that lacks `views.Notice` moves to `inbox/` under a free name, and every
+  write says so: `moved_from_views` in each MCP write tool's result, a line on the CLI's
+  stderr, `strays` in a sync and in the migration's report, and a notice in the plugin.
 - **Every path built from input is contained.** `Vault.Contain` refuses an absolute or
   unclean path, `..`, `.git` in any case, a name over 255 bytes, and a path whose folders
   or final link resolve outside the vault. `Vault.Write`, `WriteIfChanged`, and `Remove`
