@@ -180,3 +180,16 @@ func TestAnEditAddsNoSecondHeading(t *testing.T) {
 		t.Error("a second ## Subagents was allowed")
 	}
 }
+
+// A session outside every vault meets the edit rule in a linked repository too.
+func TestTheEditRuleHoldsForASessionOutsideEveryVault(t *testing.T) {
+	f := setup(t)
+	repo := f.tv.Repo("repo1", nil)
+	f.tv.Doc("repository", "repo1", map[string]any{"path": repo}, "")
+	f.tv.Commit()
+	outside := t.TempDir()
+	write := map[string]any{"cwd": outside, "tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(repo, "README.md"), "old_string": "a"}}
+	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "needs a thread this session started") {
+		t.Fatalf("an edit in a linked repository from outside every vault: %s", out)
+	}
+}

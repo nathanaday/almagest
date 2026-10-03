@@ -85,12 +85,15 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		if f.Path == canonical(vault.HomeFrom(env.getenv).ConfigPath()) {
 			return deny(w, f.Path+" holds the commands Atlas runs (terminal_command, agent_commands); the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config")
 		}
-		// A file belongs to the vault above it, wherever the session runs.
+		// A file belongs to the vault above it, wherever the session runs; a file in no
+		// vault, to the vault that links its repository.
 		v := session
 		if root := vault.FindAbove(filepath.Dir(f.Path)); root != "" {
 			if fv, err := vault.Open(root); err == nil {
 				v = fv
 			}
+		} else if lv := linkingVault(f.Path, session, env); lv != nil {
+			v = lv
 		}
 		if v == nil {
 			continue
@@ -130,6 +133,27 @@ func shellWords(cmd string) string {
 // binaryNames are the binary's name and the name it had in 6.0 to 6.2, which an older
 // install may still hold.
 var binaryNames = []string{"atlas-obsidian", "atlas"}
+
+// linkingVault is the vault that links a repository holding the file: the session's when
+// it does, else the first vault of the machine's config that does, or nil.
+func linkingVault(file string, session *vault.Vault, env Env) *vault.Vault {
+	links := func(v *vault.Vault) bool {
+		return slices.ContainsFunc(v.Repositories(), func(r vault.Repo) bool { return r.Path != "" && vault.Within(file, canonical(r.Path)) })
+	}
+	if session != nil && links(session) {
+		return session
+	}
+	cfg, err := vault.HomeFrom(env.getenv).Load()
+	if err != nil {
+		return nil
+	}
+	for _, root := range cfg.Paths() {
+		if v, err := vault.Open(root); err == nil && links(v) {
+			return v
+		}
+	}
+	return nil
+}
 
 // atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
