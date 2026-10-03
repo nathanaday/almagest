@@ -65,7 +65,12 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 			t.Errorf("Contain(%q) = %v, want a refusal", rel, err)
 			continue
 		}
-		if !strings.Contains(err.Error(), "give a clean vault-relative path") {
+		teach := "give a clean vault-relative path"
+		if strings.HasPrefix(rel, "inbox/") {
+			// A link: the fix is to the link, which the refusal names.
+			teach = "a link that leads out of the vault; make inbox/"
+		}
+		if !strings.Contains(err.Error(), teach) {
 			t.Errorf("Contain(%q) does not teach: %v", rel, err)
 		}
 		if strings.HasSuffix(rel, ".md") && v.Local(rel) {

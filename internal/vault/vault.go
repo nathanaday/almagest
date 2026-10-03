@@ -199,6 +199,12 @@ func (v *Vault) Contain(rel string) error {
 	refuse := func(why string) error {
 		return fmt.Errorf("%q: %w: %s; give a clean vault-relative path such as %s", rel, ErrOutside, why, DocPath("Title"))
 	}
+	// A path through a link is code's or the caller's, but the fix is the user's: the
+	// refusal names the link, not a path to give instead.
+	linked := func() error {
+		at := v.linkOut(rel)
+		return fmt.Errorf("%q: %w: %s is a link that leads out of the vault; make %s a plain folder or file inside the vault", rel, ErrOutside, at, at)
+	}
 	if rel == "" || !filepath.IsLocal(rel) || path.Clean(rel) != rel || strings.Contains(rel, `\`) {
 		return refuse("it is absolute, empty, unclean, or climbs out with ..")
 	}
@@ -214,7 +220,7 @@ func (v *Vault) Contain(rel string) error {
 	if st, err := os.Lstat(abs); err == nil && st.Mode()&fs.ModeSymlink != 0 {
 		real, err := filepath.EvalSymlinks(abs)
 		if err != nil || !Within(real, v.Root) {
-			return refuse("it is a link that leads out of the vault")
+			return linked()
 		}
 		return nil
 	}
@@ -222,7 +228,7 @@ func (v *Vault) Contain(rel string) error {
 	for {
 		if _, err := os.Lstat(dir); err == nil {
 			if !Within(dir, v.Root) {
-				return refuse("a folder on its way is a link that leads out of the vault")
+				return linked()
 			}
 			return nil
 		}
@@ -232,6 +238,26 @@ func (v *Vault) Contain(rel string) error {
 		}
 		dir = parent
 	}
+}
+
+// linkOut is the first part of rel, from the top, that is a link whose target lies
+// outside the vault; rel when it finds none.
+func (v *Vault) linkOut(rel string) string {
+	parts := strings.Split(rel, "/")
+	for i := 1; i <= len(parts); i++ {
+		at := strings.Join(parts[:i], "/")
+		st, err := os.Lstat(v.Abs(at))
+		if err != nil {
+			break
+		}
+		if st.Mode()&fs.ModeSymlink == 0 {
+			continue
+		}
+		if real, err := filepath.EvalSymlinks(v.Abs(at)); err != nil || !Within(real, v.Root) {
+			return at
+		}
+	}
+	return rel
 }
 
 // Local reports whether a vault-relative path names a document a change may write: a .md

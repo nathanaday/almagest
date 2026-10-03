@@ -62,7 +62,7 @@ func TestSyncWritesNoCanvasThroughALinkedChordsFolder(t *testing.T) {
 		t.Fatal(err)
 	}
 	_, err := core.Sync(tv.V, testvault.Now.Add(time.Hour), core.SyncOptions{})
-	if err == nil || !strings.Contains(err.Error(), "not a path inside the vault") {
+	if err == nil || !strings.Contains(err.Error(), "chords is a link that leads out of the vault; make chords a plain folder") {
 		t.Errorf("sync through a linked chords/: %v", err)
 	}
 	if entries, _ := os.ReadDir(away); len(entries) != 0 {
