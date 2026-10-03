@@ -173,9 +173,31 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The shell runs neither the apply command of `change`, `vault migrate`, nor
   `atlas-obsidian hook`.** The guard refuses them, in every folder: two skip the gate,
   the other forges a user's turn. It is no sandbox; a shell can still write any file. To
-  try one by hand from a session, type the command with `!`.
+  try one by hand from a session, type the command with `!`. Each word loses its quotes
+  and backslashes, the binary's name compares without case, and options drop out; an
+  option's value stays, so `apply` and `migrate` count anywhere after their subcommand.
 - **The guard takes the vault above the file**, not the vault of the session's folder,
   so a session outside the vault gets the same refusals.
+- **The guard judges the path the disk names.** `canonical` resolves links on the part
+  that exists and spells each part as its folder entry, so `ATLAS.md`, `Wiki/documents/…`,
+  a repository in another case, or a link into the vault meet the rule of the real file.
+  Code sections come from `doc.SectionOffsets`, which skips fenced headings, and a Codex
+  hunk is placed by its context lines, so an insert-only hunk is judged too.
+- **The files that decide what runs are the user's.** The guard refuses an edit of the
+  home's `config.json` (`terminal_command`, `agent_commands`) and of anything under
+  `.obsidian/plugins/atlas/`.
+- **A read-only agent makes only the calls that read.** `readActions` lists them per
+  tool; any other action, or a tool the list does not know, is a write.
+- **The PreToolUse matcher anchors itself** (`^(…)$`) and names the atlas server of both
+  hosts (`mcp__plugin_atlas-obsidian_atlas__…`, Codex's `mcp__atlas__…`): hosts test it
+  unanchored.
+- **The guard finds task lists by their `thread` field.** The lists named after the
+  thread answer first; when none has an open task, it reads the index, so a list renamed
+  by hand still counts.
+- **Every hook waits for the lock half its timeout at most** (`hooks.Deadlines`,
+  `Vault.LockWithin`, which bounds the in-process mutex too), then exits 1 with the held
+  lock named, before the host kills it. The plugin test holds each deadline against
+  `hooks.json`; SessionEnd's timeout is 3 s.
 - **`thread-audit` names a repository by its path**: `git -C <path> …`, since it runs
   in the vault.
 - **The host's own read-only agents are workers.** `Explore`, `Plan`,
