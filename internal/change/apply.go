@@ -3,6 +3,9 @@ package change
 import (
 	"errors"
 	"fmt"
+	"io/fs"
+	"os"
+	"path/filepath"
 	"slices"
 	"sort"
 	"strings"
@@ -97,14 +100,32 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 	}
 	d := idx.ByPath(rel)
 	if d == nil {
-		return nil, readBack(rel)
+		return nil, readBack(v, rel)
 	}
 	return preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx)), nil
 }
 
 // readBack is the error of a change document the index cannot find after its write.
-func readBack(rel string) error {
-	return fmt.Errorf("the change document %s was written but the vault's index cannot read it back; run `atlas-obsidian lint` and look for it under misplaced or untyped files", rel)
+// The index does not walk into a folder that is a link, so the error names that folder
+// and where the file really is.
+func readBack(v *vault.Vault, rel string) error {
+	parts := strings.Split(rel, "/")
+	for i := 1; i < len(parts); i++ {
+		folder := strings.Join(parts[:i], "/")
+		st, err := os.Lstat(v.Abs(folder))
+		if err != nil || st.Mode()&fs.ModeSymlink == 0 {
+			continue
+		}
+		where := v.Abs(rel)
+		if real, err := filepath.EvalSymlinks(where); err == nil {
+			where = real
+			if r := v.Rel(real); r != "" {
+				where = r
+			}
+		}
+		return fmt.Errorf("the change document %s was written, at %s, but the vault's index cannot read it back: the folder %s is a link, and the index does not read a linked folder. Make %s a plain folder, move the document into it, and propose again", rel, where, folder, folder)
+	}
+	return fmt.Errorf("the change document %s was written but the vault's index cannot read it back; check that its frontmatter parses, and propose again", rel)
 }
 
 // freePath is the path of a new change document: the date and the title, with (2) and
@@ -470,7 +491,7 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	}
 	done := idx.ByPath(d.Path)
 	if done == nil {
-		return nil, readBack(d.Path)
+		return nil, readBack(v, d.Path)
 	}
 	pv := preview(idx, done, p.Ops, outsideRefs(idx, p.Outside), c.warnings, current(idx))
 	pv.Writes = lines
