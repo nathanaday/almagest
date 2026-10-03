@@ -10,12 +10,66 @@ import (
 
 // runners are the commands that run a string they are given as a command of its own, so
 // a quoted word or a heredoc they take is read as one.
-var runners = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "ssh", "su", "watch", "env"}
+var runners = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "ssh", "su", "watch"}
 
-// isRunner reports whether a word names a runner, in any case or as zsh's =name, as the
-// binary's name is read.
-func isRunner(w string) bool {
-	return slices.Contains(runners, strings.ToLower(path.Base(strings.TrimPrefix(w, "="))))
+// wrappers run the command that follows them, after their own options; the value each
+// option of valueOptions takes is a word of its own.
+var (
+	wrappers     = []string{"sudo", "doas", "env", "xargs", "nice", "nohup", "time", "timeout", "stdbuf", "exec", "command", "builtin"}
+	valueOptions = map[string][]string{
+		"sudo":    {"-u", "-g", "-C", "-D", "-h", "-p", "-r", "-t", "-U"},
+		"xargs":   {"-I", "-n", "-P", "-L", "-s", "-d", "-E", "-a"},
+		"nice":    {"-n"},
+		"timeout": {"-s", "-k"},
+		"stdbuf":  {"-i", "-o", "-e"},
+		"env":     {"-u", "-C"},
+	}
+)
+
+// commandName is a word as a command name reads: its base name, in lower case, without
+// zsh's leading =.
+func commandName(w string) string {
+	return strings.ToLower(path.Base(strings.TrimPrefix(w, "=")))
+}
+
+// runsString reports whether a simple command runs a string as a command: a runner where
+// the command name stands, after assignments and wrappers, env -S, or a runner after
+// find's -exec. A word that holds whitespace, such as a commit message, names nothing.
+func runsString(words []string) bool {
+	for i, w := range words {
+		if (w == "-exec" || w == "-execdir" || w == "-ok") && i+1 < len(words) && slices.Contains(runners, commandName(words[i+1])) {
+			return true
+		}
+	}
+	i := 0
+	for i < len(words) {
+		w := words[i]
+		switch name := commandName(w); {
+		case strings.ContainsAny(w, " \t\n"):
+			return false
+		case strings.Contains(w, "=") && !strings.HasPrefix(w, "="):
+			i++ // an assignment before the command
+		case slices.Contains(runners, name):
+			return true
+		case slices.Contains(wrappers, name):
+			i++
+			for i < len(words) && strings.HasPrefix(words[i], "-") {
+				if name == "env" && (words[i] == "--split-string" || strings.HasPrefix(words[i], "-S")) {
+					return true
+				}
+				if slices.Contains(valueOptions[name], words[i]) {
+					i++
+				}
+				i++
+			}
+			if name == "timeout" && i < len(words) {
+				i++ // the duration
+			}
+		default:
+			return false
+		}
+	}
+	return false
 }
 
 // shellCommands splits a command line into its simple commands, each a list of words, as
@@ -25,7 +79,17 @@ func isRunner(w string) bool {
 // every quoted word and heredoc is read as one more command; on any other line quoted
 // text is only text.
 func shellCommands(line string) [][]string {
-	return splitCommands(line, 4)
+	var out [][]string
+	for _, c := range splitCommands(line, 4) {
+		out = append(out, c.words)
+	}
+	return out
+}
+
+// simple is one simple command and the pipeline it belongs to.
+type simple struct {
+	words []string
+	pipe  int
 }
 
 // heredoc is a here-document a command waits for: its delimiter, whether <<- strips the
@@ -36,16 +100,17 @@ type heredoc struct {
 	run   bool
 }
 
-func splitCommands(line string, depth int) [][]string {
-	// A first pass, which reads no quoted word, finds whether the line runs a string.
-	lineRuns := false
+func splitCommands(line string, depth int) []simple {
+	// A first pass, which reads no quoted word, finds the pipelines that run a string.
+	running := map[int]bool{}
 	if depth > 0 {
 		for _, c := range splitCommands(line, 0) {
-			lineRuns = lineRuns || slices.ContainsFunc(c, isRunner)
+			running[c.pipe] = running[c.pipe] || runsString(c.words)
 		}
 	}
 	var (
-		cmds    [][]string
+		cmds    []simple
+		pipe    int
 		cur     []string
 		word    strings.Builder
 		inWord  bool
@@ -54,7 +119,7 @@ func splitCommands(line string, depth int) [][]string {
 		doc     *heredoc
 		pending []heredoc
 	)
-	runs := func() bool { return lineRuns }
+	runs := func() bool { return running[pipe] }
 	endWord := func() {
 		if !inWord {
 			return
@@ -69,19 +134,23 @@ func splitCommands(line string, depth int) [][]string {
 			drop = false
 		default:
 			if quoted && depth > 0 && runs() && strings.ContainsAny(w, " \t\n;&|()`<>") {
-				cmds = append(cmds, splitCommands(w, depth-1)...)
+				cmds = append(cmds, inner(splitCommands(w, depth-1))...)
 			}
 			cur = append(cur, expandBraces(w)...)
 		}
 		word.Reset()
 		inWord, quoted = false, false
 	}
-	endCommand := func() {
+	// endCommand ends a simple command; piped says the next one reads its output.
+	endCommand := func(piped bool) {
 		endWord()
 		if len(cur) > 0 {
-			cmds = append(cmds, cur)
+			cmds = append(cmds, simple{cur, pipe})
 		}
 		cur, drop, doc = nil, false, nil
+		if !piped {
+			pipe++
+		}
 	}
 	at := func(i int) byte {
 		if i < len(line) {
@@ -141,7 +210,7 @@ func splitCommands(line string, depth int) [][]string {
 			// Locale quoting: the quotes that follow are plain double quotes.
 		case (c == '<' || c == '>') && at(i+1) == '(':
 			// A process substitution runs a command of its own.
-			endCommand()
+			endCommand(false)
 			i++
 		case c == ' ' || c == '\t':
 			endWord()
@@ -182,7 +251,7 @@ func splitCommands(line string, depth int) [][]string {
 				drop = true
 			}
 		case c == '\n':
-			endCommand()
+			endCommand(false)
 			// The lines after a heredoc's command are its body, up to its delimiter.
 			for _, h := range pending {
 				var body []string
@@ -202,18 +271,36 @@ func splitCommands(line string, depth int) [][]string {
 					body = append(body, l)
 				}
 				if h.run && depth > 0 {
-					cmds = append(cmds, splitCommands(strings.Join(body, "\n"), depth-1)...)
+					cmds = append(cmds, inner(splitCommands(strings.Join(body, "\n"), depth-1))...)
 				}
 			}
 			pending = nil
-		case strings.IndexByte(";&|()`", c) >= 0:
-			endCommand()
+		case c == '|' && at(i+1) == '|', c == '&' && at(i+1) == '&':
+			endCommand(false)
+			i++
+		case c == '|':
+			// | and |& pipe the command into the next one.
+			endCommand(true)
+			if at(i+1) == '&' {
+				i++
+			}
+		case strings.IndexByte(";&()`", c) >= 0:
+			endCommand(false)
 		default:
 			word.WriteByte(c)
 			inWord = true
 		}
 	}
-	endCommand()
+	endCommand(false)
+	return cmds
+}
+
+// inner marks the commands read out of a quoted word or a heredoc as a pipeline of their
+// own, apart from the line's.
+func inner(cmds []simple) []simple {
+	for i := range cmds {
+		cmds[i].pipe = -1
+	}
 	return cmds
 }
 
