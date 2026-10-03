@@ -121,3 +121,23 @@ func TestAChangeDocumentNeverReplacesOneInAnotherUnicodeForm(t *testing.T) {
 		t.Fatal("the first change document changed")
 	}
 }
+
+// The index does not walk into a linked folder, so a change document written through a
+// month folder that links elsewhere in the vault cannot be read back.
+func TestProposeSaysSoWhenItCannotReadItsDocumentBack(t *testing.T) {
+	tv := testvault.New(t)
+	now := tv.Tick(time.Minute).Add(time.Minute)
+	inside := tv.V.Abs("scratchpad/months")
+	if err := os.MkdirAll(inside, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	month := tv.V.Abs("changes/" + now.Format("2006-01"))
+	os.RemoveAll(month)
+	if err := os.Symlink(inside, month); err != nil {
+		t.Fatal(err)
+	}
+	_, err := change.Propose(tv.V, change.Plan{Title: "Hidden", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "Alpha", Fields: map[string]any{"description": "A topic.", "status": "stable"}, Body: str("## Definition\n\nA topic.\n")}}}, now)
+	if err == nil || !strings.Contains(err.Error(), "cannot read it back") {
+		t.Fatalf("propose: %v", err)
+	}
+}

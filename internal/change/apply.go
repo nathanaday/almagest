@@ -96,7 +96,15 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 		return nil, err
 	}
 	d := idx.ByPath(rel)
+	if d == nil {
+		return nil, readBack(rel)
+	}
 	return preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx)), nil
+}
+
+// readBack is the error of a change document the index cannot find after its write.
+func readBack(rel string) error {
+	return fmt.Errorf("the change document %s was written but the vault's index cannot read it back; run `atlas-obsidian lint` and look for it under misplaced or untyped files", rel)
 }
 
 // freePath is the path of a new change document: the date and the title, with (2) and
@@ -460,7 +468,11 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	if err != nil {
 		return nil, err
 	}
-	pv := preview(idx, idx.ByPath(d.Path), p.Ops, outsideRefs(idx, p.Outside), c.warnings, current(idx))
+	done := idx.ByPath(d.Path)
+	if done == nil {
+		return nil, readBack(d.Path)
+	}
+	pv := preview(idx, done, p.Ops, outsideRefs(idx, p.Outside), c.warnings, current(idx))
 	pv.Writes = lines
 	pv.Commit = sha
 	for _, id := range eventIDs {
