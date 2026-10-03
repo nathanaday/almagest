@@ -6,6 +6,7 @@
 package derive
 
 import (
+	"cmp"
 	"fmt"
 	"path"
 	"regexp"
@@ -116,7 +117,7 @@ func SourceLead(idx *vault.Index, d *doc.Doc) string {
 	if m := d.Str("measure"); m != "" {
 		title += " · " + m
 	}
-	title += " · " + orDefault(d.Str("authority"), "unknown")
+	title += " · " + cmp.Or(d.Str("authority"), "unknown")
 	var lines []string
 	var by []string
 	if a := d.List("authors"); len(a) > 0 {
@@ -252,7 +253,7 @@ func RepositoryLead(d *doc.Doc) string {
 		return doc.Callout("repository-missing", "`"+p+"` is gone", "The path is no git work tree now. Link the new path (repo-link), or unlink it (repo-unlink).")
 	}
 	var lines []string
-	head := "`" + orDefault(d.Str("branch"), "?") + "`"
+	head := "`" + cmp.Or(d.Str("branch"), "?") + "`"
 	if h := d.Str("head"); h != "" {
 		head += " at `" + h + "`"
 		if t, ok := schema.ParseTime(d.Str("head_time")); ok {
@@ -267,7 +268,7 @@ func RepositoryLead(d *doc.Doc) string {
 	if c := d.Str("described"); c != "" {
 		desc = "Described at `" + c + "`"
 		if n := d.Front.Int("behind"); n > 0 {
-			desc += fmt.Sprintf(", %d %s behind", n, plural(n, "commit", "commits"))
+			desc += fmt.Sprintf(", %d %s behind", n, doc.Plural(n, "commit", "commits"))
 		} else {
 			desc += ", current"
 		}
@@ -299,13 +300,13 @@ func RepoBlock(d *doc.Doc) string {
 // TopicLead is a topic's card: its kind, its status, its sources, and its tags. A policy
 // says its strength and reach; an overview names its tag.
 func TopicLead(idx *vault.Index, d *doc.Doc) string {
-	kind := orDefault(d.Str("kind"), "concept")
-	status := orDefault(d.Str("status"), "stable")
+	kind := cmp.Or(d.Str("kind"), "concept")
+	status := cmp.Or(d.Str("status"), "stable")
 	var lines []string
 	title := ""
 	switch kind {
 	case "policy":
-		title = capital(orDefault(d.Str("strength"), "should"))
+		title = doc.Capital(cmp.Or(d.Str("strength"), "should"))
 		reach := d.List("tags")
 		if len(reach) == 0 {
 			title += " · holds for every repository"
@@ -327,14 +328,14 @@ func TopicLead(idx *vault.Index, d *doc.Doc) string {
 			}
 		}
 	default:
-		title = capital(kind)
+		title = doc.Capital(kind)
 	}
 	switch status {
 	case "deprecated", "contested", "draft":
-		title = capital(status) + " · " + title
+		title = doc.Capital(status) + " · " + title
 	}
 	n := len(d.List("sources"))
-	meta := fmt.Sprintf("%d %s", n, plural(n, "source", "sources"))
+	meta := fmt.Sprintf("%d %s", n, doc.Plural(n, "source", "sources"))
 	if r := d.Str("refreshed"); r != "" {
 		meta += " · refreshed " + day(r)
 	}
@@ -509,25 +510,4 @@ func day(stamp string) string {
 		return vault.Date(t)
 	}
 	return stamp
-}
-
-func capital(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-func orDefault(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

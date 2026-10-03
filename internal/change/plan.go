@@ -576,10 +576,10 @@ func (c *check) content(o *op, w Write, current *doc.Doc) {
 			fields["description"] = current.Str("description")
 		}
 		if _, ok := fields["tags"]; !ok {
-			fields["tags"] = nonNil(current.List("tags"))
+			fields["tags"] = doc.NonNil(current.List("tags"))
 		}
 		if _, ok := fields["aliases"]; !ok {
-			fields["aliases"] = nonNil(current.List("aliases"))
+			fields["aliases"] = doc.NonNil(current.List("aliases"))
 		}
 		list := []doc.Field{{Key: "id", Value: o.ID}, {Key: "type", Value: "topic"}, {Key: "kind", Value: o.TopicKind}}
 		body := normalizeBody(bodyOr(w.Body, skeleton(t, o.TopicKind)))
@@ -966,13 +966,6 @@ func normalizeBody(body string) string {
 		body += "\n"
 	}
 	return body
-}
-
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
 }
 
 // retitles are the titles the change's renames, promotes, and removes free, with where

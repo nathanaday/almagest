@@ -5,6 +5,7 @@
 package views
 
 import (
+	"cmp"
 	"fmt"
 	"io/fs"
 	"net/url"
@@ -221,14 +222,14 @@ func (r *renderer) home() string {
 	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories", "stub": "threads", "chord": "chords", "event": "events"}
 	for _, t := range []string{"topic", "source", "repository", "stub", "chord", "event"} {
 		if t == "stub" {
-			typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], plural(counts[t], "thread", plurals[t])))
+			typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], doc.Plural(counts[t], "thread", plurals[t])))
 			continue
 		}
-		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], plural(counts[t], t, plurals[t])))
+		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], doc.Plural(counts[t], t, plurals[t])))
 	}
 	head := doc.Callout("atlas", r.idx.V.Name(),
 		strings.Join(typeCounts, " · "),
-		fmt.Sprintf("%d %s · %d open %s · %d open %s · %d pending · %d proposed %s · %d live %s", stubs, plural(stubs, "stub", "stubs"), open, plural(open, "thread", "threads"), chords, plural(chords, "chord", "chords"), pending, len(proposed), plural(len(proposed), "change", "changes"), len(live), plural(len(live), "session", "sessions")))
+		fmt.Sprintf("%d %s · %d open %s · %d open %s · %d pending · %d proposed %s · %d live %s", stubs, doc.Plural(stubs, "stub", "stubs"), open, doc.Plural(open, "thread", "threads"), chords, doc.Plural(chords, "chord", "chords"), pending, len(proposed), doc.Plural(len(proposed), "change", "changes"), len(live), doc.Plural(len(live), "session", "sessions")))
 	var wait []string
 	for _, c := range proposed {
 		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · proposed change · "+c.Str("counts"))
@@ -237,7 +238,7 @@ func (r *renderer) home() string {
 		wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))
 	}
 	for _, m := range mentions {
-		wait = append(wait, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(m.Doc)), oneLine(m.Text, 120)))
+		wait = append(wait, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(m.Doc)), doc.OneLine(m.Text, 120)))
 	}
 	var tagLines []string
 	for _, t := range idx.TopTags() {
@@ -287,7 +288,7 @@ func base(name string, filters []string, order []string, groupBy string, sortBy 
 		b.WriteString("    sort:\n")
 		for _, s := range sortBy {
 			prop, dir, _ := strings.Cut(s, " ")
-			b.WriteString("      - property: " + prop + "\n        direction: " + orDefault(dir, "ASC") + "\n")
+			b.WriteString("      - property: " + prop + "\n        direction: " + cmp.Or(dir, "ASC") + "\n")
 		}
 	}
 	b.WriteString("```")
@@ -395,7 +396,7 @@ func (r *renderer) threadsView() string {
 		if hs := r.b.Holders(d); len(hs) > 0 {
 			line += " · " + doc.Link(hs[0].Title())
 			if p, _ := doc.Section(hs[0].Body, "Progress"); p != "" {
-				line += " · " + oneLine(doc.LastLine(p), 120)
+				line += " · " + doc.OneLine(doc.LastLine(p), 120)
 			}
 		}
 		active = append(active, line)
@@ -416,12 +417,12 @@ func (r *renderer) threadsView() string {
 	todos := idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.Views, vault.Changes, vault.Scratchpad)
 	var todoLines []string
 	for _, t := range todos {
-		todoLines = append(todoLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(t.Doc)), oneLine(t.Text, 160)))
+		todoLines = append(todoLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)))
 	}
 	mentions := idx.OpenTasks(func(t string) bool { return strings.Contains(t, "@atlas") }, vault.Documents, vault.Changes, vault.Sessions, vault.Views, vault.Scratchpad)
 	var mentionLines []string
 	for _, m := range mentions {
-		mentionLines = append(mentionLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(m.Doc)), oneLine(m.Text, 160)))
+		mentionLines = append(mentionLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(m.Doc)), doc.OneLine(m.Text, 160)))
 	}
 	var ended []string
 	for _, ref := range bv.Ended {
@@ -544,7 +545,7 @@ func (r *renderer) entries() []timelineEntry {
 		case "note":
 			line += " → " + doc.Link(e.Title()+"|note")
 		case "blocked":
-			line += " · " + oneLine(thread.BlockedLine(e), 100)
+			line += " · " + doc.OneLine(thread.BlockedLine(e), 100)
 		}
 		if s := e.Str("session"); s != "" {
 			line += " · " + s
@@ -665,7 +666,7 @@ func (r *renderer) tagView(t string) string {
 		}
 		lines = append(lines, "Below: "+strings.Join(parts, " · "))
 	}
-	head := doc.Callout("tag", fmt.Sprintf("#%s · %d %s", t, count, plural(count, "document", "documents")), lines...)
+	head := doc.Callout("tag", fmt.Sprintf("#%s · %d %s", t, count, doc.Plural(count, "document", "documents")), lines...)
 	// Narrow: the tags that occur with this one, most first.
 	with := map[string]int{}
 	var holders []*doc.Doc
@@ -739,26 +740,4 @@ func minute(stamp string) string {
 		return t.Format("2006-01-02 15:04")
 	}
 	return stamp
-}
-
-func oneLine(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len([]rune(s)) > n {
-		s = string([]rune(s)[:n-1]) + "…"
-	}
-	return s
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
-}
-
-func orDefault(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
 }

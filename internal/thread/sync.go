@@ -1,6 +1,7 @@
 package thread
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"sort"
@@ -128,7 +129,7 @@ func (b *Board) derivedPart(d *doc.Doc) string {
 	if t == nil {
 		return doc.ReplaceLead(d.Content, doc.Callout(d.Type(), "No thread", "Its thread field names no stub. Lint names the fix."))
 	}
-	set := []doc.Field{{Key: "tags", Value: nonNil(t.Stub.List("tags"))}}
+	set := []doc.Field{{Key: "tags", Value: doc.NonNil(t.Stub.List("tags"))}}
 	back := "Thread: " + doc.Link(t.Stub.Title()) + " (" + b.Status(t.Stub) + ")"
 	var lead string
 	switch d.Type() {
@@ -136,7 +137,7 @@ func (b *Board) derivedPart(d *doc.Doc) string {
 		status := b.Status(d)
 		set = append(set, doc.Field{Key: "status", Value: status})
 		n := len(Requirements(d.Body))
-		lead = doc.Callout("spec", fmt.Sprintf("%s · %d %s", capital(status), n, plural(n, "requirement", "requirements")), back)
+		lead = doc.Callout("spec", fmt.Sprintf("%s · %d %s", doc.Capital(status), n, doc.Plural(n, "requirement", "requirements")), back)
 	case "tasks":
 		done, total := ListCounts(d)
 		set = append(set, doc.Field{Key: "done", Value: done}, doc.Field{Key: "total", Value: total})
@@ -231,7 +232,7 @@ func (b *Board) placeLine(d *doc.Doc) string {
 	}
 	if a := b.afterLine(d); a != "" {
 		if len(parts) == 0 {
-			a = capital(a)
+			a = doc.Capital(a)
 		}
 		parts = append(parts, a)
 	}
@@ -267,7 +268,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 		if e := b.Result(d); e != nil {
 			title += " " + day(e.Str("at"))
 			text, _ := doc.Section(e.Body, "Why")
-			why = oneLine(doc.FirstLine(text), 160)
+			why = doc.OneLine(doc.FirstLine(text), 160)
 			see = "See " + doc.Link(e.Title())
 		}
 		return doc.Callout("thread-dropped", title, lines(why, see, place)...)
@@ -284,7 +285,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 		}
 		return doc.Callout("thread-closed", title, lines(place)...)
 	}
-	priority := orDefault(d.Str("priority"), "normal")
+	priority := cmp.Or(d.Str("priority"), "normal")
 	var title, tagsLine string
 	if status == StatusStub {
 		title = "Stub · " + priority + " · planted " + day(d.Str("created"))
@@ -293,7 +294,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 		}
 		tagsLine = tagLine(d)
 	} else {
-		title = capital(status)
+		title = doc.Capital(status)
 		if n := t.CountsText(); n != "" {
 			title += " · " + n + " tasks"
 		}
@@ -314,7 +315,7 @@ func (b *Board) stubLead(d *doc.Doc) string {
 	}
 	blocked := ""
 	if line := b.Blocked(d); line != "" {
-		blocked = "Blocked: " + oneLine(line, 160)
+		blocked = "Blocked: " + doc.OneLine(line, 160)
 	}
 	missing := ""
 	if m := b.Missing(d); len(m) > 0 {
@@ -413,7 +414,7 @@ func (b *Board) ThreadSection(d *doc.Doc) string {
 		lines = append(lines, "- Spec: none")
 	} else {
 		n := len(Requirements(t.Spec.Body))
-		lines = append(lines, fmt.Sprintf("- Spec: %s · %d %s · %s", doc.Link(t.Spec.Title()), n, plural(n, "requirement", "requirements"), b.Status(t.Spec)))
+		lines = append(lines, fmt.Sprintf("- Spec: %s · %d %s · %s", doc.Link(t.Spec.Title()), n, doc.Plural(n, "requirement", "requirements"), b.Status(t.Spec)))
 	}
 	if len(t.Lists) == 0 {
 		lines = append(lines, "- Tasks: none")
@@ -430,7 +431,7 @@ func (b *Board) ThreadSection(d *doc.Doc) string {
 	} else {
 		line := "- Verification: " + doc.Link(last.Title()) + " · " + b.Verdict(t, last)
 		if n := openFindings(last); n > 0 {
-			line += fmt.Sprintf(" · %d open %s", n, plural(n, "finding", "findings"))
+			line += fmt.Sprintf(" · %d open %s", n, doc.Plural(n, "finding", "findings"))
 		}
 		if n := len(t.Rounds) - 1; n > 0 {
 			var earlier []string
@@ -465,14 +466,14 @@ func (b *Board) ThreadSection(d *doc.Doc) string {
 func (b *Board) chordLead(d *doc.Doc) string {
 	status := b.Status(d)
 	closed, total := b.ChordCounts(d)
-	title := fmt.Sprintf("%s · %d/%d threads closed", capital(status), closed, total)
+	title := fmt.Sprintf("%s · %d/%d threads closed", doc.Capital(status), closed, total)
 	switch status {
 	case ChordDropped:
 		lines := []string{}
 		for i := len(b.events[d.ID()]) - 1; i >= 0; i-- {
 			if e := b.events[d.ID()][i]; e.Str("kind") == "dropped" {
 				text, _ := doc.Section(e.Body, "Why")
-				if why := oneLine(doc.FirstLine(text), 160); why != "" {
+				if why := doc.OneLine(doc.FirstLine(text), 160); why != "" {
 					lines = append(lines, why)
 				}
 				lines = append(lines, "See "+doc.Link(e.Title()))
@@ -486,7 +487,7 @@ func (b *Board) chordLead(d *doc.Doc) string {
 		}
 		return doc.Callout("chord-closed", title)
 	}
-	title += " · " + orDefault(d.Str("priority"), "normal")
+	title += " · " + cmp.Or(d.Str("priority"), "normal")
 	var lines []string
 	if t := tagLine(d); t != "" {
 		lines = append(lines, t)
@@ -561,18 +562,4 @@ func minute(stamp string) string {
 		return t.Format("2006-01-02 15:04")
 	}
 	return stamp
-}
-
-func orDefault(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }

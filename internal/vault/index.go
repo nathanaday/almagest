@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"cmp"
 	"fmt"
 	"io/fs"
 	"os"
@@ -469,7 +470,7 @@ type Ref struct {
 
 // Ref builds the reference to a document.
 func (idx *Index) Ref(d *doc.Doc) Ref {
-	r := Ref{ID: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: Title(d), Path: d.Path, Tags: nonNil(d.List("tags")), Description: d.Str("description"), Status: d.Str("status")}
+	r := Ref{ID: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: Title(d), Path: d.Path, Tags: doc.NonNil(d.List("tags")), Description: d.Str("description"), Status: d.Str("status")}
 	state := map[string]any{}
 	switch d.Type() {
 	case "source":
@@ -495,7 +496,7 @@ func (idx *Index) Ref(d *doc.Doc) Ref {
 		}
 		state["sources"] = len(d.List("sources"))
 	case "stub":
-		state["priority"] = orDefault(d.Str("priority"), "normal")
+		state["priority"] = cmp.Or(d.Str("priority"), "normal")
 		state["tasks"] = d.Str("tasks")
 		state["verification"] = d.Str("verification")
 		state["blocked"] = d.Str("blocked")
@@ -523,7 +524,7 @@ func (idx *Index) Ref(d *doc.Doc) Ref {
 			state["round"] = d.Front.Int("round")
 		}
 	case "chord":
-		state["priority"] = orDefault(d.Str("priority"), "normal")
+		state["priority"] = cmp.Or(d.Str("priority"), "normal")
 		state["threads"] = d.Str("threads")
 	case "event":
 		state["subject"] = doc.LinkTarget(d.Str("subject"))
@@ -561,20 +562,6 @@ func targets(values []string) []string {
 		out = append(out, doc.LinkTarget(v))
 	}
 	return out
-}
-
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
-}
-
-func orDefault(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
 }
 
 // ProseEvents are the event kinds that hold prose, and so may be pending.

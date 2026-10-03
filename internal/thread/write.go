@@ -1,6 +1,7 @@
 package thread
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -181,7 +182,7 @@ func (w *writer) finish(subject, focus string) (*Result, error) {
 	if _, err := nb.SyncWith(vault.NewGuard(idx, w.tx)); err != nil {
 		return nil, err
 	}
-	sha, err := w.tx.Commit("thread: "+oneLine(subject, 72), Trailer+": "+focus)
+	sha, err := w.tx.Commit("thread: "+doc.OneLine(subject, 72), Trailer+": "+focus)
 	if err != nil {
 		return nil, err
 	}
@@ -361,24 +362,6 @@ func TitleFromText(text string) string {
 	return doc.CutTitle(line, doc.MaxTitleBytes)
 }
 
-// firstSentence is a description from text: its first line that is no heading or
-// callout, cut at the end of its first sentence.
-func firstSentence(text string) string {
-	line := ""
-	for _, l := range strings.Split(text, "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, ">") || strings.HasPrefix(l, "|") || strings.HasPrefix(l, "```") {
-			continue
-		}
-		line = strings.TrimLeft(l, "-*0123456789. ")
-		break
-	}
-	if i := strings.Index(line, ". "); i > 0 {
-		line = line[:i+1]
-	}
-	return oneLine(line, 200)
-}
-
 // Titles of a thread's documents, from the stub's title.
 func SpecTitle(stub string) string { return stub + " · Spec" }
 
@@ -427,8 +410,8 @@ func (w *writer) newDoc(typ, title, description string, tagList []string, extra 
 	fields := append([]doc.Field{
 		{Key: "id", Value: id},
 		{Key: "type", Value: typ},
-		{Key: "description", Value: oneLine(description, 200)},
-		{Key: "tags", Value: nonNil(tagList)},
+		{Key: "description", Value: doc.OneLine(description, 200)},
+		{Key: "tags", Value: doc.NonNil(tagList)},
 		{Key: "aliases", Value: []string{}},
 		{Key: "created", Value: stamp},
 		{Key: "updated", Value: stamp},
@@ -445,9 +428,9 @@ func (w *writer) newDoc(typ, title, description string, tagList []string, extra 
 // stubFields are the fields of a new stub past the common ones.
 func stubFields(priority, chord string, after []string) []doc.Field {
 	return []doc.Field{
-		{Key: "priority", Value: orDefault(priority, "normal")},
+		{Key: "priority", Value: cmp.Or(priority, "normal")},
 		{Key: "chord", Value: chord},
-		{Key: "after", Value: nonNil(after)},
+		{Key: "after", Value: doc.NonNil(after)},
 		{Key: "status", Value: StatusStub},
 		{Key: "spec", Value: ""},
 		{Key: "tasks", Value: ""},
@@ -518,7 +501,7 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (_ *Result, err error) {
 		chord = doc.Link(c.Title())
 		// A thread planted in a chord with no tags of its own takes the chord's.
 		if len(tg) == 0 {
-			tg = nonNil(c.List("tags"))
+			tg = doc.NonNil(c.List("tags"))
 		}
 	}
 	after, _, err := w.afterLinks(in.After, "")
@@ -536,7 +519,7 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (_ *Result, err error) {
 	}
 	desc := strings.TrimSpace(in.Description)
 	if desc == "" {
-		desc = firstSentence(text)
+		desc = doc.FirstSentence(text)
 	}
 	id, _, err := w.newDoc("stub", title, desc, tg, stubFields(in.Priority, chord, after), "## Idea\n\n"+text+"\n")
 	if err != nil {
@@ -576,7 +559,7 @@ func CheckSpec(text string) error {
 	section, _ := doc.Section(text, "Requirements")
 	for _, l := range strings.Split(section, "\n") {
 		if (strings.HasPrefix(l, "- ") || strings.HasPrefix(l, "* ")) && !reqLine.MatchString(l) {
-			return fmt.Errorf("under ## Requirements, write each requirement as `- R1: …`; this line has no id: %s", oneLine(l, 80))
+			return fmt.Errorf("under ## Requirements, write each requirement as `- R1: …`; this line has no id: %s", doc.OneLine(l, 80))
 		}
 	}
 	return nil
@@ -617,12 +600,12 @@ func Spec(v *vault.Vault, in SpecIn, o Opts) (_ *Result, err error) {
 	desc := strings.TrimSpace(in.Description)
 	if desc == "" {
 		goal, _ := doc.Section(text, "Goal")
-		desc = firstSentence(goal)
+		desc = doc.FirstSentence(goal)
 	}
 	if t.Spec != nil {
 		front, _, _ := doc.Split(t.Spec.Content)
 		content := doc.Join(front, "\n"+text+"\n")
-		content = doc.SetFields(content, []doc.Field{{Key: "description", Value: oneLine(desc, 200)}, {Key: "updated", Value: vault.Stamp(w.now)}})
+		content = doc.SetFields(content, []doc.Field{{Key: "description", Value: doc.OneLine(desc, 200)}, {Key: "updated", Value: vault.Stamp(w.now)}})
 		if err := w.tx.Write(t.Spec.Path, []byte(content)); err != nil {
 			return nil, err
 		}
@@ -770,7 +753,7 @@ func Start(v *vault.Vault, key string, take bool, o Opts) (_ *Result, err error)
 		return nil, fmt.Errorf("%s is %s: every task is done. New work needs a new task first (thread tasks, or thread finding with outcome task)", d.Title(), status)
 	}
 	if waits := w.b.Waits(d); len(waits) > 0 {
-		return nil, fmt.Errorf("%s comes after %s, which %s not verified yet; work on that first", d.Title(), titles(waits), plural(len(waits), "is", "are"))
+		return nil, fmt.Errorf("%s comes after %s, which %s not verified yet; work on that first", d.Title(), titles(waits), doc.Plural(len(waits), "is", "are"))
 	}
 	if hs := w.b.Holders(d); len(hs) > 0 && !take {
 		return nil, fmt.Errorf("%s is held by the live session %s. If you mean to take it over, call start again with take: true", d.Title(), hs[0].Title())
@@ -814,9 +797,9 @@ func Check(v *vault.Vault, in CheckIn, o Opts) (_ *Result, err error) {
 		}
 	}
 	if task == nil {
-		return nil, fmt.Errorf("%s has no task %q; its open tasks are %s", t.Stub.Title(), in.Task, orDefault(strings.Join(open, ", "), "none"))
+		return nil, fmt.Errorf("%s has no task %q; its open tasks are %s", t.Stub.Title(), in.Task, cmp.Or(strings.Join(open, ", "), "none"))
 	}
-	state := orDefault(in.State, TaskDone)
+	state := cmp.Or(in.State, TaskDone)
 	switch state {
 	case TaskDone:
 		if w.by == ByAgent && !w.b.started(t) {
@@ -834,7 +817,7 @@ func Check(v *vault.Vault, in CheckIn, o Opts) (_ *Result, err error) {
 				trail = append(trail, strings.Join(short, ", "))
 			}
 		}
-		if note := strings.ReplaceAll(oneLine(in.Note, 200), trailSep, ", "); note != "" {
+		if note := strings.ReplaceAll(doc.OneLine(in.Note, 200), trailSep, ", "); note != "" {
 			trail = append(trail, note)
 		}
 		if len(trail) == 0 {
@@ -842,7 +825,7 @@ func Check(v *vault.Vault, in CheckIn, o Opts) (_ *Result, err error) {
 		}
 		task.Trail = strings.Join(trail, trailSep)
 	case TaskDropped:
-		reason := strings.ReplaceAll(oneLine(in.Reason, 200), trailSep, ", ")
+		reason := strings.ReplaceAll(doc.OneLine(in.Reason, 200), trailSep, ", ")
 		if reason == "" {
 			return nil, errors.New("a dropped task needs the reason")
 		}
@@ -881,14 +864,14 @@ func Verify(v *vault.Vault, in VerifyIn, o Opts) (_ *Result, err error) {
 	var open []string
 	for _, task := range t.Tasks() {
 		if task.State == TaskOpen {
-			open = append(open, orDefault(task.ID, task.Text))
+			open = append(open, cmp.Or(task.ID, task.Text))
 		}
 	}
 	switch {
 	case len(t.Tasks()) == 0:
 		return nil, fmt.Errorf("%s has no task; a verification checks done work", t.Stub.Title())
 	case len(open) > 0:
-		return nil, fmt.Errorf("%s has %d open %s (%s); finish or drop them first (thread check)", t.Stub.Title(), len(open), plural(len(open), "task", "tasks"), strings.Join(open, ", "))
+		return nil, fmt.Errorf("%s has %d open %s (%s); finish or drop them first (thread check)", t.Stub.Title(), len(open), doc.Plural(len(open), "task", "tasks"), strings.Join(open, ", "))
 	case strings.TrimSpace(in.Scope) == "":
 		return nil, errors.New("verify needs scope: what was checked, each repository with its commits")
 	}
@@ -930,7 +913,7 @@ func Verify(v *vault.Vault, in VerifyIn, o Opts) (_ *Result, err error) {
 	}
 	var findings []string
 	for _, f := range in.Findings {
-		if f = strings.ReplaceAll(oneLine(f, 400), outcomeSep, " - "); f != "" {
+		if f = strings.ReplaceAll(doc.OneLine(f, 400), outcomeSep, " - "); f != "" {
 			findings = append(findings, fmt.Sprintf("- [ ] F%d: %s", len(findings)+1, f))
 		}
 	}
@@ -971,7 +954,7 @@ func Verify(v *vault.Vault, in VerifyIn, o Opts) (_ *Result, err error) {
 		{Key: "tasks_hash", Value: TasksHash(t.Lists)},
 		{Key: "verdict", Value: verdict},
 	}
-	desc := fmt.Sprintf("Round %d of the verification of %s: %d of %d requirements pass, %d %s.", round, t.Stub.Title(), len(rows)-2-failed, len(rows)-2, len(findings), plural(len(findings), "finding", "findings"))
+	desc := fmt.Sprintf("Round %d of the verification of %s: %d of %d requirements pass, %d %s.", round, t.Stub.Title(), len(rows)-2-failed, len(rows)-2, len(findings), doc.Plural(len(findings), "finding", "findings"))
 	if _, _, err := w.newDoc("verification", title, desc, t.Stub.List("tags"), extra, body); err != nil {
 		return nil, err
 	}
@@ -1007,7 +990,7 @@ func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (_ *Result, err error)
 	}
 	switch {
 	case finding == nil:
-		return nil, fmt.Errorf("%s has no finding %q; its open findings are %s", last.Title(), in.Finding, orDefault(strings.Join(open, ", "), "none"))
+		return nil, fmt.Errorf("%s has no finding %q; its open findings are %s", last.Title(), in.Finding, cmp.Or(strings.Join(open, ", "), "none"))
 	case !finding.Open:
 		return nil, fmt.Errorf("%s of %s has its outcome already: %s", id, last.Title(), finding.Outcome)
 	}
@@ -1041,7 +1024,7 @@ func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (_ *Result, err error)
 				return nil, err
 			}
 			text := strings.TrimSpace(in.Text) + "\n\nFrom " + id + " of " + doc.Link(last.Title()) + "."
-			if _, _, err := w.newDoc("stub", title, firstSentence(in.Text), t.Stub.List("tags"), stubFields("", "", nil), "## Idea\n\n"+text+"\n"); err != nil {
+			if _, _, err := w.newDoc("stub", title, doc.FirstSentence(in.Text), t.Stub.List("tags"), stubFields("", "", nil), "## Idea\n\n"+text+"\n"); err != nil {
 				return nil, err
 			}
 		default:
@@ -1058,7 +1041,7 @@ func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (_ *Result, err error)
 		}
 		outcome = "knowledge " + doc.Link(vault.Title(d))
 	case "accepted":
-		reason := oneLine(in.Reason, 200)
+		reason := doc.OneLine(in.Reason, 200)
 		if reason == "" {
 			return nil, errors.New("the outcome accepted needs reason: why the user accepts the finding as it is")
 		}
@@ -1123,7 +1106,7 @@ func Resolve(v *vault.Vault, stub string, became []string, o Opts) (_ *Result, e
 // ResolveInTx closes a stub with no spec as resolved inside another write's transaction:
 // a capture that the stub asked for. It returns the id of the event.
 func ResolveInTx(tx *vault.Tx, idx *vault.Index, stub *doc.Doc, became []string, o Opts) (string, error) {
-	w := &writer{v: tx.V, tx: tx, idx: idx, b: Load(idx), now: o.Now.Truncate(time.Second), by: orDefault(o.By, ByAgent), titles: NewTitles(idx), newTag: map[string]bool{}}
+	w := &writer{v: tx.V, tx: tx, idx: idx, b: Load(idx), now: o.Now.Truncate(time.Second), by: cmp.Or(o.By, ByAgent), titles: NewTitles(idx), newTag: map[string]bool{}}
 	for _, b := range became {
 		w.titles.Take(b)
 	}
@@ -1230,7 +1213,7 @@ func Reopen(v *vault.Vault, key, reason string, o Opts) (_ *Result, err error) {
 
 // Block marks a thread blocked, with the one line it waits on.
 func Block(v *vault.Vault, key, reason string, o Opts) (_ *Result, err error) {
-	reason = oneLine(reason, 180)
+	reason = doc.OneLine(reason, 180)
 	if reason == "" {
 		return nil, errors.New("block needs the reason: what the thread waits on, in one line")
 	}
@@ -1358,7 +1341,7 @@ func Set(v *vault.Vault, in SetIn, o Opts) (_ *Result, err error) {
 		if strings.TrimSpace(*in.Description) == "" {
 			return nil, errors.New("description: one sentence is required")
 		}
-		set("description", oneLine(*in.Description, 200))
+		set("description", doc.OneLine(*in.Description, 200))
 	}
 	if in.Tags != nil {
 		tg, err := w.tagList(*in.Tags, in.NewTags)
@@ -1375,13 +1358,13 @@ func Set(v *vault.Vault, in SetIn, o Opts) (_ *Result, err error) {
 				}
 			}
 		}
-		set("aliases", nonNil(*in.Aliases))
+		set("aliases", doc.NonNil(*in.Aliases))
 	}
 	if in.Priority != nil {
 		if err := checkPriority(*in.Priority); err != nil {
 			return nil, err
 		}
-		set("priority", orDefault(*in.Priority, "normal"))
+		set("priority", cmp.Or(*in.Priority, "normal"))
 	}
 	if (in.Chord != nil || in.After != nil) && !stub {
 		return nil, errors.New("only a thread has a chord and an after; a chord's order lives on its threads (chord order)")

@@ -260,7 +260,7 @@ func Subagent(v *vault.Vault, e Event, now time.Time) (string, error) {
 	if Worker(e.AgentType) {
 		line := fmt.Sprintf("- %s · `%s` · started %s", agent, Short(e.AgentID), now.Format("15:04"))
 		if e.Detail != "" {
-			line += " · " + oneLine(e.Detail, 120)
+			line += " · " + doc.OneLine(e.Detail, 120)
 		}
 		front, body, _ := doc.Split(parent.Content)
 		content := doc.Join(front, doc.AppendSection(body, "Subagents", line))
@@ -373,7 +373,7 @@ func AddLink(content, field, title string) string {
 			return content
 		}
 	}
-	return doc.SetField(content, field, append(nonNil(list), link))
+	return doc.SetField(content, field, append(doc.NonNil(list), link))
 }
 
 // MarkLost ends every live session whose agent process is gone, sets every other live
@@ -460,9 +460,9 @@ func Lead(v *vault.Vault, d *doc.Doc) string {
 	var lines []string
 	progress, _ := doc.Section(d.Body, "Progress")
 	if quote := doc.LastLine(progress); quote != "" {
-		lines = append(lines, oneLine(quote, 160))
+		lines = append(lines, doc.OneLine(quote, 160))
 	} else if desc := d.Str("description"); desc != "" {
-		lines = append(lines, oneLine(desc, 160))
+		lines = append(lines, doc.OneLine(desc, 160))
 	}
 	return doc.Callout("session", strings.Join(parts, " · "), lines...)
 }
@@ -511,26 +511,11 @@ func Refresh(v *vault.Vault, d *doc.Doc) (bool, error) {
 	return v.WriteIfChanged(d.Path, []byte(content))
 }
 
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
-}
-
-func oneLine(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len([]rune(s)) > n {
-		s = string([]rune(s)[:n-1]) + "…"
-	}
-	return s
-}
-
 // DescriptionLine is the first line of a session's Description section, which the
 // touched hook copies into the description field.
 func DescriptionLine(body string) string {
 	text, _ := doc.Section(body, "Description")
-	return oneLine(doc.FirstLine(text), 200)
+	return doc.OneLine(doc.FirstLine(text), 200)
 }
 
 func escapeGlob(s string) string {

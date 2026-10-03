@@ -5,6 +5,7 @@ package testvault
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -137,7 +138,7 @@ func (tv *T) Doc(typ, title string, fields map[string]any, body string) string {
 			keys = append(keys, k)
 		}
 	}
-	sortStrings(keys)
+	slices.Sort(keys)
 	for _, k := range keys {
 		list = append(list, doc.Field{Key: k, Value: fields[k]})
 	}
@@ -200,12 +201,4 @@ func (tv *T) Index() *vault.Index {
 		tv.t.Fatal(err)
 	}
 	return idx
-}
-
-func sortStrings(s []string) {
-	for i := 1; i < len(s); i++ {
-		for j := i; j > 0 && s[j] < s[j-1]; j-- {
-			s[j], s[j-1] = s[j-1], s[j]
-		}
-	}
 }

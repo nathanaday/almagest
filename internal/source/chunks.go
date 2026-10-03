@@ -298,7 +298,7 @@ func Read(idx *vault.Index, key string, index int) (*TextBlob, error) {
 	if err != nil {
 		return nil, err
 	}
-	blob := &TextBlob{Doc: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: vault.Title(d), Tags: nonNil(d.List("tags")), Authority: d.Str("authority"), Chunk: c}
+	blob := &TextBlob{Doc: d.ID(), Type: d.Type(), Kind: d.Str("kind"), Title: vault.Title(d), Tags: doc.NonNil(d.List("tags")), Authority: d.Str("authority"), Chunk: c}
 	switch m.kind {
 	case "pdf", "image", "other":
 		blob.File = idx.V.Abs(m.file)

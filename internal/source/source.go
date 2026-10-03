@@ -232,7 +232,7 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (_ *Result, err error) 
 			{Key: "id", Value: id},
 			{Key: "type", Value: "source"},
 			{Key: "description", Value: "Captured, not yet ingested."},
-			{Key: "tags", Value: nonNil(it.tags)},
+			{Key: "tags", Value: doc.NonNil(it.tags)},
 			{Key: "aliases", Value: []string{}},
 			{Key: "created", Value: stamp},
 			{Key: "updated", Value: stamp},
@@ -337,7 +337,7 @@ func measure(media string, data []byte) Measure {
 	case "pdf":
 		return Measure{Pages: PDFPages(data)}
 	case "markdown", "text":
-		return Measure{Lines: lineCount(string(data))}
+		return Measure{Lines: doc.LineCount(string(data))}
 	}
 	return Measure{}
 }
@@ -351,14 +351,6 @@ func pagesOf(measure string) int {
 	return 0
 }
 
-func lineCount(s string) int {
-	s = strings.TrimRight(s, "\n")
-	if s == "" {
-		return 0
-	}
-	return strings.Count(s, "\n") + 1
-}
-
 // repoHead is a repository's head, for a snapshot.
 func repoHead(root string) (string, error) {
 	g := gitx.Repo{Dir: root}
@@ -366,11 +358,4 @@ func repoHead(root string) (string, error) {
 		return "", fmt.Errorf("%s has no commit to snapshot", root)
 	}
 	return g.Head()
-}
-
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
 }

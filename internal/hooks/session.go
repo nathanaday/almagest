@@ -1,6 +1,7 @@
 package hooks
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -110,13 +111,13 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 	}
 	running := len(st.Sessions.Running) + len(st.Sessions.Waiting) + len(st.Sessions.Idle) - 1
 	if running > 0 {
-		line := fmt.Sprintf("Live now: %d other session%s", running, plural(running))
+		line := fmt.Sprintf("Live now: %d other session%s", running, doc.Plural(running, "", "s"))
 		if n := len(st.Sessions.Waiting); n > 0 {
 			var names []string
 			for _, s := range st.Sessions.Waiting {
-				names = append(names, fmt.Sprintf("%q", orTitle(s.Description, s.Title)))
+				names = append(names, fmt.Sprintf("%q", cmp.Or(s.Description, s.Title)))
 			}
-			line += fmt.Sprintf(" · %d wait%s for you: %s", n, pluralVerb(n), strings.Join(names, ", "))
+			line += fmt.Sprintf(" · %d wait%s for you: %s", n, doc.Plural(n, "s", ""), strings.Join(names, ", "))
 		}
 		b.WriteString(line + "\n")
 	}
@@ -145,8 +146,8 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		fmt.Fprintf(&b, "Tags (%s mode): %s\n", v.Tagging(), strings.Join(parts, " · "))
 	}
 	var counts []string
-	counts = append(counts, fmt.Sprintf("Inbox: %d file%s", len(st.Inbox), plural(len(st.Inbox))))
-	counts = append(counts, fmt.Sprintf("Pending for the wiki: %d document%s", len(st.Pending), plural(len(st.Pending))))
+	counts = append(counts, fmt.Sprintf("Inbox: %d file%s", len(st.Inbox), doc.Plural(len(st.Inbox), "", "s")))
+	counts = append(counts, fmt.Sprintf("Pending for the wiki: %d document%s", len(st.Pending), doc.Plural(len(st.Pending), "", "s")))
 	counts = append(counts, fmt.Sprintf("Proposed changes: %d", len(st.Changes.Proposed)))
 	counts = append(counts, fmt.Sprintf("Mentions: %d", len(st.Mentions)))
 	if st.Problems > 0 {
@@ -211,27 +212,6 @@ func workLine(r vault.Ref) string {
 		parts = append(parts, "blocked: "+bl)
 	}
 	return strings.Join(parts, " · ")
-}
-
-func orTitle(s, title string) string {
-	if s != "" {
-		return s
-	}
-	return title
-}
-
-func plural(n int) string {
-	if n == 1 {
-		return ""
-	}
-	return "s"
-}
-
-func pluralVerb(n int) string {
-	if n == 1 {
-		return "s"
-	}
-	return ""
 }
 
 // Prompt marks the session running, records the time of the user's turn for the gate,

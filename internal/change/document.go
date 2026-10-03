@@ -210,16 +210,9 @@ func (o *op) heading() string {
 	case OpConfirm:
 		return fmt.Sprintf("### confirm · %s · %s · base %s", o.Title, o.ID, doc.Short(o.Base))
 	case OpRetag:
-		return fmt.Sprintf("### retag · %s → %s · %d %s", o.From, o.To, o.Files, plural(o.Files, "file", "files"))
+		return fmt.Sprintf("### retag · %s → %s · %d %s", o.From, o.To, o.Files, doc.Plural(o.Files, "file", "files"))
 	}
 	return ""
-}
-
-func plural(n int, one, many string) string {
-	if n == 1 {
-		return one
-	}
-	return many
 }
 
 // renderDocument writes a change document.
@@ -248,7 +241,7 @@ func renderDocument(p *planned, id string, now time.Time) string {
 		{Key: "proposed", Value: stamp},
 		{Key: "session", Value: ""},
 		{Key: "counts", Value: counts.String()},
-		{Key: "new_tags", Value: nonNil(p.NewTags)},
+		{Key: "new_tags", Value: doc.NonNil(p.NewTags)},
 		{Key: "applied", Value: ""},
 		{Key: "supersedes", Value: supersedes},
 		{Key: "reason", Value: ""},

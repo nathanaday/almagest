@@ -9,6 +9,7 @@
 package migrate
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -506,13 +507,6 @@ func stamp(s string, fallback time.Time) string {
 	return vault.Stamp(fallback)
 }
 
-func orDefault(s, def string) string {
-	if strings.TrimSpace(s) == "" {
-		return def
-	}
-	return s
-}
-
 // knowledge converts areas, repositories, concepts, entities, policies, and sources.
 func (p *plan) knowledge(o *old, scopeTag map[string]string) {
 	for _, d := range o.of("area", "repository", "concept", "entity", "policy", "source") {
@@ -527,9 +521,9 @@ func (p *plan) knowledge(o *old, scopeTag map[string]string) {
 			fields = append(base,
 				doc.Field{Key: "type", Value: "topic"},
 				doc.Field{Key: "kind", Value: "overview"},
-				doc.Field{Key: "description", Value: orDefault(d.Str("description"), vault.Title(d))},
+				doc.Field{Key: "description", Value: cmp.Or(d.Str("description"), vault.Title(d))},
 				doc.Field{Key: "tags", Value: union(parentTags)},
-				doc.Field{Key: "aliases", Value: nonNil(d.List("aliases"))},
+				doc.Field{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 				doc.Field{Key: "created", Value: created},
 				doc.Field{Key: "updated", Value: updated},
 				doc.Field{Key: "refreshed", Value: updated},
@@ -537,14 +531,14 @@ func (p *plan) knowledge(o *old, scopeTag map[string]string) {
 				doc.Field{Key: "sources", Value: []string{}},
 				doc.Field{Key: "defines", Value: scopeTag[d.ID()]},
 			)
-			summary := orDefault(d.Str("description"), "")
+			summary := cmp.Or(d.Str("description"), "")
 			body = "## Summary\n\n" + summary + "\n\n## Context\n\n" + strings.TrimSpace(body) + "\n"
 		case "repository":
 			fields = append(base,
 				doc.Field{Key: "type", Value: "repository"},
-				doc.Field{Key: "description", Value: orDefault(d.Str("description"), vault.Title(d))},
+				doc.Field{Key: "description", Value: cmp.Or(d.Str("description"), vault.Title(d))},
 				doc.Field{Key: "tags", Value: union(scopeTags(o, scopeTag, d.Str("parent")))},
-				doc.Field{Key: "aliases", Value: nonNil(d.List("aliases"))},
+				doc.Field{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 				doc.Field{Key: "created", Value: created},
 				doc.Field{Key: "updated", Value: updated},
 				doc.Field{Key: "refreshed", Value: updated},
@@ -558,18 +552,18 @@ func (p *plan) knowledge(o *old, scopeTag map[string]string) {
 			file := doc.LinkTarget(d.Str("file"))
 			fields = append(base,
 				doc.Field{Key: "type", Value: "source"},
-				doc.Field{Key: "description", Value: orDefault(d.Str("description"), "Captured, not yet ingested.")},
+				doc.Field{Key: "description", Value: cmp.Or(d.Str("description"), "Captured, not yet ingested.")},
 				doc.Field{Key: "tags", Value: union(scopeTags(o, scopeTag, d.Str("scope")), normalized(d.List("tags")))},
-				doc.Field{Key: "aliases", Value: nonNil(d.List("aliases"))},
+				doc.Field{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 				doc.Field{Key: "created", Value: created},
 				doc.Field{Key: "updated", Value: updated},
 				doc.Field{Key: "refreshed", Value: stamp(d.Str("captured"), p.now)},
-				doc.Field{Key: "authority", Value: orDefault(d.Str("authority"), "unknown")},
+				doc.Field{Key: "authority", Value: cmp.Or(d.Str("authority"), "unknown")},
 				doc.Field{Key: "status", Value: "pending"},
 				doc.Field{Key: "file", Value: doc.Link(file)},
 				doc.Field{Key: "media", Value: mediaOf(file)},
 				doc.Field{Key: "sha256", Value: d.Str("sha256")},
-				doc.Field{Key: "origin", Value: orDefault(d.Str("origin"), "inbox")},
+				doc.Field{Key: "origin", Value: cmp.Or(d.Str("origin"), "inbox")},
 				doc.Field{Key: "locator", Value: d.Str("locator")},
 				doc.Field{Key: "measure", Value: d.Str("measure")},
 				doc.Field{Key: "captured", Value: stamp(d.Str("captured"), p.now)},
@@ -584,14 +578,14 @@ func (p *plan) knowledge(o *old, scopeTag map[string]string) {
 			fields = append(base,
 				doc.Field{Key: "type", Value: "topic"},
 				doc.Field{Key: "kind", Value: d.Type()},
-				doc.Field{Key: "description", Value: orDefault(d.Str("description"), vault.Title(d))},
+				doc.Field{Key: "description", Value: cmp.Or(d.Str("description"), vault.Title(d))},
 				doc.Field{Key: "tags", Value: union(scopeTags(o, scopeTag, d.Str("scope")), extra)},
-				doc.Field{Key: "aliases", Value: nonNil(d.List("aliases"))},
+				doc.Field{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 				doc.Field{Key: "created", Value: created},
 				doc.Field{Key: "updated", Value: updated},
 				doc.Field{Key: "refreshed", Value: updated},
-				doc.Field{Key: "status", Value: orDefault(d.Str("status"), "stable")},
-				doc.Field{Key: "sources", Value: nonNil(d.List("sources"))},
+				doc.Field{Key: "status", Value: cmp.Or(d.Str("status"), "stable")},
+				doc.Field{Key: "sources", Value: doc.NonNil(d.List("sources"))},
 			)
 			if s := d.Str("strength"); s != "" {
 				fields = append(fields, doc.Field{Key: "strength", Value: s})
@@ -625,13 +619,6 @@ func mediaOf(file string) string {
 		return "office"
 	}
 	return "other"
-}
-
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
 }
 
 // absorbedIDs maps each document id an applied change absorbed to the hashes it recorded.

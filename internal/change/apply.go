@@ -184,7 +184,7 @@ func atParent(idx *vault.Index, sha string) before {
 
 // preview describes a change document and its ops.
 func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warnings []string, prior before) *Preview {
-	pv := &Preview{Ref: idx.Ref(d), Status: d.Str("status"), Counts: ParseCounts(d.Str("counts")), Writes: []WriteLine{}, Rewrites: outside, NewTags: nonNil(d.List("new_tags")), Absorbs: []vault.Ref{}, Warnings: warnings, Reason: d.Str("reason")}
+	pv := &Preview{Ref: idx.Ref(d), Status: d.Str("status"), Counts: ParseCounts(d.Str("counts")), Writes: []WriteLine{}, Rewrites: outside, NewTags: doc.NonNil(d.List("new_tags")), Absorbs: []vault.Ref{}, Warnings: warnings, Reason: d.Str("reason")}
 	if pv.Warnings == nil {
 		pv.Warnings = []string{}
 	}
@@ -207,7 +207,7 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 		}
 		switch o.Kind {
 		case OpCreate:
-			w.Lines = fmt.Sprintf("+%d", lineCount(o.Content))
+			w.Lines = fmt.Sprintf("+%d", doc.LineCount(o.Content))
 		case OpModify, OpPromote:
 			added, removed := diffLines(prior(o), o.Content)
 			w.Lines = fmt.Sprintf("+%d −%d", added, removed)
@@ -225,7 +225,7 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 			w.Note = "refreshed, no edit"
 		case OpRetag:
 			w.Title = o.From + " → " + o.To
-			w.Note = fmt.Sprintf("%d %s", o.Files, plural(o.Files, "file", "files"))
+			w.Note = fmt.Sprintf("%d %s", o.Files, doc.Plural(o.Files, "file", "files"))
 			w.Path = ""
 		}
 		if o.NewTitle != "" && o.Kind != OpRemove {
@@ -234,14 +234,6 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 		pv.Writes = append(pv.Writes, w)
 	}
 	return pv
-}
-
-func lineCount(s string) int {
-	s = strings.TrimRight(s, "\n")
-	if s == "" {
-		return 0
-	}
-	return strings.Count(s, "\n") + 1
 }
 
 // diffLines counts the lines added and removed between two texts, by their longest

@@ -83,9 +83,9 @@ func EventTitle(t *Titles, subject, kind string, at time.Time) string {
 // Describe is an event's description: the kind and the subject, or a block's line.
 func Describe(kind, subject, line string) string {
 	if kind == "blocked" && line != "" {
-		return oneLine("Blocked: "+line, 200)
+		return doc.OneLine("Blocked: "+line, 200)
 	}
-	return oneLine(capital(kind)+": "+subject, 200)
+	return doc.OneLine(doc.Capital(kind)+": "+subject, 200)
 }
 
 // NewEvent renders a new event. It returns the event's path, content, and id, and
@@ -104,7 +104,7 @@ func NewEvent(t *Titles, in EventIn) (rel, content, id string) {
 		{Key: "type", Value: "event"},
 		{Key: "kind", Value: in.Kind},
 		{Key: "description", Value: Describe(in.Kind, in.SubjectTitle, in.Line)},
-		{Key: "tags", Value: nonNil(in.SubjectTags)},
+		{Key: "tags", Value: doc.NonNil(in.SubjectTags)},
 		{Key: "aliases", Value: []string{}},
 		{Key: "created", Value: stamp},
 		{Key: "updated", Value: stamp},
@@ -148,7 +148,7 @@ func NewEvent(t *Titles, in EventIn) (rel, content, id string) {
 func EventLead(e *doc.Doc, subject, chord string) string {
 	kind := e.Str("kind")
 	at, _ := schema.ParseTime(e.Str("at"))
-	title := capital(kind) + " · " + doc.Link(subject) + " · " + at.Format("2006-01-02 15:04:05")
+	title := doc.Capital(kind) + " · " + doc.Link(subject) + " · " + at.Format("2006-01-02 15:04:05")
 	var line []string
 	switch kind {
 	case "promoted":
@@ -175,26 +175,4 @@ func EventLead(e *doc.Doc, subject, chord string) string {
 	}
 	line = append(line, who)
 	return doc.Callout("event-"+kind, title, line...)
-}
-
-func capital(s string) string {
-	if s == "" {
-		return s
-	}
-	return strings.ToUpper(s[:1]) + s[1:]
-}
-
-func oneLine(s string, n int) string {
-	s = strings.Join(strings.Fields(s), " ")
-	if len([]rune(s)) > n {
-		s = string([]rune(s)[:n-1]) + "…"
-	}
-	return s
-}
-
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
 }

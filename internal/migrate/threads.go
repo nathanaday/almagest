@@ -1,11 +1,13 @@
 package migrate
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -135,13 +137,13 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		fields := []doc.Field{
 			{Key: "id", Value: s.ID()},
 			{Key: "type", Value: "stub"},
-			{Key: "description", Value: orDefault(firstSentence(idea), title)},
+			{Key: "description", Value: cmp.Or(doc.FirstSentence(idea), title)},
 			{Key: "tags", Value: union(allTags)},
-			{Key: "aliases", Value: nonNil(s.List("aliases"))},
+			{Key: "aliases", Value: doc.NonNil(s.List("aliases"))},
 			{Key: "created", Value: created},
 			{Key: "updated", Value: updated},
 			{Key: "refreshed", Value: updated},
-			{Key: "priority", Value: orDefault(s.Str("priority"), "normal")},
+			{Key: "priority", Value: cmp.Or(s.Str("priority"), "normal")},
 			{Key: "status", Value: "open"},
 			{Key: "became", Value: []string{}},
 		}
@@ -154,7 +156,7 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 	if t.spec != nil {
 		specBody = strings.TrimSpace(doc.StripLead(t.spec.Body))
 		goal, _ := doc.Section(t.spec.Body, "Goal")
-		desc = firstSentence(goal)
+		desc = doc.FirstSentence(goal)
 		p.rename[vault.Title(t.spec)] = title
 		p.removes = append(p.removes, t.spec.Path)
 		p.report.Retitles = append(p.report.Retitles, Retitle{Old: vault.Title(t.spec), New: title})
@@ -171,14 +173,14 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		{Key: "id", Value: s.ID()},
 		{Key: "type", Value: "spec"},
 		{Key: "kind", Value: "plan"},
-		{Key: "description", Value: orDefault(desc, orDefault(firstSentence(idea), title))},
+		{Key: "description", Value: cmp.Or(desc, cmp.Or(doc.FirstSentence(idea), title))},
 		{Key: "tags", Value: rootTags},
-		{Key: "aliases", Value: nonNil(s.List("aliases"))},
+		{Key: "aliases", Value: doc.NonNil(s.List("aliases"))},
 		{Key: "created", Value: created},
 		{Key: "updated", Value: updated},
 		{Key: "refreshed", Value: updated},
 		{Key: "repositories", Value: union(repos)},
-		{Key: "priority", Value: orDefault(s.Str("priority"), "normal")},
+		{Key: "priority", Value: cmp.Or(s.Str("priority"), "normal")},
 		{Key: "status", Value: "open"},
 	}
 	rootWrite := &write{from: s.Path, to: vault.DocPath(title), content: doc.Render(append(root, p.keepUser(s, "spec")...), strings.TrimLeft(body, "\n"))}
@@ -240,15 +242,15 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 			{Key: "id", Value: task.ID()},
 			{Key: "type", Value: "spec"},
 			{Key: "kind", Value: "plan"},
-			{Key: "description", Value: orDefault(firstSentence(what), nt)},
+			{Key: "description", Value: cmp.Or(doc.FirstSentence(what), nt)},
 			{Key: "tags", Value: rootTags},
 			{Key: "aliases", Value: []string{}},
 			{Key: "created", Value: tCreated},
 			{Key: "updated", Value: tUpdated},
 			{Key: "refreshed", Value: tUpdated},
 			{Key: "parent", Value: doc.Link(title)},
-			{Key: "repositories", Value: nonNil(taskRepos)},
-			{Key: "depends", Value: nonNil(deps)},
+			{Key: "repositories", Value: doc.NonNil(taskRepos)},
+			{Key: "depends", Value: doc.NonNil(deps)},
 			{Key: "order", Value: task.Front.Int("order")},
 			{Key: "priority", Value: "normal"},
 			{Key: "status", Value: "open"},
@@ -268,7 +270,7 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		case "done":
 			in := base
 			in.Kind, in.At = "completed", at
-			in.Prose = map[string]string{"Delivered": orDefault(result, "Done before 7.0."), "Verified": "Recorded before 7.0 in the task's result."}
+			in.Prose = map[string]string{"Delivered": cmp.Or(result, "Done before 7.0."), "Verified": "Recorded before 7.0 in the task's result."}
 			taskEvents = append(taskEvents, pending{in: in, absorbed: wasAbsorbed(absorbed, task)})
 			note(at)
 		case "dropped":
@@ -298,7 +300,7 @@ func (p *plan) thread(o *old, t *oldThread, scopeTag map[string]string, absorbed
 		if r.Str("outcome") == "killed" {
 			why, _ := doc.Section(r.Body, "Why killed")
 			in.Kind = "dropped"
-			in.Prose = map[string]string{"Why": orDefault(why, "Killed before 7.0.")}
+			in.Prose = map[string]string{"Why": cmp.Or(why, "Killed before 7.0.")}
 		} else {
 			in.Kind = "completed"
 			in.Prose = map[string]string{}
@@ -341,35 +343,16 @@ func mustTime(s string) time.Time {
 	return t
 }
 
-// firstSentence is a one-line description from text.
-func firstSentence(text string) string {
-	for _, l := range strings.Split(text, "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, ">") || strings.HasPrefix(l, "|") || strings.HasPrefix(l, "```") {
-			continue
-		}
-		l = strings.TrimLeft(l, "-*0123456789. ")
-		if i := strings.Index(l, ". "); i > 0 {
-			l = l[:i+1]
-		}
-		if len([]rune(l)) > 200 {
-			l = string([]rune(l)[:199]) + "…"
-		}
-		return l
-	}
-	return ""
-}
-
 // records renames the thread fields of the sessions and the changes.
 func (p *plan) records(o *old) {
 	for _, s := range o.of("session") {
 		c := s.Content
 		if s.Front.Has("threads") {
-			c = doc.SetField(c, "work", nonNil(s.List("threads")))
+			c = doc.SetField(c, "work", doc.NonNil(s.List("threads")))
 			c = doc.RemoveField(c, "threads")
 		}
 		if s.Front.Has("tasks") {
-			c = doc.SetField(c, "specs", nonNil(s.List("tasks")))
+			c = doc.SetField(c, "specs", doc.NonNil(s.List("tasks")))
 			c = doc.RemoveField(c, "tasks")
 		}
 		if c != s.Content {
@@ -451,25 +434,16 @@ func (p *plan) atlas() {
 			case "task", "concept", "entity", "policy", "area":
 				continue
 			}
-			if !contains(wikify, t) {
+			if !slices.Contains(wikify, t) {
 				wikify = append(wikify, t)
 			}
 		}
-		c = doc.SetField(c, "wikify", nonNil(wikify))
+		c = doc.SetField(c, "wikify", doc.NonNil(wikify))
 	}
 	c = doc.RemoveField(c, "areas")
 	c = doc.SetField(c, "tagging", tagging)
 	c = doc.SetField(c, "layout", vault.Layout)
 	p.writes = append(p.writes, &write{from: vault.Marker, to: vault.Marker, content: c})
-}
-
-func contains(list []string, s string) bool {
-	for _, x := range list {
-		if x == s {
-			return true
-		}
-	}
-	return false
 }
 
 // linkRewrites rewrites the links to every title the migration changes, in every file it

@@ -168,7 +168,7 @@ func TaskLine(t Task) string {
 // TaskText is a task's text for a new line: one line, its requirements in brackets at
 // the end, and no separator of its own.
 func TaskText(text string, reqs []string) string {
-	text = strings.ReplaceAll(oneLine(text, 300), trailSep, ", ")
+	text = strings.ReplaceAll(doc.OneLine(text, 300), trailSep, ", ")
 	text = strings.TrimSpace(reqRefs.ReplaceAllString(text, ""))
 	if len(reqs) > 0 {
 		text += " (" + strings.Join(reqs, ", ") + ")"

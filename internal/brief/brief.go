@@ -222,7 +222,7 @@ func Policies(idx *vault.Index, held []string) []Policy {
 		for _, t := range pt {
 			depth = max(depth, tags.Depth(t))
 		}
-		list = append(list, ranked{Policy{Ref: idx.Ref(p), Strength: p.Str("strength"), Via: nonNil(pt)}, len(pt), depth})
+		list = append(list, ranked{Policy{Ref: idx.Ref(p), Strength: p.Str("strength"), Via: doc.NonNil(pt)}, len(pt), depth})
 	}
 	sort.SliceStable(list, func(i, j int) bool {
 		if list[i].n != list[j].n {
@@ -382,11 +382,4 @@ func bounded(text string, n int) string {
 		return text
 	}
 	return strings.Join(lines[:n], "\n") + "\n[…]"
-}
-
-func nonNil(list []string) []string {
-	if list == nil {
-		return []string{}
-	}
-	return list
 }

@@ -7,6 +7,7 @@
 package thread
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"sort"
@@ -670,7 +671,7 @@ func (b *Board) Next(d *doc.Doc) Step {
 	case Started:
 		for _, task := range t.Tasks() {
 			if task.State == TaskOpen {
-				return Step{Step: "run", Skill: "thread-run", Reason: "the next open task is " + orDefault(task.ID, task.Text) + " in " + doc.Link(task.List.Title())}
+				return Step{Step: "run", Skill: "thread-run", Reason: "the next open task is " + cmp.Or(task.ID, task.Text) + " in " + doc.Link(task.List.Title())}
 			}
 		}
 	}
@@ -704,7 +705,7 @@ func (b *Board) ChordNext(chord *doc.Doc) Step {
 		}
 	}
 	if ready := b.ChordReady(chord); len(ready) > 0 {
-		return Step{Step: "work", Skill: "chord-work", Reason: fmt.Sprintf("%d %s can go on now", len(ready), plural(len(ready), "thread", "threads"))}
+		return Step{Step: "work", Skill: "chord-work", Reason: fmt.Sprintf("%d %s can go on now", len(ready), doc.Plural(len(ready), "thread", "threads"))}
 	}
 	return Step{Step: "wait", Reason: "every open thread is blocked, or comes after one that is"}
 }
@@ -730,7 +731,7 @@ func (b *Board) Missing(d *doc.Doc) []string {
 	}
 	for _, l := range t.Lists {
 		if done, total := ListCounts(l); done < total {
-			out = append(out, fmt.Sprintf("%d open %s in %s", total-done, plural(total-done, "task", "tasks"), doc.Link(l.Title())))
+			out = append(out, fmt.Sprintf("%d open %s in %s", total-done, doc.Plural(total-done, "task", "tasks"), doc.Link(l.Title())))
 		}
 	}
 	last := t.Last()
@@ -745,7 +746,7 @@ func (b *Board) Missing(d *doc.Doc) []string {
 		out = append(out, round+" failed "+strings.Join(b.failed(t, last), ", "))
 	case OpenFindings:
 		n := openFindings(last)
-		out = append(out, fmt.Sprintf("%d open %s in %s", n, plural(n, "finding", "findings"), doc.Link(last.Title())))
+		out = append(out, fmt.Sprintf("%d open %s in %s", n, doc.Plural(n, "finding", "findings"), doc.Link(last.Title())))
 	}
 	return append(out, "the wiki change")
 }
@@ -802,7 +803,7 @@ func (b *Board) Ref(d *doc.Doc) vault.Ref {
 	case "stub":
 		t := b.threads[d.ID()]
 		r.Status = b.Status(d)
-		r.State["priority"] = orDefault(d.Str("priority"), "normal")
+		r.State["priority"] = cmp.Or(d.Str("priority"), "normal")
 		r.State["tasks"] = t.CountsText()
 		r.State["verification"] = b.VerificationText(t)
 		r.State["blocked"] = b.Blocked(d)
@@ -830,7 +831,7 @@ func (b *Board) Ref(d *doc.Doc) vault.Ref {
 	case "chord":
 		r.Status = b.Status(d)
 		closed, total := b.ChordCounts(d)
-		r.State["priority"] = orDefault(d.Str("priority"), "normal")
+		r.State["priority"] = cmp.Or(d.Str("priority"), "normal")
 		r.State["threads"] = fmt.Sprintf("%d/%d", closed, total)
 		r.State["ready"] = titleList(b.ChordReady(d))
 		r.State["next"] = b.ChordNext(d).Step

@@ -3,6 +3,7 @@
 package lint
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path"
@@ -490,7 +491,7 @@ func (r *run) knowledge(d *doc.Doc, incoming map[string]int) {
 		r.add("uncited", Warning, d, "wiki-edit: cite the documents it rests on", "its sources are empty")
 	}
 	if d.Type() == "topic" {
-		refreshed, ok := schema.ParseTime(orDefault(d.Str("refreshed"), d.Str("updated")))
+		refreshed, ok := schema.ParseTime(cmp.Or(d.Str("refreshed"), d.Str("updated")))
 		if !ok {
 			return
 		}
@@ -499,7 +500,7 @@ func (r *run) knowledge(d *doc.Doc, incoming map[string]int) {
 			if c == nil {
 				continue
 			}
-			if t, ok := schema.ParseTime(orDefault(c.Str("refreshed"), c.Str("updated"))); ok && t.After(refreshed) {
+			if t, ok := schema.ParseTime(cmp.Or(c.Str("refreshed"), c.Str("updated"))); ok && t.After(refreshed) {
 				r.add("stale", Warning, d, "wiki-review, then wiki-edit (a modify, or a confirm)", "it cites %s, which changed after it was refreshed", vault.Title(c))
 				break
 			}
@@ -593,11 +594,4 @@ func (r *run) info(d *doc.Doc) {
 			r.add("pending", Info, d, "wiki-sync", "the wiki has not absorbed it since %s", d.Str("created"))
 		}
 	}
-}
-
-func orDefault(s, def string) string {
-	if s == "" {
-		return def
-	}
-	return s
 }

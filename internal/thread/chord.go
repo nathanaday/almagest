@@ -1,6 +1,7 @@
 package thread
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"slices"
@@ -81,9 +82,9 @@ func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (_ *Result, err error) {
 	desc := strings.TrimSpace(in.Description)
 	if desc == "" {
 		text, _ := doc.Section(body, "Goal")
-		desc = firstSentence(text)
+		desc = doc.FirstSentence(text)
 	}
-	extra := []doc.Field{{Key: "priority", Value: orDefault(in.Priority, "normal")}, {Key: "status", Value: ChordOpen}, {Key: "threads", Value: "0/0"}, {Key: "canvas", Value: ""}}
+	extra := []doc.Field{{Key: "priority", Value: cmp.Or(in.Priority, "normal")}, {Key: "status", Value: ChordOpen}, {Key: "threads", Value: "0/0"}, {Key: "canvas", Value: ""}}
 	id, _, err := w.newDoc("chord", title, desc, tg, extra, body)
 	if err != nil {
 		return nil, err
@@ -169,7 +170,7 @@ func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (_ *Result, err error) {
 		}
 		desc := strings.TrimSpace(m.in.Description)
 		if desc == "" {
-			desc = firstSentence(m.in.Text)
+			desc = doc.FirstSentence(m.in.Text)
 		}
 		if _, _, err := w.newDoc("stub", m.title, desc, tg, stubFields(m.in.Priority, doc.Link(title), links), "## Idea\n\n"+strings.TrimSpace(m.in.Text)+"\n"); err != nil {
 			return nil, err
@@ -177,7 +178,7 @@ func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (_ *Result, err error) {
 	}
 	subject := "chord " + title
 	if n := len(members); n > 0 {
-		subject += fmt.Sprintf(" with %d %s", n, plural(n, "thread", "threads"))
+		subject += fmt.Sprintf(" with %d %s", n, doc.Plural(n, "thread", "threads"))
 	}
 	return w.finish(subject, id)
 }

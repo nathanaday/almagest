@@ -1,6 +1,7 @@
 package migrate
 
 import (
+	"cmp"
 	"fmt"
 	"regexp"
 	"slices"
@@ -262,7 +263,7 @@ func (s *step2) common(id, typ, description string, d *doc.Doc, updated string) 
 		{Key: "id", Value: id},
 		{Key: "type", Value: typ},
 		{Key: "description", Value: description},
-		{Key: "tags", Value: nonNil(d.List("tags"))},
+		{Key: "tags", Value: doc.NonNil(d.List("tags"))},
 		{Key: "aliases", Value: []string{}},
 		{Key: "created", Value: updated},
 		{Key: "updated", Value: updated},
@@ -290,7 +291,7 @@ func (s *step2) thread(d *doc.Doc) {
 	}
 	status, result := s.status7(d)
 	order, text := sections(doc.StripLead(d.Body))
-	idea := orDefault(text["Origin"], orDefault(d.Str("description"), title))
+	idea := cmp.Or(text["Origin"], cmp.Or(d.Str("description"), title))
 	chord := ""
 	if root := s.root(d); root.ID() != d.ID() && len(s.parts[root.ID()]) > 0 {
 		chord = doc.Link(root.Title())
@@ -309,15 +310,15 @@ func (s *step2) thread(d *doc.Doc) {
 	fields := []doc.Field{
 		{Key: "id", Value: id},
 		{Key: "type", Value: "stub"},
-		{Key: "description", Value: orDefault(d.Str("description"), title)},
-		{Key: "tags", Value: nonNil(d.List("tags"))},
-		{Key: "aliases", Value: nonNil(d.List("aliases"))},
+		{Key: "description", Value: cmp.Or(d.Str("description"), title)},
+		{Key: "tags", Value: doc.NonNil(d.List("tags"))},
+		{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 		{Key: "created", Value: stamp(d.Str("created"), s.now)},
 		{Key: "updated", Value: updated},
 		{Key: "refreshed", Value: updated},
-		{Key: "priority", Value: orDefault(d.Str("priority"), "normal")},
+		{Key: "priority", Value: cmp.Or(d.Str("priority"), "normal")},
 		{Key: "chord", Value: chord},
-		{Key: "after", Value: nonNil(after)},
+		{Key: "after", Value: doc.NonNil(after)},
 		{Key: "status", Value: thread.StatusStub},
 		{Key: "spec", Value: ""},
 		{Key: "tasks", Value: ""},
@@ -348,7 +349,7 @@ func (s *step2) thread(d *doc.Doc) {
 				t = reqText
 			}
 			if pair[0] == "Goal" && t == "" {
-				t = orDefault(d.Str("description"), title)
+				t = cmp.Or(d.Str("description"), title)
 			}
 			if t != "" {
 				b.WriteString("## " + pair[1] + "\n\n" + t + "\n\n")
@@ -357,7 +358,7 @@ func (s *step2) thread(d *doc.Doc) {
 		}
 		specTitle := s.free(thread.SpecTitle(title), "")
 		goal := text["Goal"]
-		f := append(s.common(s.newID(), "spec", orDefault(firstSentence(goal), orDefault(d.Str("description"), title)), d, updated),
+		f := append(s.common(s.newID(), "spec", cmp.Or(doc.FirstSentence(goal), cmp.Or(d.Str("description"), title)), d, updated),
 			doc.Field{Key: "thread", Value: doc.Link(title)}, doc.Field{Key: "status", Value: thread.NotImplemented})
 		content := doc.Render(f, strings.TrimSpace(b.String())+"\n")
 		rel := vault.DocPath(specTitle)
@@ -455,12 +456,12 @@ func (s *step2) done(d, spec, result *doc.Doc, text map[string]string, repos []s
 	s.report.TaskLists++
 
 	_, was := sections(doc.StripLead(result.Body))
-	evidence := "Verified in 7.x: " + cellText(orDefault(was["Verified"], "see the scope above"), 300)
+	evidence := "Verified in 7.x: " + cellText(cmp.Or(was["Verified"], "see the scope above"), 300)
 	rows := []string{"| Requirement | Result | Evidence |", "|---|---|---|"}
 	for _, r := range reqs {
 		rows = append(rows, fmt.Sprintf("| %s: %s | pass | %s |", r.ID, cellText(r.Text, 400), evidence))
 	}
-	vb := "## Scope\n\n" + orDefault(strings.TrimSpace(was["Delivered"]), "Completed before 8.0.") + "\n\n## Requirements\n\n" + strings.Join(rows, "\n") + "\n\n## Findings\n\nNone.\n"
+	vb := "## Scope\n\n" + cmp.Or(strings.TrimSpace(was["Delivered"]), "Completed before 8.0.") + "\n\n## Requirements\n\n" + strings.Join(rows, "\n") + "\n\n## Findings\n\nNone.\n"
 	var notes []string
 	if t := strings.TrimSpace(was["Verified"]); t != "" {
 		notes = append(notes, demote("Verified (7.x)", t))
@@ -479,7 +480,7 @@ func (s *step2) done(d, spec, result *doc.Doc, text map[string]string, repos []s
 		doc.Field{Key: "thread", Value: doc.Link(title)},
 		doc.Field{Key: "round", Value: 1},
 		doc.Field{Key: "at", Value: at},
-		doc.Field{Key: "by", Value: orDefault(result.Str("by"), thread.ByAgent)},
+		doc.Field{Key: "by", Value: cmp.Or(result.Str("by"), thread.ByAgent)},
 		doc.Field{Key: "session", Value: result.Str("session")},
 		doc.Field{Key: "spec_hash", Value: thread.SpecHash(spec)},
 		doc.Field{Key: "tasks_hash", Value: thread.TasksHash([]*doc.Doc{doc.Parse(tasksRel, []byte(tasksContent))})},
@@ -515,7 +516,7 @@ func (s *step2) chord(d *doc.Doc) {
 	if done := strings.TrimSpace(text["Done when"]); done != "" {
 		goal = strings.TrimSpace(goal + "\n\nDone when:\n\n" + done)
 	}
-	body := "## Goal\n\n" + orDefault(goal, d.Str("description")) + "\n"
+	body := "## Goal\n\n" + cmp.Or(goal, d.Str("description")) + "\n"
 	if notes := strings.TrimSpace(text["Notes"]); notes != "" {
 		body += "\n## Notes\n\n" + notes + "\n"
 	}
@@ -523,13 +524,13 @@ func (s *step2) chord(d *doc.Doc) {
 	fields := []doc.Field{
 		{Key: "id", Value: d.ID()},
 		{Key: "type", Value: "chord"},
-		{Key: "description", Value: orDefault(d.Str("description"), title)},
-		{Key: "tags", Value: nonNil(d.List("tags"))},
-		{Key: "aliases", Value: nonNil(d.List("aliases"))},
+		{Key: "description", Value: cmp.Or(d.Str("description"), title)},
+		{Key: "tags", Value: doc.NonNil(d.List("tags"))},
+		{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 		{Key: "created", Value: stamp(d.Str("created"), s.now)},
 		{Key: "updated", Value: updated},
 		{Key: "refreshed", Value: updated},
-		{Key: "priority", Value: orDefault(d.Str("priority"), "normal")},
+		{Key: "priority", Value: cmp.Or(d.Str("priority"), "normal")},
 		{Key: "status", Value: thread.ChordOpen},
 	}
 	s.writes = append(s.writes, &write{from: d.Path, to: d.Path, content: doc.Render(append(fields, s.userFields(d, "chord")...), body)})
@@ -583,7 +584,7 @@ func (s *step2) design(d *doc.Doc) {
 			}
 		}
 	}
-	body := "## Definition\n\n" + orDefault(strings.TrimSpace(text["Purpose"]), d.Str("description")) + "\n"
+	body := "## Definition\n\n" + cmp.Or(strings.TrimSpace(text["Purpose"]), d.Str("description")) + "\n"
 	if len(explain) > 0 {
 		body += "\n## Explanation\n\n" + strings.Join(explain, "\n\n") + "\n"
 	}
@@ -602,9 +603,9 @@ func (s *step2) design(d *doc.Doc) {
 		{Key: "id", Value: d.ID()},
 		{Key: "type", Value: "topic"},
 		{Key: "kind", Value: "concept"},
-		{Key: "description", Value: orDefault(d.Str("description"), d.Title())},
-		{Key: "tags", Value: nonNil(d.List("tags"))},
-		{Key: "aliases", Value: nonNil(d.List("aliases"))},
+		{Key: "description", Value: cmp.Or(d.Str("description"), d.Title())},
+		{Key: "tags", Value: doc.NonNil(d.List("tags"))},
+		{Key: "aliases", Value: doc.NonNil(d.List("aliases"))},
 		{Key: "created", Value: stamp(d.Str("created"), s.now)},
 		{Key: "updated", Value: updated},
 		{Key: "refreshed", Value: updated},
@@ -666,7 +667,7 @@ func (s *step2) atlas8() {
 				}
 			}
 		}
-		c = doc.SetField(c, "wikify", nonNil(wikify))
+		c = doc.SetField(c, "wikify", doc.NonNil(wikify))
 	}
 	c = doc.SetField(c, "layout", vault.Layout)
 	s.writes = append(s.writes, &write{from: vault.Marker, to: vault.Marker, content: c})
