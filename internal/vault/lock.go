@@ -83,6 +83,9 @@ type Tx struct {
 	rolledBack bool
 	// added is set once the commit staged the paths, so rollback knows to unstage them.
 	added bool
+	// all makes the commit stage the whole tree, for a write that changes too many paths
+	// to mark (the migration).
+	all bool
 	// saved are the paths rollback left as saved, because they changed after the write.
 	saved []string
 	// staged are contents the commit records in place of what the disk holds.
@@ -189,7 +192,12 @@ func (tx *Tx) rollback() []string {
 		}
 	}
 	tx.V.Prune(paths...)
-	if tx.added {
+	if tx.added && tx.all {
+		// The write began from a clean index, so the whole index goes back to HEAD.
+		if err := tx.V.Git().Unstage("."); err != nil {
+			failed = append(failed, fmt.Sprintf("the index (%v)", firstLine(err)))
+		}
+	} else if tx.added {
 		if err := tx.V.Git().Unstage(paths...); err != nil {
 			failed = append(failed, fmt.Sprintf("the index entries of %s (%v)", strings.Join(paths, ", "), firstLine(err)))
 		}
@@ -389,6 +397,13 @@ func (tx *Tx) Paths() []string {
 	return out
 }
 
+// CommitAll is Commit for a write that stages the whole tree: every path it changed must
+// have been kept with Keep, so a failed commit can put them back.
+func (tx *Tx) CommitAll(message string) (string, error) {
+	tx.all = true
+	return tx.Commit(message)
+}
+
 // Commit stages the marked paths and commits them with the subject and trailers
 // ("Key: value"). It returns "" when nothing changed.
 func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
@@ -410,7 +425,11 @@ func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
 
 func (tx *Tx) commit(subject string, trailers []string) (string, error) {
 	g := tx.V.Git()
-	if err := g.Add(tx.Paths()...); err != nil {
+	stage := func() error { return g.Add(tx.Paths()...) }
+	if tx.all {
+		stage = g.AddAll
+	}
+	if err := stage(); err != nil {
 		return "", err
 	}
 	tx.added = true

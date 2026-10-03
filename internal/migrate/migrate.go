@@ -158,7 +158,7 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 		if err != nil {
 			return nil, err
 		}
-		if err := p.execute(); err != nil {
+		if err := p.execute(tx); err != nil {
 			return nil, err
 		}
 		report = p.report
@@ -171,10 +171,21 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 	if err != nil {
 		return nil, err
 	}
-	if err := p.execute(); err != nil {
+	if err := p.execute(tx); err != nil {
 		return nil, err
 	}
 	if fresh, err = vault.Open(v.Root); err != nil {
+		return nil, err
+	}
+	// The files the next steps write are kept too, so a failed commit puts them back.
+	machine := []string{vault.AppJSON}
+	for _, f := range vault.PluginFiles {
+		machine = append(machine, path.Join(vault.PluginDir, f))
+	}
+	for _, rel := range vault.Bases {
+		machine = append(machine, rel)
+	}
+	if err := tx.Keep(machine...); err != nil {
 		return nil, err
 	}
 	if err := fresh.EnsureFolders(); err != nil {
@@ -193,14 +204,10 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 			p.report.Plugin = vault.PluginVersion()
 		}
 	}
-	if err := syncDerived(fresh, now); err != nil {
+	if err := syncDerived(fresh, tx, now); err != nil {
 		return nil, err
 	}
-	g := fresh.Git()
-	if err := g.AddAll(); err != nil {
-		return nil, err
-	}
-	sha, err := g.Commit("layout: migrate to 8.0\n\n" + Trailer + " from " + report.From)
+	sha, err := tx.CommitAll("layout: migrate to 8.0\n\n" + Trailer + " from " + report.From)
 	if err != nil {
 		return nil, err
 	}
@@ -219,24 +226,24 @@ func Run(v *vault.Vault, now time.Time) (*Report, error) {
 
 // syncDerived writes the statuses, the callouts, and the git facts the new layout
 // derives, so the migration's commit holds them.
-func syncDerived(v *vault.Vault, now time.Time) error {
+func syncDerived(v *vault.Vault, tx *vault.Tx, now time.Time) error {
 	idx, err := vault.Load(v)
 	if err != nil {
 		return err
 	}
-	if _, err := thread.Load(idx).SyncWith(vault.NewGuard(idx, v)); err != nil {
+	if _, err := thread.Load(idx).SyncWith(vault.NewGuard(idx, tx)); err != nil {
 		return err
 	}
 	if idx, err = vault.Load(v); err != nil {
 		return err
 	}
-	if _, err := derive.GitFacts(idx, vault.NewGuard(idx, v).Write, now); err != nil {
+	if _, err := derive.GitFacts(idx, vault.NewGuard(idx, tx).Write, now); err != nil {
 		return err
 	}
 	if idx, err = vault.Load(v); err != nil {
 		return err
 	}
-	_, err = derive.Sync(idx, vault.NewGuard(idx, v).Write)
+	_, err = derive.Sync(idx, vault.NewGuard(idx, tx).Write)
 	return err
 }
 

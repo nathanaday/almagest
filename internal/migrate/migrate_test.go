@@ -2,6 +2,8 @@ package migrate_test
 
 import (
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -398,5 +400,35 @@ func TestMigrateACopy(t *testing.T) {
 	b := thread.Load(idx)
 	for _, s := range b.Stubs {
 		t.Logf("thread %-12s %s · missing: %s", b.Status(s), s.Title(), strings.Join(b.Missing(s), "; "))
+	}
+}
+
+// A migration whose commit fails puts the vault back as it was, and passes once the lock
+// is gone.
+func TestAMigrationWhoseCommitFailsPutsTheVaultBack(t *testing.T) {
+	tv := flat(t)
+	atlas := tv.Read("Atlas.md")
+	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := migrate.Run(tv.V, testvault.Now.Add(time.Hour))
+	os.Remove(lock)
+	if err == nil || !strings.Contains(err.Error(), "the vault is back as it was") {
+		t.Fatalf("a migration with the index locked: %v", err)
+	}
+	if tv.Read("Atlas.md") != atlas {
+		t.Fatal("Atlas.md changed")
+	}
+	out, err := exec.Command("git", "-C", tv.V.Root, "status", "--porcelain").CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("the tree is not clean:\n%s %v", out, err)
+	}
+	v, err := vault.Open(tv.V.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := migrate.Run(v, testvault.Now.Add(2*time.Hour)); err != nil {
+		t.Fatalf("the migration after the lock is gone: %v", err)
 	}
 }

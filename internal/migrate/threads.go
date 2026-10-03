@@ -549,7 +549,7 @@ func (p *plan) absorbChange(o *old) {
 }
 
 // execute writes the plan to disk. The caller holds the lock and commits.
-func (p *plan) execute() error {
+func (p *plan) execute(tx *vault.Tx) error {
 	v := p.v
 	// Every path is checked before anything moves, so a refusal leaves the vault as it was.
 	var paths []string
@@ -567,6 +567,10 @@ func (p *plan) execute() error {
 		if err := v.Contain(rel); err != nil {
 			return fmt.Errorf("migrate: %w", err)
 		}
+	}
+	// Kept first, so a migration that fails before its commit puts every path back.
+	if err := tx.Keep(paths...); err != nil {
+		return fmt.Errorf("migrate: %w", err)
 	}
 	for _, w := range p.writes {
 		if err := v.Write(w.to, []byte(w.content)); err != nil {
