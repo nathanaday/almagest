@@ -214,3 +214,18 @@ func TestADanglingLinkIsJudgedByItsTarget(t *testing.T) {
 	}
 	f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": loop}})
 }
+
+// A folder that does not exist yet keeps the typed case, so fixed names compare without
+// case.
+func TestFixedNamesCompareWithoutCase(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	if err := os.RemoveAll(filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas")); err != nil {
+		t.Fatal(err)
+	}
+	for _, rel := range []string{".obsidian/plugins/ATLAS/data.json", "Other.BASE", ".ATLAS/config.json"} {
+		if !denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": filepath.Join(f.tv.V.Root, rel)}})) {
+			t.Errorf("%s: allowed", rel)
+		}
+	}
+}

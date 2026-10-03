@@ -82,7 +82,7 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		// Every rule judges the file as the disk names it, whatever case, Unicode form,
 		// or link the agent wrote.
 		f.Path = canonical(f.Path)
-		if f.Path == canonical(vault.HomeFrom(env.getenv).ConfigPath()) {
+		if strings.EqualFold(f.Path, canonical(vault.HomeFrom(env.getenv).ConfigPath())) {
 			return deny(w, f.Path+" holds the commands Atlas runs (terminal_command, agent_commands); the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config")
 		}
 		// A file belongs to the vault above it, wherever the session runs; a file in no
@@ -222,31 +222,35 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	if rel == "" {
 		return repositoryRefusal(v, in, f.Path)
 	}
-	name := path.Base(rel)
+	// A part that does not exist yet keeps the case the agent typed, which a disk that
+	// ignores case folds into the real folder, so fixed names compare without case.
+	key := strings.ToLower(rel)
+	is := func(name string) bool { return key == strings.ToLower(name) }
+	under := func(dir string) bool { return strings.HasPrefix(key, strings.ToLower(dir)+"/") }
 	switch {
-	case rel == vault.VaultConfigFile:
+	case is(vault.VaultConfigFile):
 		return rel + " holds the commands Atlas runs for this vault (terminal_command, agent_commands), which win over the machine's; the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config"
-	case rel == vault.PluginDir || strings.HasPrefix(rel, vault.PluginDir+"/"):
+	case is(vault.PluginDir) || under(vault.PluginDir):
 		return rel + " is the Atlas plugin, whose code and binaryPath decide what runs; vault init and vault sync install it, and the user sets binaryPath in the Atlas settings in Obsidian"
-	case path.Dir(rel) == vault.Documents:
+	case strings.EqualFold(path.Dir(rel), vault.Documents):
 		return documentRefusal(v, in, f, rel)
-	case strings.HasPrefix(rel, vault.Assets+"/"):
+	case under(vault.Assets):
 		return rel + " is a captured original or an attachment; source capture writes the originals, and you add attachments in Obsidian"
-	case strings.HasPrefix(rel, vault.Wiki+"/"):
+	case under(vault.Wiki):
 		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from the thread tool, the chord tool, change propose, or source capture"
-	case strings.HasPrefix(rel, vault.Changes+"/"):
+	case under(vault.Changes):
 		return rel + " is a change document; the change tool writes it. Edit a proposed document inside it only when the user asks"
-	case strings.HasPrefix(rel, vault.Chords+"/"):
+	case under(vault.Chords):
 		return rel + " is a chord's canvas, which code writes from the stubs; change the order with chord order, and the user redraws it in Obsidian"
-	case strings.HasPrefix(rel, vault.Views+"/"):
+	case under(vault.Views):
 		return rel + " is a view, which code writes from the documents; change the documents instead"
-	case rel == vault.Marker:
+	case is(vault.Marker):
 		return "Atlas.md is the user's; ask the user to edit it"
-	case strings.HasSuffix(name, ".base"):
+	case strings.HasSuffix(key, ".base"):
 		return rel + " is a Base that vault init ships; ask the user to change it in Obsidian"
-	case rel == vault.Settings:
+	case is(vault.Settings):
 		return rel + " lists the linked repositories; vault sync keeps it"
-	case strings.HasPrefix(rel, vault.Sessions+"/"):
+	case under(vault.Sessions):
 		return sessionRefusal(v, in, f, rel)
 	}
 	return ""
