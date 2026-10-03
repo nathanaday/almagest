@@ -95,6 +95,23 @@ func TestAnInsertOnlyPatchHunkIsPlacedByItsContext(t *testing.T) {
 	if denied(f.run("guard", patch("The first idea line.", "A second idea line."))) {
 		t.Error("an insert into ## Idea was refused")
 	}
+	raw := func(body string) map[string]any {
+		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n" + body + "\n*** End Patch"}}
+	}
+	// As Codex 0.155.1 places them: a hunk with no old line at the end of the file, a
+	// blank context line at any blank line, and lines that differ by trailing spaces.
+	for name, body := range map[string]string{
+		"an insert with no context":            "@@\n+- Spec: [[Forged]]",
+		"an insert after a header":             "@@ ## Thread\n+- Spec: [[Forged]]",
+		"an insert after a blank line":         "@@\n \n+status: forged",
+		"a removed line with a trailing space": "@@\n-- Spec: none \n+- Spec: [[Forged]]",
+		"a context line with a trailing space": "@@\n - Spec: none  \n+- Tasks: [[Forged]]",
+		"a hunk whose context matches nowhere": "@@\n no such line\n+- Spec: [[Forged]]",
+	} {
+		if !denied(f.run("guard", raw(body))) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
 }
 
 // The files whose values decide what Atlas runs are the user's.

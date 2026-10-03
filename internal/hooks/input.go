@@ -10,6 +10,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
@@ -166,70 +167,59 @@ type patchFile struct {
 	Hunks   []hunk
 }
 
-// hunk is one @@ block of a patch: its header's text and its lines, each with its mark
-// (' ' context, '-' removed, '+' added).
+// hunk is one @@ block of a patch: its lines, each with its mark (' ' context, '-'
+// removed, '+' added).
 type hunk struct {
-	Header string
-	Lines  []string
+	Lines []string
 }
 
-// touches reports whether the hunk changes content[start:end]. It is placed where its
-// context and removed lines stand in the file; a removed line inside the range touches
-// it, and so does an added line that lands after the range's first byte and up to its
-// end. A hunk that cannot be placed is judged by its removed lines alone.
+// touches reports whether the hunk can change content[start:end], placed as Codex places
+// it: its context and removed lines match lines of the file with trailing whitespace
+// ignored, every place they match counts, and a hunk with none of them lands at the end
+// of the file. A removed line inside the range touches it, and so does an added line that
+// lands after the range's first byte and up to its end. A hunk that matches nowhere
+// touches every range: the guard cannot tell where it lands.
 func (h hunk) touches(content string, start, end int) bool {
+	inside := func(at int) bool { return at > start && at <= end }
 	var old []string
 	for _, l := range h.Lines {
 		if l[0] != '+' {
 			old = append(old, l[1:])
 		}
 	}
-	text := strings.Join(old, "\n")
-	from := 0
-	if header := strings.TrimSpace(h.Header); header != "" {
-		if i := strings.Index(content, header); i >= 0 {
-			from = i
-		}
+	if len(old) == 0 {
+		return inside(len(content))
 	}
+	lines := strings.SplitAfter(content, "\n")
+	offsets := make([]int, len(lines)+1)
+	for i, l := range lines {
+		offsets[i+1] = offsets[i] + len(l)
+	}
+	trim := func(l string) string { return strings.TrimRight(l, " \t\r\n") }
 	placed := false
-	for at := from; text != "" && at <= len(content); {
-		i := strings.Index(content[at:], text)
-		if i < 0 {
-			break
-		}
-		p := at + i
-		at = p + 1
-		if p > 0 && content[p-1] != '\n' {
+	for i := 0; i+len(old) <= len(lines); i++ {
+		if !slices.EqualFunc(lines[i:i+len(old)], old, func(a, b string) bool { return trim(a) == trim(b) }) {
 			continue
 		}
 		placed = true
-		offset := p
+		at := i
 		for _, l := range h.Lines {
 			switch l[0] {
 			case '+':
-				if offset > start && offset <= end {
+				if inside(offsets[at]) {
 					return true
 				}
 			case '-':
-				if offset < end && offset+len(l)-1 > start {
+				if offsets[at] < end && offsets[at+1] > start {
 					return true
 				}
-				offset += len(l)
+				at++
 			default:
-				offset += len(l)
+				at++
 			}
 		}
 	}
-	if placed {
-		return false
-	}
-	region := content[start:end]
-	for _, l := range h.Lines {
-		if l[0] == '-' && strings.TrimSpace(l[1:]) != "" && strings.Contains(region, l[1:]) {
-			return true
-		}
-	}
-	return false
+	return !placed
 }
 
 // paths are the files a write tool touches: the file of an edit, or every file of a
@@ -249,8 +239,8 @@ func (in Input) paths() []patchFile {
 			if cur == nil || strings.HasPrefix(line, "*** ") {
 				continue
 			}
-			if header, ok := strings.CutPrefix(line, "@@"); ok {
-				cur.Hunks = append(cur.Hunks, hunk{Header: header})
+			if strings.HasPrefix(line, "@@") {
+				cur.Hunks = append(cur.Hunks, hunk{})
 				continue
 			}
 			if line == "" {

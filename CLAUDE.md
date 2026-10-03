@@ -181,8 +181,10 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The guard judges the path the disk names.** `canonical` resolves links on the part
   that exists and spells each part as its folder entry, so `ATLAS.md`, `Wiki/documents/…`,
   a repository in another case, or a link into the vault meet the rule of the real file.
-  Code sections come from `doc.SectionOffsets`, which skips fenced headings, and a Codex
-  hunk is placed by its context lines, so an insert-only hunk is judged too.
+  Code sections come from `doc.SectionOffsets`, which skips fenced headings. A Codex hunk
+  is placed as Codex 0.155.1 places it: its context and removed lines match with trailing
+  whitespace ignored, every match counts, a hunk with neither lands at the end of the
+  file, and a hunk that matches nowhere is refused.
 - **The files that decide what runs are the user's.** The guard refuses an edit of the
   home's `config.json` (`terminal_command`, `agent_commands`) and of anything under
   `.obsidian/plugins/atlas/`.
