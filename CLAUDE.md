@@ -173,21 +173,35 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The shell runs neither the apply command of `change`, `vault migrate`, nor
   `atlas-obsidian hook`.** The guard refuses them, in every folder: two skip the gate,
   the other forges a user's turn. It is no sandbox; a shell can still write any file. To
-  try one by hand from a session, type the command with `!`. Each word loses its quotes
-  and backslashes, the binary's name compares without case, and options drop out; an
-  option's value stays, so `apply` and `migrate` count anywhere after their subcommand.
+  try one by hand from a session, type the command with `!`. `shellCommands`
+  (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes,
+  backslashes and backslash-newlines, separators, and redirects whose targets leave the
+  words (`&>`, `{fd}>`, `<<<`, quoted targets); a quoted word that holds a command
+  (`sh -c "…"`) is read too, and zsh's `=name` counts as the name. The binary's name
+  compares without case, and options drop out; an option's value stays, so `apply` and
+  `migrate` count anywhere after their subcommand. A word built at run time (a variable,
+  `$(…)`, a glob, xargs) is out of its reach. `config set` of `terminal_command` or
+  `agent_commands` is refused too.
 - **The guard takes the vault above the file**, not the vault of the session's folder,
-  so a session outside the vault gets the same refusals.
+  so a session outside the vault gets the same refusals. A file in no vault belongs to
+  the vault that links its repository (the session's first, then the machine's
+  config); when that is not the session's vault, the refusal names it and says to start
+  a session there or set `ATLAS_VAULT`.
 - **The guard judges the path the disk names.** `canonical` resolves links on the part
   that exists and spells each part as its folder entry, so `ATLAS.md`, `Wiki/documents/…`,
   a repository in another case, or a link into the vault meet the rule of the real file.
-  Code sections come from `doc.SectionOffsets`, which skips fenced headings. A Codex hunk
-  is placed as Codex 0.155.1 places it: its context and removed lines match with trailing
-  whitespace ignored, every match counts, a hunk with neither lands at the end of the
-  file, and a hunk that matches nowhere is refused.
+  Code sections come from `doc.SectionOffsets`, which skips fenced headings, and an
+  Edit, a MultiEdit, or a patch is judged by the document it leaves (`Input.leaves`,
+  `codeChanged`): the frontmatter, the lead, and each code section come out as they went
+  in, with each code heading as often as before by `doc.Headings`, and no second heading
+  of any section. A Codex patch is read as Codex 0.155.1 reads it: file markers with
+  whitespace before them, context and removed lines that match with trailing whitespace
+  ignored, every match counting, a hunk with neither at the end of the file; a hunk that
+  matches nowhere is refused and the refusal says so.
 - **The files that decide what runs are the user's.** The guard refuses an edit of the
-  home's `config.json` (`terminal_command`, `agent_commands`) and of anything under
-  `.obsidian/plugins/atlas/`.
+  home's `config.json` and the vault's `.atlas/config.json` (`terminal_command`,
+  `agent_commands`), and of anything under `.obsidian/plugins/atlas/`; fixed names
+  compare without case, so a folder that does not exist yet cannot carry another case.
 - **A read-only agent makes only the calls that read.** `readActions` lists them per
   tool; any other action, or a tool the list does not know, is a write.
 - **The PreToolUse matcher anchors itself** (`^(…)$`) and names the atlas server of both
