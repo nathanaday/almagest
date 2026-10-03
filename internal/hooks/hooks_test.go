@@ -223,6 +223,34 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a global config set of an agent command", bash(bin + ` config set --global agent_commands.claude "x"`), true},
 		{"a config set of the terminal", bash(bin + ` config set terminal wezterm`), false},
 		{"a config get", bash(bin + ` config get terminal_command`), false},
+		// T32: a process substitution runs a command of its own.
+		{"a process substitution read", bash(`cat <(` + bin + ` hook prompt)`), true},
+		{"a process substitution compared", bash(`diff <(` + bin + ` hook prompt) /dev/null`), true},
+		{"a process substitution written", bash(`echo x > >(` + bin + ` hook prompt)`), true},
+		{"a process substitution redirected", bash(`cat < <(` + bin + ` hook prompt)`), true},
+		{"a process substitution teed", bash(`tee >(` + bin + ` hook prompt)`), true},
+		// T33: an escaped space quotes.
+		{"eval of escaped spaces", bash(`eval ` + bin + `\ hook\ prompt`), true},
+		{"sh -c of escaped spaces", bash(`sh -c ` + bin + `\ hook\ prompt`), true},
+		// T34: bash's braced hex escape.
+		{"a braced hex escape", bash(bin + ` $'\x{68}ook' prompt`), true},
+		// T35: brace expansion.
+		{"braces around hook", bash(bin + ` {hook,} prompt`), true},
+		{"braces around the binary", bash(`{` + bin + `,hook} prompt`), true},
+		{"braces in an echo", bash(`echo {a,b} ` + bin + `-notes`), false},
+		// T38: quoted text and heredocs are commands only when a shell or eval runs them.
+		{"a grep for the hook command", bash(`grep -rn "` + bin + ` hook" internal/`), false},
+		{"a commit message naming the migration", bash(`git commit -m "run ` + bin + ` vault migrate by hand"`), false},
+		{"a commit message in a heredoc", bash("git commit -F - <<'EOF'\nrun " + bin + " vault migrate by hand\nEOF"), false},
+		{"a heredoc fed to bash", bash("bash <<'EOF'\n" + bin + " hook prompt\nEOF"), true},
+		{"eval of a quoted command", bash(`eval "` + bin + ` hook prompt"`), true},
+		{"sudo sh -c", bash(`sudo sh -c "` + bin + ` hook prompt"`), true},
+		{"xargs sh -c", bash(`echo x | xargs sh -c "` + bin + ` hook prompt"`), true},
+		{"a command after a heredoc", bash("cat <<EOF\ntext\nEOF\n" + bin + " hook prompt"), true},
+		// T40: unset counts as set.
+		{"a config unset of the terminal command", bash(bin + ` config unset terminal_command`), true},
+		{"a config unset of an agent command", bash(bin + ` config unset agent_commands.claude`), true},
+		{"a config unset of the terminal", bash(bin + ` config unset terminal`), false},
 		{"a shell change show", bash(bin + " change show X"), false},
 		{"a shell vault status", bash(bin + " vault status --json"), false},
 		{"make install", bash("make install"), false},
