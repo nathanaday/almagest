@@ -60,7 +60,7 @@ func cachedDoc(v *Vault, rel string) (*doc.Doc, error) {
 // Index is every document of the vault, read at one moment.
 type Index struct {
 	V *Vault
-	// Docs are the typed documents in their place: the six types directly in
+	// Docs are the typed documents in their place: the nine types directly in
 	// wiki/documents, sessions under sessions/, changes under changes/, and Atlas.md.
 	Docs []*doc.Doc
 	// Misplaced are typed documents anywhere else. Tools do not see them; lint reports
