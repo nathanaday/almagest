@@ -132,27 +132,38 @@ func linkingVault(file string, session *vault.Vault, env Env) *vault.Vault {
 // atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
 func atlasCommandRefusal(cmd string) string {
-	for _, words := range shellCommands(cmd) {
-		for i, word := range words {
-			// zsh runs =name as the path of name.
-			name := path.Base(strings.TrimPrefix(word, "="))
-			if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, name) }) {
-				continue
+	for _, c := range splitCommands(cmd, 4) {
+		if why := commandRefusal(c.words); why != "" {
+			if c.pipe < 0 {
+				why += ". The guard read this from quoted text or a heredoc, because a shell in its pipeline runs that text as a command; text meant only as text goes in a file (git commit -F <file>) or in a line with no shell"
 			}
-			rest := positional(words[i+1:])
-			if len(rest) == 0 {
-				continue
-			}
-			switch {
-			case rest[0] == "hook":
-				return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
-			case rest[0] == "change" && slices.Contains(rest[1:], "apply"):
-				return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
-			case rest[0] == "config" && (slices.Contains(rest[1:], "set") || slices.Contains(rest[1:], "unset")) && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
-				return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
-			case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
-				return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
-			}
+			return why
+		}
+	}
+	return ""
+}
+
+// commandRefusal is why one simple command may not run, or "".
+func commandRefusal(words []string) string {
+	for i, word := range words {
+		// zsh runs =name as the path of name.
+		name := path.Base(strings.TrimPrefix(word, "="))
+		if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, name) }) {
+			continue
+		}
+		rest := positional(words[i+1:])
+		if len(rest) == 0 {
+			continue
+		}
+		switch {
+		case rest[0] == "hook":
+			return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
+		case rest[0] == "change" && slices.Contains(rest[1:], "apply"):
+			return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
+		case rest[0] == "config" && (slices.Contains(rest[1:], "set") || slices.Contains(rest[1:], "unset")) && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
+			return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
+		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
+			return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
 		}
 	}
 	return ""

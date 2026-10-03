@@ -362,3 +362,17 @@ func TestAnEditIsMatchedWithCurlyAndStraightQuotesAlike(t *testing.T) {
 		t.Error("an Edit spanning from straight-quoted text into ## Thread was allowed")
 	}
 }
+
+// A refusal of a command read out of quoted text says why the text counted as one.
+func TestARefusalOfQuotedTextSaysWhy(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	bin := "atlas-" + "obsidian"
+	out := f.run("guard", bash(`echo "`+bin+` hook prompt" | sh`))
+	if !denied(out) || !strings.Contains(out, "read this from quoted text") {
+		t.Fatalf("the refusal of quoted text: %s", out)
+	}
+	if out := f.run("guard", bash(bin+` hook prompt`)); strings.Contains(out, "quoted text") {
+		t.Fatalf("a plain command's refusal speaks of quoted text: %s", out)
+	}
+}

@@ -72,20 +72,6 @@ func runsString(words []string) bool {
 	return false
 }
 
-// shellCommands splits a command line into its simple commands, each a list of words, as
-// bash and zsh read them before they run: quotes and escapes resolved, braces expanded,
-// redirects and their targets taken out, and a process substitution read as a command
-// of its own. On a line that holds a runner (sh, eval, …) anywhere, as in echo "…" | sh,
-// every quoted word and heredoc is read as one more command; on any other line quoted
-// text is only text.
-func shellCommands(line string) [][]string {
-	var out [][]string
-	for _, c := range splitCommands(line, 4) {
-		out = append(out, c.words)
-	}
-	return out
-}
-
 // simple is one simple command and the pipeline it belongs to.
 type simple struct {
 	words []string
@@ -100,6 +86,12 @@ type heredoc struct {
 	run   bool
 }
 
+// splitCommands splits a command line into its simple commands, each a list of words, as
+// bash and zsh read them before they run: quotes and escapes resolved, braces expanded,
+// redirects and their targets taken out, and a process substitution read as a command
+// of its own. In a pipeline that runs a string (runsString: sh -c, eval, … | sh), every
+// quoted word and heredoc is read as one more command, at most depth levels deep; in
+// any other pipeline quoted text is only text.
 func splitCommands(line string, depth int) []simple {
 	// A first pass, which reads no quoted word, finds the pipelines that run a string.
 	running := map[int]bool{}
