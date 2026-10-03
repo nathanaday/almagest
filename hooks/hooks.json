@@ -97,7 +97,7 @@
           {
             "type": "command",
             "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/atlas-obsidian hook session-end",
-            "timeout": 10
+            "timeout": 3
           }
         ]
       }

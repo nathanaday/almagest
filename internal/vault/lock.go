@@ -35,8 +35,20 @@ func processLock(root string) *sync.Mutex {
 // and two calls in one process, never write the vault at once. The lock is not
 // re-entrant; a write takes it once.
 func (v *Vault) Lock() (func(), error) {
+	return v.LockWithin(LockWait)
+}
+
+// LockWithin is Lock that gives up after wait, in this process and on disk alike, so a
+// hook can stop before its host kills it.
+func (v *Vault) LockWithin(wait time.Duration) (func(), error) {
+	deadline := time.Now().Add(wait)
 	m := processLock(v.Root)
-	m.Lock()
+	for !m.TryLock() {
+		if time.Now().After(deadline) {
+			return nil, fmt.Errorf("another atlas write in this process holds the lock of %s; try again", v.Root)
+		}
+		time.Sleep(15 * time.Millisecond)
+	}
 	dir := v.Git().GitDir()
 	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
 		// A vault that is not a repository yet (during init) locks nothing on disk.
@@ -47,7 +59,6 @@ func (v *Vault) Lock() (func(), error) {
 		m.Unlock()
 		return nil, err
 	}
-	deadline := time.Now().Add(LockWait)
 	for {
 		err := syscall.Flock(int(f.Fd()), syscall.LOCK_EX|syscall.LOCK_NB)
 		if err == nil {

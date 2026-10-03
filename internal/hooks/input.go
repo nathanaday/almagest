@@ -60,6 +60,8 @@ type Input struct {
 type Env struct {
 	Getenv func(string) string
 	Now    func() time.Time
+	// wait is how long the hook waits for the vault lock; Run sets it from Deadlines.
+	wait time.Duration
 }
 
 func (e Env) now() time.Time {

@@ -6,14 +6,30 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"time"
 )
 
 // EnvLog names a file that receives every hook event, one JSON line each, for checking
 // what a host sends.
 const EnvLog = "ATLAS_HOOK_LOG"
 
+// Deadlines are how long each hook waits for the vault lock: below its timeout in
+// hooks.json, so a hook that cannot get the lock gives up with an error before the host
+// kills it. The guard takes no lock.
+var Deadlines = map[string]time.Duration{
+	"session-start":  8 * time.Second,
+	"prompt":         4 * time.Second,
+	"touched":        6 * time.Second,
+	"notify":         4 * time.Second,
+	"stop":           4 * time.Second,
+	"subagent-start": 4 * time.Second,
+	"subagent-stop":  4 * time.Second,
+	"session-end":    time.Second,
+}
+
 // Run runs one hook command.
 func Run(command string, r io.Reader, w io.Writer, env Env) error {
+	env.wait = Deadlines[command]
 	if file := env.getenv(EnvLog); file != "" {
 		data, _ := io.ReadAll(r)
 		logEvent(file, command, data)

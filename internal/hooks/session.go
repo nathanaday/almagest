@@ -29,9 +29,13 @@ func locked(in Input, env Env, fn func(v *vault.Vault) error) error {
 	if v == nil {
 		return nil
 	}
-	unlock, err := v.Lock()
+	wait := env.wait
+	if wait == 0 {
+		wait = vault.LockWait
+	}
+	unlock, err := v.LockWithin(wait)
 	if err != nil {
-		return err
+		return fmt.Errorf("gave up after %s waiting for the vault lock: %w", wait, err)
 	}
 	defer unlock()
 	return fn(v)

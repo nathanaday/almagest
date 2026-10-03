@@ -11,6 +11,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
@@ -187,6 +188,7 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 			Matcher string `json:"matcher"`
 			Hooks   []struct {
 				Command string `json:"command"`
+				Timeout int    `json:"timeout"`
 			} `json:"hooks"`
 		} `json:"hooks"`
 	}
@@ -202,6 +204,11 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 					t.Errorf("%s runs %s, which is the %s hook", event, command, hooks.Events[command])
 				}
 				seen[command] = true
+				// A hook waits for the lock half its timeout at most, so the work after
+				// the wait has time too.
+				if wait := hooks.Deadlines[command]; h.Timeout == 0 || 2*wait > time.Duration(h.Timeout)*time.Second {
+					t.Errorf("%s waits %s for the lock, more than half its timeout of %d s", command, wait, h.Timeout)
+				}
 			}
 		}
 	}
