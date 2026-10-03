@@ -13,6 +13,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // crashPlan proposes a change that modifies one topic and creates another.
@@ -234,5 +235,47 @@ func TestAnUndoThatFailsLeavesNothingStaged(t *testing.T) {
 	out, err := exec.Command("git", "-C", tv.V.Root, "diff", "--cached", "--name-only").CombinedOutput()
 	if err != nil || strings.TrimSpace(string(out)) != "" {
 		t.Fatalf("the failed undo left staged: %q %v", out, err)
+	}
+}
+
+// A crash after the apply's derived sync and before its commit: the vault is copied at
+// that moment. Recovery on the copy puts the absorbed source back as pending too, since
+// the apply listed it before it wrote it.
+func TestACrashAfterTheDerivedSyncPutsTheSourceBack(t *testing.T) {
+	tv := testvault.New(t)
+	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[doc-aaaaaa.pdf]]", "media": "pdf", "origin": "inbox"}, "")
+	tv.Write("wiki/assets/doc-aaaaaa.pdf", "%PDF")
+	tv.Commit()
+	pv := propose(t, tv, change.Plan{Title: "Absorb", Absorbs: []string{src}, Writes: []change.Write{{Op: "create", Type: "topic", Kind: "entity", Title: "Radar", Fields: map[string]any{"description": "A sensor."}}}})
+	crashed := filepath.Join(t.TempDir(), "crashed")
+	change.SetBeforeApplyCommit(func() {
+		if err := os.CopyFS(crashed, os.DirFS(tv.V.Root)); err != nil {
+			t.Fatal(err)
+		}
+	})
+	defer change.SetBeforeApplyCommit(nil)
+	apply(t, tv, pv.Ref.ID)
+	if !strings.Contains(tv.Read("wiki/documents/DINOv2.md"), "status: absorbed") {
+		t.Fatal("the apply did not absorb the source, so the test proves nothing")
+	}
+	v, err := vault.Open(crashed)
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The next write is a thread write, which runs recovery but derives no source; a sync
+	// would derive the source back from the proposed change and hide the gap.
+	if _, err := thread.Stub(v, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
+		t.Fatal(err)
+	}
+	got, _ := os.ReadFile(filepath.Join(crashed, "wiki/documents/DINOv2.md"))
+	if strings.Contains(string(got), "status: absorbed") || strings.Contains(string(got), "absorbed by") {
+		t.Fatalf("the source stays absorbed:\n%s", got)
+	}
+	if _, err := os.Stat(filepath.Join(crashed, "wiki/documents/Radar.md")); err == nil {
+		t.Fatal("the created topic stayed")
+	}
+	doc, _ := os.ReadFile(filepath.Join(crashed, pv.Ref.Path))
+	if !strings.Contains(string(doc), "status: proposed") || strings.Contains(string(doc), "paths:") {
+		t.Fatalf("the change is not proposed again:\n%s", doc)
 	}
 }

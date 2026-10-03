@@ -483,8 +483,15 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	if err := tx.Write(d.Path, []byte(doc.SetField(final, "paths", paths))); err != nil {
 		return nil, err
 	}
-	if err := syncDerived(v, tx); err != nil {
+	flight := &inFlight{tx: tx, doc: d.Path, final: final, paths: paths, listed: map[string]bool{}}
+	for _, p := range paths {
+		flight.listed[p] = true
+	}
+	if err := syncDerived(v, flight); err != nil {
 		return nil, err
+	}
+	if beforeApplyCommit != nil {
+		beforeApplyCommit()
 	}
 	tx.Stage(d.Path, []byte(final))
 	sha, err := tx.Commit("change: "+p.Title, Trailer+": "+d.ID())
@@ -521,7 +528,7 @@ func createdOf(d *doc.Doc) time.Time {
 
 // syncDerived brings the derived parts of every document the writes touch up to date,
 // in the same commit: statuses, lead callouts, and the sections code writes.
-func syncDerived(v *vault.Vault, tx *vault.Tx) error {
+func syncDerived(v *vault.Vault, tx guardWriter) error {
 	idx, err := vault.Load(v)
 	if err != nil {
 		return err
@@ -534,6 +541,57 @@ func syncDerived(v *vault.Vault, tx *vault.Tx) error {
 	}
 	_, err = thread.Load(idx).SyncWith(vault.NewGuard(idx, tx))
 	return err
+}
+
+// guardWriter is what a guard writes the derived parts through: the transaction, or an
+// apply's in-flight record of it.
+type guardWriter interface {
+	WriteIfChanged(rel string, content []byte) (bool, error)
+	WriteIfUnchanged(rel string, content []byte, want string) (bool, error)
+}
+
+// beforeApplyCommit lets a test see the vault as a crash right before the apply's commit
+// would leave it. It is nil outside tests.
+var beforeApplyCommit func()
+
+// inFlight writes an apply's derived parts through its transaction, and lists each path
+// in the change document's paths before it writes it, so a crash after any derived write
+// leaves that path for recovery to put back.
+type inFlight struct {
+	tx     *vault.Tx
+	doc    string
+	final  string
+	paths  []string
+	listed map[string]bool
+}
+
+func (f *inFlight) list(rel string) error {
+	if f.listed[rel] || rel == f.doc {
+		return nil
+	}
+	f.listed[rel] = true
+	f.paths = uniqueSorted(append(f.paths, rel))
+	return f.tx.Write(f.doc, []byte(doc.SetField(f.final, "paths", f.paths)))
+}
+
+func (f *inFlight) WriteIfChanged(rel string, content []byte) (bool, error) {
+	if have, err := f.tx.V.Read(rel); err == nil && string(have) == string(content) {
+		return false, nil
+	}
+	if err := f.list(rel); err != nil {
+		return false, err
+	}
+	return f.tx.WriteIfChanged(rel, content)
+}
+
+func (f *inFlight) WriteIfUnchanged(rel string, content []byte, want string) (bool, error) {
+	if want == string(content) {
+		return false, nil
+	}
+	if err := f.list(rel); err != nil {
+		return false, err
+	}
+	return f.tx.WriteIfUnchanged(rel, content, want)
 }
 
 // revalidate checks the ops a change document holds against the vault as it is now: the
