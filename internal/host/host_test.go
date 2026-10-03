@@ -3,6 +3,7 @@ package host
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 )
 
@@ -36,6 +37,25 @@ func TestClaudeInstalledReadsEnabledPlugins(t *testing.T) {
 		if err != nil || inst == nil || inst.Version != "8.1.1" || inst.Enabled != c.enabled {
 			t.Fatalf("%s: %+v %v", c.name, inst, err)
 		}
+	}
+}
+
+func TestNoClaudeDirWithoutAHome(t *testing.T) {
+	work := t.TempDir()
+	t.Chdir(work)
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	t.Setenv("HOME", "")
+	if _, err := os.UserHomeDir(); err == nil {
+		t.Skip("this platform finds a home folder without $HOME")
+	}
+	if _, err := AllowVault("/tmp/vault"); err == nil || !strings.Contains(err.Error(), "CLAUDE_CONFIG_DIR") {
+		t.Fatalf("AllowVault: %v", err)
+	}
+	if _, err := Installed("claude"); err == nil || !strings.Contains(err.Error(), "CLAUDE_CONFIG_DIR") {
+		t.Fatalf("Installed: %v", err)
+	}
+	if entries, _ := os.ReadDir(work); len(entries) != 0 {
+		t.Fatalf("wrote into the working folder: %v", entries)
 	}
 }
 

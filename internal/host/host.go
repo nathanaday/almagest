@@ -39,16 +39,17 @@ func EnableHint(host string) string {
 	return "run: claude plugin enable " + PluginID
 }
 
-// ClaudeDir is Claude Code's config folder: $CLAUDE_CONFIG_DIR or ~/.claude.
-func ClaudeDir() string {
+// ClaudeDir is Claude Code's config folder: $CLAUDE_CONFIG_DIR or ~/.claude. It never
+// falls back to a folder relative to the working directory.
+func ClaudeDir() (string, error) {
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return dir
+		return dir, nil
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
-		return ".claude"
+		return "", fmt.Errorf("the home folder is unknown (%v); set CLAUDE_CONFIG_DIR to Claude Code's config folder", err)
 	}
-	return filepath.Join(home, ".claude")
+	return filepath.Join(home, ".claude"), nil
 }
 
 // CLI is the path of a host's command, or "".
@@ -72,7 +73,11 @@ func Installed(host string) (*Install, error) {
 }
 
 func claudeInstalled() (*Install, error) {
-	path := filepath.Join(ClaudeDir(), "plugins", "installed_plugins.json")
+	dir, err := ClaudeDir()
+	if err != nil {
+		return nil, err
+	}
+	path := filepath.Join(dir, "plugins", "installed_plugins.json")
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return nil, nil
@@ -100,7 +105,7 @@ func claudeInstalled() (*Install, error) {
 	} else if err := json.Unmarshal(raw, &inst); err != nil {
 		return nil, fmt.Errorf("%s: %w", path, err)
 	}
-	enabled, err := claudeEnabled()
+	enabled, err := claudeEnabled(dir)
 	if err != nil {
 		return nil, err
 	}
@@ -111,8 +116,8 @@ func claudeInstalled() (*Install, error) {
 // claudeEnabled reads the plugin's key in enabledPlugins of the user's settings, where
 // setup installs it. A missing key counts as enabled: only a manifest with
 // defaultEnabled: false starts a plugin turned off.
-func claudeEnabled() (bool, error) {
-	path := filepath.Join(ClaudeDir(), "settings.json")
+func claudeEnabled(dir string) (bool, error) {
+	path := filepath.Join(dir, "settings.json")
 	data, err := os.ReadFile(path)
 	if errors.Is(err, os.ErrNotExist) {
 		return true, nil
@@ -206,7 +211,11 @@ func InstallPlugin(host, source string) ([]string, error) {
 // settings, so a session that starts in a linked repository can reach the vault. It
 // keeps every other key, and reports whether it wrote.
 func AllowVault(vault string) (bool, error) {
-	file := filepath.Join(ClaudeDir(), "settings.json")
+	dir, err := ClaudeDir()
+	if err != nil {
+		return false, err
+	}
+	file := filepath.Join(dir, "settings.json")
 	settings := map[string]any{}
 	if data, err := os.ReadFile(file); err == nil {
 		if err := json.Unmarshal(data, &settings); err != nil {
