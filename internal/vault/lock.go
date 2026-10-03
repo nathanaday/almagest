@@ -76,6 +76,8 @@ type Tx struct {
 	// its commit puts the vault back.
 	before    map[string]*found
 	committed bool
+	// staged are contents the commit records in place of what the disk holds.
+	staged map[string][]byte
 	// Snapshot is the commit of the hand edits the write found, or "".
 	Snapshot string
 }
@@ -113,7 +115,7 @@ func Begin(v *Vault, recover func() error) (*Tx, error) {
 	sha, err := CommitSnapshot(v)
 	if err != nil {
 		tx.Close()
-		return nil, err
+		return nil, fmt.Errorf("commit the hand edits before this write: %w; nothing was written, so the vault is as it was", err)
 	}
 	tx.Snapshot = sha
 	return tx, nil
@@ -257,6 +259,16 @@ func (tx *Tx) Mark(paths ...string) {
 	}
 }
 
+// Stage makes the commit record content for rel in place of what the disk holds. Apply
+// commits a change document as applied while the file still marks the apply in flight.
+func (tx *Tx) Stage(rel string, content []byte) {
+	if tx.staged == nil {
+		tx.staged = map[string][]byte{}
+	}
+	tx.Mark(rel)
+	tx.staged[rel] = content
+}
+
 // Paths are the paths the write marked, sorted.
 func (tx *Tx) Paths() []string {
 	out := make([]string, 0, len(tx.written))
@@ -282,6 +294,11 @@ func (tx *Tx) commit(subject string, trailers []string) (string, error) {
 	g := tx.V.Git()
 	if err := g.Add(tx.Paths()...); err != nil {
 		return "", err
+	}
+	for rel, data := range tx.staged {
+		if err := g.StageContent(rel, data); err != nil {
+			return "", err
+		}
 	}
 	staged, err := g.Staged()
 	if err != nil || !staged {

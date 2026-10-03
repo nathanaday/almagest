@@ -215,6 +215,21 @@ func (r Repo) Unstage(paths ...string) error {
 	return err
 }
 
+// StageContent puts data in the index as the content of path, whatever the file on disk
+// holds, so a commit can record a file in a state the disk does not show yet.
+func (r Repo) StageContent(p string, data []byte) error {
+	cmd := r.cmd("hash-object", "-w", "--stdin")
+	cmd.Stdin = bytes.NewReader(data)
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout, cmd.Stderr = &stdout, &stderr
+	if err := cmd.Run(); err != nil {
+		return fmt.Errorf("git hash-object: %s", strings.TrimSpace(stderr.String()))
+	}
+	sha := strings.TrimSpace(stdout.String())
+	_, err := r.run("update-index", "--add", "--cacheinfo", "100644,"+sha+","+p)
+	return err
+}
+
 // Tracked reports whether the index holds path.
 func (r Repo) Tracked(p string) bool {
 	out, err := r.run("ls-files", "-z", "--", p)

@@ -21,7 +21,7 @@ import (
 )
 
 // Trailer names the change a commit applied.
-const Trailer = "Atlas-Change"
+const Trailer = vault.ChangeTrailer
 
 // Preview is what a change does, enough to show it in the chat.
 type Preview struct {
@@ -472,16 +472,23 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, erro
 	final := replaceWrites(record, renderWrites(p.Ops, p.Outside))
 	final = doc.SetFields(final, []doc.Field{{Key: "counts", Value: counts.String()}, {Key: "applied", Value: vault.Stamp(now)}, {Key: "updated", Value: vault.Stamp(now)}})
 	final = doc.RemoveField(setStatus(final, Applied), "paths")
-	if err := tx.Write(d.Path, []byte(final)); err != nil {
+	// The file says applied, so the derived parts read the change as applied (a source it
+	// absorbs is no longer pending), and keeps paths, the mark of an apply in flight, until
+	// the commit lands. The commit records the final document, without paths, from the
+	// index. A crash before the commit leaves a change recovery puts back; one after it
+	// leaves a change whose commit recovery finds and finishes.
+	if err := tx.Write(d.Path, []byte(doc.SetField(final, "paths", paths))); err != nil {
 		return nil, err
 	}
-	// The derived parts read the change as applied: a source it absorbs is no longer
-	// pending.
 	if err := syncDerived(v, tx); err != nil {
 		return nil, err
 	}
+	tx.Stage(d.Path, []byte(final))
 	sha, err := tx.Commit("change: "+p.Title, Trailer+": "+d.ID())
 	if err != nil {
+		return nil, err
+	}
+	if err := v.Write(d.Path, []byte(final)); err != nil {
 		return nil, err
 	}
 	v.SyncSettings(before)

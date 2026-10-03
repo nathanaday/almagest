@@ -12,19 +12,31 @@ import (
 // Applying is the status of a change document while its apply writes.
 const Applying = "applying"
 
-// Recover finds each change a crash left applying, puts back every path it may have
-// written, and sets it to proposed. It skips a path that is no local document: the field
-// is frontmatter, which a pull or a shell can write. The caller holds the lock.
+// ChangeTrailer is the trailer of an apply's commit, which names the change's id.
+const ChangeTrailer = "Atlas-Change"
+
+// Recover finds each change a crash left in flight: a change document that still holds
+// paths. When the apply's commit exists, the apply landed and only the document's last
+// write was lost, so it takes the document from HEAD. Otherwise it puts back every path
+// the apply may have written, and sets the change to proposed. It skips a path that is no
+// local document: the field is frontmatter, which a pull or a shell can write. The caller
+// holds the lock.
 func Recover(v *Vault) error {
 	files, _ := filepath.Glob(v.Abs(Changes + "/*/*.md"))
 	g := v.Git()
 	for _, abs := range files {
 		data, err := os.ReadFile(abs)
-		if err != nil || !strings.Contains(string(data), "status: "+Applying) {
+		if err != nil || !strings.Contains(string(data), "\npaths:") {
 			continue
 		}
 		d := doc.Parse(v.Rel(abs), data)
-		if d.Str("status") != Applying {
+		if !d.Front.Has("paths") || d.ID() == "" {
+			continue
+		}
+		if sha, err := g.FindTrailer(ChangeTrailer, d.ID()); err == nil && sha != "" && g.Has("HEAD:"+d.Path) {
+			if err := g.RestoreFrom("HEAD", d.Path); err != nil {
+				return fmt.Errorf("recover %s: %w", Title(d), err)
+			}
 			continue
 		}
 		for _, p := range d.List("paths") {
