@@ -350,14 +350,15 @@ func checkPriority(p string) error {
 // TitleFromText is a title from the first line of text, cut at 60 characters at a word.
 func TitleFromText(text string) string {
 	line := doc.CleanTitle(doc.FirstLine(text))
-	if len([]rune(line)) <= 60 {
-		return line
+	if len([]rune(line)) > 60 {
+		r := []rune(line)[:60]
+		line = strings.TrimSpace(string(r))
+		if i := strings.LastIndex(string(r), " "); i > 20 {
+			line = strings.TrimSpace(string(r)[:i])
+		}
 	}
-	r := []rune(line)[:60]
-	if i := strings.LastIndex(string(r), " "); i > 20 {
-		return strings.TrimSpace(string(r)[:i])
-	}
-	return strings.TrimSpace(string(r))
+	// Sixty runes of a script with wide characters pass the byte limit of a title.
+	return doc.CutTitle(line, doc.MaxTitleBytes)
 }
 
 // firstSentence is a description from text: its first line that is no heading or
@@ -1039,7 +1040,7 @@ func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (*Result, error) {
 			}
 			title = s.Title()
 		case strings.TrimSpace(in.Text) != "":
-			if title, err = w.title(TitleFromText(in.Text)); err != nil {
+			if title, err = w.named(TitleFromText(in.Text)); err != nil {
 				return nil, err
 			}
 			text := strings.TrimSpace(in.Text) + "\n\nFrom " + id + " of " + doc.Link(last.Title()) + "."

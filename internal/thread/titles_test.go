@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/thread"
@@ -79,6 +80,20 @@ func TestAStubInAnotherUnicodeFormIsRefused(t *testing.T) {
 	refuses(t, "already exists on disk under another case or Unicode form")(thread.Stub(tv.V, thread.StubIn{Text: "The second.", Title: cafeNFD}, opts(tv)))
 	if tv.Read("wiki/documents/"+cafeNFC+".md") != first {
 		t.Fatal("the first stub changed")
+	}
+	tv.Clean()
+}
+
+func TestATitleMadeFromWideTextFitsTheLimit(t *testing.T) {
+	text := strings.Repeat("日", 70) + "\n\nMore."
+	title := thread.TitleFromText(text)
+	if len(title) > 150 || !utf8.ValidString(title) || title == "" {
+		t.Fatalf("TitleFromText gave %d bytes: %q", len(title), title)
+	}
+	tv := testvault.New(t)
+	r := ok(t)(thread.Stub(tv.V, thread.StubIn{Text: text}, opts(tv)))
+	if got := r.Wrote[0].Title; len(got) > 150 || got != title {
+		t.Fatalf("the stub took %q", got)
 	}
 	tv.Clean()
 }
