@@ -148,6 +148,8 @@ func atlasCommandRefusal(cmd string) string {
 				return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
 			case rest[0] == "change" && slices.Contains(rest[1:], "apply"):
 				return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
+			case rest[0] == "config" && slices.Contains(rest[1:], "set") && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
+				return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
 			case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
 				return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
 			}
