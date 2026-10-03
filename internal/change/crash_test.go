@@ -174,3 +174,22 @@ func TestRecoveryLeavesNothingStaged(t *testing.T) {
 		t.Fatalf("recovery left staged: %q %v", out, err)
 	}
 }
+
+// After a crash past the commit, a line the user adds to the change document goes into
+// git before recovery takes the document from its commit.
+func TestRecoveryKeepsAnEditOfTheChangeDocument(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	apply(t, tv, pv.Ref.ID)
+	applied := tv.Read(pv.Ref.Path)
+	inFlight := doc.SetField(applied, "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	tv.Write(pv.Ref.Path, inFlight+"\nA line the user added after the crash.\n")
+	nextWrite(t, tv)
+	if got := tv.Read(pv.Ref.Path); got != applied {
+		t.Fatalf("recovery did not take the document from its commit:\n%s", got)
+	}
+	out, err := exec.Command("git", "-C", tv.V.Root, "log", "-p", "--", pv.Ref.Path).CombinedOutput()
+	if err != nil || !strings.Contains(string(out), "+A line the user added after the crash.") || !strings.Contains(string(out), "recovery: ") {
+		t.Fatalf("git does not keep the line:\n%s %v", out, err)
+	}
+}

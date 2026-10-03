@@ -34,7 +34,19 @@ func Recover(v *Vault) error {
 			continue
 		}
 		if sha, err := g.FindTrailer(ChangeTrailer, d.ID()); err == nil && sha != "" && g.Has("HEAD:"+d.Path) {
-			if err := g.RestoreFrom("HEAD", d.Path); err != nil {
+			// The apply landed. The file differs from its commit by paths alone, unless
+			// someone edited it after the crash; such an edit goes into git first.
+			from := "HEAD"
+			head, _ := g.ShowFile("HEAD", d.Path)
+			if doc.RemoveField(d.Content, "paths") != string(head) {
+				if from, err = commitFound(v, d, []string{d.Path}); err != nil {
+					return fmt.Errorf("recover %s: %w", Title(d), err)
+				}
+			}
+			if err := g.RestoreFrom(from, d.Path); err != nil {
+				return fmt.Errorf("recover %s: %w", Title(d), err)
+			}
+			if err := g.Unstage(d.Path); err != nil {
 				return fmt.Errorf("recover %s: %w", Title(d), err)
 			}
 			continue
