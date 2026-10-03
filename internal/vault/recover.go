@@ -71,6 +71,10 @@ func Recover(v *Vault) error {
 			if err := v.Write(d.Path, []byte(d.Content)); err != nil {
 				return fmt.Errorf("recover %s: %w", Title(d), err)
 			}
+		} else if base != recoveringNone && !g.HasCommit(base) {
+			// The field is frontmatter, which a hand or a pull can change; a value that
+			// names no commit would put back nothing, or delete what it lacks.
+			return fmt.Errorf("recover %s: its recovering field %q names no commit of the vault; set it to the commit before the crash (git log), or remove it to recover from HEAD, then try again", d.Path, base)
 		}
 		from := base
 		if from == recoveringNone {

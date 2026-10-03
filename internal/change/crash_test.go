@@ -360,3 +360,20 @@ func TestAFailedUndoKeepsASaveMadeDuringIt(t *testing.T) {
 		t.Fatalf("the save was rolled back:\n%s", got)
 	}
 }
+
+// A recovering field that names no commit stops recovery before it changes anything.
+func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	tv.Commit()
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", "deadbeef"))
+	tv.Write("wiki/documents/Motion scoring.md", "half written")
+	_, err := thread.Stub(tv.V, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)})
+	if err == nil || !strings.Contains(err.Error(), "names no commit") {
+		t.Fatalf("the write after a bogus recovering field: %v", err)
+	}
+	if tv.Read("wiki/documents/Motion scoring.md") != "half written" {
+		t.Fatal("recovery changed a listed path")
+	}
+}
