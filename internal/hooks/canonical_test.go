@@ -96,3 +96,21 @@ func TestAnInsertOnlyPatchHunkIsPlacedByItsContext(t *testing.T) {
 		t.Error("an insert into ## Idea was refused")
 	}
 }
+
+// The files whose values decide what Atlas runs are the user's.
+func TestTheGuardRefusesTheFilesThatDecideWhatRuns(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	for name, file := range map[string]string{
+		"the machine config":    filepath.Join(f.tv.Home.Root, "config.json"),
+		"the plugin's settings": filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas", "data.json"),
+		"the plugin's code":     filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas", "main.js"),
+	} {
+		if !denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": file}})) {
+			t.Errorf("%s: allowed", name)
+		}
+	}
+	if denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "other", "data.json")}})) {
+		t.Error("another plugin's settings were refused")
+	}
+}

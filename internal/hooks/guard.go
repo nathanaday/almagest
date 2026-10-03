@@ -81,6 +81,9 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		// Every rule judges the file as the disk names it, whatever case, Unicode form,
 		// or link the agent wrote.
 		f.Path = canonical(f.Path)
+		if f.Path == canonical(vault.HomeFrom(env.getenv).ConfigPath()) {
+			return deny(w, f.Path+" holds the commands Atlas runs (terminal_command, agent_commands); the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config")
+		}
 		// A file belongs to the vault above it, wherever the session runs.
 		v := session
 		if root := vault.FindAbove(filepath.Dir(f.Path)); root != "" {
@@ -173,6 +176,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	}
 	name := path.Base(rel)
 	switch {
+	case rel == vault.PluginDir || strings.HasPrefix(rel, vault.PluginDir+"/"):
+		return rel + " is the Atlas plugin, whose code and binaryPath decide what runs; vault init and vault sync install it, and the user sets binaryPath in the Atlas settings in Obsidian"
 	case path.Dir(rel) == vault.Documents:
 		return documentRefusal(v, in, f, rel)
 	case strings.HasPrefix(rel, vault.Assets+"/"):
