@@ -87,11 +87,28 @@ The design pages are the spec. When the code departs from them, the reason is be
   standard Go package. `internal/derive` writes the code-owned parts of sources,
   repositories, and topics (lead callouts, the `atlas-repo` block, git facts).
 - **Recovery needs the paths.** A change document gets a code-owned `paths` field while
-  it is `applying`: every path the apply may write. Recovery restores those that are
-  local documents (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside
-  `.git`, `.obsidian`, and `.claude` in any case), and skips the rest. Frontmatter comes
-  from a pull or a shell too, and recovery runs at every session start. Apply removes the
-  field when it ends.
+  its apply is in flight: every path the apply may write. The field, not the status, is
+  the mark: the file says `applied` for the derive step and keeps `paths` until the
+  commit lands, and the commit records the final document, without `paths`, from the
+  index (`Tx.Stage`). Recovery takes a document that holds `paths` from `HEAD` when its
+  `Atlas-Change` commit exists. Otherwise it first commits each listed path that differs
+  from `HEAD` as `recovery: N files as found after a crash`, then puts the listed local
+  documents (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside `.git`,
+  `.obsidian`, and `.claude` in any case) back from the commit before that, and sets the
+  change to proposed. Frontmatter comes from a pull or a shell too, and recovery runs at
+  every session start.
+- **A write that ends without its commit is put back.** `vault.Tx` keeps each path's
+  bytes before its first touch (`Keep`); `Close` on a transaction that did not commit
+  writes them back and unstages the paths. A crash in the middle of a thread write has no
+  journal: the snapshot before the next write commits what it left, so no text is lost.
+- **`writeAtomic` syncs** the file before the rename and the folder after it. On macOS
+  that is `F_FULLFSYNC`, about 0.2 s for a thread write.
+- **A derived write keeps a newer save.** `vault.Guarded` wraps the writer of every sync
+  (derive, git facts, thread documents): it skips a document whose bytes changed since
+  the index read it, and the next sync derives it. The canvas and `SyncSettings` compare
+  the bytes they read with the bytes just before their write.
+- **The views sync never deletes a user's note.** A `.md` file in `views/` that no view
+  stands for and that lacks `views.Notice` moves to `inbox/` under a free name.
 - **Every path built from input is contained.** `Vault.Contain` refuses an absolute or
   unclean path, `..`, `.git` in any case, a name over 255 bytes, and a path whose folders
   or final link resolve outside the vault. `Vault.Write`, `WriteIfChanged`, and `Remove`
