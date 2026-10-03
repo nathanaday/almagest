@@ -296,6 +296,22 @@ func (tx *Tx) WriteIfChanged(rel string, content []byte) (bool, error) {
 	return wrote, err
 }
 
+// WriteIfUnchanged is Vault.WriteIfUnchanged within the write, kept for its rollback.
+func (tx *Tx) WriteIfUnchanged(rel string, content []byte, want string) (bool, error) {
+	if err := tx.V.Contain(rel); err != nil {
+		return false, err
+	}
+	if err := tx.Keep(rel); err != nil {
+		return false, err
+	}
+	wrote, err := tx.V.WriteIfUnchanged(rel, content, want)
+	if wrote && err == nil {
+		tx.written[rel] = true
+		tx.after[rel] = &found{exists: true, data: content}
+	}
+	return wrote, err
+}
+
 // Remove deletes a file and marks it for the commit.
 func (tx *Tx) Remove(rel string) error {
 	if err := tx.V.Contain(rel); err != nil {

@@ -386,7 +386,9 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if err != nil {
 		return nil, err
 	}
-	wrote, err := thread.Load(idx).Sync(vault.Guarded(idx, v.WriteIfChanged, &out.Skipped))
+	guard := vault.NewGuard(idx, v)
+	wrote, err := thread.Load(idx).SyncWith(guard)
+	out.Skipped = append(out.Skipped, guard.Skipped...)
 	if err != nil {
 		return nil, err
 	}
@@ -395,7 +397,9 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 		if idx, err = vault.Load(v); err != nil {
 			return nil, err
 		}
-		facts, err := derive.GitFacts(idx, vault.Guarded(idx, v.WriteIfChanged, &out.Skipped), now)
+		guard := vault.NewGuard(idx, v)
+		facts, err := derive.GitFacts(idx, guard.Write, now)
+		out.Skipped = append(out.Skipped, guard.Skipped...)
 		if err != nil {
 			return out, err
 		}
@@ -404,7 +408,9 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	if idx, err = vault.Load(v); err != nil {
 		return nil, err
 	}
-	knowledge, err := derive.Sync(idx, vault.Guarded(idx, v.WriteIfChanged, &out.Skipped))
+	guard = vault.NewGuard(idx, v)
+	knowledge, err := derive.Sync(idx, guard.Write)
+	out.Skipped = append(out.Skipped, guard.Skipped...)
 	if err != nil {
 		return out, err
 	}

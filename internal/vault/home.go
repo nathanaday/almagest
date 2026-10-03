@@ -179,38 +179,58 @@ func Within(path, dir string) bool {
 // syncs the file before the rename and the folder after it, so a power loss leaves the old
 // file or the new one, never an empty one.
 func writeAtomic(file string, data []byte) error {
+	_, err := writeAtomicIf(file, data, nil)
+	return err
+}
+
+// beforeRename lets a test act inside the window between the sync of a temporary file and
+// its rename. It is nil outside tests.
+var beforeRename func(file string)
+
+// writeAtomicIf is writeAtomic with a check that runs after the temporary file is synced,
+// right before the rename: when the check fails, it writes nothing and reports false. A
+// guarded write passes its byte comparison, so a save that lands during the sync is kept.
+func writeAtomicIf(file string, data []byte, check func() bool) (bool, error) {
 	dir := filepath.Dir(file)
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return err
+		return false, err
 	}
 	tmp, err := os.CreateTemp(dir, ".atlas-*")
 	if err != nil {
-		return err
+		return false, err
 	}
 	name := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
+	fail := func(err error) (bool, error) {
 		tmp.Close()
 		os.Remove(name)
-		return err
+		return false, err
+	}
+	if _, err := tmp.Write(data); err != nil {
+		return fail(err)
 	}
 	if err := tmp.Sync(); err != nil {
-		tmp.Close()
-		os.Remove(name)
-		return err
+		return fail(err)
 	}
 	if err := tmp.Close(); err != nil {
 		os.Remove(name)
-		return err
+		return false, err
 	}
 	if err := os.Chmod(name, 0o644); err != nil {
 		os.Remove(name)
-		return err
+		return false, err
+	}
+	if beforeRename != nil {
+		beforeRename(file)
+	}
+	if check != nil && !check() {
+		os.Remove(name)
+		return false, nil
 	}
 	if err := os.Rename(name, file); err != nil {
 		os.Remove(name)
-		return err
+		return false, err
 	}
-	return syncDir(dir)
+	return true, syncDir(dir)
 }
 
 // syncDir makes a rename in dir durable. A file system that cannot sync a folder says

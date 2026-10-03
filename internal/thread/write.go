@@ -178,7 +178,7 @@ func (w *writer) finish(subject, focus string) (*Result, error) {
 	}
 	nb := Load(idx)
 	nb.ForceCanvas, nb.TidyCanvas, nb.Joined = w.force, w.tidy, w.joined
-	if _, err := nb.Sync(vault.Guarded(idx, w.tx.WriteIfChanged, nil)); err != nil {
+	if _, err := nb.SyncWith(vault.NewGuard(idx, w.tx)); err != nil {
 		return nil, err
 	}
 	sha, err := w.tx.Commit("thread: "+oneLine(subject, 72), Trailer+": "+focus)

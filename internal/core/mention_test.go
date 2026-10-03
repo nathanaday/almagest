@@ -110,10 +110,11 @@ func TestADerivedWriteKeepsASaveMadeAfterTheRead(t *testing.T) {
 	path := idx.ByID(tv.ID("Paper")).Path
 	saved := tv.Read(path) + "\nA line saved in Obsidian.\n"
 	tv.Write(path, saved)
-	var skipped []string
-	if _, err := derive.Sync(idx, vault.Guarded(idx, tv.V.WriteIfChanged, &skipped)); err != nil {
+	guard := vault.NewGuard(idx, tv.V)
+	if _, err := derive.Sync(idx, guard.Write); err != nil {
 		t.Fatal(err)
 	}
+	skipped := guard.Skipped
 	if tv.Read(path) != saved {
 		t.Fatal("the derived write overwrote the save")
 	}

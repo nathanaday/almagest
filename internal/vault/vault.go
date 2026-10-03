@@ -612,21 +612,75 @@ func Date(t time.Time) string { return t.Format(DateFormat) }
 // ParseTime reads a code-owned time, a date, or a time without seconds.
 func ParseTime(s string) (time.Time, bool) { return schema.ParseTime(s) }
 
-// Guarded wraps a write of derived content so that it writes a document only while the
-// file still holds the bytes the index read. A file saved in between, by Obsidian or by an
-// agent's Edit, keeps the save: the write skips it, adds its path to skipped, and the next
-// sync derives it again.
-func Guarded(idx *Index, write func(string, []byte) (bool, error), skipped *[]string) func(string, []byte) (bool, error) {
-	return func(rel string, content []byte) (bool, error) {
-		if d := idx.ByPath(rel); d != nil {
-			disk, err := idx.V.Read(rel)
-			if err == nil && string(disk) != d.Content {
-				if skipped != nil {
-					*skipped = append(*skipped, rel)
-				}
-				return false, nil
-			}
-		}
-		return write(rel, content)
+// ErrChangedSince is a guarded write's refusal of a file whose bytes changed after the
+// write read it.
+var ErrChangedSince = errors.New("the file changed after the write read it")
+
+// WriteIfUnchanged writes a file only while it holds want: it compares before it writes,
+// and again after the temporary file is synced, right before the rename. A file that
+// holds other bytes gives ErrChangedSince and stays as it is.
+func (v *Vault) WriteIfUnchanged(rel string, content []byte, want string) (bool, error) {
+	if err := v.Contain(rel); err != nil {
+		return false, err
 	}
+	same := func() bool {
+		disk, err := v.Read(rel)
+		return err == nil && string(disk) == want
+	}
+	if !same() {
+		return false, ErrChangedSince
+	}
+	if want == string(content) {
+		return false, nil
+	}
+	wrote, err := writeAtomicIf(v.Abs(rel), content, same)
+	if err == nil && !wrote {
+		return false, ErrChangedSince
+	}
+	return wrote, err
+}
+
+// unchangedWriter is what a Guard writes through: the vault itself, or a Tx.
+type unchangedWriter interface {
+	WriteIfChanged(rel string, content []byte) (bool, error)
+	WriteIfUnchanged(rel string, content []byte, want string) (bool, error)
+}
+
+// Guard writes derived content only while each file still holds the bytes the write read:
+// a document's bytes as the index loaded them, or the bytes a caller registered with
+// Expect. A file saved in between, by Obsidian or by an agent's Edit, keeps the save; the
+// guard records it in Skipped, and the next sync derives it again.
+type Guard struct {
+	idx     *Index
+	w       unchangedWriter
+	expect  map[string]string
+	Skipped []string
+}
+
+// NewGuard guards the writes of one sync step through w, against what idx read.
+func NewGuard(idx *Index, w unchangedWriter) *Guard {
+	return &Guard{idx: idx, w: w, expect: map[string]string{}}
+}
+
+// Expect registers the bytes a write read from a file the index does not hold, such as a
+// chord canvas.
+func (g *Guard) Expect(rel string, raw []byte) { g.expect[rel] = string(raw) }
+
+// Write is the guarded write; its signature fits the writers of derive and thread.
+func (g *Guard) Write(rel string, content []byte) (bool, error) {
+	want, ok := g.expect[rel]
+	if !ok {
+		if d := g.idx.ByPath(rel); d != nil {
+			want, ok = d.Content, true
+		}
+	}
+	if !ok {
+		return g.w.WriteIfChanged(rel, content)
+	}
+	wrote, err := g.w.WriteIfUnchanged(rel, content, want)
+	if errors.Is(err, ErrChangedSince) {
+		g.Skipped = append(g.Skipped, rel)
+		return false, nil
+	}
+	return wrote, err
 }

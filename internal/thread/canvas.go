@@ -231,7 +231,10 @@ func (b *Board) paint(node map[string]any, s *doc.Doc) {
 func (b *Board) syncCanvas(chord *doc.Doc, write WriteFunc) (string, bool, error) {
 	force, tidy := b.ForceCanvas[chord.ID()], b.TidyCanvas[chord.ID()]
 	rel := CanvasPath(chord)
-	raw, _ := b.Idx.V.Read(rel)
+	raw, rawErr := b.Idx.V.Read(rel)
+	if b.Expect != nil && rawErr == nil {
+		b.Expect(rel, raw)
+	}
 	c, exists, err := b.readCanvas(chord)
 	if err != nil {
 		// A canvas that does not parse is the user's to repair; the chord still syncs.

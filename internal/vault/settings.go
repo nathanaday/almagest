@@ -87,10 +87,18 @@ func (v *Vault) syncSettings(drop []string) (wrote, raced bool, err error) {
 	if err != nil {
 		return false, false, err
 	}
-	if now, _ := os.ReadFile(file); string(now) != string(data) {
+	unchanged := func() bool {
+		now, _ := os.ReadFile(file)
+		return string(now) == string(data)
+	}
+	if !unchanged() {
 		return false, true, nil
 	}
-	return true, false, writeAtomic(file, append(out, '\n'))
+	wrote, err = writeAtomicIf(file, append(out, '\n'), unchanged)
+	if err == nil && !wrote {
+		return false, true, nil
+	}
+	return wrote, false, err
 }
 
 // OpenNote is the vault-relative path of the note Obsidian shows in its active pane, read

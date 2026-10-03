@@ -523,13 +523,13 @@ func syncDerived(v *vault.Vault, tx *vault.Tx) error {
 	if err != nil {
 		return err
 	}
-	if _, err := derive.Sync(idx, vault.Guarded(idx, tx.WriteIfChanged, nil)); err != nil {
+	if _, err := derive.Sync(idx, vault.NewGuard(idx, tx).Write); err != nil {
 		return err
 	}
 	if idx, err = vault.Load(v); err != nil {
 		return err
 	}
-	_, err = thread.Load(idx).Sync(vault.Guarded(idx, tx.WriteIfChanged, nil))
+	_, err = thread.Load(idx).SyncWith(vault.NewGuard(idx, tx))
 	return err
 }
 

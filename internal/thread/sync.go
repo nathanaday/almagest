@@ -22,6 +22,13 @@ const (
 	MaxCardSessions  = 3
 )
 
+// SyncWith runs Sync through a guard, which keeps any save that lands after the board
+// read a file; a canvas registers the bytes it read with the guard.
+func (b *Board) SyncWith(g *vault.Guard) ([]string, error) {
+	b.Expect = g.Expect
+	return b.Sync(g.Write)
+}
+
 // Sync makes every thread document, chord, canvas, and event agree with the vault: the
 // derived fields, the lead callouts, and the sections code writes. It writes a file only
 // when its content differs, and never changes updated. It returns the paths it wrote.

@@ -74,7 +74,10 @@ type Thread struct {
 
 // Board is every thread, chord, and event of a vault, read from one index.
 type Board struct {
-	Idx     *vault.Index
+	Idx *vault.Index
+	// Expect, when set, hears the bytes Sync read from a file the index does not hold,
+	// before it writes that file (SyncWith sets it to a guard's).
+	Expect  func(rel string, raw []byte)
 	Stubs   []*doc.Doc
 	Chords  []*doc.Doc
 	threads map[string]*Thread

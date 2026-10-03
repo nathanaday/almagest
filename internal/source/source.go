@@ -273,10 +273,10 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 		}
 	}
 	if idx2, err := vault.Load(v); err == nil {
-		if _, err := derive.Sync(idx2, vault.Guarded(idx2, tx.WriteIfChanged, nil)); err != nil {
+		if _, err := derive.Sync(idx2, vault.NewGuard(idx2, tx).Write); err != nil {
 			return nil, err
 		}
-		if _, err := thread.Load(idx2).Sync(vault.Guarded(idx2, tx.WriteIfChanged, nil)); err != nil {
+		if _, err := thread.Load(idx2).SyncWith(vault.NewGuard(idx2, tx)); err != nil {
 			return nil, err
 		}
 	}
