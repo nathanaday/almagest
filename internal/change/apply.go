@@ -367,13 +367,13 @@ type newEvent struct {
 // Apply reads a proposed change document again, validates it again, writes its
 // documents, and makes one commit. A gate, when given, judges the document Apply
 // resolved, under the lock, before anything is written.
-func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (*Preview, error) {
+func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, err error) {
 	now = now.Truncate(time.Second)
 	tx, err := Begin(v)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Close()
+	defer tx.End(&err)
 	idx, err := vault.Load(v)
 	if err != nil {
 		return nil, err
@@ -901,12 +901,12 @@ func Reject(v *vault.Vault, key, reason string, now time.Time) (*Preview, error)
 // Undo restores the paths of one applied change from the commit before it. It refuses
 // when a path changed since, so it never takes back a later edit. It never uses git
 // revert, so it needs no clean tree and touches no other path.
-func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
+func Undo(v *vault.Vault, key string, now time.Time) (_ *Preview, err error) {
 	tx, err := Begin(v)
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Close()
+	defer tx.End(&err)
 	idx, err := vault.Load(v)
 	if err != nil {
 		return nil, err

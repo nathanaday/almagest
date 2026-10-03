@@ -229,8 +229,8 @@ func TestAnUndoThatFailsLeavesNothingStaged(t *testing.T) {
 		t.Fatal(err)
 	}
 	tv.Commit()
-	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err == nil {
-		t.Fatal("the undo through a linked chords/ passed")
+	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err == nil || !strings.Contains(err.Error(), "the vault is back as it was before this call") {
+		t.Fatalf("the undo through a linked chords/: %v", err)
 	}
 	if tv.Read("wiki/documents/Motion scoring.md") != topic || !tv.V.Exists("wiki/documents/Radar.md") {
 		t.Fatal("the failed undo left files changed")

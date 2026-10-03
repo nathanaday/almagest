@@ -141,12 +141,12 @@ func Plan(v *vault.Vault, now time.Time) (*Report, error) {
 }
 
 // Run migrates a vault in one commit, then syncs the derived parts and writes the views.
-func Run(v *vault.Vault, now time.Time) (*Report, error) {
+func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	tx, err := vault.Begin(v, func() error { return vault.Recover(v) })
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Close()
+	defer tx.End(&err)
 	fresh, err := vault.Open(v.Root)
 	if err != nil {
 		return nil, err

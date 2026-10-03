@@ -70,6 +70,7 @@ func TestAWriteRefusedPartWayLeavesNothing(t *testing.T) {
 		t.Fatal(err)
 	}
 	refuses(t, "chords is a link")(thread.Stub(tv.V, thread.StubIn{Text: "Unrelated.", Title: "Zed"}, opts(tv)))
+	refuses(t, "the vault is back as it was before this call")(thread.Stub(tv.V, thread.StubIn{Text: "Unrelated.", Title: "Zed"}, opts(tv)))
 	if tv.V.Exists("wiki/documents/Zed.md") {
 		t.Fatal("the refused stub stayed on disk")
 	}

@@ -484,7 +484,7 @@ func (w *writer) afterLinks(keys []string, self string) ([]string, []*doc.Doc, e
 }
 
 // Stub plants a stub, in the user's words.
-func Stub(v *vault.Vault, in StubIn, o Opts) (*Result, error) {
+func Stub(v *vault.Vault, in StubIn, o Opts) (_ *Result, err error) {
 	text := strings.TrimSpace(in.Text)
 	if text == "" {
 		return nil, errors.New("stub needs text: the user's words")
@@ -493,7 +493,7 @@ func Stub(v *vault.Vault, in StubIn, o Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	raw := in.Title
 	if strings.TrimSpace(raw) == "" {
 		raw = TitleFromText(text)
@@ -600,12 +600,12 @@ func outsideFences(text string) string {
 }
 
 // Spec writes a thread's spec, or replaces the text of the one it has.
-func Spec(v *vault.Vault, in SpecIn, o Opts) (*Result, error) {
+func Spec(v *vault.Vault, in SpecIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.open(in.Thread)
 	if err != nil {
 		return nil, err
@@ -732,12 +732,12 @@ func (w *writer) addTasks(t *Thread, repository string, tasks []TaskIn, trail st
 }
 
 // Tasks writes a thread's task list for one repository, or appends tasks to it.
-func TasksWrite(v *vault.Vault, in TasksIn, o Opts) (*Result, error) {
+func TasksWrite(v *vault.Vault, in TasksIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.open(in.Thread)
 	if err != nil {
 		return nil, err
@@ -750,12 +750,12 @@ func TasksWrite(v *vault.Vault, in TasksIn, o Opts) (*Result, error) {
 }
 
 // Start starts work on a thread, or continues it, and binds the session to it.
-func Start(v *vault.Vault, key string, take bool, o Opts) (*Result, error) {
+func Start(v *vault.Vault, key string, take bool, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.open(key)
 	if err != nil {
 		return nil, err
@@ -791,12 +791,12 @@ func Start(v *vault.Vault, key string, take bool, o Opts) (*Result, error) {
 }
 
 // Check checks one task with what did it, drops it with the reason, or opens it again.
-func Check(v *vault.Vault, in CheckIn, o Opts) (*Result, error) {
+func Check(v *vault.Vault, in CheckIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.open(in.Thread)
 	if err != nil {
 		return nil, err
@@ -865,12 +865,12 @@ func Check(v *vault.Vault, in CheckIn, o Opts) (*Result, error) {
 
 // Verify files one verification of a thread: the result for every requirement, with the
 // evidence, and the findings.
-func Verify(v *vault.Vault, in VerifyIn, o Opts) (*Result, error) {
+func Verify(v *vault.Vault, in VerifyIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.open(in.Thread)
 	if err != nil {
 		return nil, err
@@ -982,12 +982,12 @@ func Verify(v *vault.Vault, in VerifyIn, o Opts) (*Result, error) {
 var Outcomes = []string{"task", "spec", "stub", "knowledge", "accepted"}
 
 // FindingOutcome gives one open finding of a thread's last verification its outcome.
-func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (*Result, error) {
+func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.open(in.Thread)
 	if err != nil {
 		return nil, err
@@ -1090,7 +1090,7 @@ func (w *writer) resolve(stub *doc.Doc, became []string) error {
 }
 
 // Resolve closes a stub with no spec as resolved, with the documents it became.
-func Resolve(v *vault.Vault, stub string, became []string, o Opts) (*Result, error) {
+func Resolve(v *vault.Vault, stub string, became []string, o Opts) (_ *Result, err error) {
 	if len(became) == 0 {
 		return nil, errors.New("resolve needs became: the documents the stub became")
 	}
@@ -1098,7 +1098,7 @@ func Resolve(v *vault.Vault, stub string, became []string, o Opts) (*Result, err
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	d, err := w.idx.ResolveType(stub, "stub")
 	if err != nil {
 		return nil, err
@@ -1141,7 +1141,7 @@ func ResolveInTx(tx *vault.Tx, idx *vault.Index, stub *doc.Doc, became []string,
 
 // Drop drops a thread or a chord with the reason. A dropped chord drops each of its
 // threads that is not ended.
-func Drop(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
+func Drop(v *vault.Vault, key, reason string, o Opts) (_ *Result, err error) {
 	if strings.TrimSpace(reason) == "" {
 		return nil, errors.New("drop needs the reason")
 	}
@@ -1149,7 +1149,7 @@ func Drop(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	d, err := w.subject(key)
 	if err != nil {
 		return nil, err
@@ -1190,12 +1190,12 @@ func (w *writer) subject(key string) (*doc.Doc, error) {
 
 // Reopen takes up a dropped or resolved thread, or a dropped chord, again. A chord's
 // threads that were dropped with it come back with it.
-func Reopen(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
+func Reopen(v *vault.Vault, key, reason string, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	d, err := w.subject(key)
 	if err != nil {
 		return nil, err
@@ -1232,7 +1232,7 @@ func Reopen(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
 }
 
 // Block marks a thread blocked, with the one line it waits on.
-func Block(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
+func Block(v *vault.Vault, key, reason string, o Opts) (_ *Result, err error) {
 	reason = oneLine(reason, 180)
 	if reason == "" {
 		return nil, errors.New("block needs the reason: what the thread waits on, in one line")
@@ -1241,7 +1241,7 @@ func Block(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.thread(key)
 	if err != nil {
 		return nil, err
@@ -1257,12 +1257,12 @@ func Block(v *vault.Vault, key, reason string, o Opts) (*Result, error) {
 }
 
 // Unblock clears a thread's block.
-func Unblock(v *vault.Vault, key string, o Opts) (*Result, error) {
+func Unblock(v *vault.Vault, key string, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	t, err := w.thread(key)
 	if err != nil {
 		return nil, err
@@ -1278,7 +1278,7 @@ func Unblock(v *vault.Vault, key string, o Opts) (*Result, error) {
 }
 
 // Note records a note about any document of wiki/documents.
-func Note(v *vault.Vault, key, text string, o Opts) (*Result, error) {
+func Note(v *vault.Vault, key, text string, o Opts) (_ *Result, err error) {
 	if strings.TrimSpace(text) == "" {
 		return nil, errors.New("note needs text")
 	}
@@ -1286,7 +1286,7 @@ func Note(v *vault.Vault, key, text string, o Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	d, err := w.idx.Resolve(key)
 	if err != nil {
 		return nil, err
@@ -1344,12 +1344,12 @@ func (w *writer) retitle(moves []vault.Retitle, contents map[string]string) erro
 
 // Set changes the fields of a thread's stub or of a chord. A new title renames the
 // document, the thread's other documents, and a chord's canvas, and rewrites every link.
-func Set(v *vault.Vault, in SetIn, o Opts) (*Result, error) {
+func Set(v *vault.Vault, in SetIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	d, err := w.subject(in.Doc)
 	if err != nil {
 		return nil, err

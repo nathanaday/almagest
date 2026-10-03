@@ -171,6 +171,31 @@ func (tx *Tx) Close() {
 	tx.unlock = nil
 }
 
+// End closes a write and, when it failed before its commit, rolls it back and adds what
+// the rollback did to the error. A write defers it with its error result: defer
+// tx.End(&err).
+func (tx *Tx) End(errp *error) {
+	if tx.unlock == nil {
+		return
+	}
+	if errp != nil && *errp != nil && !tx.committed && !tx.rolledBack && len(tx.before) > 0 {
+		*errp = tx.outcome(*errp, tx.rollback())
+	}
+	tx.Close()
+}
+
+// outcome is the error of a failed write with what its rollback did.
+func (tx *Tx) outcome(err error, failed []string) error {
+	kept := ""
+	if len(tx.saved) > 0 {
+		kept = "; left as saved, since they changed after this call wrote them: " + strings.Join(tx.saved, ", ")
+	}
+	if len(failed) > 0 {
+		return fmt.Errorf("%s; nothing was saved, and these could not be put back as they were: %s%s", firstLine(err), strings.Join(failed, "; "), kept)
+	}
+	return fmt.Errorf("%s; nothing was saved: the vault is back as it was before this call%s", firstLine(err), kept)
+}
+
 // rollback puts each touched path back as the write found it, and returns the paths it
 // could not put back. It runs under the lock.
 func (tx *Tx) rollback() []string {
@@ -413,15 +438,7 @@ func (tx *Tx) CommitAll(message string) (string, error) {
 func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
 	sha, err := tx.commit(subject, trailers)
 	if err != nil {
-		failed := tx.rollback()
-		kept := ""
-		if len(tx.saved) > 0 {
-			kept = "; left as saved, since they changed after this call wrote them: " + strings.Join(tx.saved, ", ")
-		}
-		if len(failed) > 0 {
-			return "", fmt.Errorf("%s; nothing was saved, and these could not be put back as they were: %s%s", firstLine(err), strings.Join(failed, "; "), kept)
-		}
-		return "", fmt.Errorf("%s; nothing was saved: the vault is back as it was before this call%s", firstLine(err), kept)
+		return "", tx.outcome(err, tx.rollback())
 	}
 	tx.committed = true
 	return sha, nil

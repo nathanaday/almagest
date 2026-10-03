@@ -86,7 +86,7 @@ func Media(name string) string {
 }
 
 // Capture brings the requested documents into the vault as one commit.
-func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
+func Capture(v *vault.Vault, req Request, o thread.Opts) (_ *Result, err error) {
 	n := 0
 	if len(req.Inbox) > 0 {
 		n++
@@ -105,7 +105,7 @@ func Capture(v *vault.Vault, req Request, o thread.Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer tx.Close()
+	defer tx.End(&err)
 	idx, err := vault.Load(v)
 	if err != nil {
 		return nil, err

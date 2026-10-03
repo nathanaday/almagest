@@ -50,7 +50,7 @@ func (w *writer) chord(key string) (*doc.Doc, error) {
 }
 
 // ChordCreate makes a chord and its threads in one commit.
-func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (*Result, error) {
+func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (_ *Result, err error) {
 	goal := strings.TrimSpace(in.Text)
 	if goal == "" {
 		return nil, errors.New("a chord needs text: its goal, what is true when every thread is closed")
@@ -59,7 +59,7 @@ func ChordCreate(v *vault.Vault, in ChordIn, o Opts) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	title, err := w.named(in.Title)
 	if err != nil {
 		return nil, err
@@ -224,12 +224,12 @@ func (w *writer) member(chord *doc.Doc, key string) (*doc.Doc, error) {
 }
 
 // ChordAdd puts a stub into a chord, after the threads given.
-func ChordAdd(v *vault.Vault, chord, key string, after []string, o Opts) (*Result, error) {
+func ChordAdd(v *vault.Vault, chord, key string, after []string, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	c, err := w.chord(chord)
 	if err != nil {
 		return nil, err
@@ -262,12 +262,12 @@ func ChordAdd(v *vault.Vault, chord, key string, after []string, o Opts) (*Resul
 }
 
 // ChordRemove takes a thread out of its chord. The thread stays, and keeps its after.
-func ChordRemove(v *vault.Vault, chord, key string, o Opts) (*Result, error) {
+func ChordRemove(v *vault.Vault, chord, key string, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	c, err := w.idx.ResolveType(chord, "chord")
 	if err != nil {
 		return nil, err
@@ -285,7 +285,7 @@ func ChordRemove(v *vault.Vault, chord, key string, o Opts) (*Result, error) {
 }
 
 // ChordOrder sets the threads each given thread of a chord comes after.
-func ChordOrder(v *vault.Vault, chord string, order []OrderIn, o Opts) (*Result, error) {
+func ChordOrder(v *vault.Vault, chord string, order []OrderIn, o Opts) (_ *Result, err error) {
 	if len(order) == 0 {
 		return nil, errors.New("order needs order: each thread with the threads it comes after")
 	}
@@ -293,7 +293,7 @@ func ChordOrder(v *vault.Vault, chord string, order []OrderIn, o Opts) (*Result,
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	c, err := w.chord(chord)
 	if err != nil {
 		return nil, err
@@ -343,12 +343,12 @@ func (w *writer) setAfter(stubs []*doc.Doc, links map[string][]string) error {
 // CanvasSave makes the stubs hold the order a chord's canvas shows: each stub on the
 // canvas joins the chord, a stub taken off it leaves the chord, and each arrow from A to
 // B puts B after A. A link from a thread to one outside the canvas stays.
-func CanvasSave(v *vault.Vault, chord string, o Opts) (*Result, error) {
+func CanvasSave(v *vault.Vault, chord string, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	c, err := w.chord(chord)
 	if err != nil {
 		return nil, err
@@ -421,12 +421,12 @@ func CanvasSave(v *vault.Vault, chord string, o Opts) (*Result, error) {
 
 // CanvasWrite writes a chord's canvas from its stubs, over what the user drew; tidy also
 // places every card again.
-func CanvasWrite(v *vault.Vault, chord string, tidy bool, o Opts) (*Result, error) {
+func CanvasWrite(v *vault.Vault, chord string, tidy bool, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)
 	if err != nil {
 		return nil, err
 	}
-	defer w.tx.Close()
+	defer w.tx.End(&err)
 	c, err := w.chord(chord)
 	if err != nil {
 		return nil, err
