@@ -59,9 +59,6 @@ func Cited(idx *vault.Index) map[string]bool {
 	return out
 }
 
-// Derived is a knowledge document's content with the parts code owns made current.
-func Derived(idx *vault.Index, d *doc.Doc) string { return derived(idx, d, Cited(idx)) }
-
 func derived(idx *vault.Index, d *doc.Doc, cited map[string]bool) string {
 	content := d.Content
 	switch d.Type() {

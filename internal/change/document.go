@@ -38,11 +38,6 @@ type Counts struct {
 	TagRewrites  int `json:"tag_rewrites"`
 }
 
-// Writes is the number of writes that change a document.
-func (c Counts) Writes() int {
-	return c.Create + c.Modify + c.Promote + c.Rename + c.Remove + c.Confirm + c.Retag
-}
-
 func (c Counts) pairs() []struct {
 	n    int
 	name string

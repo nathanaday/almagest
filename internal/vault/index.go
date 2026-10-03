@@ -171,9 +171,6 @@ func (idx *Index) add(d *doc.Doc) {
 	}
 }
 
-// Reload reads the vault again after a write.
-func (idx *Index) Reload() (*Index, error) { return Load(idx.V) }
-
 // ByID is the typed document with that id, or nil.
 func (idx *Index) ByID(id string) *doc.Doc { return idx.byID[id] }
 

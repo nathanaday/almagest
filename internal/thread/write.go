@@ -978,9 +978,6 @@ func Verify(v *vault.Vault, in VerifyIn, o Opts) (_ *Result, err error) {
 	return w.finish(fmt.Sprintf("verification %d of %s", round, t.Stub.Title()), t.Stub.ID())
 }
 
-// Outcomes of a finding.
-var Outcomes = []string{"task", "spec", "stub", "knowledge", "accepted"}
-
 // FindingOutcome gives one open finding of a thread's last verification its outcome.
 func FindingOutcome(v *vault.Vault, in FindingIn, o Opts) (_ *Result, err error) {
 	w, err := begin(v, o)

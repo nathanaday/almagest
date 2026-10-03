@@ -21,7 +21,7 @@ func TestNormalize(t *testing.T) {
 }
 
 func TestTree(t *testing.T) {
-	if !slices.Equal(Ancestors("a/b/c"), []string{"a", "a/b"}) || Parent("a/b/c") != "a/b" || Parent("a") != "" || Leaf("a/b") != "b" || Top("a/b") != "a" {
+	if !slices.Equal(Ancestors("a/b/c"), []string{"a", "a/b"}) || Parent("a/b/c") != "a/b" || Parent("a") != "" || Leaf("a/b") != "b" {
 		t.Fatal("tree helpers")
 	}
 	if !Holds([]string{"school/cs513/hw1"}, "school") || Holds([]string{"schools"}, "school") || !HoldsAll([]string{"school/cs513", "self-driving"}, []string{"school", "self-driving"}) {

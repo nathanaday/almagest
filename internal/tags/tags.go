@@ -85,12 +85,6 @@ func Parent(t string) string {
 	return ""
 }
 
-// Top is the first part of t.
-func Top(t string) string {
-	top, _, _ := strings.Cut(t, "/")
-	return top
-}
-
 // Leaf is the last part of t.
 func Leaf(t string) string { return t[strings.LastIndex(t, "/")+1:] }
 

@@ -527,12 +527,6 @@ func (r Repo) LsFiles() ([]string, error) {
 	return paths, nil
 }
 
-// Ignored reports whether the ignore rules cover path.
-func (r Repo) Ignored(p string) bool {
-	_, err := r.run("check-ignore", "-q", "--", p)
-	return err == nil
-}
-
 // Exclude adds patterns to .git/info/exclude when it lacks them, so a machine's own files
 // stay out of the history without editing a file the user owns.
 func (r Repo) Exclude(patterns ...string) error {
@@ -560,25 +554,6 @@ func (r Repo) Exclude(patterns ...string) error {
 	}
 	text += strings.Join(add, "\n") + "\n"
 	return os.WriteFile(file, []byte(text), 0o644)
-}
-
-// DiffStat is the diff from rev to HEAD as a stat and a log, for a reader who must see
-// what moved. At most max commits are listed when max is above 0.
-func (r Repo) LogStat(from string, max int) (string, error) {
-	args := []string{"log", "--stat", "--format=%h %as %s", from + "..HEAD"}
-	if max > 0 {
-		args = append(args, fmt.Sprintf("-n%d", max))
-	}
-	return r.run(args...)
-}
-
-// Dirty counts the changed and untracked paths.
-func (r Repo) Dirty() int {
-	entries, err := r.Status()
-	if err != nil {
-		return 0
-	}
-	return len(entries)
 }
 
 // HeadTime is the commit time of HEAD, in the local zone, or the zero time.

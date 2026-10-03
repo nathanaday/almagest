@@ -102,9 +102,6 @@ func LoadRegistry() (*Registry, error) {
 	return reg, nil
 }
 
-// Path is the registry file's location.
-func (r *Registry) Path() string { return r.path }
-
 // Find returns the id of a vault directory, if registered.
 func (r *Registry) Find(vault string) (string, bool) {
 	target := filepath.Clean(vault)
@@ -191,14 +188,6 @@ func Open(vault string) error {
 		return fmt.Errorf("could not launch Obsidian; open this link by hand: %s", OpenURI(vault))
 	}
 	return nil
-}
-
-// Reveal shows the folder in the file manager, for "Open folder as vault" by hand.
-func Reveal(vault string) error {
-	if runtime.GOOS == "darwin" {
-		return exec.Command("open", "-R", vault).Run()
-	}
-	return launch(filepath.Dir(vault))
 }
 
 // Running reports whether the desktop app has a process.

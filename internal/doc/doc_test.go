@@ -150,7 +150,7 @@ func TestIDsAndTitles(t *testing.T) {
 	seen := map[string]bool{}
 	for range 200 {
 		id := NewID("con", func(s string) bool { return seen[s] })
-		if !IDPattern.MatchString(id) || strings.ContainsAny(id[4:], "ilou") {
+		if len(id) != 10 || !strings.HasPrefix(id, "con-") || strings.Trim(id[4:], idAlphabet) != "" {
 			t.Fatalf("bad id %s", id)
 		}
 		seen[id] = true

@@ -166,9 +166,6 @@ func SameHash(a, b string) bool {
 // idAlphabet is lowercase Crockford base32: digits and letters without i, l, o, and u.
 const idAlphabet = "0123456789abcdefghjkmnpqrstvwxyz"
 
-// IDPattern matches an id code mints, and a session id.
-var IDPattern = regexp.MustCompile(`^[a-z]{3}-[0-9a-z]{6}$`)
-
 // NewID mints an id with prefix that taken does not hold.
 func NewID(prefix string, taken func(string) bool) string {
 	for {

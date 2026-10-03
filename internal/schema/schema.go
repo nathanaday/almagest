@@ -318,15 +318,6 @@ var byName = func() map[string]*Type {
 // Get returns the type of that name, or nil.
 func Get(name string) *Type { return byName[name] }
 
-// Names lists every type name.
-func Names() []string {
-	out := make([]string, len(Types))
-	for i, t := range Types {
-		out[i] = t.Name
-	}
-	return out
-}
-
 // DocumentTypes are the nine types of wiki/documents.
 var DocumentTypes = []string{"source", "repository", "topic", "stub", "spec", "tasks", "verification", "chord", "event"}
 
@@ -341,14 +332,6 @@ func Is(name string) bool { return byName[name] != nil }
 
 // IsDocument reports whether name is one of the nine types of wiki/documents.
 func IsDocument(name string) bool { return slices.Contains(DocumentTypes, name) }
-
-// KindsOf lists the kinds of a type, or nil when it has none.
-func KindsOf(name string) []string {
-	if t := byName[name]; t != nil {
-		return t.Kinds
-	}
-	return nil
-}
 
 // AllKinds lists every kind of every type.
 func AllKinds() []string {

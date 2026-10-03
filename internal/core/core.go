@@ -4,7 +4,6 @@
 package core
 
 import (
-	"errors"
 	"fmt"
 	"io/fs"
 	"os"
@@ -509,6 +508,3 @@ func Init(opts vault.InitOptions, h vault.Home, now time.Time) (*Status, error) 
 	}
 	return StatusOf(idx, now), nil
 }
-
-// ErrUsage is returned for a call that names no action it knows.
-var ErrUsage = errors.New("unknown action")

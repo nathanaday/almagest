@@ -146,16 +146,6 @@ func (tv *T) Doc(typ, title string, fields map[string]any, body string) string {
 	return id
 }
 
-// PathOf is the path Page gave a title, found on disk.
-func (tv *T) PathOf(title string) string {
-	tv.t.Helper()
-	d, err := tv.Index().Resolve(title)
-	if err != nil {
-		tv.t.Fatal(err)
-	}
-	return d.Path
-}
-
 // ID is the id Page gave a title.
 func (tv *T) ID(title string) string { return tv.ids[title] }
 
