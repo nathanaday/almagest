@@ -200,6 +200,21 @@ func (r Repo) Untrack(paths ...string) ([]string, error) {
 	return removed, nil
 }
 
+// Unstage puts the index entries of paths back as HEAD has them, and drops the entries
+// HEAD lacks. The files on disk stay as they are. With the index locked by another
+// program, it does what git allows and returns the error.
+func (r Repo) Unstage(paths ...string) error {
+	if len(paths) == 0 {
+		return nil
+	}
+	if !r.HasHead() {
+		_, err := r.run(append([]string{"rm", "--cached", "-q", "-r", "--ignore-unmatch", "--"}, paths...)...)
+		return err
+	}
+	_, err := r.run(append([]string{"reset", "-q", "HEAD", "--"}, paths...)...)
+	return err
+}
+
 // Tracked reports whether the index holds path.
 func (r Repo) Tracked(p string) bool {
 	out, err := r.run("ls-files", "-z", "--", p)

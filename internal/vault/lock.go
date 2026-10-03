@@ -72,8 +72,19 @@ type Tx struct {
 	V       *Vault
 	unlock  func()
 	written map[string]bool
+	// before holds each touched path as the write found it, so a write that ends without
+	// its commit puts the vault back.
+	before    map[string]*found
+	committed bool
 	// Snapshot is the commit of the hand edits the write found, or "".
 	Snapshot string
+}
+
+// found is a path as a write found it: its bytes and mode, or that it did not exist.
+type found struct {
+	exists bool
+	data   []byte
+	mode   os.FileMode
 }
 
 // Begin takes the lock, runs recover (the repair of a write a crash left half done), and
@@ -84,7 +95,7 @@ func Begin(v *Vault, recover func() error) (*Tx, error) {
 	if err != nil {
 		return nil, err
 	}
-	tx := &Tx{V: v, unlock: unlock, written: map[string]bool{}}
+	tx := &Tx{V: v, unlock: unlock, written: map[string]bool{}, before: map[string]*found{}}
 	if err := v.Git().CheckIdle(); err != nil {
 		tx.Close()
 		return nil, err
@@ -130,11 +141,53 @@ func CommitSnapshot(v *Vault) (string, error) {
 	return g.Commit(fmt.Sprintf("snapshot: %d %s edited by hand", n, noun))
 }
 
-// Close lets the lock go.
+// Close lets the lock go. A write that ends without its commit, because a step or the
+// commit failed, first puts every path it touched back as it found it, and unstages them.
 func (tx *Tx) Close() {
-	if tx.unlock != nil {
-		tx.unlock()
-		tx.unlock = nil
+	if tx.unlock == nil {
+		return
+	}
+	if !tx.committed && len(tx.before) > 0 {
+		tx.rollback()
+	}
+	tx.unlock()
+	tx.unlock = nil
+}
+
+// rollback puts each touched path back as the write found it. It runs under the lock.
+func (tx *Tx) rollback() {
+	paths := make([]string, 0, len(tx.before))
+	for rel, f := range tx.before {
+		paths = append(paths, rel)
+		abs := tx.V.Abs(rel)
+		if !f.exists {
+			os.Remove(abs)
+			continue
+		}
+		if writeAtomic(abs, f.data) == nil {
+			os.Chmod(abs, f.mode)
+		}
+	}
+	sort.Strings(paths)
+	tx.V.Prune(paths...)
+	tx.V.Git().Unstage(paths...)
+}
+
+// Keep records paths as they are now, before another function changes them, so a write
+// that ends without its commit can put them back. Each path is kept once, at its first
+// touch.
+func (tx *Tx) Keep(paths ...string) {
+	for _, rel := range paths {
+		if _, ok := tx.before[rel]; ok {
+			continue
+		}
+		f := &found{}
+		if st, err := os.Lstat(tx.V.Abs(rel)); err == nil && st.Mode().IsRegular() {
+			if data, err := os.ReadFile(tx.V.Abs(rel)); err == nil {
+				f = &found{exists: true, data: data, mode: st.Mode().Perm()}
+			}
+		}
+		tx.before[rel] = f
 	}
 }
 
@@ -144,6 +197,7 @@ func (tx *Tx) Write(rel string, content []byte) error {
 	if err := tx.V.Contain(rel); err != nil {
 		return err
 	}
+	tx.Keep(rel)
 	tx.written[rel] = true
 	return tx.V.Write(rel, content)
 }
@@ -153,6 +207,7 @@ func (tx *Tx) WriteIfChanged(rel string, content []byte) (bool, error) {
 	if err := tx.V.Contain(rel); err != nil {
 		return false, err
 	}
+	tx.Keep(rel)
 	wrote, err := tx.V.WriteIfChanged(rel, content)
 	if wrote {
 		tx.written[rel] = true
@@ -165,6 +220,7 @@ func (tx *Tx) Remove(rel string) error {
 	if err := tx.V.Contain(rel); err != nil {
 		return err
 	}
+	tx.Keep(rel)
 	tx.written[rel] = true
 	return tx.V.Remove(rel)
 }
@@ -177,6 +233,7 @@ func (tx *Tx) Move(from, to string) error {
 	if err := tx.V.Contain(to); err != nil {
 		return err
 	}
+	tx.Keep(from, to)
 	tx.written[from] = true
 	tx.written[to] = true
 	if err := os.MkdirAll(filepath.Dir(tx.V.Abs(to)), 0o755); err != nil {
@@ -192,7 +249,8 @@ func (tx *Tx) Move(from, to string) error {
 	return tx.V.Remove(from)
 }
 
-// Mark adds paths another function wrote to the commit.
+// Mark adds paths another function wrote to the commit. Call Keep on them before that
+// function writes, so a failed write can put them back.
 func (tx *Tx) Mark(paths ...string) {
 	for _, p := range paths {
 		tx.written[p] = true
@@ -212,6 +270,15 @@ func (tx *Tx) Paths() []string {
 // Commit stages the marked paths and commits them with the subject and trailers
 // ("Key: value"). It returns "" when nothing changed.
 func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
+	sha, err := tx.commit(subject, trailers)
+	if err != nil {
+		return "", fmt.Errorf("%w; nothing was saved: the vault is back as it was before this call", err)
+	}
+	tx.committed = true
+	return sha, nil
+}
+
+func (tx *Tx) commit(subject string, trailers []string) (string, error) {
 	g := tx.V.Git()
 	if err := g.Add(tx.Paths()...); err != nil {
 		return "", err

@@ -882,6 +882,7 @@ func Undo(v *vault.Vault, key string, now time.Time) (*Preview, error) {
 		return nil, fmt.Errorf("undo refused: %s changed since the change applied. Undo the later change first, or make the fix as a new change", strings.Join(moved, ", "))
 	}
 	before := repoPaths(idx)
+	tx.Keep(paths...)
 	if err := g.RestoreFrom(g.Parent(sha), paths...); err != nil {
 		return nil, err
 	}

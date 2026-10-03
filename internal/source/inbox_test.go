@@ -57,3 +57,27 @@ func TestTheInboxTakesOnlyAFileKeptInIt(t *testing.T) {
 		t.Fatal("the stub left its inbox file")
 	}
 }
+
+func TestACaptureWhoseCommitFailsPutsTheInboxBack(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("inbox/notes.md", "# Notes\n\nKept.\n")
+	tv.Commit()
+	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	_, err := source.Capture(tv.V, source.Request{Inbox: []string{"notes.md"}}, at)
+	os.Remove(lock)
+	if err == nil || !strings.Contains(err.Error(), "the vault is back as it was") {
+		t.Fatalf("capture with the index locked: %v", err)
+	}
+	if tv.Read("inbox/notes.md") != "# Notes\n\nKept.\n" {
+		t.Fatal("the inbox file is gone or changed")
+	}
+	if entries, _ := os.ReadDir(tv.V.Abs("wiki/documents")); len(entries) != 0 {
+		t.Fatalf("a source stayed: %v", entries)
+	}
+	if entries, _ := os.ReadDir(tv.V.Abs("wiki/assets")); len(entries) != 0 {
+		t.Fatalf("an asset stayed: %v", entries)
+	}
+}
