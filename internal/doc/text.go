@@ -35,8 +35,7 @@ func Capital(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// FirstSentence is the first sentence of the first line of prose in text: headings,
-// callouts, tables, and fences are skipped, and list marks dropped.
+// FirstSentence is the first sentence of text's first prose line, cut to 200 runes.
 func FirstSentence(text string) string {
 	line := ""
 	for _, l := range strings.Split(text, "\n") {
