@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"os"
 	"path"
 	"path/filepath"
 	"regexp"
@@ -65,6 +66,9 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	}
 	session := findVault(in, env)
 	for _, f := range in.paths() {
+		// Every rule judges the file as the disk names it, whatever case, Unicode form,
+		// or link the agent wrote.
+		f.Path = canonical(f.Path)
 		// A file belongs to the vault above it, wherever the session runs.
 		v := session
 		if root := vault.FindAbove(filepath.Dir(f.Path)); root != "" {
@@ -337,7 +341,7 @@ func sectionBounds(content, title string) (int, int) {
 func repositoryRefusal(v *vault.Vault, in Input, target string) string {
 	var repo *vault.Repo
 	for _, r := range v.Repositories() {
-		if r.Path != "" && vault.Within(target, r.Path) {
+		if r.Path != "" && vault.Within(target, canonical(r.Path)) {
 			rr := r
 			if repo == nil || len(rr.Path) > len(repo.Path) {
 				repo = &rr
@@ -426,4 +430,63 @@ func restartRefusal(in Input, env Env) string {
 		}
 	}
 	return ""
+}
+
+// canonical is a path as the disk names it: links on the part that exists are resolved,
+// and each part is spelled as its folder entry, which on a disk that ignores case or
+// Unicode form may differ from what was written. A part that does not exist yet keeps its
+// spelling.
+func canonical(p string) string {
+	p = filepath.Clean(p)
+	have, tail := p, ""
+	for {
+		if _, err := os.Lstat(have); err == nil {
+			break
+		}
+		parent := filepath.Dir(have)
+		if parent == have {
+			return p
+		}
+		tail = filepath.Join(filepath.Base(have), tail)
+		have = parent
+	}
+	real, err := filepath.EvalSymlinks(have)
+	if err != nil {
+		return p
+	}
+	out := string(filepath.Separator)
+	for _, part := range strings.Split(strings.TrimPrefix(real, string(filepath.Separator)), string(filepath.Separator)) {
+		if part == "" {
+			continue
+		}
+		out = filepath.Join(out, entryName(out, part))
+	}
+	if tail != "" {
+		out = filepath.Join(out, tail)
+	}
+	return out
+}
+
+// entryName is the name under which dir holds part: part itself when an entry has that
+// exact name, else the entry that is the same file.
+func entryName(dir, part string) string {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return part
+	}
+	for _, e := range entries {
+		if e.Name() == part {
+			return part
+		}
+	}
+	want, err := os.Lstat(filepath.Join(dir, part))
+	if err != nil {
+		return part
+	}
+	for _, e := range entries {
+		if info, err := os.Lstat(filepath.Join(dir, e.Name())); err == nil && os.SameFile(want, info) {
+			return e.Name()
+		}
+	}
+	return part
 }
