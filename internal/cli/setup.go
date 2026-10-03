@@ -52,7 +52,11 @@ func (c *CLI) setupCmd(argv []string) error {
 	// The agent plugin.
 	if a.has("no-plugin") {
 		fmt.Fprintln(c.Out, "plugin   skipped (--no-plugin)")
-	} else if inst, _ := host.Installed(agent); inst != nil {
+	} else if inst, err := host.Installed(agent); err != nil {
+		fmt.Fprintf(c.Out, "plugin   could not read the install: %v\n", err)
+	} else if inst != nil && !inst.Enabled {
+		fmt.Fprintf(c.Out, "plugin   %s %s in %s is disabled; %s\n", host.PluginID, inst.Version, agent, host.EnableHint(agent))
+	} else if inst != nil {
 		fmt.Fprintf(c.Out, "plugin   %s %s in %s\n", host.PluginID, inst.Version, agent)
 	} else {
 		ran, err := host.InstallPlugin(agent, a.get("plugin-source"))
