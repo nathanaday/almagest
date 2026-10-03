@@ -229,6 +229,16 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 			t.Errorf("the guard sees %s", tool)
 		}
 	}
+	// Every atlas tool that can write reaches the guard on both hosts; a new tool fails
+	// here until the matcher names it, or this list says it only reads.
+	readsOnly := map[string]bool{"search": true, "context": true, "match": true, "lint": true}
+	for _, tool := range mcpserver.ToolNames() {
+		for _, name := range []string{"mcp__plugin_" + hooks.PluginName + "_atlas__" + tool, "mcp__atlas__" + tool} {
+			if !readsOnly[tool] && !guard.MatchString(name) {
+				t.Errorf("the guard does not see %s, which can write", name)
+			}
+		}
+	}
 }
 
 func TestOneVersion(t *testing.T) {
