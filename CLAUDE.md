@@ -178,10 +178,13 @@ The design pages are the spec. When the code departs from them, the reason is be
   (`\x{…}` too), backslashes and backslash-newlines, brace lists and ranges,
   separators, process substitutions (`<(…)` runs a command of its own), and redirects
   whose targets leave the words (`&>`, `{fd}>`, `<<<`, quoted targets); zsh's `=name`
-  counts as the name. A quoted word or a heredoc body is read as a command only on a
-  line that holds a runner (`runners`: sh, bash, eval, ssh, env, …, in any case),
-  anywhere, as in `echo "…" | sh`; elsewhere a commit message or a grep pattern that
-  names a refused subcommand is text. The binary's name compares without case, and
+  counts as the name. A quoted word or a heredoc body is read as a command only in a
+  pipeline that runs a string (`runsString`: a runner such as sh, bash, eval, or ssh,
+  in any case, where the command name stands, after assignments and wrappers like sudo,
+  xargs, or timeout; `env -S`; find's `-exec sh`), as in `sh -c "…"` or `echo "…" | sh`;
+  elsewhere a commit message or a grep pattern that names a refused subcommand is text,
+  and a refusal of quoted text says why it counted. Brace expansion stops past 256
+  words, counted before it expands. The binary's name compares without case, and
   options drop out; an option's value stays, so `apply` and `migrate` count anywhere
   after their subcommand. A word built at run time (a variable, `$(…)`, a glob, xargs)
   is out of its reach. `config set` and `config unset` of `terminal_command` or
