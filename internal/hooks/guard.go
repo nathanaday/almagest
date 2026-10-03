@@ -405,7 +405,28 @@ func covers(v *vault.Vault, title, repo string) string {
 	if s := stub.Str("status"); s == thread.Dropped || s == thread.Resolved {
 		return title + " is " + s
 	}
-	for _, list := range sessions.TaskLists(v, title) {
+	// The lists named after the thread answer most calls without reading the vault; a
+	// list renamed by hand still names its thread, which the index finds.
+	why := openTask(sessions.TaskLists(v, title), title, repo)
+	if why == "" {
+		return ""
+	}
+	if idx, err := vault.Load(v); err == nil {
+		var lists []*doc.Doc
+		for _, d := range idx.Of("tasks") {
+			if strings.EqualFold(doc.LinkTarget(d.Str("thread")), title) {
+				lists = append(lists, d)
+			}
+		}
+		why = openTask(lists, title, repo)
+	}
+	return why
+}
+
+// openTask says why no list of a thread has an open task for a repository, or "".
+func openTask(lists []*doc.Doc, title, repo string) string {
+	why := title + " has no task list for " + repo
+	for _, list := range lists {
 		if !strings.EqualFold(doc.LinkTarget(list.Str("repository")), repo) {
 			continue
 		}
@@ -414,9 +435,9 @@ func covers(v *vault.Vault, title, repo string) string {
 				return ""
 			}
 		}
-		return title + " has no open task for " + repo + ": every task of its list is done"
+		why = title + " has no open task for " + repo + ": every task of its list is done"
 	}
-	return title + " has no task list for " + repo
+	return why
 }
 
 // restartRefusal refuses a second start of a thread this session already started and

@@ -114,3 +114,26 @@ func TestTheGuardRefusesTheFilesThatDecideWhatRuns(t *testing.T) {
 		t.Error("another plugin's settings were refused")
 	}
 }
+
+// The guard finds a thread's task lists by their thread field, so a list renamed by hand
+// still lets the thread's session edit its repository.
+func TestARenamedTaskListStillCoversItsRepository(t *testing.T) {
+	f := setup(t)
+	edge := f.tv.Repo("p3-edge", nil)
+	f.tv.Doc("repository", "p3-edge", map[string]any{"path": edge}, "")
+	f.tv.Commit()
+	f.run("session-start", map[string]any{})
+	f.thread("Edge work", "p3-edge")
+	f.bind("start", f.ok(thread.Start(f.tv.V, "Edge work", false, thread.Opts{Now: f.tv.Clock})), map[string]any{"thread": "Edge work"})
+	lists, _ := filepath.Glob(filepath.Join(f.tv.V.Root, "wiki", "documents", "Edge work · Tasks*.md"))
+	if len(lists) != 1 {
+		t.Fatalf("task lists: %v", lists)
+	}
+	if err := os.Rename(lists[0], filepath.Join(f.tv.V.Root, "wiki", "documents", "Edge checklist.md")); err != nil {
+		t.Fatal(err)
+	}
+	write := map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": edge + "/main.go", "old_string": "a"}}
+	if out := f.run("guard", write); denied(out) {
+		t.Fatalf("a renamed task list with an open task does not cover its repository: %s", out)
+	}
+}
