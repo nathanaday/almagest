@@ -217,10 +217,16 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 			t.Errorf("hooks.json never runs %s", command)
 		}
 	}
-	guard := file.Hooks["PreToolUse"][0].Matcher
-	for _, tool := range []string{"Write", "Edit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_atlas__change", "mcp__plugin_" + hooks.PluginName + "_atlas__thread", "mcp__plugin_" + hooks.PluginName + "_atlas__chord"} {
-		if !regexp.MustCompile("^(" + guard + ")$").MatchString(tool) {
+	// The hosts test the matcher as written, unanchored, so it anchors itself.
+	guard := regexp.MustCompile(file.Hooks["PreToolUse"][0].Matcher)
+	for _, tool := range []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_atlas__change", "mcp__plugin_" + hooks.PluginName + "_atlas__thread", "mcp__plugin_" + hooks.PluginName + "_atlas__chord", "mcp__plugin_" + hooks.PluginName + "_atlas__source", "mcp__plugin_" + hooks.PluginName + "_atlas__vault", "mcp__atlas__change", "mcp__atlas__thread"} {
+		if !guard.MatchString(tool) {
 			t.Errorf("the guard does not see %s", tool)
+		}
+	}
+	for _, tool := range []string{"WriteFile", "mcp__x_atlas__changelog", "mcp__plugin_other_atlas__change", "mcp__atlas__change_log", "mcp__atlas__search", "Read"} {
+		if guard.MatchString(tool) {
+			t.Errorf("the guard sees %s", tool)
 		}
 	}
 }

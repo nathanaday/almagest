@@ -125,7 +125,7 @@ func atlasTool(name string) string {
 	}
 	i := strings.LastIndex(name, "__")
 	server, tool := name[len("mcp__"):i], name[i+2:]
-	if server == "atlas" || strings.HasSuffix(server, PluginName+"_atlas") {
+	if server == "atlas" || server == "plugin_"+PluginName+"_atlas" {
 		return tool
 	}
 	return ""
