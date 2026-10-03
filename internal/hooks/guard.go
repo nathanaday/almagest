@@ -9,6 +9,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
@@ -103,6 +104,29 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 
 var shellSeparator = regexp.MustCompile("[;&|()\n`]")
 
+// redirect matches a redirect and its target, which bash takes out of a command's words.
+var redirect = regexp.MustCompile(`\d*(?:<<<|<<|<>|>>|>\||<|>)&?\s*[^\s;&|()<>]*`)
+
+// ansiQuoted matches bash's $'…' quoting, whose escapes bash decodes, and $"…".
+var ansiQuoted = regexp.MustCompile(`\$'((?:[^'\\]|\\.)*)'|\$"`)
+
+// shellWords is a command as bash reads it before it runs it: a backslash-newline joins
+// two lines, redirects leave the words, and $'…' turns into its decoded text.
+func shellWords(cmd string) string {
+	cmd = strings.ReplaceAll(cmd, "\\\n", "")
+	cmd = redirect.ReplaceAllString(cmd, " ")
+	return ansiQuoted.ReplaceAllStringFunc(cmd, func(m string) string {
+		if m == `$"` {
+			return `"`
+		}
+		body := m[2 : len(m)-1]
+		if text, err := strconv.Unquote(`"` + strings.ReplaceAll(body, `"`, `\"`) + `"`); err == nil {
+			return "'" + text + "'"
+		}
+		return "'" + body + "'"
+	})
+}
+
 // binaryNames are the binary's name and the name it had in 6.0 to 6.2, which an older
 // install may still hold.
 var binaryNames = []string{"atlas-obsidian", "atlas"}
@@ -110,7 +134,7 @@ var binaryNames = []string{"atlas-obsidian", "atlas"}
 // atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
 func atlasCommandRefusal(cmd string) string {
-	for _, part := range shellSeparator.Split(cmd, -1) {
+	for _, part := range shellSeparator.Split(shellWords(cmd), -1) {
 		words := strings.Fields(shellUnquote.Replace(part))
 		for i, word := range words {
 			if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, path.Base(word)) }) {
