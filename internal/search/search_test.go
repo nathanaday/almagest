@@ -1,7 +1,12 @@
 package search_test
 
 import (
+	"reflect"
+	"slices"
+	"strings"
 	"testing"
+
+	"github.com/nathanaday/atlas-obsidian/internal/schema"
 
 	"github.com/nathanaday/atlas-obsidian/internal/search"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
@@ -84,5 +89,56 @@ func TestTheStatusFilterSelectsAVerification(t *testing.T) {
 	hits, err := search.Search(tv.Index(), search.Query{Status: []string{"findings"}})
 	if err != nil || hits.Total != 1 || hits.Hits[0].Ref.Title != "Fix alarms · Verification 2" {
 		t.Fatalf("status findings: %+v %v", hits, err)
+	}
+}
+
+// The hints of the search tool name exactly what the call accepts.
+func TestTheSearchHintsFollowTheSchema(t *testing.T) {
+	hint := func(field string) string {
+		f, _ := reflect.TypeOf(search.Query{}).FieldByName(field)
+		return f.Tag.Get("jsonschema")
+	}
+	// byType reads "type: a, b; type: c" into its values, checking each type.
+	byType := func(text string) []string {
+		var out []string
+		for _, group := range strings.Split(text, "; ") {
+			name, values, ok := strings.Cut(group, ": ")
+			if !ok || schema.Get(name[strings.LastIndex(name, " ")+1:]) == nil {
+				t.Fatalf("%q names no type", group)
+			}
+			out = append(out, strings.Split(values, ", ")...)
+		}
+		return out
+	}
+	same := func(field string, got, want []string) {
+		for _, v := range want {
+			if !slices.Contains(got, v) {
+				t.Errorf("the %s hint lacks %q", field, v)
+			}
+		}
+		for _, v := range got {
+			if !slices.Contains(want, v) {
+				t.Errorf("the %s hint names %q, which the call refuses", field, v)
+			}
+		}
+	}
+	types, rest, _ := strings.Cut(strings.TrimPrefix(hint("Types"), "document types: "), "; or ")
+	same("types", strings.Split(types, ", "), schema.DocumentTypes)
+	if !strings.HasPrefix(rest, "session, change. Empty: the nine document types") {
+		t.Errorf("the types hint ends %q", rest)
+	}
+	same("kinds", byType(strings.TrimPrefix(hint("Kinds"), "kinds by type: ")), schema.AllKinds())
+	same("status", byType(strings.TrimPrefix(hint("Status"), "the statuses to keep, by type: ")), schema.Statuses())
+}
+
+// A task list for a repository belongs to it.
+func TestARepositoryHoldsItsTaskLists(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("repository", "p3-edge", map[string]any{"path": "/y"}, "")
+	tv.Doc("stub", "Fix alarms", map[string]any{"status": "planned"}, "## Idea\n\nx\n")
+	tv.Doc("tasks", "Fix alarms · Tasks (p3-edge)", map[string]any{"thread": "[[Fix alarms]]", "repository": "[[p3-edge]]"}, "## Tasks\n\n- [ ] T1 Do it\n")
+	hits, err := search.Search(tv.Index(), search.Query{Repository: "p3-edge", Types: []string{"tasks"}})
+	if err != nil || hits.Total != 1 {
+		t.Fatalf("the task list of p3-edge: %+v %v", hits, err)
 	}
 }

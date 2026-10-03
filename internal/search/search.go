@@ -35,10 +35,10 @@ const (
 // Query is what to search for.
 type Query struct {
 	Text       string   `json:"text,omitempty" jsonschema:"free text; may be empty when the filters say enough"`
-	Types      []string `json:"types,omitempty" jsonschema:"source, repository, topic, stub, spec, event (and session or change); empty: the six document types"`
-	Kinds      []string `json:"kinds,omitempty" jsonschema:"topic kinds (concept, entity, policy, overview), spec kinds (plan, design), or event kinds"`
+	Types      []string `json:"types,omitempty" jsonschema:"document types: source, repository, topic, stub, spec, tasks, verification, chord, event; or session, change. Empty: the nine document types"`
+	Kinds      []string `json:"kinds,omitempty" jsonschema:"kinds by type: topic: concept, entity, policy, overview; event: started, continued, dropped, reopened, blocked, unblocked, promoted, resolved, note"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"a document must hold every one of these tags, or a tag below it"`
-	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep: open, started, done, dropped, resolved, current, superseded, pending, absorbed, draft, stable, contested, deprecated"`
+	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep, by type: source: pending, absorbed; topic: draft, stable, contested, deprecated; stub: stub, specified, planned, started, unverified, verified, closed, dropped, resolved; spec: not implemented, complete (unverified), complete (verified); verification: pass, fail, findings, stale; chord: open, started, done, closed, dropped; session: running, waiting, idle, ended, lost; change: proposed, applying, applied, rejected, superseded, undone"`
 	Repository string   `json:"repository,omitempty" jsonschema:"only documents that name this repository or hold its tag, by id or title"`
 	Limit      int      `json:"limit,omitempty" jsonschema:"at most this many hits; 20 when 0"`
 }
@@ -229,13 +229,15 @@ func wanted(d *doc.Doc, types []string) bool {
 }
 
 // names reports whether a document belongs to a repository: the repository itself, a
-// spec that names it, an event about such a spec, or a document that holds its tag.
+// thread or a session that lists it, a task list for it, an event about one of those, or
+// a document that holds its tag.
 func names(idx *vault.Index, d, repo *doc.Doc) bool {
 	if d.ID() == repo.ID() {
 		return true
 	}
 	lists := func(x *doc.Doc) bool {
-		return slices.ContainsFunc(x.List("repositories"), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) })
+		is := func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) }
+		return slices.ContainsFunc(x.List("repositories"), is) || is(x.Str("repository"))
 	}
 	if lists(d) {
 		return true
