@@ -285,8 +285,8 @@ func (o *op) label() string {
 	return fmt.Sprintf("%s %q (%s)", o.Kind, o.Title, o.ID)
 }
 
-// createTypes are the types a change creates. A source comes from capture; a stub, a
-// spec, and an event from the work tool.
+// createTypes are the types a change creates. A source comes from capture; a thread
+// document, a chord, and an event from the thread and chord tools.
 var createTypes = []string{"topic", "repository"}
 
 // knowledge reports whether a type is one a change writes.

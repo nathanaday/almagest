@@ -62,7 +62,7 @@ const (
 	Root Family = "root"
 	// Knowledge is what the vault knows: only a change writes it.
 	Knowledge Family = "knowledge"
-	// Work is what the user means to do: the work tool writes it.
+	// Work is what the user means to do: the thread and chord tools write it.
 	Work Family = "work"
 	// Record is what happened: code writes it.
 	Record Family = "record"

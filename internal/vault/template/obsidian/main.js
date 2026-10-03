@@ -549,7 +549,7 @@ function exec(bin, args, cwd) {
         if (!err) return resolve(stdout);
         const code = err.code;
         if (code === "ENOENT") {
-          return reject(new AtlasError(`the atlas binary was not found at ${bin}`));
+          return reject(new AtlasError(`the atlas-obsidian binary was not found at ${bin}`));
         }
         reject(new AtlasError(errorMessage(String(stderr)) || err.message));
       }
@@ -557,7 +557,7 @@ function exec(bin, args, cwd) {
   });
 }
 async function runAtlas(bin, vault, args) {
-  if (!bin) throw new AtlasError("the atlas binary was not found; set its path in the Atlas settings");
+  if (!bin) throw new AtlasError("the atlas-obsidian binary was not found; set its path in the Atlas settings");
   const out = await exec(bin, [...args, "--vault", vault, "--json"], vault);
   let parsed;
   try {
@@ -1776,7 +1776,7 @@ var AtlasSettingTab = class extends import_obsidian9.PluginSettingTab {
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian9.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the status of each stub, plan, and session, and the kind of each event.").addToggle(
+    new import_obsidian9.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the status of each thread, chord, and session, and the kind of each event.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.badges).onChange(async (value) => {
         this.plugin.settings.badges = value;
         await this.plugin.saveSettings();

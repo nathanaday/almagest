@@ -59,7 +59,7 @@ func New() *CLI {
 	return &CLI{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Getenv: os.Getenv, Now: time.Now, Dir: dir}
 }
 
-const usage = `atlas-obsidian: one vault for what you know, what you plan and do, and what happened.
+const usage = `atlas-obsidian: one vault for what you know, the threads you work on, and what happened.
 
 Usage:
   atlas-obsidian vault [status|init|sync [--views]|mention|migrate [--dry-run]]
