@@ -323,40 +323,47 @@ func (v *Vault) Exists(rel string) bool {
 	return err == nil
 }
 
-// Write writes a vault-relative file atomically, making its folder.
+// Write writes a vault-relative file atomically, making its folder. It refuses a path
+// that Contain refuses, so no caller can write outside the vault by forgetting a check.
 func (v *Vault) Write(rel string, content []byte) error {
-	return writeAtomic(v.Abs(rel), content)
-}
-
-// WriteDoc writes a document outside a Tx, after Contain accepts its path. Fixed machine
-// paths (.obsidian/, .claude/) use Write.
-func (v *Vault) WriteDoc(rel string, content []byte) error {
 	if err := v.Contain(rel); err != nil {
 		return err
 	}
-	return v.Write(rel, content)
-}
-
-// WriteDocIfChanged is WriteIfChanged after Contain accepts the path.
-func (v *Vault) WriteDocIfChanged(rel string, content []byte) (bool, error) {
-	if err := v.Contain(rel); err != nil {
-		return false, err
-	}
-	return v.WriteIfChanged(rel, content)
+	return writeAtomic(v.Abs(rel), content)
 }
 
 // WriteIfChanged writes the file only when its content differs, and reports whether it
-// wrote.
+// wrote. Like Write, it refuses a path that Contain refuses, before it reads.
 func (v *Vault) WriteIfChanged(rel string, content []byte) (bool, error) {
+	if err := v.Contain(rel); err != nil {
+		return false, err
+	}
 	if have, err := v.Read(rel); err == nil && string(have) == string(content) {
 		return false, nil
 	}
-	return true, v.Write(rel, content)
+	return true, writeAtomic(v.Abs(rel), content)
+}
+
+// WriteMachineIfChanged is the one unchecked writer: it serves only the fixed machine
+// paths under .obsidian/ and .claude/, which a user may link to a shared folder outside
+// the vault on purpose.
+func (v *Vault) WriteMachineIfChanged(rel string, content []byte) (bool, error) {
+	top, _, _ := strings.Cut(rel, "/")
+	if top != Obsidian && top != ".claude" {
+		return false, fmt.Errorf("%q is no machine path; only .obsidian/ and .claude/ take an unchecked write", rel)
+	}
+	if have, err := v.Read(rel); err == nil && string(have) == string(content) {
+		return false, nil
+	}
+	return true, writeAtomic(v.Abs(rel), content)
 }
 
 // Remove deletes a vault-relative file, and the folders it leaves empty up to the
 // layout's own folders.
 func (v *Vault) Remove(rel string) error {
+	if err := v.Contain(rel); err != nil {
+		return err
+	}
 	if err := os.Remove(v.Abs(rel)); err != nil && !errors.Is(err, os.ErrNotExist) {
 		return err
 	}

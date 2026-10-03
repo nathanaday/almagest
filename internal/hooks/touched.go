@@ -67,7 +67,7 @@ func Touched(r io.Reader, env Env) error {
 					if data, err := v.Read(rel); err == nil {
 						d := doc.Parse(rel, data)
 						if schema.IsThread(d.Type()) || d.Type() == "event" {
-							v.WriteDocIfChanged(rel, []byte(doc.SetField(d.Content, "updated", vault.Stamp(now))))
+							v.WriteIfChanged(rel, []byte(doc.SetField(d.Content, "updated", vault.Stamp(now))))
 							// An edit of a spec or a list changes what its thread's status derives from.
 							syncWork = true
 						}
@@ -83,7 +83,7 @@ func Touched(r io.Reader, env Env) error {
 					link("changes", title)
 					if s := sessions.Find(v, e.Key()); s != nil {
 						if data, err := v.Read(p); err == nil {
-							v.WriteDocIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(s.Title()))))
+							v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(s.Title()))))
 						}
 					}
 				}
@@ -133,7 +133,7 @@ func Touched(r io.Reader, env Env) error {
 		if d != nil {
 			for _, p := range eventPaths {
 				if data, err := v.Read(p); err == nil {
-					v.WriteDocIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(d.Title()))))
+					v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(d.Title()))))
 				}
 			}
 		}

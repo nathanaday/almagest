@@ -175,7 +175,7 @@ func InstallPlugin(v *Vault) ([]string, error) {
 			return nil, err
 		}
 		rel := path.Join(PluginDir, f)
-		wrote, err := v.WriteIfChanged(rel, data)
+		wrote, err := v.WriteMachineIfChanged(rel, data)
 		if err != nil {
 			return nil, err
 		}

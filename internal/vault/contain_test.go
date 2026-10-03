@@ -154,17 +154,36 @@ func TestAFailedRenameLeavesNoTemporaryFile(t *testing.T) {
 	}
 }
 
-func TestWriteDocRefusesAPathThroughALinkOut(t *testing.T) {
+func TestVaultWriteRefusesAPathThroughALinkOut(t *testing.T) {
 	tv := testvault.New(t)
 	out := outside(t)
 	link(t, out, tv.V.Abs("sessions/2026-10"))
-	if err := tv.V.WriteDoc("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
-		t.Errorf("WriteDoc: %v", err)
+	if err := tv.V.Write("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("Write: %v", err)
 	}
-	if _, err := tv.V.WriteDocIfChanged("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
-		t.Errorf("WriteDocIfChanged: %v", err)
+	if _, err := tv.V.WriteIfChanged("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+		t.Errorf("WriteIfChanged: %v", err)
 	}
 	if entries, _ := os.ReadDir(out); len(entries) != 1 {
 		t.Fatalf("the outside folder changed: %v", entries)
+	}
+}
+
+func TestThePluginInstallsThroughALinkedObsidianFolder(t *testing.T) {
+	tv := testvault.New(t)
+	shared := filepath.Join(t.TempDir(), "shared-obsidian")
+	if err := os.Rename(tv.V.Abs(".obsidian"), shared); err != nil {
+		t.Fatal(err)
+	}
+	link(t, shared, tv.V.Abs(".obsidian"))
+	os.RemoveAll(filepath.Join(shared, "plugins"))
+	if _, err := vault.InstallPlugin(tv.V); err != nil {
+		t.Fatalf("install through a linked .obsidian: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(shared, "plugins", "atlas", "manifest.json")); err != nil {
+		t.Fatal("the plugin is not in the shared folder")
+	}
+	if _, err := tv.V.WriteMachineIfChanged("wiki/documents/x.md", []byte("x\n")); err == nil {
+		t.Fatal("the machine writer took a document path")
 	}
 }

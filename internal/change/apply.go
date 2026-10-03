@@ -82,12 +82,12 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 	id := doc.NewID("chg", func(s string) bool { return idx.ByID(s) != nil })
 	rel := freePath(idx, now, p.Title)
 	content := renderDocument(p, id, now)
-	if err := v.WriteDoc(rel, []byte(content)); err != nil {
+	if err := v.Write(rel, []byte(content)); err != nil {
 		return nil, err
 	}
 	if p.Supersedes != nil {
 		old := setStatus(p.Supersedes.Content, Superseded, doc.Field{Key: "updated", Value: vault.Stamp(now)})
-		if err := v.WriteDoc(p.Supersedes.Path, []byte(old)); err != nil {
+		if err := v.Write(p.Supersedes.Path, []byte(old)); err != nil {
 			return nil, err
 		}
 	}
@@ -799,7 +799,7 @@ func Reject(v *vault.Vault, key, reason string, now time.Time) (*Preview, error)
 		return nil, fmt.Errorf("%s is %s; only a proposed change can be rejected", vault.Title(d), s)
 	}
 	content := setStatus(d.Content, Rejected, doc.Field{Key: "reason", Value: strings.TrimSpace(reason)}, doc.Field{Key: "updated", Value: vault.Stamp(now)})
-	if err := v.WriteDoc(d.Path, []byte(content)); err != nil {
+	if err := v.Write(d.Path, []byte(content)); err != nil {
 		return nil, err
 	}
 	idx, err = vault.Load(v)
