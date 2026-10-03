@@ -230,8 +230,8 @@ func wanted(d *doc.Doc, types []string) bool {
 }
 
 // names reports whether a document belongs to a repository: the repository itself, a
-// thread or a session that lists it, a task list for it, an event about one of those, or
-// a document that holds its tag.
+// thread or a session that lists it, a task list for it, a thread document or an event of
+// such a thread, or a document that holds its tag.
 func names(idx *vault.Index, d, repo *doc.Doc) bool {
 	if d.ID() == repo.ID() {
 		return true
@@ -245,6 +245,12 @@ func names(idx *vault.Index, d, repo *doc.Doc) bool {
 	}
 	if d.Type() == "event" {
 		if s := idx.Linked(d.Str("subject")); s != nil && lists(s) {
+			return true
+		}
+	}
+	// A spec or a verification belongs where its thread does.
+	if t := d.Str("thread"); t != "" {
+		if s := idx.Linked(t); s != nil && lists(s) {
 			return true
 		}
 	}

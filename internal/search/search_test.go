@@ -141,6 +141,14 @@ func TestARepositoryHoldsItsTaskLists(t *testing.T) {
 	if err != nil || hits.Total != 1 {
 		t.Fatalf("the task list of p3-edge: %+v %v", hits, err)
 	}
+	// The thread's spec and verification belong where the thread does.
+	tv.Doc("stub", "Score boxes", map[string]any{"status": "unverified", "repositories": []string{"[[p3-edge]]"}}, "## Idea\n\nx\n")
+	tv.Doc("spec", "Score boxes · Spec", map[string]any{"thread": "[[Score boxes]]"}, "## Goal\n\nx\n")
+	tv.Doc("verification", "Score boxes · Verification 1", map[string]any{"thread": "[[Score boxes]]", "round": 1, "verdict": "pass"}, "## Scope\n\nx\n")
+	hits, err = search.Search(tv.Index(), search.Query{Repository: "p3-edge", Types: []string{"spec", "verification"}})
+	if err != nil || hits.Total != 2 {
+		t.Fatalf("the spec and verification of a p3-edge thread: %+v %v", hits, err)
+	}
 }
 
 // The facets list only statuses the filter takes.
