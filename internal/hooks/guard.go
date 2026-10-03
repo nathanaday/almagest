@@ -27,13 +27,25 @@ func deny(w io.Writer, reason string) error {
 	}})
 }
 
-// writeActions are, per atlas tool, the actions that write.
-var writeActions = map[string]map[string]bool{
-	"change": {"propose": true, "apply": true, "reject": true, "undo": true},
-	"thread": {"stub": true, "spec": true, "tasks": true, "start": true, "check": true, "verify": true, "finding": true, "drop": true, "reopen": true, "block": true, "unblock": true, "resolve": true, "note": true, "set": true},
-	"chord":  {"create": true, "add": true, "remove": true, "order": true},
-	"source": {"capture": true},
-	"vault":  {"init": true, "sync": true, "mention": true},
+// readActions are, per atlas tool, the actions that only read; a tool listed with nil
+// only reads. A read-only agent makes no other call: an action or a tool this list does
+// not know is a write until someone lists it here.
+var readActions = map[string]map[string]bool{
+	"search":  nil,
+	"context": nil,
+	"match":   nil,
+	"lint":    nil,
+	"vault":   {"": true, "status": true},
+	"change":  {"": true, "show": true},
+	"thread":  {"": true, "list": true, "load": true},
+	"chord":   {"": true, "list": true, "load": true},
+	"source":  {"chunks": true, "read": true},
+}
+
+// readsOnly reports whether a call of an atlas tool only reads.
+func readsOnly(tool, action string) bool {
+	reads, ok := readActions[tool]
+	return ok && (reads == nil || reads[action])
 }
 
 // Guard refuses a call that breaks a rule. The first rule that matches decides.
@@ -141,8 +153,8 @@ func readOnlyRefusal(in Input, tool string) string {
 	switch {
 	case editTools[in.ToolName]:
 		return agent + " is read-only; it returns its entity and the skill that sent it writes"
-	case tool != "" && writeActions[tool][in.tool().Action]:
-		return fmt.Sprintf("%s is read-only; %s %s writes, so the skill that sent it makes that call", agent, tool, in.tool().Action)
+	case tool != "" && !readsOnly(tool, in.tool().Action):
+		return fmt.Sprintf("%s is read-only, and %s %q is not one of the calls that only read; the skill that sent it makes that call", agent, tool, in.tool().Action)
 	case in.ToolName == "Bash":
 		// thread-audit checks work by running its tests and reading git; it edits nothing.
 		if agent == "thread-audit" {
