@@ -108,14 +108,13 @@ func commitFound(v *Vault, d *doc.Doc, paths []string) (string, error) {
 	if err := g.Add(differ...); err != nil {
 		return "", err
 	}
-	if staged, err := g.Staged(); err != nil || !staged {
-		return "HEAD", err
-	}
 	noun := "files"
 	if len(differ) == 1 {
 		noun = "file"
 	}
-	if _, err := g.Commit(fmt.Sprintf("recovery: %d %s as found after a crash\n\n%s: %s", len(differ), noun, RecoveredTrailer, d.ID())); err != nil {
+	// Only these paths: a crash inside a commit can leave other entries staged, such as
+	// the change document as applied, which belong to no recovery commit.
+	if _, err := g.CommitOnly(fmt.Sprintf("recovery: %d %s as found after a crash\n\n%s: %s", len(differ), noun, RecoveredTrailer, d.ID()), differ...); err != nil {
 		return "", err
 	}
 	return before, nil

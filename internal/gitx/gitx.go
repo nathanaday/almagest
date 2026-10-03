@@ -264,6 +264,17 @@ func (r Repo) Commit(message string) (string, error) {
 	return r.Head()
 }
 
+// CommitOnly commits the given paths as they are in the work tree, and nothing else the
+// index holds; what else was staged stays staged. A path git does not track yet must be
+// added first.
+func (r Repo) CommitOnly(message string, paths ...string) (string, error) {
+	args := append(r.identity(), "commit", "-q", "--no-verify", "--only", "-m", message, "--")
+	if _, err := r.run(append(args, paths...)...); err != nil {
+		return "", err
+	}
+	return r.Head()
+}
+
 // unfinished are the files git leaves while an operation of several steps is open.
 var unfinished = []struct{ path, what string }{
 	{"MERGE_HEAD", "merge"},

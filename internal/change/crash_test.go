@@ -131,3 +131,30 @@ func TestRecoveryKeepsAnEditMadeAfterTheCrash(t *testing.T) {
 		t.Fatalf("git does not keep the paragraph:\n%s %v", out, err)
 	}
 }
+
+// A crash inside the commit leaves the change document staged as applied. The recovery
+// commit holds only the listed paths it found changed, not what else the index holds.
+func TestTheRecoveryCommitHoldsOnlyItsPaths(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	tv.Commit()
+	content := tv.Read(pv.Ref.Path)
+	inFlight := doc.SetField(doc.SetField(content, "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	tv.Write(pv.Ref.Path, inFlight)
+	tv.Write("wiki/documents/Motion scoring.md", "half written")
+	tv.Write("wiki/documents/Radar.md", "half written")
+	if err := tv.V.Git().StageContent(pv.Ref.Path, []byte(doc.SetField(content, "status", "applied"))); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("git", "-C", tv.V.Root, "log", "--grep", "recovery: ", "--name-only", "--format=").CombinedOutput()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if strings.Join(got, "|") != "wiki/documents/Motion scoring.md|wiki/documents/Radar.md" {
+		t.Fatalf("the recovery commit holds:\n%s", out)
+	}
+}
