@@ -200,6 +200,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	}
 	name := path.Base(rel)
 	switch {
+	case rel == vault.VaultConfigFile:
+		return rel + " holds the commands Atlas runs for this vault (terminal_command, agent_commands), which win over the machine's; the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config"
 	case rel == vault.PluginDir || strings.HasPrefix(rel, vault.PluginDir+"/"):
 		return rel + " is the Atlas plugin, whose code and binaryPath decide what runs; vault init and vault sync install it, and the user sets binaryPath in the Atlas settings in Obsidian"
 	case path.Dir(rel) == vault.Documents:

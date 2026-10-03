@@ -120,6 +120,7 @@ func TestTheGuardRefusesTheFilesThatDecideWhatRuns(t *testing.T) {
 	f.run("session-start", map[string]any{})
 	for name, file := range map[string]string{
 		"the machine config":    filepath.Join(f.tv.Home.Root, "config.json"),
+		"the vault's config":    filepath.Join(f.tv.V.Root, ".atlas", "config.json"),
 		"the plugin's settings": filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas", "data.json"),
 		"the plugin's code":     filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas", "main.js"),
 	} {
