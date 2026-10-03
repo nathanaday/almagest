@@ -57,6 +57,11 @@ func Recover(v *Vault) error {
 			}
 			v.Prune(p)
 		}
+		// The checkout staged the reversal; it waits in the work tree for the next write's
+		// snapshot instead, so the user's own next commit does not take it.
+		if err := g.Unstage(local...); err != nil {
+			return fmt.Errorf("recover %s: %w", Title(d), err)
+		}
 		content := doc.RemoveField(doc.SetField(d.Content, "status", "proposed"), "paths")
 		content = doc.ReplaceLead(content, doc.Callout("change", "Proposed", "Recovered after a crash. Review the documents below, then say yes in the chat, or press Apply."))
 		if err := v.Write(d.Path, []byte(content)); err != nil {

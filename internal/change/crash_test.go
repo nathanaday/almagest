@@ -158,3 +158,19 @@ func TestTheRecoveryCommitHoldsOnlyItsPaths(t *testing.T) {
 		t.Fatalf("the recovery commit holds:\n%s", out)
 	}
 }
+
+func TestRecoveryLeavesNothingStaged(t *testing.T) {
+	tv := testvault.New(t)
+	pv, _ := crashPlan(t, tv)
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applying"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	tv.Write(pv.Ref.Path, content)
+	tv.Write("wiki/documents/Motion scoring.md", "half written")
+	tv.Write("wiki/documents/Radar.md", "half written")
+	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	out, err := exec.Command("git", "-C", tv.V.Root, "diff", "--cached", "--name-only").CombinedOutput()
+	if err != nil || strings.TrimSpace(string(out)) != "" {
+		t.Fatalf("recovery left staged: %q %v", out, err)
+	}
+}
