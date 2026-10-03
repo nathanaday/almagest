@@ -97,8 +97,10 @@ The design pages are the spec. When the code departs from them, the reason is be
   else, commits the listed paths that differ from `HEAD` as `recovery: N files as found
   after a crash` (`CommitOnly`: those paths alone), puts the listed local documents
   (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside `.git`, `.obsidian`,
-  and `.claude` in any case) back from the base, and sets the change to proposed without
-  `paths` or `recovering`. So a recovery that a crash stops partway does the same again.
+  and `.claude` in any case, and a listed chord canvas) back from the base, and sets the
+  change to proposed without `paths` or `recovering`. So a recovery that a crash stops
+  partway does the same again.
+  A `recovering` value that names no commit stops recovery before it changes anything.
   Both ways it unstages what it restored and the change document. Frontmatter comes from
   a pull or a shell too, and recovery runs at every session start.
 - **A write that ends without its commit is put back.** `vault.Tx` keeps each path's
@@ -106,8 +108,10 @@ The design pages are the spec. When the code departs from them, the reason is be
   keep. Every write defers `tx.End(&err)`: a failure before the commit rolls back and the
   error says so, like a failed `Commit`: "the vault is back as it was", or the paths it
   could not put back. A path saved since the write wrote it (Obsidian, an agent's Edit)
-  stays as saved, and the message names it. Rollback unstages once the commit staged the
-  paths, or once `Tx.Indexed` said a git checkout did (undo). The migration keeps every
+  stays as saved, and the message names it; `Tx.Settle` records what a git checkout (undo)
+  or the migration left at its kept paths, so their later saves count too. Rollback
+  unstages once the commit staged the paths, or once `Tx.Indexed` said a git checkout did
+  (undo). The migration keeps every
   path it touches and commits with `Tx.CommitAll`. A crash in the middle of a thread write
   has no journal: the snapshot before the next write commits what it left, so no text is
   lost.
