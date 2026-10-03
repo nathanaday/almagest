@@ -211,6 +211,9 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	if err := syncDerived(fresh, tx, now); err != nil {
 		return nil, err
 	}
+	if beforeCommit != nil {
+		beforeCommit()
+	}
 	sha, err := tx.CommitAll("layout: migrate to 8.0\n\n" + Trailer + " from " + report.From)
 	if err != nil {
 		return nil, err
@@ -229,6 +232,9 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	}
 	return p.report, nil
 }
+
+// beforeCommit is a test hook that runs right before the migration's commit.
+var beforeCommit func()
 
 // syncDerived writes the statuses, the callouts, and the git facts the new layout
 // derives, so the migration's commit holds them.

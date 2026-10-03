@@ -432,3 +432,56 @@ func TestAMigrationWhoseCommitFailsPutsTheVaultBack(t *testing.T) {
 		t.Fatalf("the migration after the lock is gone: %v", err)
 	}
 }
+
+// A save that lands during a migration, after the step that wrote its path, survives the
+// rollback of a migration whose commit fails, and the error names it.
+func TestAFailedMigrationKeepsASaveMadeDuringIt(t *testing.T) {
+	for _, c := range []struct {
+		name  string
+		vault func(*testing.T) *testvault.T
+		path  string
+	}{
+		{"7.x, a document", flat, "Atlas.md"},
+		{"7.x, a machine file", flat, ".obsidian/app.json"},
+		{"6.x, a document", legacy, "Atlas.md"},
+	} {
+		t.Run(c.name, func(t *testing.T) {
+			tv := c.vault(t)
+			git := func(args ...string) string {
+				out, err := exec.Command("git", append([]string{"-C", tv.V.Root}, args...)...).CombinedOutput()
+				if err != nil {
+					t.Fatalf("git %v: %v: %s", args, err, out)
+				}
+				return strings.TrimSpace(string(out))
+			}
+			head := git("rev-parse", "HEAD")
+			lock := filepath.Join(tv.V.Root, ".git", "index.lock")
+			saved := "saved during the migration\n"
+			migrate.SetBeforeCommit(func() {
+				if err := os.WriteFile(tv.V.Abs(c.path), []byte(saved), 0o644); err != nil {
+					t.Fatal(err)
+				}
+				if err := os.WriteFile(lock, nil, 0o644); err != nil {
+					t.Fatal(err)
+				}
+			})
+			defer migrate.SetBeforeCommit(nil)
+			_, err := migrate.Run(tv.V, testvault.Now.Add(time.Hour))
+			os.Remove(lock)
+			if err == nil || !strings.Contains(err.Error(), c.path) {
+				t.Fatalf("the error does not name the save: %v", err)
+			}
+			if got := tv.Read(c.path); got != saved {
+				t.Fatalf("the save is gone:\n%s", got)
+			}
+			if git("rev-parse", "HEAD") != head || git("diff", "--cached", "--name-only") != "" {
+				t.Fatal("the failed migration moved HEAD or left something staged")
+			}
+			for _, l := range strings.Split(git("status", "--porcelain"), "\n") {
+				if l != "" && !strings.Contains(l, c.path) {
+					t.Errorf("the failed migration left %s", l)
+				}
+			}
+		})
+	}
+}
