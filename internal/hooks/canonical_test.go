@@ -333,3 +333,17 @@ func TestACodexMoveIsADeleteAndAnAdd(t *testing.T) {
 		t.Error("a move of a note in inbox/ was refused")
 	}
 }
+
+// An Edit's anchor may hold a code heading the edit leaves as it was.
+func TestAnEditMayAnchorOnACodeHeading(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Anchored", Text: "An idea with quotes."}, thread.Opts{Now: f.tv.Clock}))
+	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
+	if out := f.run("guard", editNew(stub, "An idea with quotes.\n\n## Thread", "An idea with quotes, said better.\n\n## Thread")); denied(out) {
+		t.Fatalf("an Edit anchored on ## Thread was refused: %s", out)
+	}
+	if !denied(f.run("guard", editNew(stub, "## Thread\n\n- Spec: none", "## Thread\n\n- Spec: [[Forged]]"))) {
+		t.Error("an Edit of a ## Thread line was allowed")
+	}
+}

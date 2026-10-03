@@ -266,7 +266,12 @@ func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 		return rel + " is a " + d.Type() + "; revise its prose with Edit, and its fields with thread set"
 	case unplaced(in, f, d.Content):
 		return unplacedWhy(rel)
-	case touchesPrefix(in, f, d):
+	}
+	// An Edit that applies is judged by the document it leaves alone, so its anchor may
+	// hold a code heading it keeps; a patch is judged by where each hunk lands too.
+	after, applies := in.leaves(d.Content, f)
+	whole := applies && in.ToolName != "apply_patch"
+	if !whole && touchesPrefix(in, f, d) {
 		return "the frontmatter and the lead callout of " + d.Title() + " are code's; use thread set, or the thread action that fits"
 	}
 	codeWhy := func(s string) string {
@@ -276,14 +281,14 @@ func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 		return "## " + s + " is code's; it follows the documents and the events"
 	}
 	for _, s := range t.CodeSections {
-		if start, end := sectionBounds(d.Content, s); start >= 0 && touchesRange(in, f, d.Content, start, end) {
+		if start, end := sectionBounds(d.Content, s); !whole && start >= 0 && touchesRange(in, f, d.Content, start, end) {
 			return codeWhy(s)
 		}
 	}
 	// The document the edit leaves keeps what code owns: whatever headings, fences, or
 	// placement the edit uses, the frontmatter, the lead, and each code section come out
 	// as they went in.
-	if after, ok := in.leaves(d.Content, f); ok {
+	if applies {
 		switch changed := codeChanged(d, after, t.CodeSections); changed {
 		case "":
 		case prefixPart:
@@ -338,13 +343,15 @@ func sessionRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
 	if unplaced(in, f, d.Content) {
 		return unplacedWhy(rel)
 	}
-	if touchesPrefix(in, f, d) {
+	after, applies := in.leaves(d.Content, f)
+	whole := applies && in.ToolName != "apply_patch"
+	if !whole && touchesPrefix(in, f, d) {
 		return "the frontmatter and the lead callout are the hooks'; " + allowed
 	}
-	if start, end := sectionBounds(d.Content, "Subagents"); start >= 0 && touchesRange(in, f, d.Content, start, end) {
+	if start, end := sectionBounds(d.Content, "Subagents"); !whole && start >= 0 && touchesRange(in, f, d.Content, start, end) {
 		return "Subagents is the hooks'; " + allowed
 	}
-	if after, ok := in.leaves(d.Content, f); ok {
+	if applies {
 		switch codeChanged(d, after, []string{"Subagents"}) {
 		case "":
 		case prefixPart:
