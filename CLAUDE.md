@@ -175,15 +175,16 @@ The design pages are the spec. When the code departs from them, the reason is be
   the other forges a user's turn. It is no sandbox; a shell can still write any file. To
   try one by hand from a session, type the command with `!`. `shellCommands`
   (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes
-  (`\x{…}` too), backslashes and backslash-newlines, brace lists, separators, process
-  substitutions (`<(…)` runs a command of its own), and redirects whose targets leave
-  the words (`&>`, `{fd}>`, `<<<`, quoted targets); zsh's `=name` counts as the name. A
-  quoted word or a heredoc body is read as a command only when a shell or `eval` runs it
-  (`runners`: sh -c, bash <<EOF, eval, ssh, …), so a commit message or a grep pattern
-  that names a refused subcommand is text. The binary's name compares without case, and
+  (`\x{…}` too), backslashes and backslash-newlines, brace lists and ranges,
+  separators, process substitutions (`<(…)` runs a command of its own), and redirects
+  whose targets leave the words (`&>`, `{fd}>`, `<<<`, quoted targets); zsh's `=name`
+  counts as the name. A quoted word or a heredoc body is read as a command only on a
+  line that holds a runner (`runners`: sh, bash, eval, ssh, env, …, in any case),
+  anywhere, as in `echo "…" | sh`; elsewhere a commit message or a grep pattern that
+  names a refused subcommand is text. The binary's name compares without case, and
   options drop out; an option's value stays, so `apply` and `migrate` count anywhere
-  after their subcommand. A word built at run time (a variable, `$(…)`, a glob, xargs,
-  `env -S`) is out of its reach. `config set` and `config unset` of `terminal_command` or
+  after their subcommand. A word built at run time (a variable, `$(…)`, a glob, xargs)
+  is out of its reach. `config set` and `config unset` of `terminal_command` or
   `agent_commands` are refused too.
 - **The guard takes the vault above the file**, not the vault of the session's folder,
   so a session outside the vault gets the same refusals. A file in no vault belongs to

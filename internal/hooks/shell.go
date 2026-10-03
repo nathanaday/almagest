@@ -10,13 +10,20 @@ import (
 
 // runners are the commands that run a string they are given as a command of its own, so
 // a quoted word or a heredoc they take is read as one.
-var runners = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "ssh", "su", "watch"}
+var runners = []string{"sh", "bash", "zsh", "dash", "ksh", "fish", "eval", "ssh", "su", "watch", "env"}
+
+// isRunner reports whether a word names a runner, in any case or as zsh's =name, as the
+// binary's name is read.
+func isRunner(w string) bool {
+	return slices.Contains(runners, strings.ToLower(path.Base(strings.TrimPrefix(w, "="))))
+}
 
 // shellCommands splits a command line into its simple commands, each a list of words, as
 // bash and zsh read them before they run: quotes and escapes resolved, braces expanded,
 // redirects and their targets taken out, and a process substitution read as a command
-// of its own. A quoted word or a heredoc that a shell or eval runs is read as one more
-// command; any other quoted text is only text.
+// of its own. On a line that holds a runner (sh, eval, …) anywhere, as in echo "…" | sh,
+// every quoted word and heredoc is read as one more command; on any other line quoted
+// text is only text.
 func shellCommands(line string) [][]string {
 	return splitCommands(line, 4)
 }
@@ -30,21 +37,24 @@ type heredoc struct {
 }
 
 func splitCommands(line string, depth int) [][]string {
+	// A first pass, which reads no quoted word, finds whether the line runs a string.
+	lineRuns := false
+	if depth > 0 {
+		for _, c := range splitCommands(line, 0) {
+			lineRuns = lineRuns || slices.ContainsFunc(c, isRunner)
+		}
+	}
 	var (
 		cmds    [][]string
 		cur     []string
 		word    strings.Builder
 		inWord  bool
 		quoted  bool // the word holds quoted or escaped text, so it may hold a command
-		literal bool // the word holds text a quote kept from brace expansion
 		drop    bool // the next word is a redirect's target
 		doc     *heredoc
 		pending []heredoc
 	)
-	// A runner anywhere before the word counts: sudo sh -c, xargs sh -c, find -exec sh -c.
-	runs := func() bool {
-		return slices.ContainsFunc(cur, func(w string) bool { return slices.Contains(runners, path.Base(w)) })
-	}
+	runs := func() bool { return lineRuns }
 	endWord := func() {
 		if !inWord {
 			return
@@ -61,14 +71,10 @@ func splitCommands(line string, depth int) [][]string {
 			if quoted && depth > 0 && runs() && strings.ContainsAny(w, " \t\n;&|()`<>") {
 				cmds = append(cmds, splitCommands(w, depth-1)...)
 			}
-			if literal {
-				cur = append(cur, w)
-			} else {
-				cur = append(cur, expandBraces(w)...)
-			}
+			cur = append(cur, expandBraces(w)...)
 		}
 		word.Reset()
-		inWord, quoted, literal = false, false, false
+		inWord, quoted = false, false
 	}
 	endCommand := func() {
 		endWord()
@@ -98,7 +104,7 @@ func splitCommands(line string, depth int) [][]string {
 				word.WriteByte(line[i+1])
 				i++
 			}
-			inWord, literal = true, true
+			inWord = true
 		case c == '\'':
 			end := strings.IndexByte(line[i+1:], '\'')
 			if end < 0 {
@@ -106,7 +112,7 @@ func splitCommands(line string, depth int) [][]string {
 			}
 			word.WriteString(line[i+1 : i+1+end])
 			i += end + 1
-			inWord, quoted, literal = true, true, true
+			inWord, quoted = true, true
 		case c == '"':
 			j := i + 1
 			for ; j < len(line) && line[j] != '"'; j++ {
@@ -120,7 +126,7 @@ func splitCommands(line string, depth int) [][]string {
 				word.WriteByte(line[j])
 			}
 			i = j
-			inWord, quoted, literal = true, true, true
+			inWord, quoted = true, true
 		case c == '$' && at(i+1) == '\'':
 			j := i + 2
 			for ; j < len(line) && line[j] != '\''; j++ {
@@ -130,7 +136,7 @@ func splitCommands(line string, depth int) [][]string {
 			}
 			word.WriteString(decodeANSI(line[i+2 : min(j, len(line))]))
 			i = j
-			inWord, quoted, literal = true, true, true
+			inWord, quoted = true, true
 		case c == '$' && at(i+1) == '"':
 			// Locale quoting: the quotes that follow are plain double quotes.
 		case (c == '<' || c == '>') && at(i+1) == '(':
@@ -236,7 +242,7 @@ func expandBraces(w string) []string {
 			}
 			level--
 			if level == 0 {
-				if comma {
+				if comma || braceRange(w[start+1:i]) != nil {
 					end = i
 					break
 				}
@@ -250,22 +256,24 @@ func expandBraces(w string) []string {
 	if start < 0 || end < 0 {
 		return []string{w}
 	}
-	var parts []string
+	parts := braceRange(w[start+1 : end])
 	level, from := 0, start+1
-	for i := start + 1; i < end; i++ {
-		switch w[i] {
-		case '{':
-			level++
-		case '}':
-			level--
-		case ',':
-			if level == 0 {
-				parts = append(parts, w[from:i])
-				from = i + 1
+	if parts == nil {
+		for i := start + 1; i < end; i++ {
+			switch w[i] {
+			case '{':
+				level++
+			case '}':
+				level--
+			case ',':
+				if level == 0 {
+					parts = append(parts, w[from:i])
+					from = i + 1
+				}
 			}
 		}
+		parts = append(parts, w[from:end])
 	}
-	parts = append(parts, w[from:end])
 	var out []string
 	for _, p := range parts {
 		for _, e := range expandBraces(w[:start] + p + w[end+1:]) {
@@ -273,9 +281,49 @@ func expandBraces(w string) []string {
 				out = append(out, e)
 			}
 		}
+		// A list this long holds no command; the cap keeps the hook fast.
+		if len(out) > maxBraceWords {
+			return []string{w}
+		}
 	}
 	return out
 }
+
+// maxBraceWords bounds a brace expansion.
+const maxBraceWords = 256
+
+// braceRange is the words of a {a..c} or {1..3} range, or nil when the text is no range.
+func braceRange(text string) []string {
+	lo, hi, ok := strings.Cut(text, "..")
+	if !ok {
+		return nil
+	}
+	if a, err := strconv.Atoi(lo); err == nil {
+		b, err := strconv.Atoi(hi)
+		if err != nil || b-a > 1000 || a-b > 1000 {
+			return nil
+		}
+		var out []string
+		for i := a; ; i += map[bool]int{true: 1, false: -1}[b >= a] {
+			out = append(out, strconv.Itoa(i))
+			if i == b {
+				return out
+			}
+		}
+	}
+	if len(lo) != 1 || len(hi) != 1 || !isLetter(lo[0]) || !isLetter(hi[0]) {
+		return nil
+	}
+	var out []string
+	for c := lo[0]; ; c += map[bool]byte{true: 1, false: 255}[hi[0] >= lo[0]] {
+		out = append(out, string(c))
+		if c == hi[0] {
+			return out
+		}
+	}
+}
+
+func isLetter(c byte) bool { return c >= 'a' && c <= 'z' || c >= 'A' && c <= 'Z' }
 
 func isDigits(s string) bool {
 	return s != "" && strings.Trim(s, "0123456789") == ""
