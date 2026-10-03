@@ -149,6 +149,20 @@ type args struct {
 	flags map[string][]string
 }
 
+// removed refuses an option a command no longer takes, so parse cannot take the next
+// word as its value.
+func removed(argv []string, name, why string) error {
+	for _, s := range argv {
+		if s == "--" {
+			break
+		}
+		if s == "--"+name || strings.HasPrefix(s, "--"+name+"=") {
+			return fmt.Errorf("--%s is gone: %s", name, why)
+		}
+	}
+	return nil
+}
+
 // parse reads --name value, --name=value, and the boolean flags named in bools.
 func parse(argv []string, bools ...string) args {
 	a := args{flags: map[string][]string{}}
@@ -785,6 +799,9 @@ func (c *CLI) threadCmd(argv []string) error {
 }
 
 func (c *CLI) chordCmd(argv []string) error {
+	if err := removed(argv, "new-tags", `chord create reads "new_tags": true from its JSON`); err != nil {
+		return err
+	}
 	a := parse(argv, "save", "write", "tidy")
 	v, err := c.open(a)
 	if err != nil {
