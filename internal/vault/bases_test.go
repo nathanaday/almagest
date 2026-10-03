@@ -3,6 +3,7 @@ package vault_test
 import (
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -63,4 +64,39 @@ func read(t *testing.T, rel string) string {
 		t.Fatal(err)
 	}
 	return string(data)
+}
+
+// When git refuses the upgrade commit, the old copy goes back and the write goes on.
+func TestARefusedUpgradeCommitPutsTheOldBaseBack(t *testing.T) {
+	tv := testvault.New(t)
+	git := func(args ...string) string {
+		out, err := exec.Command("git", append([]string{"-C", tv.V.Root}, args...)...).CombinedOutput()
+		if err != nil {
+			t.Fatalf("git %v: %v: %s", args, err, out)
+		}
+		return strings.TrimSpace(string(out))
+	}
+	// A Base git ignores: CommitOnly refuses it.
+	git("rm", "-q", "--cached", "sessions/Sessions.base")
+	f, err := os.OpenFile(filepath.Join(tv.V.Root, ".git", "info", "exclude"), os.O_APPEND|os.O_WRONLY, 0o644)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.WriteString("\nsessions/Sessions.base\n")
+	f.Close()
+	git("commit", "-q", "-m", "ignore the Base")
+	old := read(t, "template/old/7.0/Sessions.base")
+	tv.Write("sessions/Sessions.base", old)
+	if _, err := thread.Stub(tv.V, thread.StubIn{Title: "Goes on", Text: "A write."}, thread.Opts{Now: tv.Clock}); err != nil {
+		t.Fatalf("the write after a refused upgrade: %v", err)
+	}
+	if tv.Read("sessions/Sessions.base") != old {
+		t.Fatal("the old copy did not come back")
+	}
+	if staged := git("diff", "--cached", "--name-only"); staged != "" {
+		t.Fatalf("staged: %s", staged)
+	}
+	if !strings.HasPrefix(git("log", "-1", "--format=%s"), "thread: stub Goes on") {
+		t.Fatalf("the write did not commit: %s", git("log", "-3", "--format=%s"))
+	}
 }
