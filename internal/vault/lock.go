@@ -1,6 +1,7 @@
 package vault
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -74,19 +75,24 @@ type Tx struct {
 	written map[string]bool
 	// before holds each touched path as the write found it, so a write that ends without
 	// its commit puts the vault back.
-	before    map[string]*found
-	committed bool
+	before     map[string]*found
+	committed  bool
+	rolledBack bool
+	// added is set once the commit staged the paths, so rollback knows to unstage them.
+	added bool
 	// staged are contents the commit records in place of what the disk holds.
 	staged map[string][]byte
 	// Snapshot is the commit of the hand edits the write found, or "".
 	Snapshot string
 }
 
-// found is a path as a write found it: its bytes and mode, or that it did not exist.
+// found is a path as a write found it: a file with its bytes and mode, a link with its
+// target, or nothing.
 type found struct {
 	exists bool
 	data   []byte
 	mode   os.FileMode
+	link   string
 }
 
 // Begin takes the lock, runs recover (the repair of a write a crash left half done), and
@@ -143,54 +149,97 @@ func CommitSnapshot(v *Vault) (string, error) {
 	return g.Commit(fmt.Sprintf("snapshot: %d %s edited by hand", n, noun))
 }
 
-// Close lets the lock go. A write that ends without its commit, because a step or the
-// commit failed, first puts every path it touched back as it found it, and unstages them.
+// Close lets the lock go. A write that ends without its commit, because a step failed,
+// first puts every path it touched back as it found it, and unstages them. (A failed
+// commit has put them back already, and said how it went.)
 func (tx *Tx) Close() {
 	if tx.unlock == nil {
 		return
 	}
-	if !tx.committed && len(tx.before) > 0 {
+	if !tx.committed && !tx.rolledBack && len(tx.before) > 0 {
 		tx.rollback()
 	}
 	tx.unlock()
 	tx.unlock = nil
 }
 
-// rollback puts each touched path back as the write found it. It runs under the lock.
-func (tx *Tx) rollback() {
+// rollback puts each touched path back as the write found it, and returns the paths it
+// could not put back. It runs under the lock.
+func (tx *Tx) rollback() []string {
+	tx.rolledBack = true
+	var failed []string
 	paths := make([]string, 0, len(tx.before))
-	for rel, f := range tx.before {
+	for rel := range tx.before {
 		paths = append(paths, rel)
-		abs := tx.V.Abs(rel)
-		if !f.exists {
-			os.Remove(abs)
-			continue
-		}
-		if writeAtomic(abs, f.data) == nil {
-			os.Chmod(abs, f.mode)
-		}
 	}
 	sort.Strings(paths)
+	for _, rel := range paths {
+		if err := tx.putBack(rel, tx.before[rel]); err != nil {
+			failed = append(failed, fmt.Sprintf("%s (%v)", rel, firstLine(err)))
+		}
+	}
 	tx.V.Prune(paths...)
-	tx.V.Git().Unstage(paths...)
+	if tx.added {
+		if err := tx.V.Git().Unstage(paths...); err != nil {
+			failed = append(failed, fmt.Sprintf("the index entries of %s (%v)", strings.Join(paths, ", "), firstLine(err)))
+		}
+	}
+	return failed
+}
+
+// putBack makes one path what it was.
+func (tx *Tx) putBack(rel string, f *found) error {
+	abs := tx.V.Abs(rel)
+	if err := os.Remove(abs); err != nil && !errors.Is(err, os.ErrNotExist) {
+		return err
+	}
+	switch {
+	case f.link != "":
+		if err := os.MkdirAll(filepath.Dir(abs), 0o755); err != nil {
+			return err
+		}
+		return os.Symlink(f.link, abs)
+	case f.exists:
+		if err := writeAtomic(abs, f.data); err != nil {
+			return err
+		}
+		return os.Chmod(abs, f.mode)
+	}
+	return nil
 }
 
 // Keep records paths as they are now, before another function changes them, so a write
 // that ends without its commit can put them back. Each path is kept once, at its first
-// touch.
-func (tx *Tx) Keep(paths ...string) {
+// touch. A path that exists but cannot be kept is refused: the write could not undo it.
+func (tx *Tx) Keep(paths ...string) error {
 	for _, rel := range paths {
 		if _, ok := tx.before[rel]; ok {
 			continue
 		}
-		f := &found{}
-		if st, err := os.Lstat(tx.V.Abs(rel)); err == nil && st.Mode().IsRegular() {
-			if data, err := os.ReadFile(tx.V.Abs(rel)); err == nil {
-				f = &found{exists: true, data: data, mode: st.Mode().Perm()}
+		abs := tx.V.Abs(rel)
+		st, err := os.Lstat(abs)
+		switch {
+		case errors.Is(err, os.ErrNotExist):
+			tx.before[rel] = &found{}
+		case err != nil:
+			return fmt.Errorf("%s cannot be read (%v), so a write could not undo a change to it; nothing was written", rel, err)
+		case st.Mode()&os.ModeSymlink != 0:
+			target, err := os.Readlink(abs)
+			if err != nil {
+				return fmt.Errorf("%s is a link that cannot be read (%v); nothing was written", rel, err)
 			}
+			tx.before[rel] = &found{link: target}
+		case st.Mode().IsRegular():
+			data, err := os.ReadFile(abs)
+			if err != nil {
+				return fmt.Errorf("%s cannot be read (%v), so a write could not undo a change to it; nothing was written", rel, err)
+			}
+			tx.before[rel] = &found{exists: true, data: data, mode: st.Mode().Perm()}
+		default:
+			return fmt.Errorf("%s is a folder or a special file, not a document; nothing was written", rel)
 		}
-		tx.before[rel] = f
 	}
+	return nil
 }
 
 // Write writes a file and marks it for the commit. Like every write of a Tx, it refuses a
@@ -199,7 +248,9 @@ func (tx *Tx) Write(rel string, content []byte) error {
 	if err := tx.V.Contain(rel); err != nil {
 		return err
 	}
-	tx.Keep(rel)
+	if err := tx.Keep(rel); err != nil {
+		return err
+	}
 	tx.written[rel] = true
 	return tx.V.Write(rel, content)
 }
@@ -209,7 +260,9 @@ func (tx *Tx) WriteIfChanged(rel string, content []byte) (bool, error) {
 	if err := tx.V.Contain(rel); err != nil {
 		return false, err
 	}
-	tx.Keep(rel)
+	if err := tx.Keep(rel); err != nil {
+		return false, err
+	}
 	wrote, err := tx.V.WriteIfChanged(rel, content)
 	if wrote {
 		tx.written[rel] = true
@@ -222,7 +275,9 @@ func (tx *Tx) Remove(rel string) error {
 	if err := tx.V.Contain(rel); err != nil {
 		return err
 	}
-	tx.Keep(rel)
+	if err := tx.Keep(rel); err != nil {
+		return err
+	}
 	tx.written[rel] = true
 	return tx.V.Remove(rel)
 }
@@ -235,7 +290,9 @@ func (tx *Tx) Move(from, to string) error {
 	if err := tx.V.Contain(to); err != nil {
 		return err
 	}
-	tx.Keep(from, to)
+	if err := tx.Keep(from, to); err != nil {
+		return err
+	}
 	tx.written[from] = true
 	tx.written[to] = true
 	if err := os.MkdirAll(filepath.Dir(tx.V.Abs(to)), 0o755); err != nil {
@@ -284,7 +341,10 @@ func (tx *Tx) Paths() []string {
 func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
 	sha, err := tx.commit(subject, trailers)
 	if err != nil {
-		return "", fmt.Errorf("%w; nothing was saved: the vault is back as it was before this call", err)
+		if failed := tx.rollback(); len(failed) > 0 {
+			return "", fmt.Errorf("%s; nothing was saved, and these could not be put back as they were: %s", firstLine(err), strings.Join(failed, "; "))
+		}
+		return "", fmt.Errorf("%s; nothing was saved: the vault is back as it was before this call", firstLine(err))
 	}
 	tx.committed = true
 	return sha, nil
@@ -295,6 +355,7 @@ func (tx *Tx) commit(subject string, trailers []string) (string, error) {
 	if err := g.Add(tx.Paths()...); err != nil {
 		return "", err
 	}
+	tx.added = true
 	for rel, data := range tx.staged {
 		if err := g.StageContent(rel, data); err != nil {
 			return "", err
@@ -309,4 +370,10 @@ func (tx *Tx) commit(subject string, trailers []string) (string, error) {
 		msg += "\n\n" + strings.Join(trailers, "\n")
 	}
 	return g.Commit(msg)
+}
+
+// firstLine is the first line of an error: git explains a held lock in a paragraph.
+func firstLine(err error) string {
+	msg, _, _ := strings.Cut(err.Error(), "\n")
+	return strings.TrimSpace(msg)
 }

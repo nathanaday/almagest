@@ -77,3 +77,31 @@ func TestAWriteRefusedPartWayLeavesNothing(t *testing.T) {
 	os.MkdirAll(tv.V.Abs("chords"), 0o755)
 	ok(t)(thread.Stub(tv.V, thread.StubIn{Text: "Unrelated.", Title: "Zed"}, opts(tv)))
 }
+
+// A document that is a link inside the vault stays a link with its target when a write
+// to it fails at its commit.
+func TestAFailedWriteKeepsALinkedDocumentALink(t *testing.T) {
+	tv := testvault.New(t)
+	ok(t)(thread.Stub(tv.V, thread.StubIn{Text: "An idea.", Title: "Idea"}, opts(tv)))
+	real := tv.V.Abs("scratchpad/Idea.md")
+	if err := os.Rename(tv.V.Abs("wiki/documents/Idea.md"), real); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("../../scratchpad/Idea.md", tv.V.Abs("wiki/documents/Idea.md")); err != nil {
+		t.Fatal(err)
+	}
+	tv.Commit()
+	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
+	if err := os.WriteFile(lock, nil, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	refuses(t, "the vault is back as it was before this call")(thread.Note(tv.V, "Idea", "A note that cannot land.", opts(tv)))
+	os.Remove(lock)
+	target, err := os.Readlink(tv.V.Abs("wiki/documents/Idea.md"))
+	if err != nil || target != "../../scratchpad/Idea.md" {
+		t.Fatalf("the link is gone or changed: %q %v", target, err)
+	}
+	if st := porcelain(t, tv); st != "" {
+		t.Fatalf("the tree is not clean:\n%s", st)
+	}
+}
