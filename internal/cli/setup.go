@@ -225,8 +225,8 @@ func (c *CLI) serverCheck(agent string) (bool, string) {
 	if err != nil {
 		return false, fmt.Sprintf("%v; %s", err, host.UpdateHint(agent))
 	}
-	command := strings.Join(append([]string{s.Command}, s.Args...), " ")
-	if strings.Contains(command, "${") {
+	// A shell script in the args may hold its own ${…}; only the command must be a path.
+	if strings.Contains(s.Command, "${") {
 		return false, fmt.Sprintf("%s runs %q, whose placeholder it does not expand; %s", agent, s.Command, host.UpdateHint(agent))
 	}
 	names, err := host.Probe(context.Background(), s, c.Dir)

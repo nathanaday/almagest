@@ -117,6 +117,8 @@ func TestDoctorStartsEachHostsServer(t *testing.T) {
 			"FAIL codex server     the server did not start: atlas: the atlas-obsidian binary is not installed."},
 		{"a working entry", `{"type": "stdio", "command": "` + working + `", "args": [], "env": null, "env_vars": ["ATLAS_HOME"], "cwd": null}`,
 			"ok   codex server     atlas: " + fmt.Sprint(len(all)) + " tools"},
+		{"a working entry whose script expands variables", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "w=${ATLAS_BIN:-` + working + `}; exec \\"$w\\""], "env": null, "env_vars": [], "cwd": null}`,
+			"ok   codex server     atlas: " + fmt.Sprint(len(all)) + " tools"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
