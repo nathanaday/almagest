@@ -3,6 +3,7 @@ package hooks_test
 import (
 	"bytes"
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 	"time"
@@ -611,5 +612,36 @@ func TestPromptNamesTheOpenNote(t *testing.T) {
 	f.tv.Write(".obsidian/workspace.json", `{"main":{"id":"m","type":"leaf","state":{"state":{"file":"Ideas.md"}}},"active":"m"}`)
 	if out := f.run("prompt", map[string]any{"prompt": "what is this"}); out != "Open in Obsidian: [[Ideas]]\n" {
 		t.Fatalf("prompt: %q", out)
+	}
+}
+
+func TestAHookTakesTheVaultFromAtlasVaultAndFallsBackToTheFolder(t *testing.T) {
+	f := setup(t)
+	sessionsIn := func() int {
+		matches, _ := filepath.Glob(filepath.Join(f.tv.V.Root, vault.Sessions, "*", "*.md"))
+		return len(matches)
+	}
+	runWith := func(envVault, cwd, id string) {
+		data, _ := json.Marshal(map[string]any{"session_id": id, "cwd": cwd, "source": "startup"})
+		env := f.env()
+		home := env.Getenv
+		env.Getenv = func(k string) string {
+			if k == vault.EnvVault {
+				return envVault
+			}
+			return home(k)
+		}
+		if err := hooks.Run("session-start", bytes.NewReader(data), &bytes.Buffer{}, env); err != nil {
+			t.Fatal(err)
+		}
+	}
+	before := sessionsIn()
+	runWith(f.tv.V.Root, t.TempDir(), "b1b2c3d4-5e6f-7a8b-9c0d-000000000101")
+	if sessionsIn() != before+1 {
+		t.Fatal("ATLAS_VAULT did not choose the vault for a session outside it")
+	}
+	runWith("/no/such/vault", f.tv.V.Root, "c1b2c3d4-5e6f-7a8b-9c0d-000000000102")
+	if sessionsIn() != before+2 {
+		t.Fatal("a bad ATLAS_VAULT did not fall back to the folder's vault")
 	}
 }

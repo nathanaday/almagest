@@ -493,6 +493,23 @@ func Find(dir string, h Home) (*Vault, error) {
 	return nil, fmt.Errorf("%w for %s: no Atlas.md at or above it, and no vault in %s links a repository that holds it", ErrNoVault, dir, h.ConfigPath())
 }
 
+// EnvVault names the variable that chooses the vault when a call names none.
+const EnvVault = "ATLAS_VAULT"
+
+// Select is the one rule that chooses a vault for the CLI, the MCP server, and the hooks:
+// the vault the call names, else the vault $ATLAS_VAULT names (a path or a name from the
+// machine file), else the vault above dir.
+func Select(name, dir string, h Home, envVault string) (*Vault, error) {
+	if strings.TrimSpace(name) == "" && strings.TrimSpace(envVault) != "" {
+		v, err := Resolve(envVault, dir, h)
+		if err != nil {
+			return nil, fmt.Errorf("%s=%s: %w; unset it, or set it to a vault's folder or name", EnvVault, envVault, err)
+		}
+		return v, nil
+	}
+	return Resolve(name, dir, h)
+}
+
 // Resolve finds the vault a call names: a path, or a vault's name from the machine file.
 // An empty name finds the vault of dir.
 func Resolve(name, dir string, h Home) (*Vault, error) {

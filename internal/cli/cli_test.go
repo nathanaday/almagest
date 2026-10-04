@@ -286,3 +286,29 @@ func TestTheJSONOfAWriteNamesANoteMovedOutOfViews(t *testing.T) {
 		t.Fatalf("stderr: %s", errOut)
 	}
 }
+
+func TestTheCLITakesTheVaultFromAtlasVault(t *testing.T) {
+	one, two := testvault.New(t), testvault.New(t)
+	two.Doc("stub", "Only in the second vault", nil, "## Idea\n\nx\n")
+	two.Commit()
+	runIn := func(env map[string]string, args ...string) (int, string, string) {
+		var out, errOut bytes.Buffer
+		c := &cli.CLI{In: strings.NewReader(""), Out: &out, Err: &errOut, Dir: one.V.Root,
+			Getenv: func(k string) string {
+				if k == vault.EnvHome {
+					return one.Home.Root
+				}
+				return env[k]
+			}, Now: func() time.Time { return one.Tick(time.Second) }}
+		return c.Run(args), out.String(), errOut.String()
+	}
+	if _, out, _ := runIn(map[string]string{vault.EnvVault: two.V.Root}, "thread", "list", "--json"); !strings.Contains(out, "Only in the second vault") {
+		t.Fatalf("ATLAS_VAULT did not choose the second vault:\n%s", out)
+	}
+	if _, out, _ := runIn(map[string]string{vault.EnvVault: two.V.Root}, "thread", "list", "--json", "--vault", one.V.Root); strings.Contains(out, "Only in the second vault") {
+		t.Fatalf("--vault did not beat ATLAS_VAULT:\n%s", out)
+	}
+	if code, _, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, "thread", "list"); code == 0 || !strings.Contains(errOut, "ATLAS_VAULT=/no/such/vault") {
+		t.Fatalf("a bad ATLAS_VAULT: exit %d %s", code, errOut)
+	}
+}

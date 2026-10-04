@@ -97,12 +97,12 @@ func findVault(in Input, env Env) *vault.Vault {
 	if dir == "" {
 		dir, _ = os.Getwd()
 	}
-	if p := env.getenv("ATLAS_VAULT"); p != "" {
-		if v, err := vault.Open(vault.Expand(p)); err == nil {
-			return v
-		}
+	h := vault.HomeFrom(env.getenv)
+	// A hook never breaks a session: an ATLAS_VAULT that names no vault falls back to dir.
+	if v, err := vault.Select("", dir, h, env.getenv(vault.EnvVault)); err == nil {
+		return v
 	}
-	v, err := vault.Find(dir, vault.HomeFrom(env.getenv))
+	v, err := vault.Find(dir, h)
 	if err != nil {
 		return nil
 	}

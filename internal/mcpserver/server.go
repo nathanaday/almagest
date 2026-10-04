@@ -63,7 +63,7 @@ func ToolNames() []string {
 
 // open resolves the vault a call acts on.
 func (s *Server) open(name string) (*vault.Vault, error) {
-	return vault.Resolve(name, s.opts.Dir, vault.HomeFrom(s.opts.Getenv))
+	return vault.Select(name, s.opts.Dir, vault.HomeFrom(s.opts.Getenv), s.opts.Getenv(vault.EnvVault))
 }
 
 // index loads the vault a call acts on.

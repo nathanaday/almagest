@@ -285,3 +285,22 @@ func TestOpenNote(t *testing.T) {
 		t.Fatalf("open note %q", got)
 	}
 }
+
+func TestSelectTakesTheNamedVaultThenAtlasVaultThenTheFolder(t *testing.T) {
+	one, two := testvault.New(t), testvault.New(t)
+	if v, err := vault.Select("", one.V.Root, one.Home, two.V.Root); err != nil || v.Root != two.V.Root {
+		t.Fatalf("ATLAS_VAULT as a path: %v %v", v, err)
+	}
+	if v, err := vault.Select("", "/", one.Home, "work"); err != nil || v.Root != one.V.Root {
+		t.Fatalf("ATLAS_VAULT as a name: %v %v", v, err)
+	}
+	if v, err := vault.Select(one.V.Root, two.V.Root, one.Home, two.V.Root); err != nil || v.Root != one.V.Root {
+		t.Fatalf("a named vault beats ATLAS_VAULT: %v %v", v, err)
+	}
+	if v, err := vault.Select("", one.V.Root, one.Home, ""); err != nil || v.Root != one.V.Root {
+		t.Fatalf("no ATLAS_VAULT: the folder's vault: %v %v", v, err)
+	}
+	if _, err := vault.Select("", one.V.Root, one.Home, filepath.Join(t.TempDir(), "none")); err == nil || !strings.Contains(err.Error(), "ATLAS_VAULT=") {
+		t.Fatalf("a bad ATLAS_VAULT: %v", err)
+	}
+}

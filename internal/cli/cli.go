@@ -227,7 +227,7 @@ func (a args) arg(i int) string {
 func (c *CLI) home() vault.Home { return vault.HomeFrom(c.Getenv) }
 
 func (c *CLI) open(a args) (*vault.Vault, error) {
-	return vault.Resolve(a.get("vault"), c.Dir, c.home())
+	return vault.Select(a.get("vault"), c.Dir, c.home(), c.Getenv(vault.EnvVault))
 }
 
 func (c *CLI) index(a args) (*vault.Index, error) {

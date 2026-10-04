@@ -281,3 +281,37 @@ func TestMentionsAndInitFromTheServer(t *testing.T) {
 		t.Fatalf("a vault by name %v", byName)
 	}
 }
+
+func TestTheServerTakesTheVaultFromAtlasVault(t *testing.T) {
+	one, two := testvault.New(t), testvault.New(t)
+	two.Doc("stub", "Only in the second vault", nil, "## Idea\n\nx\n")
+	two.Commit()
+	connectWith := func(envVault string) *client {
+		s := mcpserver.New(mcpserver.Options{Version: "test", Dir: one.V.Root, Getenv: func(k string) string {
+			switch k {
+			case vault.EnvHome:
+				return one.Home.Root
+			case vault.EnvVault:
+				return envVault
+			}
+			return ""
+		}, Now: func() time.Time { return one.Tick(time.Second) }})
+		st, ct := mcp.NewInMemoryTransports()
+		if _, err := s.MCP().Connect(context.Background(), st, nil); err != nil {
+			t.Fatal(err)
+		}
+		sess, err := mcp.NewClient(&mcp.Implementation{Name: "test", Version: "0"}, nil).Connect(context.Background(), ct, nil)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { sess.Close() })
+		return &client{t: t, sess: sess}
+	}
+	out, _ := connectWith(two.V.Root).call("thread", map[string]any{"action": "list"}, false)
+	if data, _ := json.Marshal(out); !strings.Contains(string(data), "Only in the second vault") {
+		t.Fatalf("ATLAS_VAULT did not choose the second vault: %s", data)
+	}
+	if _, msg := connectWith("/no/such/vault").call("thread", map[string]any{"action": "list"}, true); !strings.Contains(msg, "ATLAS_VAULT=/no/such/vault") {
+		t.Fatalf("a bad ATLAS_VAULT: %s", msg)
+	}
+}
