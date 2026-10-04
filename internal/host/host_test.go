@@ -75,3 +75,45 @@ func TestCodexInstallReadsEnabled(t *testing.T) {
 		t.Fatalf("not installed: %+v %v", inst, err)
 	}
 }
+
+func TestCodexEntryReadsTheAtlasTransport(t *testing.T) {
+	data := `[{"name": "other", "transport": {"type": "stdio", "command": "x"}},
+	 {"name": "atlas", "enabled": true, "transport": {"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp"], "env": null, "env_vars": ["ATLAS_HOME"], "cwd": null}}]`
+	s, err := codexEntry([]byte(data))
+	if err != nil || s.Command != "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian" || len(s.Args) != 1 || s.EnvVars[0] != "ATLAS_HOME" || s.Cwd != "" {
+		t.Fatalf("%+v %v", s, err)
+	}
+	if _, err := codexEntry([]byte(`[{"name": "other", "transport": {"type": "stdio", "command": "x"}}]`)); err == nil || !strings.Contains(err.Error(), "no atlas server") {
+		t.Fatalf("no entry: %v", err)
+	}
+	if _, err := codexEntry([]byte(`[{"name": "atlas", "transport": {"type": "streamable_http", "url": "http://x"}}]`)); err == nil || !strings.Contains(err.Error(), "not stdio") {
+		t.Fatalf("http entry: %v", err)
+	}
+}
+
+func TestClaudeEntrySubstitutesThePluginRoot(t *testing.T) {
+	dir := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", dir)
+	plugin := filepath.Join(dir, "plugins", "cache", "m", "p", "8.1.1")
+	if err := os.MkdirAll(plugin, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	mcp := `{"mcpServers": {"atlas": {"command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp", "${CLAUDE_PLUGIN_ROOT}"]}}}`
+	if err := os.WriteFile(filepath.Join(plugin, ".mcp.json"), []byte(mcp), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	registry := `{"version": 2, "plugins": {"` + PluginID + `": [{"scope": "user", "version": "8.1.1", "installPath": "` + plugin + `"}]}}`
+	if err := os.WriteFile(filepath.Join(dir, "plugins", "installed_plugins.json"), []byte(registry), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := Entry("claude")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if s.Command != plugin+"/scripts/atlas-obsidian" || s.Args[1] != plugin || s.Env["CLAUDE_PLUGIN_ROOT"] != plugin {
+		t.Fatalf("%+v", s)
+	}
+	if _, err := claudeEntry(""); err == nil || !strings.Contains(err.Error(), "installPath") {
+		t.Fatalf("no install path: %v", err)
+	}
+}

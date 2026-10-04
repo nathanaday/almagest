@@ -29,6 +29,8 @@ var Hosts = []string{"claude", "codex"}
 type Install struct {
 	Version string `json:"version"`
 	Enabled bool   `json:"-"`
+	// InstallPath is the plugin's folder in Claude Code's cache; Codex does not report it.
+	InstallPath string `json:"installPath"`
 }
 
 // EnableHint says how to enable the plugin in a host that has it disabled.
