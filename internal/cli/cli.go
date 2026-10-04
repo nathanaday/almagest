@@ -59,44 +59,113 @@ func New() *CLI {
 	return &CLI{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Getenv: os.Getenv, Now: time.Now, Dir: dir}
 }
 
-const usage = `atlas-obsidian: one vault for what you know, the threads you work on, and what happened.
+const usageHead = `atlas-obsidian: one vault for what you know, the threads you work on, and what happened.
 
 Usage:
-  atlas-obsidian vault [status|init|sync [--views]|mention|migrate [--dry-run]]
-  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
-  atlas-obsidian context [REPOSITORY] [--tag T]... [--path P]
-  atlas-obsidian match --items FILE.json | --docs ID... [--tag T]... [--across]
-  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--tag T]... [--resolves STUB]
+`
+
+const usageTail = `
+Every command takes --vault (a path, or a name from ~/.atlas/config.json) and --json.
+`
+
+// commands are the usage of each command, in the order help lists them.
+var commands = []struct{ name, usage string }{
+	{"vault", `  atlas-obsidian vault [status|init|sync [--views]|mention|migrate [--dry-run]]
+`},
+	{"search", `  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
+`},
+	{"context", `  atlas-obsidian context [REPOSITORY] [--tag T]... [--path P]
+`},
+	{"match", `  atlas-obsidian match --items FILE.json | --docs ID... [--tag T]... [--across]
+`},
+	{"source", `  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--tag T]... [--resolves STUB]
   atlas-obsidian source chunks DOC
   atlas-obsidian source read DOC CHUNK
-  atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
-  atlas-obsidian thread [list] | load THREAD | stub TEXT... [--title T] [--chord C] [--after T]...
+`},
+	{"change", `  atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
+`},
+	{"thread", `  atlas-obsidian thread [list] | load THREAD | stub TEXT... [--title T] [--chord C] [--after T]...
                         | spec THREAD FILE.md | tasks THREAD FILE.json [--repository R] | start THREAD [--take]
                         | check THREAD TASK [--state S] [--commit C]... [--note N] [--reason R]
                         | verify THREAD FILE.json | finding THREAD FINDING --outcome O [--reason R] [--link L] [--task FILE.json]
                         | drop THREAD --reason R | reopen THREAD | block THREAD --reason R | unblock THREAD
                         | resolve STUB --became DOC... | note DOC --text T
                         | set DOC [--title T] [--priority P] [--tag T]... [--chord C] [--after T]...
-  atlas-obsidian chord [list] | load CHORD | create FILE.json | add CHORD THREAD [--after T]... | remove CHORD THREAD
+`},
+	{"chord", `  atlas-obsidian chord [list] | load CHORD | create FILE.json | add CHORD THREAD [--after T]... | remove CHORD THREAD
                        | order CHORD FILE.json | drop CHORD --reason R | reopen CHORD
                        | canvas CHORD [--save | --write | --tidy]
-  atlas-obsidian lint [--tag T]...
-  atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
-  atlas-obsidian mcp                               the MCP server, over stdio
-  atlas-obsidian config [show] | set KEY VALUE [--global] | unset KEY [--global]
+`},
+	{"lint", `  atlas-obsidian lint [--tag T]...
+`},
+	{"hook", `  atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
+`},
+	{"mcp", `  atlas-obsidian mcp                               the MCP server, over stdio
+`},
+	{"config", `  atlas-obsidian config [show] | set KEY VALUE [--global] | unset KEY [--global]
                                                    agent preferences: the vault's file wins over ~/.atlas/config.json
-  atlas-obsidian setup | doctor | version | open [DOC]
+`},
+	{"setup", `  atlas-obsidian setup
+`},
+	{"doctor", `  atlas-obsidian doctor
+`},
+	{"version", `  atlas-obsidian version
+`},
+	{"open", `  atlas-obsidian open [DOC]
+`},
+	{"help", `  atlas-obsidian help | COMMAND --help
+`},
+}
 
-Every command takes --vault (a path, or a name from ~/.atlas/config.json) and --json.
-`
+// usage is the whole usage, which help prints.
+func usage() string {
+	var b strings.Builder
+	b.WriteString(usageHead)
+	for _, c := range commands {
+		b.WriteString(c.usage)
+	}
+	b.WriteString(usageTail)
+	return b.String()
+}
+
+// commandUsage is one command's usage, or "" for a name help does not list.
+func commandUsage(name string) string {
+	for _, c := range commands {
+		if c.name == name {
+			return "Usage:\n" + c.usage + usageTail
+		}
+	}
+	return ""
+}
+
+// wantsHelp reports whether an argument before -- asks for help.
+func wantsHelp(argv []string) bool {
+	for _, a := range argv {
+		if a == "--" {
+			return false
+		}
+		if a == "--help" || a == "-h" {
+			return true
+		}
+	}
+	return false
+}
 
 // Run runs the command and returns its exit code.
 func (c *CLI) Run(argv []string) int {
 	if len(argv) == 0 {
-		fmt.Fprint(c.Out, usage)
+		fmt.Fprint(c.Out, usage())
 		return 0
 	}
 	cmd, rest := argv[0], argv[1:]
+	// Help runs nothing: a command reads --help as an option, and setup, vault init,
+	// hook, and mcp act at once.
+	if wantsHelp(rest) {
+		if u := commandUsage(cmd); u != "" {
+			fmt.Fprint(c.Out, u)
+			return 0
+		}
+	}
 	var err error
 	switch cmd {
 	case "vault":
@@ -132,7 +201,11 @@ func (c *CLI) Run(argv []string) int {
 	case "open":
 		err = c.openCmd(rest)
 	case "help", "--help", "-h":
-		fmt.Fprint(c.Out, usage)
+		if u := commandUsage(argOr(rest, 0)); u != "" {
+			fmt.Fprint(c.Out, u)
+			break
+		}
+		fmt.Fprint(c.Out, usage())
 	default:
 		err = fmt.Errorf("no command %q; atlas-obsidian help lists them", cmd)
 	}
@@ -141,6 +214,13 @@ func (c *CLI) Run(argv []string) int {
 		return 1
 	}
 	return 0
+}
+
+func argOr(argv []string, i int) string {
+	if i < len(argv) {
+		return argv[i]
+	}
+	return ""
 }
 
 // args are a command's positional arguments and its --flags.
