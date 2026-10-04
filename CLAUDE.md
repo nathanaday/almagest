@@ -65,7 +65,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   (`preferences`) and `<vault>/.atlas/config.json` (`atlas.vault-config.v1`); the vault
   wins per key (`vault.Merge`). Both decode strictly, so a typo is an error. The plugin
   reads and writes them only through `atlas-obsidian config --json`, never the files.
-  The plugin settings of 8.0.2 and 8.0.3 (`agentCommand`, `terminal`, `terminalCommand`)
+  The plugin settings of 8.0.2 (`agentCommand`, `terminal`, `terminalCommand`)
   move into the vault file once, and stay in `data.json` until the move succeeds.
 - **A terminal launch fails where no one sees it** (osascript and `open` exit after the
   spawn), so `openTerminal` checks for the app first. `obsidian/scripts/probe-launch.mjs`
@@ -149,8 +149,11 @@ The design pages are the spec. When the code departs from them, the reason is be
   MCP server passes `sessions.UserAnswered`, which reads the change's `session` and that
   session's `last_prompt`. It judges the document Apply resolved, under the lock, so no
   other name for the change and no other working folder gets past it. The CLI passes
-  none: the terminal and Obsidian's Apply button are the user's. A change with no
-  `session` waits for Obsidian.
+  none: the terminal and Obsidian's Apply button are the user's. A change with no writes
+  that absorbs no spec, verification, or chord needs no answer and applies at once. Any
+  other change with no `session`, or whose session ended with no prompt after the
+  proposal, waits for Obsidian or the terminal; `change propose` from the CLI records no
+  session.
 - **Times carry seconds.** `proposed`, `last_prompt`, and an event's `at` are
   `2006-01-02T15:04:05`. With minutes, a yes typed in the minute of the proposal would not
   open the gate. Two events of one subject in one second get a strict order, so the
@@ -226,14 +229,18 @@ The design pages are the spec. When the code departs from them, the reason is be
   `hooks.json`; SessionEnd's timeout is 3 s.
 - **`thread-audit` names a repository by its path**: `git -C <path> …`, since it runs
   in the vault.
-- **The host's own read-only agents are workers.** `Explore`, `Plan`,
-  `claude-code-guide`, and `statusline-setup` get a line under `## Subagents`, like the
-  plugin's four, and no document. Only the plugin's four are refused writes.
+- **The host's own quiet agents are workers.** `Explore`, `Plan`, `claude-code-guide`,
+  and `statusline-setup` get a line under `## Subagents`, like the plugin's four, and no
+  document (`quietAgents`). `statusline-setup` has Edit; its edits meet the path rules
+  like any agent's but stay off the session's record. Only the plugin's four are refused
+  writes.
 - **The harness settings keep no memory.** `SyncSettings(drop)` adds every repository
   path the documents name and removes only the paths the documents named before a write
   and no longer do. Apply and undo pass their before-list.
-- **Machine files stay out of git** through `.git/info/exclude` (`views/`,
-  `.claude/settings.local.json`, `.obsidian/workspace*.json`, `.obsidian/graph.json`), so
+- **Machine files stay out of git** through `.git/info/exclude` (`vault.Excluded`:
+  `views/`, `.claude/settings.local.json`, `.obsidian/workspace.json`,
+  `.obsidian/workspace-mobile.json`, `.obsidian/graph.json`, `.DS_Store`, and the
+  temporary `.atlas-*` files), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
   and untracks an excluded file that an older vault tracked, in a commit of its own.
 - **A Base that equals a shipped copy upgrades in a commit of its own.** `Begin` writes
@@ -250,14 +257,28 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A create or a rename checks the disk** (`Vault.Occupied`), because the index compares
   titles by lower case only, and APFS also folds Unicode forms: "Café" in NFC and in NFD
   is one file. Capture numbers such a title; every other writer refuses it.
-- **Match merges subjects that hit one document**, so one drafter writes each document.
+- **Match merges the hits of one kind on one document** (`mergeHits`), so one drafter
+  writes that document. A near or a new subject is never merged, and neither are two
+  subjects of different kinds that hit one document.
 - **A dropped thread does not block** the threads after it.
 - **The binary is `atlas-obsidian`, not `atlas`.** Other programs install a binary named
   `atlas`, so that name could run the wrong program. 6.0 to 6.2 shipped `atlas`; the
   guard's shell rule still refuses both names.
-- **The wrapper and the Obsidian plugin never search PATH or the system folders** for the
-  binary, so another tool's binary never runs in its place. They look at `$ATLAS_BIN`
-  (the wrapper only), `~/.atlas/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`.
+- **The wrapper, the Codex entry, and the Obsidian plugin never search PATH or the system
+  folders** for the binary, so another tool's binary never runs in its place. The wrapper
+  and the Codex entry run the first executable of `$ATLAS_BIN`,
+  `${ATLAS_HOME:-~/.atlas}/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`. The plugin
+  runs its `binaryPath` setting as given when it is set (`helpers.ts`), else the first of
+  `~/.atlas/bin/atlas-obsidian` and `~/go/bin/atlas-obsidian` that exists; it reads
+  neither `ATLAS_BIN` nor `ATLAS_HOME`.
+- **One rule chooses the vault** (`vault.Select`): the vault a call names (`--vault`, or
+  a tool's `vault` input), else `$ATLAS_VAULT` (a path or a machine-file name), else the
+  vault above the working folder. The CLI, the MCP server, and the hooks call it; a bad
+  `ATLAS_VAULT` is an error in the first two, and a hook falls back to the folder.
+- **`--help` and `-h` run nothing.** `Run` answers them from the command's usage entry
+  before dispatch, since `parse` would read `--help` as an option and `setup`, `vault
+  init`, `hook`, and `mcp` act at once. A test (`usage_test.go`) holds every option a
+  command reads to its usage entry.
 - **Codex runs its own copy of the wrapper's lookup.** `.codex-plugin/plugin.json` holds
   the atlas server inline: `/bin/sh -c` with the same three candidates, no `cwd`, and
   `env_vars` for `ATLAS_BIN`, `ATLAS_HOME`, and `ATLAS_VAULT`. Codex 0.155.1 expands no
@@ -318,10 +339,14 @@ verify (three rounds with thread-audit), finding, and the closing change.
 Verified with Codex 0.155.1 in a scratch `CODEX_HOME` (2026-10-04): the plugin's server
 entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.md).
 
+Verified live in Obsidian (TESTED.md): Start agent, Resume from the sessions pane, and the
+settings tab.
+
 Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
-the rest is untested on Codex), an atlas tool called from a Codex session, the Notification types in a live session, and the rest of the Obsidian
-plugin inside Obsidian (the Atlas navigator, repository panel, view folders, change bar,
-badges, and sessions pane have not run in the app).
+the rest is untested on Codex), an atlas tool called from a Codex session, the
+Notification types in a live session, and the rest of the Obsidian plugin inside Obsidian
+(the Atlas navigator, repository panel, view folders, change bar, and badges have not run
+in the app).
 
 ## Constraints
 
@@ -350,8 +375,9 @@ make obsidian     # build the Obsidian plugin and copy it into the binary's temp
 ```
 
 The binary, both plugin manifests, the marketplace entry, and the Obsidian plugin share
-one version; `internal/plugin` fails the build when they drift, or when the binary carries
-an older Obsidian plugin than `obsidian/dist`.
+one version; the `internal/plugin` tests fail when they drift, or when the binary carries
+an older Obsidian plugin than `obsidian/dist`. `make test` runs them; `make build` and
+`make install` do not.
 
 End to end in a scratch vault, without touching the real machine folder:
 
@@ -376,14 +402,17 @@ claude plugin update atlas-obsidian@nathanaday-atlas-obsidian
 make install
 ```
 
-A session started inside this checkout reports that the project MCP server
-`${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian` failed to start: Claude Code reads the checkout's
-own `.mcp.json` as a project server, and that variable is set only for plugins. The
-message is noise.
+A session started inside this checkout may report that the project MCP server
+`${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian` failed to start. Claude Code reads the
+checkout's own `.mcp.json` as a project server, and that variable is set only for plugins.
+It starts that server only when the checkout's untracked `.claude/settings.local.json`
+enables it (`enabledMcpjsonServers` or `enableAllProjectMcpServers`). The plugin's own
+server still runs; remove the project server from that file to silence the error.
 
 ## Not built yet
 
 - The npm package that `npx atlas-obsidian setup` installs from (the Stack page). Setup
   runs from the binary for now.
-- Capture from a URL (`origin: url`).
+- Fetching a page from a URL. `source capture --text FILE --locator URL` already records
+  `origin: url`; nothing fetches the page.
 - The "Later" items of the Obsidian plugin page.

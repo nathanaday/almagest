@@ -2243,7 +2243,7 @@ var LEGACY_KEYS = ["agentCommand", "terminal", "terminalCommand"];
 var ECHO_WINDOW = 5e3;
 var AtlasPlugin = class extends import_obsidian13.Plugin {
   settings = { ...DEFAULT_SETTINGS };
-  /** The agent settings of 8.0.2 and 8.0.3, kept in data.json until they move to the vault's config file. */
+  /** The agent settings of 8.0.2, kept in data.json until they move to the vault's config file. */
   legacy = null;
   badges;
   viewFolders;
@@ -2555,7 +2555,7 @@ var AtlasPlugin = class extends import_obsidian13.Plugin {
     const args = value ? ["config", "set", key, value] : ["config", "unset", key];
     return this.atlas(global ? [...args, "--global"] : args);
   }
-  /** Moves the agent settings of 8.0.2 and 8.0.3 into the vault's config file, once. */
+  /** Moves the agent settings of 8.0.2 into the vault's config file, once. */
   async moveLegacyPreferences() {
     const saved = this.legacy;
     if (!saved) return;
