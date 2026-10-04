@@ -65,12 +65,17 @@ Usage:
 `
 
 const usageTail = `
-Every command takes --vault (a path, or a name from ~/.atlas/config.json) and --json.
+A command that acts on a vault takes --vault (a path, or a name from ~/.atlas/config.json),
+else $ATLAS_VAULT, else the vault above the working folder; it prints JSON with --json.
+setup's --vault is the folder of a new vault, vault init takes --path, match always prints
+JSON, and doctor, version, help, hook, and mcp take neither option.
 `
 
 // commands are the usage of each command, in the order help lists them.
 var commands = []struct{ name, usage string }{
-	{"vault", `  atlas-obsidian vault [status|init|sync [--views]|mention|migrate [--dry-run]]
+	{"vault", `  atlas-obsidian vault [status] | sync [--views] | migrate [--dry-run]
+                       | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
+                       | mention --note DOC --line N --link DOC
 `},
 	{"search", `  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
 `},
@@ -78,22 +83,28 @@ var commands = []struct{ name, usage string }{
 `},
 	{"match", `  atlas-obsidian match --items FILE.json | --docs ID... [--tag T]... [--across]
 `},
-	{"source", `  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T] | [--repository R] [--tag T]... [--resolves STUB]
+	{"source", `  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T [--locator URL]] | [--repository R]
+                                [--tag T]... [--new-tags] [--resolves STUB]
   atlas-obsidian source chunks DOC
   atlas-obsidian source read DOC CHUNK
 `},
 	{"change", `  atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
 `},
-	{"thread", `  atlas-obsidian thread [list] | load THREAD | stub TEXT... [--title T] [--chord C] [--after T]...
-                        | spec THREAD FILE.md | tasks THREAD FILE.json [--repository R] | start THREAD [--take]
+	{"thread", `  atlas-obsidian thread [list] [--tag T]... [--repository R] [--chord C] | load THREAD
+                        | stub TEXT... [--title T] [--description D] [--tag T]... [--priority P] [--chord C]
+                               [--after T]... [--inbox NOTE] [--new-tags]
+                        | spec THREAD FILE.md [--description D] | tasks THREAD FILE.json [--repository R]
+                        | start THREAD [--take]
                         | check THREAD TASK [--state S] [--commit C]... [--note N] [--reason R]
-                        | verify THREAD FILE.json | finding THREAD FINDING --outcome O [--reason R] [--link L] [--task FILE.json]
-                        | drop THREAD --reason R | reopen THREAD | block THREAD --reason R | unblock THREAD
+                        | verify THREAD FILE.json
+                        | finding THREAD FINDING --outcome O [--reason R] [--link L] [--text T] [--task FILE.json] [--repository R]
+                        | drop THREAD --reason R | reopen THREAD [--reason R] | block THREAD --reason R | unblock THREAD
                         | resolve STUB --became DOC... | note DOC --text T
-                        | set DOC [--title T] [--priority P] [--tag T]... [--chord C] [--after T]...
+                        | set DOC [--title T] [--description D] [--priority P] [--tag T]... [--alias A]... [--chord C]
+                              [--after T]... [--new-tags]
 `},
-	{"chord", `  atlas-obsidian chord [list] | load CHORD | create FILE.json | add CHORD THREAD [--after T]... | remove CHORD THREAD
-                       | order CHORD FILE.json | drop CHORD --reason R | reopen CHORD
+	{"chord", `  atlas-obsidian chord [list] [--tag T]... | load CHORD | create FILE.json | add CHORD THREAD [--after T]...
+                       | remove CHORD THREAD | order CHORD FILE.json | drop CHORD --reason R | reopen CHORD [--reason R]
                        | canvas CHORD [--save | --write | --tidy]
 `},
 	{"lint", `  atlas-obsidian lint [--tag T]...
@@ -105,13 +116,15 @@ var commands = []struct{ name, usage string }{
 	{"config", `  atlas-obsidian config [show] | set KEY VALUE [--global] | unset KEY [--global]
                                                    agent preferences: the vault's file wins over ~/.atlas/config.json
 `},
-	{"setup", `  atlas-obsidian setup
+	{"setup", `  atlas-obsidian setup [--agent claude|codex] [--no-plugin] [--plugin-source SOURCE]
+                       [--vault FOLDER --name N [--description D] [--tagging open|known] [--allow-vault]]
+                                                   installs the binary and the agent plugin, and makes a first vault
 `},
-	{"doctor", `  atlas-obsidian doctor
+	{"doctor", `  atlas-obsidian doctor                            checks the binary, each agent's plugin and server, and every vault
 `},
 	{"version", `  atlas-obsidian version
 `},
-	{"open", `  atlas-obsidian open [DOC]
+	{"open", `  atlas-obsidian open [DOC] [--register] [--update-plugin]
 `},
 	{"help", `  atlas-obsidian help | COMMAND --help
 `},
