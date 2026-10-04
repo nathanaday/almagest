@@ -20,7 +20,7 @@ row or change a level each time you test a setup.
 | Date       | OS                     | Obsidian | Claude Code | Codex   | Atlas |
 | ---------- | ---------------------- | -------- | ----------- | ------- | ----- |
 | 2026-10-01 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1 | 8.1.1 |
-| 2026-10-04 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1 | 8.1.1 at `84f33f3` |
+| 2026-10-04 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1, 0.160.0 | 8.1.1 at `a623068` |
 
 ## Start agent: agent × terminal (macOS)
 
@@ -65,17 +65,18 @@ and Windows: **None**.
 
 ## Codex plugin (2026-10-04)
 
-Codex 0.155.1, with the plugin installed from a `git archive` of the commit into a
-scratch `CODEX_HOME`, and a scratch `HOME` whose `~/.atlas/bin` held the built binary.
+Codex 0.155.1 and 0.160.0, with the plugin installed from a `git archive` of `a623068`
+into a scratch `CODEX_HOME` per version, and a scratch `HOME` whose `~/.atlas/bin` held the built binary.
 No Codex session ran: the checks used `codex mcp list --json`, `codex app-server`, and
 `atlas-obsidian doctor`.
 
 | Case                                                                   | Level            | Result |
 | ---------------------------------------------------------------------- | ---------------- | ------ |
-| `codex mcp list --json` lists the atlas entry with no `${` and no `cwd` | Live (Codex CLI) | `/bin/sh -c …`, `env_vars` `ATLAS_BIN`, `ATLAS_HOME`, `ATLAS_VAULT` |
+| `codex mcp list --json` lists the atlas entry with no `${` and no `cwd` | Live (Codex CLI) | `/bin/sh -c …` with 0 `${` on both versions, `env_vars` `ATLAS_BIN`, `ATLAS_HOME`, `ATLAS_VAULT`. At `84f33f3` the script still held `${ATLAS_BIN:-}` and `${ATLAS_HOME:-…}` (round 1, fixed in `63f61e6`) |
 | That command, in a vault with only `HOME` and `PATH`, serves the tools | Live (Codex CLI) | `initialize` 8.1.1, 9 tools, `vault status` answered for that vault |
 | `doctor` on the 8.1.1 plugin (`3639ae5`)                                | Live (Codex CLI) | `FAIL codex server`: the `${CLAUDE_PLUGIN_ROOT}` placeholder |
-| `doctor` on this plugin, fresh install                                 | Live (Codex CLI) | `ok codex server` (9 tools), `FAIL codex hooks` (8 untrusted) |
+| `doctor` on this plugin, fresh install                                 | Live (Codex CLI) | `ok codex server` (9 tools), `FAIL codex hooks` (8 untrusted), on both versions |
+| The Codex update hint for a Git and for a local marketplace           | Live (Codex CLI) | Git: upgrade, remove, add; local: remove and add ran (upgrade fails there) |
 | `doctor` after the 8 hooks are trusted                                 | Live (Codex CLI) | `ok codex hooks`, exit 0 |
 | `doctor` after one cached hook changes                                 | Live (Codex CLI) | `FAIL codex hooks` (1 modified) |
 | `setup --agent codex` on an installed plugin                           | Live (Codex CLI) | prints the `hooks` line |
