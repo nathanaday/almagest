@@ -223,7 +223,7 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile, elsewhere bool) string {
 	case under(vault.Wiki):
 		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from the thread tool, the chord tool, change propose, or source capture"
 	case under(vault.Changes):
-		return rel + " is a change document; the change tool writes it. Edit a proposed document inside it only when the user asks"
+		return rel + " is a change document, and only the change tool writes it. To change a proposed change, propose a new one with supersedes; the user can edit one in Obsidian before Apply"
 	case under(vault.Chords):
 		return rel + " is a chord's canvas, which code writes from the stubs; change the order with chord order, and the user redraws it in Obsidian"
 	case under(vault.Views):

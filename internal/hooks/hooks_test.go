@@ -645,3 +645,14 @@ func TestAHookTakesTheVaultFromAtlasVaultAndFallsBackToTheFolder(t *testing.T) {
 		t.Fatal("a bad ATLAS_VAULT did not fall back to the folder's vault")
 	}
 }
+
+// The refusal of an edit under changes/ names what the agent and the user can do, and
+// no edit the guard never allows.
+func TestTheChangesRefusalNamesSupersedes(t *testing.T) {
+	f := setup(t)
+	f.run("session-start", map[string]any{})
+	out := f.run("guard", edit(f.tv.V.Root+"/changes/2026-09/x.md", "x"))
+	if !denied(out) || !strings.Contains(out, "supersedes") || !strings.Contains(out, "Obsidian") || strings.Contains(out, "only when the user asks") {
+		t.Fatalf("refusal: %s", out)
+	}
+}
