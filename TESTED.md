@@ -91,7 +91,9 @@ PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder
 
 ## How to test a setup
 
-1. Build the plugin: `cd obsidian && npm install`.
+1. Install the plugin's dependencies: `cd obsidian && npm install`. That is enough for the
+   probe, which bundles `src/agents.ts` itself. To build the plugin, run `npm run build`
+   there, or `make obsidian` at the root, which also copies it into the binary.
 2. Run the probe: `node scripts/probe-launch.mjs wezterm claude-work`. The first
    argument is the terminal (`terminal`, `iterm`, `wezterm`, `ghostty`, or `custom`). The
    second is the agent command. For `custom`, the third is the template.
