@@ -231,7 +231,11 @@ func (c *CLI) serverCheck(agent string) (bool, string) {
 	}
 	names, err := host.Probe(context.Background(), s, c.Dir)
 	if err != nil {
-		return false, fmt.Sprintf("the server did not start: %v", err)
+		step := "run it in a shell to see what it does: " + s.ShellLine()
+		if agent == "codex" {
+			step = "codex mcp list --json shows the command Codex runs; run it in a shell to see what it does"
+		}
+		return false, fmt.Sprintf("the server did not start: %v; %s", err, step)
 	}
 	want := mcpserver.ToolNames()
 	if !sameSet(names, want) {

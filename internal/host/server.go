@@ -112,8 +112,9 @@ func codexEntry(data []byte) (*Server, error) {
 	return nil, fmt.Errorf("Codex lists no %s server", ServerName)
 }
 
-// ProbeTimeout bounds a probe: the start, the handshake, and the tool list.
-const ProbeTimeout = 10 * time.Second
+// ProbeTimeout bounds a probe: the start, the handshake, and the tool list. Tests
+// shorten it.
+var ProbeTimeout = 10 * time.Second
 
 // Probe starts a server as its host would, in dir unless the entry names a cwd, and
 // returns the names of the tools it lists. The server sees HOME and PATH, the entry's
@@ -131,20 +132,25 @@ func Probe(ctx context.Context, s *Server, dir string) ([]string, error) {
 	stderr := &limitedBuffer{max: 4096}
 	cmd.Stderr = stderr
 	client := mcp.NewClient(&mcp.Implementation{Name: "atlas-obsidian doctor", Version: "1"}, nil)
-	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}, nil)
-	if err != nil {
+	fail := func(err error) error {
+		timedOut := ctx.Err() == context.DeadlineExceeded
 		// Wait copies the rest of stderr, which holds the reason.
 		cancel()
-		if cmd.Process != nil {
+		if cmd.Process != nil && cmd.ProcessState == nil {
 			cmd.Wait()
 		}
-		return nil, probeError(err, stderr)
+		return probeError(err, stderr, timedOut, cmd.ProcessState)
+	}
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}, nil)
+	if err != nil {
+		return nil, fail(err)
 	}
 	res, err := session.ListTools(ctx, nil)
-	session.Close()
 	if err != nil {
-		return nil, probeError(err, stderr)
+		session.Close()
+		return nil, fail(err)
 	}
+	session.Close()
 	var names []string
 	for _, t := range res.Tools {
 		names = append(names, t.Name)
@@ -170,7 +176,9 @@ func probeEnv(s *Server) []string {
 	return env
 }
 
-func probeError(err error, stderr *limitedBuffer) error {
+// probeError says why a server gave no tool list, in words a user can act on: the
+// server's own stderr when it wrote any, else what was seen.
+func probeError(err error, stderr *limitedBuffer, timedOut bool, state *os.ProcessState) error {
 	if text := strings.TrimSpace(stderr.String()); text != "" {
 		lines := strings.Split(text, "\n")
 		if len(lines) > 3 {
@@ -178,7 +186,32 @@ func probeError(err error, stderr *limitedBuffer) error {
 		}
 		return fmt.Errorf("%s (%v)", strings.Join(lines, " "), err)
 	}
-	return err
+	if timedOut {
+		return fmt.Errorf("the server did not answer within %s", ProbeTimeout)
+	}
+	if errors.Is(err, exec.ErrNotFound) || errors.Is(err, os.ErrNotExist) {
+		return fmt.Errorf("the command does not exist (%v)", err)
+	}
+	if state != nil {
+		return fmt.Errorf("the server ended (%s) before it answered, and wrote nothing to stderr", state)
+	}
+	return fmt.Errorf("the server gave no tool list (%v)", err)
+}
+
+// ShellLine is the server's command as one line a user can paste into a shell.
+func (s *Server) ShellLine() string {
+	words := []string{shellQuote(s.Command)}
+	for _, a := range s.Args {
+		words = append(words, shellQuote(a))
+	}
+	return strings.Join(words, " ")
+}
+
+func shellQuote(w string) string {
+	if w != "" && strings.Trim(w, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./=:@%+,") == "" {
+		return w
+	}
+	return "'" + strings.ReplaceAll(w, "'", `'\''`) + "'"
 }
 
 // limitedBuffer keeps the first max bytes written to it.

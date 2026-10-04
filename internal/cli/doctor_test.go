@@ -115,6 +115,8 @@ func TestDoctorStartsEachHostsServer(t *testing.T) {
 			"FAIL codex server     the server lists vault, search, and this binary serves " + strings.Join(all, ", ")},
 		{"a server that does not start", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "echo atlas: the atlas-obsidian binary is not installed. >&2; exit 1"], "env": null, "env_vars": [], "cwd": null}`,
 			"FAIL codex server     the server did not start: atlas: the atlas-obsidian binary is not installed."},
+		{"a server that exits with nothing on stderr", `{"type": "stdio", "command": "/usr/bin/true", "args": [], "env": null, "env_vars": [], "cwd": null}`,
+			"FAIL codex server     the server did not start: the server ended (exit status 0) before it answered, and wrote nothing to stderr; codex mcp list --json shows the command Codex runs; run it in a shell to see what it does"},
 		{"a working entry", `{"type": "stdio", "command": "` + working + `", "args": [], "env": null, "env_vars": ["ATLAS_HOME"], "cwd": null}`,
 			"ok   codex server     atlas: " + fmt.Sprint(len(all)) + " tools"},
 		{"a working entry whose script expands variables", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "w=${ATLAS_BIN:-` + working + `}; exec \\"$w\\""], "env": null, "env_vars": [], "cwd": null}`,

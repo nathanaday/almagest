@@ -6,6 +6,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 )
@@ -147,5 +148,36 @@ func TestProbeSaysWhyAServerDidNotStart(t *testing.T) {
 	_, err = Probe(context.Background(), &Server{Command: "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian"}, t.TempDir())
 	if err == nil {
 		t.Fatal("a placeholder command started")
+	}
+}
+
+func TestProbeSaysWhatHappenedWhenTheServerIsSilent(t *testing.T) {
+	old := ProbeTimeout
+	ProbeTimeout = 500 * time.Millisecond
+	t.Cleanup(func() { ProbeTimeout = old })
+	for _, c := range []struct {
+		name string
+		s    *Server
+		want string
+	}{
+		{"a hang", &Server{Command: "/bin/sleep", Args: []string{"30"}}, "the server did not answer within 500ms"},
+		{"a silent exit", &Server{Command: "/usr/bin/true"}, "the server ended (exit status 0) before it answered, and wrote nothing to stderr"},
+		{"no such command", &Server{Command: "/no/such/server"}, "the command does not exist"},
+	} {
+		start := time.Now()
+		_, err := Probe(context.Background(), c.s, t.TempDir())
+		if err == nil || !strings.Contains(err.Error(), c.want) {
+			t.Fatalf("%s: %v, want %q", c.name, err, c.want)
+		}
+		if time.Since(start) > 5*time.Second {
+			t.Fatalf("%s took %s", c.name, time.Since(start))
+		}
+	}
+}
+
+func TestShellLineQuotesWhatAShellWouldSplit(t *testing.T) {
+	s := &Server{Command: "/bin/sh", Args: []string{"-c", "echo 'hi' $HOME", "plain/x"}}
+	if got, want := s.ShellLine(), `/bin/sh -c 'echo '\''hi'\'' $HOME' plain/x`; got != want {
+		t.Fatalf("%s, want %s", got, want)
 	}
 }
