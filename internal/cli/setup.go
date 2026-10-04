@@ -158,6 +158,14 @@ func (c *CLI) doctorCmd(argv []string) int {
 		if inst != nil && inst.Enabled {
 			ok, detail := c.serverCheck(agent)
 			line(ok, agent+" server", detail)
+			if agent == "codex" {
+				switch state, detail := codexHooks(c.Dir); state {
+				case checkUnknown:
+					note("codex hooks", detail)
+				default:
+					line(state == checkOK, "codex hooks", detail)
+				}
+			}
 		}
 	}
 	cfg, err := h.Load()
@@ -224,6 +232,30 @@ func (c *CLI) serverCheck(agent string) (bool, string) {
 		return false, fmt.Sprintf("the server lists %s, and this binary serves %s; %s, or install the binary that matches it", strings.Join(names, ", "), strings.Join(want, ", "), host.UpdateHint(agent))
 	}
 	return true, fmt.Sprintf("%s: %d tools", host.ServerName, len(names))
+}
+
+// The states of a check that may not know its answer.
+const (
+	checkOK = iota
+	checkFail
+	checkUnknown
+)
+
+// codexHooks reports whether Codex runs the plugin's hooks. setup and doctor print it
+// in the same words.
+func codexHooks(dir string) (int, string) {
+	trust, err := host.CodexHookTrust(dir)
+	if err != nil {
+		return checkUnknown, fmt.Sprintf("Codex did not report its hooks (%v); open /hooks in Codex to see whether it trusts the %s hooks", err, host.Plugin)
+	}
+	if trust.Total() == 0 {
+		return checkUnknown, fmt.Sprintf("Codex lists no %s hook; start a new Codex session, then run atlas-obsidian doctor again", host.Plugin)
+	}
+	if off := trust.Off(); off > 0 {
+		return checkFail, fmt.Sprintf("Codex runs %d of %d %s hooks (%d untrusted, %d modified); open /hooks in Codex, trust the %s hooks, and start a new session",
+			trust.Total()-off, trust.Total(), host.Plugin, trust["untrusted"], trust["modified"], host.Plugin)
+	}
+	return checkOK, fmt.Sprintf("%d hooks trusted", trust.Total())
 }
 
 func sameSet(a, b []string) bool {
