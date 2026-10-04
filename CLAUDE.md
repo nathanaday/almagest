@@ -258,6 +258,21 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The wrapper and the Obsidian plugin never search PATH or the system folders** for the
   binary, so another tool's binary never runs in its place. They look at `$ATLAS_BIN`
   (the wrapper only), `~/.atlas/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`.
+- **Codex runs its own copy of the wrapper's lookup.** `.codex-plugin/plugin.json` holds
+  the atlas server inline: `/bin/sh -c` with the same three candidates, no `cwd`, and
+  `env_vars` for `ATLAS_BIN`, `ATLAS_HOME`, and `ATLAS_VAULT`. Codex 0.155.1 expands no
+  placeholder in a plugin's MCP config, ignores a root `plugin.json`, and resolves a
+  `cwd` against the plugin's cache folder, where the server would find no vault.
+  `internal/plugin/codex_test.go` runs the entry and the wrapper side by side and
+  requires the same result. Claude Code keeps reading `.mcp.json`.
+- **`doctor` starts each host's server as the host runs it** (`host.Entry`,
+  `host.Probe`): Codex's transport from `codex mcp list --json`, Claude Code's
+  `.mcp.json` from the install path with `${CLAUDE_PLUGIN_ROOT}` expanded, with only
+  `HOME`, `PATH`, `env`, and `env_vars`, and compares the tools with
+  `mcpserver.ToolNames`. A `${` in the command fails; a script in the args may hold its
+  own. Codex hook trust comes from `codex app-server`'s `hooks/list`
+  (`host.CodexHookTrust`), since only Codex knows the trusted hash; `setup --agent
+  codex` prints the same line on every run.
 
 ## Host facts, verified live on Claude Code 2.1.283 (2026-09-28)
 
@@ -300,8 +315,11 @@ redrawn arrow; `View · Threads`; and one thread from a request to closed in a s
 vault with `claude -p`, where the agent used thread stub, spec, tasks, start, check,
 verify (three rounds with thread-audit), finding, and the closing change.
 
-Not yet verified: Codex's hook events (the guard reads `apply_patch` paths; the rest is
-untested on Codex), the Notification types in a live session, and the rest of the Obsidian
+Verified with Codex 0.155.1 in a scratch `CODEX_HOME` (2026-10-04): the plugin's server
+entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.md).
+
+Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
+the rest is untested on Codex), an atlas tool called from a Codex session, the Notification types in a live session, and the rest of the Obsidian
 plugin inside Obsidian (the Atlas navigator, repository panel, view folders, change bar,
 badges, and sessions pane have not run in the app).
 
