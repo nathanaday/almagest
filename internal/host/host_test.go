@@ -1,10 +1,13 @@
 package host
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 )
 
 func TestClaudeInstalledReadsEnabledPlugins(t *testing.T) {
@@ -115,5 +118,34 @@ func TestClaudeEntrySubstitutesThePluginRoot(t *testing.T) {
 	}
 	if _, err := claudeEntry(""); err == nil || !strings.Contains(err.Error(), "installPath") {
 		t.Fatalf("no install path: %v", err)
+	}
+}
+
+func TestProbeListsTheToolsWithAReducedEnvironment(t *testing.T) {
+	t.Setenv("ATLAS_HOME", "/atlas-home")
+	t.Setenv("SECRET", "leaked")
+	s := &Server{Command: testvault.MCPServer(t, "vault", "${ATLAS_HOME:-none}", "${SECRET:-none}", "${FROM_ENTRY:-none}"),
+		EnvVars: []string{"ATLAS_HOME"}, Env: map[string]string{"FROM_ENTRY": "entry"}}
+	names, err := Probe(context.Background(), s, t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := strings.Join(names, " "); got != "vault /atlas-home none entry" {
+		t.Fatalf("tools %q; want ATLAS_HOME and the entry's env passed, SECRET not", got)
+	}
+}
+
+func TestProbeSaysWhyAServerDidNotStart(t *testing.T) {
+	script := filepath.Join(t.TempDir(), "server")
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'atlas: the atlas-obsidian binary is not installed.' >&2\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	_, err := Probe(context.Background(), &Server{Command: script}, t.TempDir())
+	if err == nil || !strings.Contains(err.Error(), "not installed") {
+		t.Fatalf("%v", err)
+	}
+	_, err = Probe(context.Background(), &Server{Command: "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian"}, t.TempDir())
+	if err == nil {
+		t.Fatal("a placeholder command started")
 	}
 }

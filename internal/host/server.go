@@ -9,7 +9,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/modelcontextprotocol/go-sdk/mcp"
 )
 
 // ServerName is the plugin's MCP server, as both manifests name it.
@@ -107,4 +110,95 @@ func codexEntry(data []byte) (*Server, error) {
 		return &srv, nil
 	}
 	return nil, fmt.Errorf("Codex lists no %s server", ServerName)
+}
+
+// ProbeTimeout bounds a probe: the start, the handshake, and the tool list.
+const ProbeTimeout = 10 * time.Second
+
+// Probe starts a server as its host would, in dir unless the entry names a cwd, and
+// returns the names of the tools it lists. The server sees HOME and PATH, the entry's
+// env, and the variables the entry names in env_vars, and nothing else, so an install
+// that works only through the caller's shell still fails here.
+func Probe(ctx context.Context, s *Server, dir string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(ctx, ProbeTimeout)
+	defer cancel()
+	cmd := exec.CommandContext(ctx, s.Command, s.Args...)
+	cmd.Dir = dir
+	if s.Cwd != "" {
+		cmd.Dir = s.Cwd
+	}
+	cmd.Env = probeEnv(s)
+	stderr := &limitedBuffer{max: 4096}
+	cmd.Stderr = stderr
+	client := mcp.NewClient(&mcp.Implementation{Name: "atlas-obsidian doctor", Version: "1"}, nil)
+	session, err := client.Connect(ctx, &mcp.CommandTransport{Command: cmd, TerminateDuration: time.Second}, nil)
+	if err != nil {
+		// Wait copies the rest of stderr, which holds the reason.
+		cancel()
+		if cmd.Process != nil {
+			cmd.Wait()
+		}
+		return nil, probeError(err, stderr)
+	}
+	res, err := session.ListTools(ctx, nil)
+	session.Close()
+	if err != nil {
+		return nil, probeError(err, stderr)
+	}
+	var names []string
+	for _, t := range res.Tools {
+		names = append(names, t.Name)
+	}
+	return names, nil
+}
+
+func probeEnv(s *Server) []string {
+	env := []string{}
+	for _, k := range []string{"HOME", "PATH"} {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	for _, k := range s.EnvVars {
+		if v, ok := os.LookupEnv(k); ok {
+			env = append(env, k+"="+v)
+		}
+	}
+	for k, v := range s.Env {
+		env = append(env, k+"="+v)
+	}
+	return env
+}
+
+func probeError(err error, stderr *limitedBuffer) error {
+	if text := strings.TrimSpace(stderr.String()); text != "" {
+		lines := strings.Split(text, "\n")
+		if len(lines) > 3 {
+			lines = lines[:3]
+		}
+		return fmt.Errorf("%s (%v)", strings.Join(lines, " "), err)
+	}
+	return err
+}
+
+// limitedBuffer keeps the first max bytes written to it.
+type limitedBuffer struct {
+	mu  sync.Mutex
+	buf []byte
+	max int
+}
+
+func (b *limitedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	if room := b.max - len(b.buf); room > 0 {
+		b.buf = append(b.buf, p[:min(room, len(p))]...)
+	}
+	return len(p), nil
+}
+
+func (b *limitedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return string(b.buf)
 }
