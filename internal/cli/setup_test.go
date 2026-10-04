@@ -52,3 +52,37 @@ func TestSetupDoesNotReinstallWhenTheInstallCannotBeRead(t *testing.T) {
 		t.Fatalf("setup ran claude: %s", data)
 	}
 }
+
+func TestSetupReportsTheCodexHookTrustOnEveryRun(t *testing.T) {
+	tv := testvault.New(t)
+	r := run{t: t, tv: tv}
+	working := testvault.MCPServer(t, "vault")
+	entry := `{"type": "stdio", "command": "` + working + `", "args": [], "env": null, "env_vars": [], "cwd": null}`
+	fakeHosts(t, entry, working, appServerAnswer("trusted", "modified"))
+	want := "hooks    Codex runs 1 of 2 " + host.Plugin + " hooks (0 untrusted, 1 modified); open /hooks in Codex"
+	for i := 0; i < 2; i++ {
+		out := r.ok("", "setup", "--agent", "codex")
+		if !strings.Contains(out, "plugin   "+host.PluginID+" 8.1.1 in codex") || !strings.Contains(out, want) {
+			t.Fatalf("run %d of setup on an installed plugin lacks %q:\n%s", i+1, want, out)
+		}
+	}
+}
+
+func TestSetupReportsTheCodexHookTrustAfterAFreshInstall(t *testing.T) {
+	tv := testvault.New(t)
+	r := run{t: t, tv: tv}
+	bin := t.TempDir()
+	codex := "#!/bin/sh\ncase \"$1 $2\" in\n" +
+		"\"plugin list\") echo '{\"installed\": []}' ;;\n" +
+		"\"app-server \") " + appServerAnswer("untrusted", "untrusted") + " ;;\n" +
+		"esac\nexit 0\n"
+	if err := os.WriteFile(filepath.Join(bin, "codex"), []byte(codex), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", bin+":/usr/bin:/bin")
+	out := r.ok("", "setup", "--agent", "codex")
+	want := "hooks    Codex runs 0 of 2 " + host.Plugin + " hooks (2 untrusted, 0 modified); open /hooks in Codex, trust the " + host.Plugin + " hooks, and start a new session"
+	if !strings.Contains(out, "plugin   "+host.PluginID+" installed in codex") || !strings.Contains(out, want) {
+		t.Fatalf("setup after a fresh install lacks %q:\n%s", want, out)
+	}
+}

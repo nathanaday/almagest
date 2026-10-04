@@ -52,6 +52,7 @@ func (c *CLI) setupCmd(argv []string) error {
 		fmt.Fprintf(c.Out, "binary   %s\n", target)
 	}
 	// The agent plugin.
+	enabled := false
 	if a.has("no-plugin") {
 		fmt.Fprintln(c.Out, "plugin   skipped (--no-plugin)")
 	} else if inst, err := host.Installed(agent); err != nil {
@@ -59,6 +60,7 @@ func (c *CLI) setupCmd(argv []string) error {
 	} else if inst != nil && !inst.Enabled {
 		fmt.Fprintf(c.Out, "plugin   %s %s in %s is disabled; %s\n", host.PluginID, inst.Version, agent, host.EnableHint(agent))
 	} else if inst != nil {
+		enabled = true
 		fmt.Fprintf(c.Out, "plugin   %s %s in %s\n", host.PluginID, inst.Version, agent)
 	} else {
 		ran, err := host.InstallPlugin(agent, a.get("plugin-source"))
@@ -71,11 +73,15 @@ func (c *CLI) setupCmd(argv []string) error {
 				fmt.Fprintf(c.Out, "         %s\n", strings.Join(cmd, " "))
 			}
 		} else {
+			enabled = true
 			fmt.Fprintf(c.Out, "plugin   %s installed in %s\n", host.PluginID, agent)
 		}
-		if agent == "codex" {
-			fmt.Fprintln(c.Out, "         Codex asks you to trust the plugin's hooks: open /hooks, trust them, and start a new session.")
-		}
+	}
+	// Codex runs no plugin hook the user has not trusted, and a changed hooks.json needs
+	// trust again, so every run says where the trust stands.
+	if enabled && agent == "codex" {
+		_, detail := codexHooks(c.Dir)
+		fmt.Fprintf(c.Out, "hooks    %s\n", detail)
 	}
 	// A first vault.
 	if p := a.get("vault"); p != "" {
