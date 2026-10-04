@@ -46,42 +46,99 @@ change, you read the preview and answer, and then the agent applies the change.
   is about to apply, while it holds the vault's lock.
 - A subagent's report and a background task's notice arrive as prompts, but they do not
   count as your turn.
-- A change with no recorded session, or with a proposal time that does not parse, is
-  refused. You can still apply it with the Apply button in Obsidian.
+- One kind of change needs no prompt: a change with no writes that absorbs no spec,
+  verification, or chord. It only marks sources and events as absorbed, so the agent
+  applies it in the same turn, with or without a recorded session.
+- A change that closes a thread or a chord waits for your prompt, even when it has no
+  writes.
+- The tool refuses a change that names no session, a change whose proposal time does not
+  parse, and a change whose session ended with no prompt from you after the proposal. No
+  later prompt reaches that session. Apply such a change with the Apply button in Obsidian
+  or in your terminal.
 - The gate does not read your prompt. The skill reads your answer and decides whether to
   apply.
 - Two ways to apply have no gate: `atlas-obsidian change apply` in your terminal, and the
-  Apply button in Obsidian.
+  Apply button in Obsidian. A change that `atlas-obsidian change propose` writes from a
+  terminal names no session, so only these two apply it.
 
 ### An agent edits files that code owns
 
 The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
-`apply_patch`, and Bash call. It refuses:
+`apply_patch`, and Bash call, and before each call of an atlas tool. In a vault, it refuses
+an agent's edit of:
 
-- an edit under `wiki/` or `changes/`, and an edit of `Atlas.md`, a `.base` file, or
-  `.claude/settings.local.json`;
-- an edit of another session's document, or of the fields and sections the hooks own in
-  the agent's own session document;
-- an edit of a thread document's frontmatter or lead callout;
-- an edit inside a linked repository when the session has no open thread that covers the
-  repository.
+- `wiki/documents/`: a new document, which the thread, chord, change, and source tools
+  make; a topic, a source, or a repository, which change only through a change; a Write
+  over a thread document; and the frontmatter, the lead callout, and the sections that code
+  owns in a stub, a spec, a task list, a verification, or a chord. The guard allows an Edit
+  of a thread document's prose in the sections of its type. A stub's Idea and Notes
+  hold at most 40 lines together.
+- `wiki/assets/`, and any other folder under `wiki/`.
+- `changes/`, `chords/`, and `views/`, which code writes.
+- `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
+- `sessions/`, except the Description, Progress, and Summary sections of the agent's own
+  session document.
+- `.atlas/config.json`, anything under `.obsidian/plugins/atlas/`, and the machine's
+  `config.json` in `~/.atlas` (or `$ATLAS_HOME`). These files decide what Atlas runs; see
+  [A shared vault changes what runs](#a-shared-vault-changes-what-runs).
+- A file inside a linked repository, when the session has no started thread with an open
+  task for that repository.
 
-The guard uses the vault that holds the edited file, not the vault of the session's
-folder. A session that runs outside the vault gets the same refusals.
+The guard judges a path as the disk names it. It follows links, and it matches each folder
+name without regard to case, so another spelling of a path meets the rule of the real file.
+It uses the vault that holds the edited file, not the vault of the session's folder. A file
+in no vault belongs to the vault that links its repository. So a session that runs outside
+the vault gets the same refusals.
 
 ### A read-only agent writes
 
-The plugin's four read-only agents (`wiki-extract`, `wiki-draft`, `wiki-audit`,
-`thread-review`) cannot use the edit tools, the atlas tools' write actions, or Bash. The one
-exception is `thread-review`, which can run `git log`, `git diff`, and `git show`. The guard
-refuses such a command when it holds a shell operator, `--output`, `-c`, `--ext-diff`, or
-`--textconv`.
+The plugin's four read-only agents are `thread-audit`, `wiki-audit`, `wiki-draft`, and
+`wiki-extract`. For each of them, the guard refuses the edit tools and every atlas call
+except the calls that only read: `search`, `context`, `match`, and `lint`; `vault status`;
+`change show`; `thread` and `chord` with `list` or `load`; and `source` with `chunks` or
+`read`. The guard counts a call that this list does not name as a write.
 
-### An agent uses the shell to skip the gate
+`wiki-audit`, `wiki-draft`, and `wiki-extract` run no shell command. `thread-audit` checks
+work by running tests and git, so it can run any shell command except the atlas commands
+that the guard refuses for every agent (next section). Its shell can write files; see
+[What Atlas does not guard against](#what-atlas-does-not-guard-against).
 
-The guard refuses a Bash command that runs `atlas-obsidian change … apply` or
-`atlas-obsidian hook`. It refuses the same commands under the old name `atlas`. The first would apply a change without the gate. The second would send the binary
-a fake hook event, for example a fake prompt from you.
+### An agent uses the shell to skip the gate or to change what runs
+
+The guard reads a Bash command as bash and zsh read it: quotes, escapes, separators, brace
+lists, redirects, process substitutions, and a quoted string that a shell or `eval` runs.
+It refuses a command that runs one of these, as `atlas-obsidian` or under the old name
+`atlas`:
+
+- `change … apply`, which applies a change without the gate;
+- `hook`, which sends the binary a fake hook event, for example a fake prompt from you;
+- `vault … migrate`, which rewrites the whole vault;
+- `config set` or `config unset` of `terminal_command` or `agent_commands`, the commands
+  that Atlas runs.
+
+A word that the shell builds when the command runs, such as a variable or `$(…)`, is out
+of the guard's reach. You can run each of these commands yourself, in a terminal or with
+`!` in a session.
+
+### A shared vault changes what runs
+
+Two files in a vault decide what Atlas runs:
+
+- `.atlas/config.json` holds `terminal_command`, which opens the terminal for Start agent
+  and Resume, and `agent_commands`, the agent command that Start agent runs. The vault's
+  values win over the machine's `~/.atlas/config.json`.
+- `.obsidian/plugins/atlas/data.json` holds `binaryPath`, the binary that the Obsidian
+  plugin runs. The plugin uses a value that is not empty as it is, with no check.
+
+`.git/info/exclude` does not list these files. So the next Atlas write commits them with
+the snapshot of your hand edits, and a `git pull` of a shared vault brings in another
+person's values. The Obsidian plugin runs `terminal_command` and the agent command through
+a shell, as written. Trust a shared vault's `.atlas/` and `.obsidian/` folders as you
+trust code: read a change to them before you pull it.
+
+The guard refuses an agent's edit of these files and of the machine's config file, and the
+shell commands that set the two keys. It does not cover a `git pull`, or a shell command
+that writes the file.
 
 ### Vault contents direct a write or a delete
 
@@ -103,10 +160,15 @@ a fake hook event, for example a fake prompt from you.
 
 ### A different program runs in place of the binary
 
-The wrapper script and the Obsidian plugin never search `PATH` for the binary.
-The wrapper looks at `$ATLAS_BIN`, `$ATLAS_HOME/bin/atlas-obsidian` (default
-`~/.atlas/bin/atlas-obsidian`), and `~/go/bin/atlas-obsidian`. The Obsidian plugin looks
-at its setting, `~/.atlas/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`.
+The wrapper script, the Codex server entry, and the Obsidian plugin never search `PATH` for
+the binary.
+
+- The wrapper and the Codex entry run the first executable of `$ATLAS_BIN`,
+  `$ATLAS_HOME/bin/atlas-obsidian` (default `~/.atlas/bin/atlas-obsidian`), and
+  `~/go/bin/atlas-obsidian`.
+- The Obsidian plugin runs its `binaryPath` setting when it is set. Otherwise it runs the
+  first of `~/.atlas/bin/atlas-obsidian` and `~/go/bin/atlas-obsidian` that exists. It does
+  not read `ATLAS_BIN` or `ATLAS_HOME`.
 
 ### Vault text runs as code in Obsidian
 
@@ -115,8 +177,11 @@ nodes.
 
 ### Machine-specific files reach a shared vault
 
-`.claude/settings.local.json` and Obsidian's workspace and graph files are listed in
-`.git/info/exclude`, so they stay out of the vault's history.
+`.git/info/exclude` lists `views/`, `.claude/settings.local.json`,
+`.obsidian/workspace.json`, `.obsidian/workspace-mobile.json`, `.obsidian/graph.json`,
+`.DS_Store`, and Atlas's temporary `.atlas-*` files, so they stay out of the vault's
+history. It does not list `.atlas/config.json` or the Obsidian plugin's `data.json`; see
+[A shared vault changes what runs](#a-shared-vault-changes-what-runs).
 
 ### Dependencies
 
@@ -134,5 +199,8 @@ nodes.
   on them.
 - **Your answer.** The gate checks that you sent a prompt after the proposal. It does not
   check that the prompt said yes.
+- **Two machines that write one vault.** Each write takes a lock on `.git/atlas.lock`
+  (flock). The lock works between the processes of one machine only. A vault that a sync
+  service shares between machines gets no exclusion, so two machines can write at once.
 - **The hook log.** `ATLAS_HOOK_LOG` records every hook event in full, including your
   prompts and tool output. Use it only to debug, and delete the file after use.
