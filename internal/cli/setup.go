@@ -1,6 +1,7 @@
 package cli
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -12,6 +13,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/host"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
+	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
 	"github.com/nathanaday/atlas-obsidian/internal/obsidian"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -153,6 +155,10 @@ func (c *CLI) doctorCmd(argv []string) int {
 		default:
 			line(true, agent+" plugin", inst.Version)
 		}
+		if inst != nil && inst.Enabled {
+			ok, detail := c.serverCheck(agent)
+			line(ok, agent+" server", detail)
+		}
 	}
 	cfg, err := h.Load()
 	if err != nil {
@@ -196,6 +202,44 @@ func (c *CLI) doctorCmd(argv []string) int {
 		return 1
 	}
 	return 0
+}
+
+// serverCheck starts the plugin's MCP server as the host runs it, and compares its tools
+// with the tools this binary serves.
+func (c *CLI) serverCheck(agent string) (bool, string) {
+	s, err := host.Entry(agent)
+	if err != nil {
+		return false, fmt.Sprintf("%v; %s", err, host.UpdateHint(agent))
+	}
+	command := strings.Join(append([]string{s.Command}, s.Args...), " ")
+	if strings.Contains(command, "${") {
+		return false, fmt.Sprintf("%s runs %q, whose placeholder it does not expand; %s", agent, s.Command, host.UpdateHint(agent))
+	}
+	names, err := host.Probe(context.Background(), s, c.Dir)
+	if err != nil {
+		return false, fmt.Sprintf("the server did not start: %v", err)
+	}
+	want := mcpserver.ToolNames()
+	if !sameSet(names, want) {
+		return false, fmt.Sprintf("the server lists %s, and this binary serves %s; %s, or install the binary that matches it", strings.Join(names, ", "), strings.Join(want, ", "), host.UpdateHint(agent))
+	}
+	return true, fmt.Sprintf("%s: %d tools", host.ServerName, len(names))
+}
+
+func sameSet(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	seen := map[string]bool{}
+	for _, x := range a {
+		seen[x] = true
+	}
+	for _, x := range b {
+		if !seen[x] {
+			return false
+		}
+	}
+	return true
 }
 
 // openCmd opens the vault, or one of its documents, in Obsidian. A vault Obsidian does not

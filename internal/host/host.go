@@ -41,6 +41,15 @@ func EnableHint(host string) string {
 	return "run: claude plugin enable " + PluginID
 }
 
+// UpdateHint says how to fetch the plugin again in a host, so its files match the
+// marketplace.
+func UpdateHint(host string) string {
+	if host == "codex" {
+		return fmt.Sprintf("run: codex plugin marketplace upgrade %s && codex plugin remove %s && codex plugin add %s", Marketplace, PluginID, PluginID)
+	}
+	return fmt.Sprintf("run: claude plugin marketplace update %s && claude plugin update %s", Marketplace, PluginID)
+}
+
 // ClaudeDir is Claude Code's config folder: $CLAUDE_CONFIG_DIR or ~/.claude. It never
 // falls back to a folder relative to the working directory.
 func ClaudeDir() (string, error) {
