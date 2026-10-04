@@ -45,9 +45,56 @@ func EnableHint(host string) string {
 // marketplace.
 func UpdateHint(host string) string {
 	if host == "codex" {
-		return fmt.Sprintf("run: codex plugin marketplace upgrade %s && codex plugin remove %s && codex plugin add %s", Marketplace, PluginID, PluginID)
+		kind, source := codexMarketplace()
+		return codexUpdateHint(kind, source)
 	}
 	return fmt.Sprintf("run: claude plugin marketplace update %s && claude plugin update %s", Marketplace, PluginID)
+}
+
+// codexUpdateHint fits the steps to the marketplace's source: codex plugin marketplace
+// upgrade refreshes only a Git marketplace, and fails for a local one.
+func codexUpdateHint(kind, source string) string {
+	readd := fmt.Sprintf("codex plugin remove %s && codex plugin add %s", PluginID, PluginID)
+	switch kind {
+	case "git":
+		return fmt.Sprintf("run: codex plugin marketplace upgrade %s && %s", Marketplace, readd)
+	case "local":
+		return fmt.Sprintf("bring the marketplace folder %s up to date, then run: %s", source, readd)
+	}
+	return fmt.Sprintf("run: codex plugin marketplace upgrade %s (a Git marketplace only); codex plugin remove %s; codex plugin add %s", Marketplace, PluginID, PluginID)
+}
+
+// codexMarketplace reads the source type (git or local) and the source of the plugin's
+// marketplace from codex plugin marketplace list --json, or "" when Codex does not say.
+func codexMarketplace() (kind, source string) {
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancel()
+	data, err := exec.CommandContext(ctx, "codex", "plugin", "marketplace", "list", "--json").Output()
+	if err != nil {
+		return "", ""
+	}
+	return codexMarketplaceSource(data)
+}
+
+func codexMarketplaceSource(data []byte) (kind, source string) {
+	var list struct {
+		Marketplaces []struct {
+			Name   string `json:"name"`
+			Source struct {
+				Type   string `json:"sourceType"`
+				Source string `json:"source"`
+			} `json:"marketplaceSource"`
+		} `json:"marketplaces"`
+	}
+	if json.Unmarshal(data, &list) != nil {
+		return "", ""
+	}
+	for _, m := range list.Marketplaces {
+		if m.Name == Marketplace {
+			return m.Source.Type, m.Source.Source
+		}
+	}
+	return "", ""
 }
 
 // ClaudeDir is Claude Code's config folder: $CLAUDE_CONFIG_DIR or ~/.claude. It never

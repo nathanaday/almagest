@@ -71,6 +71,7 @@ func fakeHosts(t *testing.T, codexServer, claudeServer, appServer string) {
 	codex := "#!/bin/sh\ncase \"$1 $2\" in\n" +
 		"\"plugin list\") echo '" + codexList + "' ;;\n" +
 		"\"mcp list\") echo '" + mcpList + "' ;;\n" +
+		"\"plugin marketplace\") cat \"$FAKE_MARKETPLACES\" 2>/dev/null ;;\n" +
 		"\"app-server \") " + appServer + " ;;\n" +
 		"esac\n"
 	for name, body := range map[string]string{"claude": "#!/bin/sh\nexit 0\n", "codex": codex} {
@@ -110,7 +111,7 @@ func TestDoctorStartsEachHostsServer(t *testing.T) {
 		name, codex, want string
 	}{
 		{"the 8.1.1 entry", `{"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp"], "env": null, "env_vars": [], "cwd": null}`,
-			`FAIL codex server     codex runs "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", whose placeholder it does not expand; ` + host.UpdateHint("codex")},
+			`FAIL codex server     codex runs "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", whose placeholder it does not expand; run: codex plugin marketplace upgrade ` + host.Marketplace + ` (a Git marketplace only)`},
 		{"fewer tools", `{"type": "stdio", "command": "` + testvault.MCPServer(t, "vault", "search") + `", "args": [], "env": null, "env_vars": [], "cwd": null}`,
 			"FAIL codex server     the server lists vault, search, and this binary serves " + strings.Join(all, ", ")},
 		{"a server that does not start", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "echo atlas: the atlas-obsidian binary is not installed. >&2; exit 1"], "env": null, "env_vars": [], "cwd": null}`,
@@ -180,6 +181,31 @@ func TestDoctorReadsTheCodexHookTrust(t *testing.T) {
 			}
 			if c.fails != (code != 0) {
 				t.Fatalf("doctor exits %d:\n%s", code, out)
+			}
+		})
+	}
+}
+
+func TestDoctorFitsTheCodexUpdateToTheMarketplace(t *testing.T) {
+	entry := `{"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp"], "env": null, "env_vars": [], "cwd": null}`
+	working := testvault.MCPServer(t, mcpserver.ToolNames()...)
+	for _, c := range []struct{ kind, want string }{
+		{"git", "run: codex plugin marketplace upgrade " + host.Marketplace + " && codex plugin remove " + host.PluginID + " && codex plugin add " + host.PluginID},
+		{"local", "bring the marketplace folder /src/atlas up to date, then run: codex plugin remove " + host.PluginID + " && codex plugin add " + host.PluginID},
+	} {
+		t.Run(c.kind, func(t *testing.T) {
+			tv := testvault.New(t)
+			r := run{t: t, tv: tv}
+			fakeHosts(t, entry, working, "")
+			list := filepath.Join(t.TempDir(), "list.json")
+			body := `{"marketplaces": [{"name": "` + host.Marketplace + `", "root": "/x", "marketplaceSource": {"sourceType": "` + c.kind + `", "source": "/src/atlas"}}]}`
+			if err := os.WriteFile(list, []byte(body), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			t.Setenv("FAKE_MARKETPLACES", list)
+			_, out, _ := r.atlas("", "doctor")
+			if !strings.Contains(out, "whose placeholder it does not expand; "+c.want) {
+				t.Fatalf("doctor lacks %q:\n%s", c.want, out)
 			}
 		})
 	}

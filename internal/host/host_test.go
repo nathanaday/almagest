@@ -181,3 +181,17 @@ func TestShellLineQuotesWhatAShellWouldSplit(t *testing.T) {
 		t.Fatalf("%s, want %s", got, want)
 	}
 }
+
+func TestCodexMarketplaceSourceReadsTheListing(t *testing.T) {
+	data := `{"marketplaces": [{"name": "openai-api-curated", "root": "/x/.tmp/plugins"},
+	 {"name": "` + Marketplace + `", "root": "/x/.tmp/marketplaces/m", "marketplaceSource": {"sourceType": "git", "source": "https://github.com/nathanaday/atlas-obsidian.git"}}]}`
+	if kind, source := codexMarketplaceSource([]byte(data)); kind != "git" || source != "https://github.com/nathanaday/atlas-obsidian.git" {
+		t.Fatalf("%q %q", kind, source)
+	}
+	if kind, _ := codexMarketplaceSource([]byte(`{"marketplaces": []}`)); kind != "" {
+		t.Fatalf("no marketplace: %q", kind)
+	}
+	if !strings.Contains(codexUpdateHint("", ""), "(a Git marketplace only); codex plugin remove") {
+		t.Fatal(codexUpdateHint("", ""))
+	}
+}
