@@ -128,9 +128,12 @@ The thread "Make Codex agents, statuses, and repository access match Claude Code
 Atlas design vault tracks these limits.
 
 A vault of 6.x or 7.x needs one migration to the 8.0 layout. Obsidian shows a notice.
-From a shell, `atlas-obsidian vault migrate --dry-run` lists every move, and
-`atlas-obsidian vault migrate` makes them in one commit. Each plan of 7.x becomes a
-thread and keeps its id, its title, and its file.
+From a shell, `atlas-obsidian vault migrate --dry-run` lists the moves, and
+`atlas-obsidian vault migrate` makes them in one commit. For a 7.x vault the dry run lists
+every move. For a 6.x vault it lists only the first step, the move to the flat layout; the
+same run then makes the 7.x moves too. Each plan of 7.x becomes a thread and keeps its id,
+its title, and its file; a plan with parts becomes a chord, and its parts its threads. The
+migration refuses while a change is proposed: apply or reject it first.
 
 To try a checkout without installing the plugin, start Claude Code with
 `claude --plugin-dir /path/to/atlas-obsidian`.
@@ -142,12 +145,15 @@ Start Claude Code in an empty folder and say "set up atlas". Or from a shell:
 ```bash
 atlas-obsidian vault init --path ~/notes/work --name Work --tagging open \
   --description "Work notes: the p3 product and the tools around it."
-atlas-obsidian open --register   # opens it in Obsidian; turn on the Atlas plugin once
+atlas-obsidian open --register --vault ~/notes/work   # opens it in Obsidian; turn on the Atlas plugin once
 ```
+
+A command that acts on a vault takes `--vault` (a folder, or a vault's name), else the
+vault that `ATLAS_VAULT` names, else the vault above the working folder.
 
 ### Agent preferences
 
-Start agent and Resume read four preferences:
+Start agent reads four preferences, and Resume reads `terminal` and `terminal_command`:
 
 | Key                     | Values                                                  | Default    |
 | ----------------------- | ------------------------------------------------------- | ---------- |
@@ -170,15 +176,49 @@ atlas-obsidian config unset agent_commands.claude          # back to the global 
 The terminal runs the command in your login shell, so your `PATH` and shell functions
 apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
 
+### Environment variables
+
+| Variable | What it does |
+| --- | --- |
+| `ATLAS_HOME` | The machine folder: the binary, `config.json` with the list of vaults, and the global preferences. Default `~/.atlas`. |
+| `ATLAS_VAULT` | The vault a command, the MCP server, or a hook uses when the call names none: a folder or a vault's name. |
+| `ATLAS_BIN` | The binary that the wrapper script and the Codex server entry run, before `$ATLAS_HOME/bin` and `~/go/bin`. |
+| `ATLAS_HOOK_LOG` | A file that gets every hook event in full, your prompts included. Use it only to debug. |
+| `CLAUDE_CONFIG_DIR` | Claude Code's config folder, which `setup` and `doctor` read. Default `~/.claude`. |
+| `CLAUDE_PROJECT_DIR` | The folder in which `atlas-obsidian mcp` looks for the vault, when set. |
+| `OBSIDIAN_CONFIG_DIR` | The folder of Obsidian's `obsidian.json`, which `open --register` edits. |
+| `CODEX_HOME` | Codex's own folder. Atlas does not read it, but the `codex` commands that `setup` and `doctor` run do. |
+
+### Files in a vault
+
+Besides `wiki/documents/`, Atlas writes these files in a vault:
+
+- `Atlas.md`, the vault's own document, and the folders `inbox/`, `scratchpad/`,
+  `sessions/`, `changes/`, `chords/`, `wiki/assets/`, and `views/`. `wiki/assets/` holds
+  the captured originals and your attachments. The migration from 6.x moves the 6.x Bases
+  and canvases that you changed into `scratchpad/from 6.x/`.
+- `.obsidian/app.json`: `vault init` and the migration send new attachments to
+  `wiki/assets/` (unless you chose a folder) and keep `views/` out of Obsidian's graph and
+  search. They keep every other key.
+- `.obsidian/plugins/atlas/`: the Obsidian plugin.
+- `.claude/settings.local.json`: the linked repositories, for Claude Code.
+- `.git/info/exclude`: `views/`, `.claude/settings.local.json`, Obsidian's workspace and
+  graph files, `.DS_Store`, and Atlas's temporary `.atlas-*` files stay out of the vault's
+  history.
+- `.atlas/config.json`: the vault's agent preferences. Git commits it, so a shared vault
+  shares it; see [SECURITY.md](SECURITY.md).
+
 ## Usage
 
 Start the agent in the vault and ask in plain words. The `atlas` skill routes each
 request.
 
 - "Link the repository at ~/code/p3-edge under the tag work/p3." The agent proposes a
-  change; you say yes, or press Apply in Obsidian. The agent cannot apply a change in the
-  turn that proposed it. This gate holds against the atlas tools; it is not a sandbox
-  against an agent's shell.
+  change; you say yes, or press Apply in Obsidian. The agent cannot apply a change that
+  writes, or that closes a thread or a chord, until you send a prompt in the session that
+  proposed it. A change with no writes that only marks sources and events as absorbed
+  applies at once. This gate holds against the atlas tools; it is not a sandbox against an
+  agent's shell. [SECURITY.md](SECURITY.md) gives the full rule.
 - "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
 - "In p3-edge, score boxes by motion." The agent plants a thread, writes its spec, and
   stops for your yes. Then it writes the tasks, does them, and checks each one with its
@@ -192,7 +232,7 @@ request.
   in it from a title and a line of idea.
 - "Start agent" on a thread or a chord opens a terminal with your agent in the vault,
   given the hand-off line. The agent preferences choose the agent and the terminal (see
-  below). The sessions pane in the right sidebar shows the open sessions and the ones
+  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows the open sessions and the ones
   that closed in the last two hours, with Resume.
 - "Ingest the inbox." Files you dropped in `inbox/` become cited wiki pages.
 - "What should I work on?" The agent reads the board and ranks the open threads.
@@ -211,7 +251,8 @@ atlas-obsidian lint                       # the health check
 ```
 
 In Obsidian, `views/` holds the notes that code writes: Home, Threads, Timeline, Library,
-Repositories, and one view per tag under `views/tags/`. `View · Threads` shows each
+Repositories, one timeline per month under `views/timeline/`, and one view per tag under
+`views/tags/`. `View · Threads` shows each
 chord with its threads in order. `chords/` holds one canvas per chord. The Atlas navigator narrows the documents one
 tag at a time. `sessions/Sessions.base` shows what runs now, and `changes/Changes.base`
 lists the changes that wait for you.
@@ -224,7 +265,8 @@ its core rules:
 - Everything is a document with an id and a type. No database and no state folder.
 - Code owns what code can derive: ids, statuses, links, hashes, git facts, the first
   callout of each document, the views. The model writes prose.
-- Knowledge changes only through a change document, and apply waits for your turn.
+- Knowledge changes only through a change document, and an agent's apply of a change that
+  writes or closes a thread waits for your turn.
   The `thread` and `chord` tools write threads, chords, and events.
 - A thread's status is derived, never set: from its check boxes, its verification, and
   the applied change that absorbs it. Each thread document holds only its own sections.
@@ -237,7 +279,10 @@ its core rules:
   `internal/mcpserver` serves the nine tools, `internal/hooks` the nine hooks,
   `internal/cli` every command).
 - The agent plugin: `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`,
-  `.claude-plugin/`, `.codex-plugin/`.
+  `.claude-plugin/`, `.codex-plugin/`, and `scripts/atlas-obsidian`, the wrapper that finds
+  the binary for the hooks and the MCP server. `.agents/plugins/marketplace.json` is a second
+  marketplace entry, added with Codex support.
 - The Obsidian plugin: `obsidian/` (TypeScript); `make obsidian` builds it into the
   binary.
+- `v7-design/`: the design pages of 7.0, kept for reference.
 - Notes for agents that work on this code: [CLAUDE.md](CLAUDE.md).
