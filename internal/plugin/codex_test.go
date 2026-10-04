@@ -39,8 +39,8 @@ func readCodexServer(t *testing.T) codexServer {
 // cwd, so its entry carries the wrapper's lookup itself.
 func TestTheCodexServerEntryNeedsNoPlaceholder(t *testing.T) {
 	s := readCodexServer(t)
-	if strings.Contains(s.Command+strings.Join(s.Args, " "), "PLUGIN_ROOT") {
-		t.Errorf("the Codex entry names a plugin-root placeholder, which Codex leaves as text: %s %v", s.Command, s.Args)
+	if strings.Contains(s.Command+strings.Join(s.Args, " "), "${") {
+		t.Errorf("the Codex entry holds ${, which reads as a placeholder Codex leaves as text; test variables with [ -n ] instead: %s %v", s.Command, s.Args)
 	}
 	if s.Cwd != "" {
 		t.Errorf("the Codex entry sets cwd %q; the server must start in the session's folder to find its vault", s.Cwd)
@@ -100,6 +100,10 @@ func TestTheCodexEntryFindsTheBinaryAsTheWrapperDoes(t *testing.T) {
 			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
 			return []string{"ATLAS_HOME=" + other}
 		}, "atlas-home-env mcp"},
+		{"ATLAS_HOME empty", func(t *testing.T, home, other string) []string {
+			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
+			return []string{"ATLAS_HOME=", "ATLAS_BIN="}
+		}, "atlas-home mcp"},
 		{"~/.atlas before ~/go", func(t *testing.T, home, other string) []string {
 			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
 			fake(t, filepath.Join(home, "go/bin/atlas-obsidian"), "go-bin", true)
