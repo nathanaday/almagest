@@ -86,3 +86,24 @@ func TestSetupReportsTheCodexHookTrustAfterAFreshInstall(t *testing.T) {
 		t.Fatalf("setup after a fresh install lacks %q:\n%s", want, out)
 	}
 }
+
+// The hints after a new vault name it, so they work from any folder.
+func TestTheHintsAfterANewVaultNameIt(t *testing.T) {
+	tv := testvault.New(t)
+	r := run{t: t, tv: tv}
+	t.Setenv("PATH", t.TempDir()+":/usr/bin:/bin")
+	folder := filepath.Join(t.TempDir(), "my notes")
+	out := r.ok("", "vault", "init", "--path", folder, "--name", "Notes")
+	if !strings.Contains(out, "atlas-obsidian open --register --vault '") || !strings.Contains(out, "my notes'") {
+		t.Fatalf("vault init's hint:\n%s", out)
+	}
+	other := filepath.Join(t.TempDir(), "second")
+	out = r.ok("", "setup", "--no-plugin", "--vault", other, "--name", "Second")
+	if !strings.Contains(out, "atlas-obsidian open --register --vault ") || !strings.Contains(out, "second") {
+		t.Fatalf("setup's Next line:\n%s", out)
+	}
+	out = r.ok("", "setup", "--no-plugin")
+	if !strings.Contains(out, "then: atlas-obsidian open --register --vault ~/notes/work") {
+		t.Fatalf("setup's Next lines with no vault:\n%s", out)
+	}
+}

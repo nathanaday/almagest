@@ -411,7 +411,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"status": st}, func(w io.Writer) {
-			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas-obsidian open) and turn on the Atlas plugin under Community plugins.\n", st.Vault.Name, st.Vault.Path)
+			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas-obsidian open --register --vault %s) and turn on the Atlas plugin under Community plugins.\n", st.Vault.Name, st.Vault.Path, shellArg(st.Vault.Path))
 		})
 	case "sync":
 		v, err := c.open(a)

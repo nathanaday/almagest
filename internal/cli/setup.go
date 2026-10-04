@@ -84,12 +84,14 @@ func (c *CLI) setupCmd(argv []string) error {
 		fmt.Fprintf(c.Out, "hooks    %s\n", detail)
 	}
 	// A first vault.
+	made := ""
 	if p := a.get("vault"); p != "" {
 		st, err := core.Init(vault.InitOptions{Path: p, Name: a.get("name"), Description: a.get("description"), Tagging: a.get("tagging")}, h, c.Now())
 		if err != nil {
 			return err
 		}
 		fmt.Fprintf(c.Out, "vault    %s at %s\n", st.Vault.Name, st.Vault.Path)
+		made = st.Vault.Path
 		if a.has("allow-vault") && agent == "claude" {
 			if wrote, err := host.AllowVault(vault.Expand(st.Vault.Path)); err != nil {
 				fmt.Fprintf(c.Out, "         %v\n", err)
@@ -100,9 +102,13 @@ func (c *CLI) setupCmd(argv []string) error {
 	}
 	fmt.Fprintln(c.Out, "")
 	fmt.Fprintln(c.Out, "Next:")
-	fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up atlas\": the atlas-onboard skill makes the vault\n", agent)
-	fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --tagging open --description \"...\"")
-	fmt.Fprintln(c.Out, "  then: atlas-obsidian open, and turn on the Atlas plugin in Obsidian")
+	if made != "" {
+		fmt.Fprintf(c.Out, "  atlas-obsidian open --register --vault %s, and turn on the Atlas plugin in Obsidian\n", shellArg(made))
+	} else {
+		fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up atlas\": the atlas-onboard skill makes the vault\n", agent)
+		fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --tagging open --description \"...\"")
+		fmt.Fprintln(c.Out, "  then: atlas-obsidian open --register --vault ~/notes/work, and turn on the Atlas plugin in Obsidian")
+	}
 	fmt.Fprintln(c.Out, "  atlas-obsidian doctor checks every part")
 	return nil
 }
@@ -192,8 +198,8 @@ func (c *CLI) doctorCmd(argv []string) int {
 			line(false, "vault "+v.Name(), err.Error())
 			continue
 		}
-		if v.CheckLayout() != nil {
-			line(false, "vault "+v.Name(), vault.Shorten(v.Root)+" has the 6.x layout; atlas-obsidian vault migrate --dry-run shows the move to 7.0")
+		if err := v.CheckLayout(); err != nil {
+			line(false, "vault "+v.Name(), vault.Shorten(v.Root)+": "+err.Error())
 			continue
 		}
 		f, _ := lint.Run(idx, lint.Options{Quick: true, Now: c.Now()})
@@ -207,7 +213,7 @@ func (c *CLI) doctorCmd(argv []string) int {
 		case installed == "":
 			detail += " · no Obsidian plugin"
 		case installed != bundled:
-			detail += fmt.Sprintf(" · Obsidian plugin %s, the binary carries %s (atlas-obsidian open --update-plugin)", installed, bundled)
+			detail += fmt.Sprintf(" · Obsidian plugin %s, the binary carries %s (atlas-obsidian open --update-plugin --vault %s)", installed, bundled, shellArg(vault.Shorten(v.Root)))
 			ok = false
 		}
 		line(ok, "vault "+v.Name(), detail)
@@ -317,7 +323,7 @@ func (c *CLI) openCmd(argv []string) error {
 	}
 	if !registered {
 		if !a.has("register") {
-			fmt.Fprintf(c.Out, "Obsidian does not know %s yet. Run atlas-obsidian open --register (it restarts Obsidian on macOS), or use Open folder as vault.\n", v.Root)
+			fmt.Fprintf(c.Out, "Obsidian does not know %s yet. Run atlas-obsidian open --register --vault %s (it restarts Obsidian on macOS), or use Open folder as vault.\n", v.Root, shellArg(v.Root))
 			return nil
 		}
 		if err := obsidian.RegisterAndOpen(v.Root); err != nil {
@@ -328,4 +334,16 @@ func (c *CLI) openCmd(argv []string) error {
 		return err
 	}
 	return nil
+}
+
+// shellArg quotes a path for a command line the user may paste; a leading ~ stays bare
+// so the shell expands it.
+func shellArg(p string) string {
+	if p != "" && strings.Trim(p, "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-_./~+,@%:") == "" {
+		return p
+	}
+	if rest, ok := strings.CutPrefix(p, "~/"); ok {
+		return "~/'" + strings.ReplaceAll(rest, "'", `'\''`) + "'"
+	}
+	return "'" + strings.ReplaceAll(p, "'", `'\''`) + "'"
 }

@@ -10,6 +10,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/host"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 func TestDoctorReportsADisabledPlugin(t *testing.T) {
@@ -208,5 +209,20 @@ func TestDoctorFitsTheCodexUpdateToTheMarketplace(t *testing.T) {
 				t.Fatalf("doctor lacks %q:\n%s", c.want, out)
 			}
 		})
+	}
+}
+
+func TestDoctorNamesTheMigrationOfAnOldLayout(t *testing.T) {
+	tv := testvault.New(t)
+	r := run{t: t, tv: tv}
+	t.Setenv("PATH", t.TempDir()+":/usr/bin:/bin")
+	atlas := tv.Read("Atlas.md")
+	if !strings.Contains(atlas, "\nlayout: 4\n") {
+		t.Fatalf("Atlas.md holds no layout 4:\n%s", atlas)
+	}
+	tv.Write("Atlas.md", strings.Replace(atlas, "\nlayout: 4\n", "\nlayout: 3\n", 1))
+	_, out, _ := r.atlas("", "doctor")
+	if !strings.Contains(out, vault.ErrLegacy.Error()) || strings.Contains(out, "6.x layout") {
+		t.Fatalf("doctor on a layout-3 vault:\n%s", out)
 	}
 }
