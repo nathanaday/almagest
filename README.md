@@ -65,7 +65,8 @@ claude plugin install atlas-obsidian@nathanaday-atlas-obsidian
 ```
 
 Restart Claude Code to load the plugin. `atlas-obsidian doctor` checks the binary, the
-plugin, and every vault.
+plugin, and every vault. It also starts the plugin's MCP server as each agent runs it,
+and fails when the server does not list the binary's tools.
 
 **A second Claude Code account.** Claude Code keeps each account's plugins in its config
 folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. To add the plugin to
@@ -89,6 +90,42 @@ make install
 
 For an account with its own config folder, set `CLAUDE_CONFIG_DIR` on the two `claude`
 commands.
+
+**Codex.** `setup --agent codex` adds the plugin to Codex when Codex does not have it:
+
+```bash
+codex plugin marketplace add nathanaday/atlas-obsidian
+codex plugin add atlas-obsidian@nathanaday-atlas-obsidian
+```
+
+Codex runs a plugin's hooks only after you trust them. Without the hooks, the guard and
+the session record are off. Open `/hooks` in Codex, trust the `atlas-obsidian` hooks,
+and start a new session. Each install or update that changes the hooks needs your trust
+again. `setup --agent codex` and `doctor` say how many hooks Codex runs.
+
+To update the plugin in Codex, fetch the marketplace again and add the plugin again:
+
+```bash
+codex plugin marketplace upgrade nathanaday-atlas-obsidian
+codex plugin remove atlas-obsidian@nathanaday-atlas-obsidian
+codex plugin add atlas-obsidian@nathanaday-atlas-obsidian
+```
+
+Some parts of Atlas do not work on Codex yet:
+
+- **No read-only agents.** Codex does not load a plugin's agents, so thread-verify,
+  wiki-sync, wiki-review, and repo-ingest cannot send their workers, and the guard's
+  read-only rule never applies.
+- **No `waiting` status.** Codex has no Notification event, so a Codex session never
+  shows `waiting`.
+- **Linked repositories.** Atlas grants Claude Code write access to linked repositories
+  through the vault's `.claude/settings.local.json`. Codex reads
+  `sandbox_workspace_write.writable_roots` instead, and Atlas does not write it, so a
+  Codex session may refuse a write in a linked repository, or ask before it.
+- **`--allow-vault`** has no effect with `--agent codex`.
+
+The thread "Make Codex agents, statuses, and repository access match Claude Code" in the
+Atlas design vault tracks these limits.
 
 A vault of 6.x or 7.x needs one migration to the 8.0 layout. Obsidian shows a notice.
 From a shell, `atlas-obsidian vault migrate --dry-run` lists every move, and
