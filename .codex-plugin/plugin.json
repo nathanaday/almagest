@@ -5,7 +5,16 @@
   "author": {"name": "nathanaday", "url": "https://github.com/nathanaday"},
   "license": "MIT",
   "skills": "./skills/",
-  "mcpServers": "./.mcp.json",
+  "mcpServers": {
+    "atlas": {
+      "command": "/bin/sh",
+      "args": [
+        "-c",
+        "for b in \"${ATLAS_BIN:-}\" \"${ATLAS_HOME:-$HOME/.atlas}/bin/atlas-obsidian\" \"$HOME/go/bin/atlas-obsidian\"; do if [ -n \"$b\" ] && [ -x \"$b\" ]; then exec \"$b\" mcp; fi; done; echo 'atlas: the atlas-obsidian binary is not installed.' >&2; echo 'Install it with: make install (in an atlas-obsidian checkout), or set ATLAS_BIN to its path.' >&2; exit 1"
+      ],
+      "env_vars": ["ATLAS_BIN", "ATLAS_HOME", "ATLAS_VAULT"]
+    }
+  },
   "interface": {
     "displayName": "Atlas",
     "shortDescription": "One vault for the wiki, the threads and chords, the sessions, and the changes.",
