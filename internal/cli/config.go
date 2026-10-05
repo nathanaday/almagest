@@ -51,6 +51,13 @@ func (c *CLI) configCmd(argv []string) error {
 			return fmt.Errorf("usage: atlas-obsidian config set KEY VALUE [--global]; the keys are %s", strings.Join(vault.PreferenceKeys(), ", "))
 		}
 		if a.has("global") {
+			// The result shows the vault a call names; check it before the write, so a bad
+			// --vault or $ATLAS_VAULT fails with nothing written.
+			if a.has("vault") || c.Getenv(vault.EnvVault) != "" {
+				if _, err := c.open(a); err != nil {
+					return err
+				}
+			}
 			if err := global.Preferences.Set(key, value); err != nil {
 				return err
 			}

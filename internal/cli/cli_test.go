@@ -334,3 +334,33 @@ func TestConfigFailsOnAnAtlasVaultThatNamesNoVault(t *testing.T) {
 		t.Fatalf("config outside a vault with no ATLAS_VAULT: exit %d %s %s", code, out, errOut)
 	}
 }
+
+func TestConfigSetGlobalWritesNothingOnABadAtlasVault(t *testing.T) {
+	tv := testvault.New(t)
+	runIn := func(env map[string]string, args ...string) (int, string) {
+		var out, errOut bytes.Buffer
+		c := &cli.CLI{In: strings.NewReader(""), Out: &out, Err: &errOut, Dir: t.TempDir(),
+			Getenv: func(k string) string {
+				if k == vault.EnvHome {
+					return tv.Home.Root
+				}
+				return env[k]
+			}, Now: func() time.Time { return tv.Tick(time.Second) }}
+		return c.Run(args), errOut.String()
+	}
+	before, _ := os.ReadFile(tv.Home.ConfigPath())
+	for _, args := range [][]string{{"config", "set", "terminal", "wezterm", "--global"}, {"config", "unset", "terminal", "--global"}} {
+		if code, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, args...); code == 0 || !strings.Contains(errOut, "ATLAS_VAULT=/no/such/vault") {
+			t.Fatalf("%v with a bad ATLAS_VAULT: exit %d %s", args, code, errOut)
+		}
+		if after, _ := os.ReadFile(tv.Home.ConfigPath()); string(after) != string(before) {
+			t.Fatalf("%v wrote the global file before it failed", args)
+		}
+	}
+	if code, errOut := runIn(nil, "config", "set", "terminal", "wezterm", "--global"); code != 0 {
+		t.Fatalf("config set --global outside a vault: exit %d %s", code, errOut)
+	}
+	if after, _ := os.ReadFile(tv.Home.ConfigPath()); !strings.Contains(string(after), "wezterm") {
+		t.Fatal("config set --global wrote nothing")
+	}
+}
