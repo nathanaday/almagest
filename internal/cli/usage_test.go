@@ -6,6 +6,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"sort"
 	"strconv"
 	"strings"
@@ -83,6 +84,7 @@ func TestTheUsageNamesEveryOptionACommandReads(t *testing.T) {
 		})
 		return
 	}
+	var readsJSON []string
 	for _, c := range commands {
 		fd := funcs[c.name+"Cmd"]
 		if fd == nil {
@@ -109,6 +111,9 @@ func TestTheUsageNamesEveryOptionACommandReads(t *testing.T) {
 			}
 			queue = append(queue, calls...)
 		}
+		if opts["json"] {
+			readsJSON = append(readsJSON, c.name)
+		}
 		var missing []string
 		for o := range opts {
 			if !removed[o] && !strings.Contains(c.usage, "--"+o) {
@@ -120,6 +125,38 @@ func TestTheUsageNamesEveryOptionACommandReads(t *testing.T) {
 			t.Errorf("%s reads %s, which its usage does not name", c.name, strings.Join(missing, ", "))
 		}
 	}
+	// The usage names the commands that print JSON with --json, and the ones that print
+	// text only, as the code reads --json.
+	listed := func(prefix string) map[string]bool {
+		for _, line := range strings.Split(usageTail, "\n") {
+			if rest, ok := strings.CutPrefix(line, prefix); ok {
+				set := map[string]bool{}
+				for _, w := range strings.Split(strings.TrimSuffix(rest, "."), ",") {
+					set[strings.TrimSpace(w)] = true
+				}
+				return set
+			}
+		}
+		t.Fatalf("the usage has no line %q", prefix)
+		return nil
+	}
+	jsonList, textList := listed("--json prints JSON from:"), listed("Text only:")
+	for _, c := range commands {
+		reads := slices.Contains(readsJSON, c.name)
+		switch {
+		case c.name == "match":
+			if !reads || !strings.Contains(usageTail, "match always prints JSON") {
+				t.Error("match prints JSON always, and the usage must say so")
+			}
+		case reads && !jsonList[c.name]:
+			t.Errorf("%s reads --json, but the usage does not list it among the commands that print JSON", c.name)
+		case !reads && !textList[c.name]:
+			t.Errorf("%s reads no --json, but the usage does not list it as text only", c.name)
+		case reads && textList[c.name], !reads && jsonList[c.name]:
+			t.Errorf("the usage lists %s in the wrong group", c.name)
+		}
+	}
+
 }
 
 // takesArgs reports whether a function takes the parsed args of a command.

@@ -66,9 +66,12 @@ Usage:
 
 const usageTail = `
 A command that acts on a vault takes --vault (a path, or a name from ~/.atlas/config.json),
-else $ATLAS_VAULT, else the vault above the working folder; it prints JSON with --json.
-setup's --vault is the folder of a new vault, vault init takes --path, match always prints
-JSON, and doctor, version, help, hook, and mcp take neither option.
+else $ATLAS_VAULT, else the vault above the working folder. setup's --vault is the folder
+of a new vault, vault init takes --path, and doctor, version, help, hook, and mcp take no
+--vault.
+--json prints JSON from: vault, search, context, source, change, thread, chord, lint, config.
+match always prints JSON.
+Text only: setup, open, doctor, version, help, hook, mcp.
 `
 
 // commands are the usage of each command, in the order help lists them.
