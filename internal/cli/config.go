@@ -38,7 +38,7 @@ func (c *CLI) configCmd(argv []string) error {
 			local = vc.Preferences
 			view.Vault = &local
 			view.Files["vault"] = v.ConfigPath()
-		} else if a.has("vault") || c.Getenv(vault.EnvVault) != "" {
+		} else if c.namesVault(a) {
 			return err
 		}
 		view.Preferences = vault.Merge(global.Preferences, local)
@@ -53,7 +53,7 @@ func (c *CLI) configCmd(argv []string) error {
 		if a.has("global") {
 			// The result shows the vault a call names; check it before the write, so a bad
 			// --vault or $ATLAS_VAULT fails with nothing written.
-			if a.has("vault") || c.Getenv(vault.EnvVault) != "" {
+			if c.namesVault(a) {
 				if _, err := c.open(a); err != nil {
 					return err
 				}
@@ -72,6 +72,9 @@ func (c *CLI) configCmd(argv []string) error {
 		}
 		v, err := c.open(a)
 		if err != nil {
+			if c.namesVault(a) {
+				return err
+			}
 			return fmt.Errorf("%w; to set it for every vault, add --global", err)
 		}
 		vc, err := v.LoadConfig()
@@ -113,4 +116,10 @@ func printConfig(w io.Writer, view configView) {
 	} else {
 		fmt.Fprintln(w, "No vault here; the global file and the defaults apply.")
 	}
+}
+
+// namesVault reports whether a call names its vault, with --vault or $ATLAS_VAULT, as
+// vault.Select reads them; a vault so named must open.
+func (c *CLI) namesVault(a args) bool {
+	return strings.TrimSpace(a.get("vault")) != "" || strings.TrimSpace(c.Getenv(vault.EnvVault)) != ""
 }

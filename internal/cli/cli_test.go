@@ -364,3 +364,27 @@ func TestConfigSetGlobalWritesNothingOnABadAtlasVault(t *testing.T) {
 		t.Fatal("config set --global wrote nothing")
 	}
 }
+
+func TestConfigHintsGlobalOnlyWhenNoVaultWasNamed(t *testing.T) {
+	tv := testvault.New(t)
+	runIn := func(env map[string]string, args ...string) (int, string, string) {
+		var out, errOut bytes.Buffer
+		c := &cli.CLI{In: strings.NewReader(""), Out: &out, Err: &errOut, Dir: t.TempDir(),
+			Getenv: func(k string) string {
+				if k == vault.EnvHome {
+					return tv.Home.Root
+				}
+				return env[k]
+			}, Now: func() time.Time { return tv.Tick(time.Second) }}
+		return c.Run(args), out.String(), errOut.String()
+	}
+	if code, _, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, "config", "set", "terminal", "ghostty"); code == 0 || strings.Contains(errOut, "--global") {
+		t.Fatalf("a bad ATLAS_VAULT: exit %d, and the hint to add --global, which fails the same way: %s", code, errOut)
+	}
+	if code, _, errOut := runIn(nil, "config", "set", "terminal", "ghostty"); code == 0 || !strings.Contains(errOut, "add --global") {
+		t.Fatalf("no vault anywhere: exit %d, want the --global hint: %s", code, errOut)
+	}
+	if code, out, errOut := runIn(map[string]string{vault.EnvVault: "  "}, "config"); code != 0 || !strings.Contains(out, "No vault here") {
+		t.Fatalf("an ATLAS_VAULT of spaces counts as unset, as vault.Select reads it: exit %d %s %s", code, out, errOut)
+	}
+}
