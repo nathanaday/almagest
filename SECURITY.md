@@ -64,15 +64,17 @@ change, you read the preview and answer, and then the agent applies the change.
 ### An agent edits files that code owns
 
 The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
-`apply_patch`, and Bash call, and before each call of an atlas tool. In a vault, it refuses
-an agent's edit of:
+`apply_patch`, and Bash call, and before each call of the atlas tools that can write:
+`change`, `thread`, `chord`, `source`, and `vault`. The other four, `search`, `context`,
+`match`, and `lint`, only read, and the guard does not see them. In a vault, it refuses an
+agent's edit of:
 
 - `wiki/documents/`: a new document, which the thread, chord, change, and source tools
   make; a topic, a source, or a repository, which change only through a change; a Write
-  over a thread document; and the frontmatter, the lead callout, and the sections that code
-  owns in a stub, a spec, a task list, a verification, or a chord. The guard allows an Edit
-  of a thread document's prose in the sections of its type. A stub's Idea and Notes
-  hold at most 40 lines together.
+  over a stub, a spec, a task list, a verification, a chord, or an event; the frontmatter
+  and the lead callout of each of these; and the sections that code owns in the first
+  five. The guard allows an Edit of their prose in the sections of their type. A stub's
+  Idea and Notes hold at most 40 lines together.
 - `wiki/assets/`, and any other folder under `wiki/`.
 - `changes/`, `chords/`, and `views/`, which code writes.
 - `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
