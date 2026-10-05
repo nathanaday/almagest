@@ -312,3 +312,25 @@ func TestTheCLITakesTheVaultFromAtlasVault(t *testing.T) {
 		t.Fatalf("a bad ATLAS_VAULT: exit %d %s", code, errOut)
 	}
 }
+
+func TestConfigFailsOnAnAtlasVaultThatNamesNoVault(t *testing.T) {
+	tv := testvault.New(t)
+	runIn := func(dir string, env map[string]string, args ...string) (int, string, string) {
+		var out, errOut bytes.Buffer
+		c := &cli.CLI{In: strings.NewReader(""), Out: &out, Err: &errOut, Dir: dir,
+			Getenv: func(k string) string {
+				if k == vault.EnvHome {
+					return tv.Home.Root
+				}
+				return env[k]
+			}, Now: func() time.Time { return tv.Tick(time.Second) }}
+		return c.Run(args), out.String(), errOut.String()
+	}
+	outside := t.TempDir()
+	if code, _, errOut := runIn(outside, map[string]string{vault.EnvVault: "/no/such/vault"}, "config"); code == 0 || !strings.Contains(errOut, "ATLAS_VAULT=/no/such/vault") {
+		t.Fatalf("config with a bad ATLAS_VAULT: exit %d %s", code, errOut)
+	}
+	if code, out, errOut := runIn(outside, nil, "config"); code != 0 || !strings.Contains(out, "No vault here") {
+		t.Fatalf("config outside a vault with no ATLAS_VAULT: exit %d %s %s", code, out, errOut)
+	}
+}

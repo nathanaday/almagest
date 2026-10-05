@@ -28,7 +28,8 @@ func (c *CLI) configCmd(argv []string) error {
 	case "", "show":
 		view := configView{Global: global.Preferences, Files: map[string]string{"global": home.ConfigPath()}}
 		var local vault.Preferences
-		// Outside a vault, config shows the machine's preferences; a vault named with --vault must open.
+		// Outside a vault, config shows the machine's preferences; a vault named with --vault
+		// or $ATLAS_VAULT must open.
 		if v, err := c.open(a); err == nil {
 			vc, err := v.LoadConfig()
 			if err != nil {
@@ -37,7 +38,7 @@ func (c *CLI) configCmd(argv []string) error {
 			local = vc.Preferences
 			view.Vault = &local
 			view.Files["vault"] = v.ConfigPath()
-		} else if a.has("vault") {
+		} else if a.has("vault") || c.Getenv(vault.EnvVault) != "" {
 			return err
 		}
 		view.Preferences = vault.Merge(global.Preferences, local)
