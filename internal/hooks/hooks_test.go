@@ -644,6 +644,17 @@ func TestAHookTakesTheVaultFromAtlasVaultAndFallsBackToTheFolder(t *testing.T) {
 	if sessionsIn() != before+2 {
 		t.Fatal("a bad ATLAS_VAULT did not fall back to the folder's vault")
 	}
+	// From inside another vault, ATLAS_VAULT still wins over the folder's vault.
+	other := testvault.New(t)
+	otherSessions := func() int {
+		matches, _ := filepath.Glob(filepath.Join(other.V.Root, vault.Sessions, "*", "*.md"))
+		return len(matches)
+	}
+	otherBefore := otherSessions()
+	runWith(f.tv.V.Root, other.V.Root, "d1b2c3d4-5e6f-7a8b-9c0d-000000000103")
+	if sessionsIn() != before+3 || otherSessions() != otherBefore {
+		t.Fatalf("ATLAS_VAULT did not win over the folder's vault: %d in ATLAS_VAULT's, %d in the folder's", sessionsIn()-before, otherSessions()-otherBefore)
+	}
 }
 
 // The refusal of an edit under changes/ names what the agent and the user can do, and
