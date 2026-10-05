@@ -140,7 +140,7 @@ func TestTheUsageNamesEveryOptionACommandReads(t *testing.T) {
 		t.Fatalf("the usage has no line %q", prefix)
 		return nil
 	}
-	jsonList, textList := listed("--json prints JSON from:"), listed("Text only:")
+	jsonList, textList := listed("--json prints JSON from:"), listed("No --json:")
 	for _, c := range commands {
 		reads := slices.Contains(readsJSON, c.name)
 		switch {
@@ -151,7 +151,7 @@ func TestTheUsageNamesEveryOptionACommandReads(t *testing.T) {
 		case reads && !jsonList[c.name]:
 			t.Errorf("%s reads --json, but the usage does not list it among the commands that print JSON", c.name)
 		case !reads && !textList[c.name]:
-			t.Errorf("%s reads no --json, but the usage does not list it as text only", c.name)
+			t.Errorf("%s reads no --json, but the usage does not list it among the commands with no --json", c.name)
 		case reads && textList[c.name], !reads && jsonList[c.name]:
 			t.Errorf("the usage lists %s in the wrong group", c.name)
 		}

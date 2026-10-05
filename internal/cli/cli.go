@@ -71,7 +71,7 @@ of a new vault, vault init takes --path, and doctor, version, help, hook, and mc
 --vault.
 --json prints JSON from: vault, search, context, source, change, thread, chord, lint, config.
 match always prints JSON.
-Text only: setup, open, doctor, version, help, hook, mcp.
+No --json: setup, open, doctor, version, help, hook, mcp.
 `
 
 // commands are the usage of each command, in the order help lists them.
