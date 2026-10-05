@@ -222,7 +222,7 @@ func TestDoctorNamesTheMigrationOfAnOldLayout(t *testing.T) {
 	}
 	tv.Write("Atlas.md", strings.Replace(atlas, "\nlayout: 4\n", "\nlayout: 3\n", 1))
 	_, out, _ := r.atlas("", "doctor")
-	if !strings.Contains(out, vault.ErrLegacy.Error()) || strings.Contains(out, "6.x layout") {
+	if !strings.Contains(out, vault.ErrLegacy.Error()) || strings.Contains(out, "6.x layout") || !strings.Contains(out, "vault migrate --dry-run --vault ") {
 		t.Fatalf("doctor on a layout-3 vault:\n%s", out)
 	}
 }

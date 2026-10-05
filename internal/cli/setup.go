@@ -199,7 +199,8 @@ func (c *CLI) doctorCmd(argv []string) int {
 			continue
 		}
 		if err := v.CheckLayout(); err != nil {
-			line(false, "vault "+v.Name(), vault.Shorten(v.Root)+": "+err.Error())
+			at := shellArg(vault.Shorten(v.Root))
+			line(false, "vault "+v.Name(), fmt.Sprintf("%s: %v. From another folder: atlas-obsidian vault migrate --dry-run --vault %s, then atlas-obsidian vault migrate --vault %s", vault.Shorten(v.Root), err, at, at))
 			continue
 		}
 		f, _ := lint.Run(idx, lint.Options{Quick: true, Now: c.Now()})
