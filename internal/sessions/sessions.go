@@ -35,8 +35,9 @@ func Live(status string) bool {
 // thread-audit alone runs shell commands, since it checks work by running its tests.
 var ReadOnlyAgents = []string{"wiki-extract", "wiki-draft", "wiki-audit", "thread-audit"}
 
-// quietAgents are the host's own read-only agent types, which also get a line in their
-// parent's document and no document of their own.
+// quietAgents are the host's own worker types, which also get a line in their parent's
+// document and no document of their own. They are not all read-only (statusline-setup
+// has Edit); the guard refuses writes only of ReadOnlyAgents.
 var quietAgents = []string{"Explore", "Plan", "claude-code-guide", "statusline-setup"}
 
 // AgentName is an agent type without its plugin prefix: "plugin:wiki-extract" is
