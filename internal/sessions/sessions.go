@@ -151,10 +151,13 @@ func UserAnswered(v *vault.Vault) func(d *doc.Doc, writes int) error {
 		}
 		s := ByTitle(v, doc.LinkTarget(d.Str("session")))
 		if s == nil {
-			return fmt.Errorf("%s names no session that proposed it, so no user answered it here; the user applies it with Apply in Obsidian", vault.Title(d))
+			return fmt.Errorf("%s names no session that proposed it, so no user answered it here; the user presses Approve in the change document in Obsidian", vault.Title(d))
 		}
 		if last, ok := schema.ParseTime(s.Str("last_prompt")); ok && last.After(proposed) {
 			return nil
+		}
+		if st := s.Str("status"); st == Ended || st == Lost {
+			return fmt.Errorf("the session that proposed %s has ended, so no answer reaches it; the user presses Approve in the change document in Obsidian, or this session proposes it again with supersedes", vault.Title(d))
 		}
 		return wait
 	}

@@ -88,7 +88,7 @@ func dig(m map[string]any, keys ...string) any {
 func TestEveryToolAndAction(t *testing.T) {
 	tv := testvault.New(t)
 	repo := tv.Repo("p3-edge", map[string]string{"CLAUDE.md": "Use gofmt.\n"})
-	tv.Write("inbox/notes.md", "# Notes\n\nMotion scoring cuts false alarms.\n")
+	tv.Write("ingest/notes.md", "# Notes\n\nMotion scoring cuts false alarms.\n")
 	c := connect(t, tv, tv.V.Root)
 
 	tools, err := c.sess.ListTools(context.Background(), nil)
@@ -116,7 +116,7 @@ func TestEveryToolAndAction(t *testing.T) {
 	}
 
 	st, _ := c.call("vault", map[string]any{}, false)
-	if dig(st, "status", "vault", "name") != "Work" || len(dig(st, "status", "inbox").([]any)) != 1 {
+	if dig(st, "status", "vault", "name") != "Work" || len(dig(st, "status", "ingest").([]any)) != 1 {
 		t.Fatalf("status %v", st)
 	}
 
@@ -145,7 +145,7 @@ func TestEveryToolAndAction(t *testing.T) {
 	if dig(applied, "commit") == "" || dig(applied, "status") != "applied" {
 		t.Fatalf("apply %v", applied)
 	}
-	if !tv.V.Exists("views/tags/work/p3/Tag · work › p3.md") {
+	if !tv.V.Exists("wiki-view/nav/work/p3/Tag · work › p3.md") {
 		t.Fatal("a write refreshes the views")
 	}
 
@@ -165,7 +165,7 @@ func TestEveryToolAndAction(t *testing.T) {
 	}
 
 	// The pipeline's tools.
-	captured, _ := c.call("source", map[string]any{"action": "capture", "inbox": []any{"notes.md"}, "tags": []any{"work/p3/p3-edge"}}, false)
+	captured, _ := c.call("source", map[string]any{"action": "capture", "ingest": []any{"notes.md"}, "tags": []any{"work/p3/p3-edge"}}, false)
 	src := dig(captured, "captured").([]any)[0].(map[string]any)
 	srcID := dig(src, "ref", "id").(string)
 	chunks, _ := c.call("source", map[string]any{"action": "chunks", "doc": srcID}, false)
@@ -198,22 +198,18 @@ func TestEveryToolAndAction(t *testing.T) {
 	c.call("source", map[string]any{"action": "file"}, true)
 }
 
-func TestMentionsAndInitFromTheServer(t *testing.T) {
+func TestStatusAndInitFromTheServer(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write("Ideas.md", "- [ ] @atlas add these papers to the wiki\n- [x] @atlas done already\n")
+	tv.Write("ingest/paper.pdf", "%PDF")
 	c := connect(t, tv, tv.V.Root)
 	st, _ := c.call("vault", map[string]any{}, false)
-	mentions := dig(st, "status", "mentions").([]any)
-	if len(mentions) != 1 || dig(mentions[0].(map[string]any), "line").(float64) != 1 {
-		t.Fatalf("mentions %v", mentions)
+	if ingest := dig(st, "status", "ingest").([]any); len(ingest) != 1 {
+		t.Fatalf("ingest %v", ingest)
 	}
-	tv.Doc("topic", "Papers", map[string]any{"kind": "overview"}, "")
-	tv.Commit()
-	c.call("vault", map[string]any{"action": "mention", "note": "Ideas.md", "line": 1, "link": "Papers"}, false)
-	if got := tv.Read("Ideas.md"); !strings.HasPrefix(got, "- [x] @atlas add these papers to the wiki → [[Papers]]") {
-		t.Fatalf("closed: %q", got)
+	if dig(st, "status", "mentions") != nil {
+		t.Fatalf("the status names mentions: %v", st)
 	}
-	c.call("vault", map[string]any{"action": "mention", "note": "Ideas.md", "line": 1, "link": "Papers"}, true)
+	c.call("vault", map[string]any{"action": "mention"}, true)
 
 	other := connect(t, tv, tv.Dir)
 	out, _ := other.call("vault", map[string]any{"action": "init", "name": "Home", "path": tv.Dir + "/home-notes"}, false)

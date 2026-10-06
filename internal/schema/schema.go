@@ -1,4 +1,4 @@
-// Package schema holds the document types: the three of wiki/documents (source,
+// Package schema holds the document types: the three of source-core/documents (source,
 // repository, topic), the vault document, and the two records (session, change).
 // For each: its fields, the owner of each field, its kinds, and the sections of its body.
 // Every check of a document against its type reads these tables.
@@ -70,7 +70,7 @@ type Type struct {
 	Name   string
 	Prefix string
 	Family Family
-	// Folder is where the type's documents live: wiki/documents for the nine, a month
+	// Folder is where the type's documents live: source-core/documents for the nine, a month
 	// folder of sessions/ or changes/ for the records, the root for the vault.
 	Folder string
 	Fields []Field
@@ -108,12 +108,12 @@ func (t *Type) SectionsOf(kind string) []string {
 	return t.Sections
 }
 
-// Document reports whether the type lives in wiki/documents.
+// Document reports whether the type lives in source-core/documents.
 func (t *Type) Document() bool {
 	return t.Family == Knowledge
 }
 
-// The prefix of every new document of wiki/documents. A document from a 6.x vault keeps
+// The prefix of every new document of source-core/documents. A document from a 6.x vault keeps
 // its old prefix, since an id never changes.
 const DocPrefix = "doc"
 
@@ -124,7 +124,7 @@ var (
 
 var topicStatus = []string{"draft", "stable", "contested", "deprecated"}
 
-// common are the fields every document of wiki/documents has, then the type's own.
+// common are the fields every document of source-core/documents has, then the type's own.
 func common(extra ...Field) []Field {
 	return append([]Field{
 		{Name: "id", Kind: Text, Owner: Code, Required: true},
@@ -161,7 +161,7 @@ var Types = []*Type{
 		{Name: "stale_hours", Kind: Int},
 		{Name: "layout", Kind: Int, Owner: Code},
 	}},
-	{Name: "source", Prefix: DocPrefix, Family: Knowledge, Folder: "wiki/documents", Fields: common(
+	{Name: "source", Prefix: DocPrefix, Family: Knowledge, Folder: "source-core/documents", Fields: common(
 		Field{Name: "authority", Kind: Enum, Values: []string{"official", "primary", "secondary", "community", "synthetic", "unknown"}},
 		Field{Name: "authors", Kind: List},
 		Field{Name: "published", Kind: Text},
@@ -169,12 +169,12 @@ var Types = []*Type{
 		Field{Name: "file", Kind: Text, Owner: Code, Required: true},
 		Field{Name: "media", Kind: Enum, Owner: Code, Values: []string{"pdf", "image", "markdown", "text", "office", "audio", "video", "other"}},
 		Field{Name: "sha256", Kind: Text, Owner: Code, Required: true},
-		Field{Name: "origin", Kind: Enum, Owner: Code, Values: []string{"inbox", "pasted", "url", "repository"}},
+		Field{Name: "origin", Kind: Enum, Owner: Code, Values: []string{"ingest", "pasted", "url", "repository"}},
 		Field{Name: "locator", Kind: Text, Owner: Code},
 		Field{Name: "measure", Kind: Text, Owner: Code},
 		Field{Name: "captured", Kind: Time, Owner: Code},
 	), Sections: []string{"Summary", "Structure", "Notes"}},
-	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "wiki/documents", Fields: common(
+	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "source-core/documents", Fields: common(
 		Field{Name: "defines", Kind: Tag},
 		Field{Name: "path", Kind: Text},
 		Field{Name: "unlinked", Kind: Bool},
@@ -186,7 +186,7 @@ var Types = []*Type{
 		Field{Name: "behind", Kind: Int, Owner: Code},
 	), Sections: []string{"What it is", "How it is built", "Layout", "Components", "Instructions", "Knowledge", "Notes"},
 		CodeSections: []string{"Knowledge"}},
-	{Name: "topic", Prefix: DocPrefix, Family: Knowledge, Folder: "wiki/documents", Fields: common(
+	{Name: "topic", Prefix: DocPrefix, Family: Knowledge, Folder: "source-core/documents", Fields: common(
 		Field{Name: "kind", Kind: Enum, Required: true, Values: TopicKinds},
 		Field{Name: "status", Kind: Enum, Values: topicStatus},
 		Field{Name: "sources", Kind: Links},
@@ -240,17 +240,17 @@ var byName = func() map[string]*Type {
 // Get returns the type of that name, or nil.
 func Get(name string) *Type { return byName[name] }
 
-// DocumentTypes are the three types of wiki/documents.
+// DocumentTypes are the three types of source-core/documents.
 var DocumentTypes = []string{"source", "repository", "topic"}
 
-// ArchivedTypes are the types of the thread documents that 8.x kept in wiki/documents and
+// ArchivedTypes are the types of the thread documents that 8.x kept in source-core/documents and
 // the 9.0 migration moved to threads/.
 var ArchivedTypes = []string{"stub", "spec", "tasks", "verification", "chord", "event"}
 
 // Is reports whether name is a document type.
 func Is(name string) bool { return byName[name] != nil }
 
-// IsDocument reports whether name is one of the types of wiki/documents.
+// IsDocument reports whether name is one of the types of source-core/documents.
 func IsDocument(name string) bool { return slices.Contains(DocumentTypes, name) }
 
 // AllKinds lists every kind of every type.

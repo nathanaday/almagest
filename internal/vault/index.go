@@ -21,6 +21,10 @@ import (
 // skipDirs are folders the index never enters.
 var skipDirs = map[string]bool{".git": true, ".obsidian": true, ".trash": true, ".claude": true, "node_modules": true}
 
+// skipFolders are the vault's own folders the index never enters: the views, which code
+// derives, and the trash, which holds what the user deleted.
+var skipFolders = []string{WikiView, Trash}
+
 type cacheEntry struct {
 	mod  time.Time
 	size int64
@@ -61,10 +65,10 @@ func cachedDoc(v *Vault, rel string) (*doc.Doc, error) {
 type Index struct {
 	V *Vault
 	// Docs are the typed documents in their place: the three types directly in
-	// wiki/documents, sessions under sessions/, changes under changes/, and Atlas.md.
+	// source-core/documents, sessions under sessions/, changes under changes/, and Atlas.md.
 	Docs []*doc.Doc
 	// Misplaced are typed documents anywhere else. Tools do not see them; lint reports
-	// them, and sync moves one under wiki/ back into wiki/documents.
+	// them, and sync moves one under wiki/ back into the documents.
 	Misplaced []*doc.Doc
 	// Notes are the other markdown files outside the scratchpad, the thread archive, and the
 	// views: the user's.
@@ -94,7 +98,7 @@ type absorber struct {
 	change *doc.Doc
 }
 
-// Load reads every document of the vault. It skips views/, which code derives.
+// Load reads every document of the vault. It skips wiki-view/ and trash/.
 func Load(v *Vault) (*Index, error) {
 	idx := &Index{V: v, byID: map[string]*doc.Doc{}, byTitle: map[string][]string{}, byAlias: map[string][]*doc.Doc{}, byPath: map[string]*doc.Doc{}, fileKey: map[string][]string{}}
 	err := filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {
@@ -104,7 +108,7 @@ func Load(v *Vault) (*Index, error) {
 		r, _ := filepath.Rel(v.Root, abs)
 		rel := filepath.ToSlash(r)
 		if e.IsDir() {
-			if abs != v.Root && (skipDirs[e.Name()] || strings.HasPrefix(e.Name(), ".") || rel == Views) {
+			if abs != v.Root && (skipDirs[e.Name()] || strings.HasPrefix(e.Name(), ".") || slices.Contains(skipFolders, rel)) {
 				return filepath.SkipDir
 			}
 			return nil
@@ -137,9 +141,9 @@ func Load(v *Vault) (*Index, error) {
 }
 
 // Unread reports whether a path lies in a folder whose markdown files the index keeps as
-// link targets only: the scratchpad, and the thread archive.
+// link targets only: the scratchpad, the thread archive, the journals, and the checkouts.
 func Unread(rel string) bool {
-	for _, dir := range []string{Scratchpad, Threads} {
+	for _, dir := range []string{Scratchpad, Threads, Journals, Checkout} {
 		if rel == dir || strings.HasPrefix(rel, dir+"/") {
 			return true
 		}
@@ -211,7 +215,7 @@ func (idx *Index) Of(types ...string) []*doc.Doc {
 	return out
 }
 
-// Documents lists the documents of wiki/documents.
+// Documents lists the documents of the documents.
 func (idx *Index) Documents() []*doc.Doc { return idx.Of(schema.DocumentTypes...) }
 
 // Resolve finds the one typed document a key names: an id, a title, a [[link]], or an

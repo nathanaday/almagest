@@ -343,7 +343,7 @@ func TagBase(idx *vault.Index, tag, name string) string {
 	}
 	return "```base\n" + `filters:
   and:
-    - file.inFolder("wiki/documents")
+    - file.inFolder("` + vault.Documents + `")
     - 'file.hasTag(` + strings.Join(quoted, ", ") + `)'
 views:
   - type: table

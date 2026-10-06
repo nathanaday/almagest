@@ -23,19 +23,19 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 	if strings.Contains(tv.Read(vault.Marker), "wikify") {
 		t.Fatalf("Atlas.md names wikify:\n%s", tv.Read(vault.Marker))
 	}
-	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/plugins/atlas/manifest.json", ".obsidian/app.json", "wiki/documents", "wiki/assets", "views", "inbox", "scratchpad"} {
+	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/plugins/atlas/manifest.json", ".obsidian/app.json", "source-core/documents", "source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
 		if !v.Exists(rel) {
 			t.Errorf("missing %s", rel)
 		}
 	}
 	var app map[string]any
-	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "wiki/assets" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "views/") {
+	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") {
 		t.Fatalf("app settings %v %v", app, err)
 	}
 	if log := tv.Log(); len(log) != 1 || log[0] != "setup: Work" {
 		t.Fatalf("log %v", log)
 	}
-	tv.Write("views/View · Home.md", "derived\n")
+	tv.Write("wiki-view/View · Home.md", "derived\n")
 	tv.Clean()
 	cfg, err := tv.Home.Load()
 	if err != nil || !cfg.Lists(v.Root) {
@@ -70,7 +70,7 @@ func TestInitAdoptsAFolderOfNotes(t *testing.T) {
 		t.Fatal("the user's notes are in the first commit")
 	}
 	app, _ := os.ReadFile(filepath.Join(dir, ".obsidian/app.json"))
-	if !strings.Contains(string(app), `"attachmentFolderPath": "files"`) || !strings.Contains(string(app), "vimMode") || !strings.Contains(string(app), "views/") {
+	if !strings.Contains(string(app), `"attachmentFolderPath": "files"`) || !strings.Contains(string(app), "vimMode") || !strings.Contains(string(app), "wiki-view/") {
 		t.Fatalf("init keeps the user's app settings: %s", app)
 	}
 	if _, err := vault.Init(vault.InitOptions{Path: filepath.Join(tv.Dir, "x"), Name: "X", Tagging: "many"}, tv.Home, testvault.Now); err == nil {
@@ -148,7 +148,7 @@ func TestIndexResolvesIdsTitlesAliasesAndTags(t *testing.T) {
 	if got := idx.TagChildren("school"); len(got) != 1 || got[0] != "school/cs513" {
 		t.Fatalf("children %v", got)
 	}
-	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "wiki/documents/Self-supervised learning.md" || ref.Kind != "concept" || len(ref.Tags) != 2 {
+	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "source-core/documents/Self-supervised learning.md" || ref.Kind != "concept" || len(ref.Tags) != 2 {
 		t.Fatalf("ref %+v", ref)
 	}
 }
@@ -185,7 +185,7 @@ func TestPendingFollowsAbsorbedHashes(t *testing.T) {
 		t.Fatalf("pending docs %v", got)
 	}
 	// A new file under the same source is pending again.
-	tv.Write("wiki/documents/DINOv2.md", strings.Replace(tv.Read("wiki/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
+	tv.Write("source-core/documents/DINOv2.md", strings.Replace(tv.Read("source-core/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
 	if idx := tv.Index(); !idx.Pending(idx.ByID(src)) {
 		t.Fatal("a source with a new hash is pending")
 	}
@@ -214,7 +214,7 @@ func TestTheThreadsArchiveHoldsLinkTargetsOnly(t *testing.T) {
 	if typ, err := idx.TypeOfLink("[[Fix alarms · Spec]]"); err != nil || typ != "file" {
 		t.Fatalf("an archived spec is a link target: %q %v", typ, err)
 	}
-	if !vault.Unread("threads/Fix alarms.md") || !vault.Unread("scratchpad/Draft.md") || vault.Unread("wiki/documents/Alarms.md") {
+	if !vault.Unread("threads/Fix alarms.md") || !vault.Unread("scratchpad/Draft.md") || vault.Unread("source-core/documents/Alarms.md") {
 		t.Fatal("unread")
 	}
 }
@@ -306,8 +306,8 @@ func TestSyncSettingsKeepsOtherKeys(t *testing.T) {
 
 func TestOpenNote(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write(".obsidian/workspace.json", `{"main":{"id":"a","type":"split","children":[{"id":"b","type":"tabs","children":[{"id":"leaf1","type":"leaf","state":{"type":"markdown","state":{"file":"wiki/documents/X.md"}}}]}]},"active":"leaf1","lastOpenFiles":["Other.md"]}`)
-	if got := tv.V.OpenNote(); got != "wiki/documents/X.md" {
+	tv.Write(".obsidian/workspace.json", `{"main":{"id":"a","type":"split","children":[{"id":"b","type":"tabs","children":[{"id":"leaf1","type":"leaf","state":{"type":"markdown","state":{"file":"source-core/documents/X.md"}}}]}]},"active":"leaf1","lastOpenFiles":["Other.md"]}`)
+	if got := tv.V.OpenNote(); got != "source-core/documents/X.md" {
 		t.Fatalf("open note %q", got)
 	}
 }

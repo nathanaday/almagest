@@ -38,7 +38,6 @@ those. Every other callout is the user's, or yours to write in a section you own
 
 ## Other syntax
 
-- Task lines: `- [ ] open`, `- [x] done`. A line `- [ ] @atlas …` is a mention, a
-  request to the agent.
+- Task lines: `- [ ] open`, `- [x] done`.
 - Math: `$inline$` and `$$ block $$`. Diagrams: a fenced `mermaid` block.
 - Comments: `%% hidden %%`.

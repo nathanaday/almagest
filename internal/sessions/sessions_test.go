@@ -41,6 +41,10 @@ func TestUserAnsweredGatesOnlyAChangeThatWrites(t *testing.T) {
 	if s == nil {
 		t.Fatal("no session document")
 	}
+	tv.Write(rel, doc.SetField(s.Content, "status", sessions.Ended))
+	if err := gate(d, 1); err == nil || !strings.Contains(err.Error(), "has ended") || !strings.Contains(err.Error(), "presses Approve") {
+		t.Fatalf("a change whose session ended: %v", err)
+	}
 	tv.Write(rel, doc.SetField(s.Content, "last_prompt", vault.Stamp(tv.Tick(time.Minute))))
 	if err := gate(d, 1); err != nil {
 		t.Fatalf("a change with writes after the user's turn: %v", err)

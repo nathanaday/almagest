@@ -35,9 +35,9 @@ type Preview struct {
 	Warnings []string    `json:"warnings"`
 	Commit   string      `json:"commit,omitempty"`
 	Reason   string      `json:"reason,omitempty"`
-	// MovedFromViews are notes of the user's that the views step after the write moved out of
-	// views/ into inbox/.
-	MovedFromViews []vault.Moved `json:"moved_from_views,omitempty"`
+	// MovedFromWikiView are notes of the user's that the views step after the write moved out
+	// of wiki-view/ into ingest/.
+	MovedFromWikiView []vault.Moved `json:"moved_from_wiki_view,omitempty"`
 }
 
 // WriteLine is one write of a preview.

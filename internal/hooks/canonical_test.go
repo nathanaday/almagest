@@ -29,7 +29,7 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 	if err := os.MkdirAll(outside, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(root, "wiki", "documents"), filepath.Join(outside, "docs")); err != nil {
+	if err := os.Symlink(filepath.Join(root, "source-core", "documents"), filepath.Join(outside, "docs")); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct {
@@ -43,9 +43,9 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 			name  string
 			event map[string]any
 		}{
-			{"a topic in another case", edit(root+"/Wiki/documents/Alpha.md", "x")},
+			{"a topic in another case", edit(root+"/Source-Core/documents/Alpha.md", "x")},
 			{"Atlas.md in upper case", edit(root+"/ATLAS.md", "Work")},
-			{"a view in upper case", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/VIEWS/x.md"}}},
+			{"a view in upper case", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/WIKI-VIEW/x.md"}}},
 		}...)
 	} else {
 		t.Log("this file system keeps case; only the link case runs")
@@ -159,17 +159,17 @@ func TestAnEditAddsNoSecondHeading(t *testing.T) {
 func TestADanglingLinkIsJudgedByItsTarget(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
-	link := filepath.Join(f.tv.V.Root, "inbox", "dang.md")
+	link := filepath.Join(f.tv.V.Root, "ingest", "dang.md")
 	if err := os.MkdirAll(filepath.Dir(link), 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink("../views/dang.md", link); err != nil {
+	if err := os.Symlink("../wiki-view/dang.md", link); err != nil {
 		t.Fatal(err)
 	}
 	if !denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": link}})) {
-		t.Error("a Write through a dangling link into views/ was allowed")
+		t.Error("a Write through a dangling link into wiki-view/ was allowed")
 	}
-	loop := filepath.Join(f.tv.V.Root, "inbox", "loop.md")
+	loop := filepath.Join(f.tv.V.Root, "ingest", "loop.md")
 	if err := os.Symlink("loop.md", loop); err != nil {
 		t.Fatal(err)
 	}
@@ -200,7 +200,7 @@ func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
 	for name, body := range map[string]string{
 		"an insert into ## Subagents": " *** Update File: " + rel + "\n@@\n " + line + "\n+- forged · `000000`",
 		"the vault's config":          "\t*** Add File: .atlas/config.json\n+{}",
-		"a document deleted":          " *** Delete File: wiki/documents/Alpha.md",
+		"a document deleted":          " *** Delete File: source-core/documents/Alpha.md",
 	} {
 		patch := map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n" + body + "\n*** End Patch"}}
 		if !denied(f.run("guard", patch)) {
@@ -251,23 +251,23 @@ func TestACodexMoveIsADeleteAndAnAdd(t *testing.T) {
 	own, line := f.own("A summary.")
 	f.tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
 	f.tv.Commit()
-	topic := "wiki/documents/Alpha.md"
-	f.tv.Write("inbox/note.md", "A note.\n")
+	topic := "source-core/documents/Alpha.md"
+	f.tv.Write("ingest/note.md", "A note.\n")
 	move := func(from, to, hunk string) map[string]any {
 		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + from + "\n*** Move to: " + to + "\n" + hunk + "*** End Patch"}}
 	}
 	for name, ev := range map[string]map[string]any{
-		"a topic out with a line changed": move(topic, "inbox/x.md", "@@\n-x\n+y\n"),
-		"a topic out":                     move(topic, "inbox/y.md", ""),
-		"the session's own document out":  move(own, "inbox/z.md", ""),
-		"its own Subagents line out":      move(own, "inbox/w.md", "@@\n-"+line+"\n"),
+		"a topic out with a line changed": move(topic, "ingest/x.md", "@@\n-x\n+y\n"),
+		"a topic out":                     move(topic, "ingest/y.md", ""),
+		"the session's own document out":  move(own, "ingest/z.md", ""),
+		"its own Subagents line out":      move(own, "ingest/w.md", "@@\n-"+line+"\n"),
 	} {
 		if !denied(f.run("guard", ev)) {
 			t.Errorf("%s: allowed", name)
 		}
 	}
-	if denied(f.run("guard", move("inbox/note.md", "inbox/kept.md", ""))) {
-		t.Error("a move of a note in inbox/ was refused")
+	if denied(f.run("guard", move("ingest/note.md", "ingest/kept.md", ""))) {
+		t.Error("a move of a note in ingest/ was refused")
 	}
 }
 

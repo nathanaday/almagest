@@ -39,7 +39,8 @@ Atlas does not trust:
 ### An agent changes the wiki without your yes
 
 The agent writes to the wiki only through a change document. The agent proposes the
-change, you read the preview and answer, and then the agent applies the change.
+change, you read the preview and answer, and then the agent applies the change. Or you
+press Approve in the change document and apply it yourself.
 
 - The `change` tool refuses the agent's `apply` until you have sent a prompt after the
   proposal, in the session that proposed it. The tool checks this on the change document it
@@ -49,14 +50,16 @@ change, you read the preview and answer, and then the agent applies the change.
 - One kind of change needs no prompt: a change with no writes. It only marks sources as
   absorbed, so the agent applies it in the same turn, with or without a recorded session.
 - The tool refuses a change that names no session, a change whose proposal time does not
-  parse, and a change whose session ended with no prompt from you after the proposal. No
-  later prompt reaches that session. Apply such a change with the Apply button in Obsidian
-  or in your terminal.
+  parse, and a change whose session ended, or is lost, with no prompt from you after the
+  proposal. No later prompt reaches that session. Press Approve in the change document
+  to apply such a change, or ask an agent to propose it again from a live session.
 - The gate does not read your prompt. The skill reads your answer and decides whether to
   apply.
-- Two ways to apply have no gate: `atlas-obsidian change apply` in your terminal, and the
-  Apply button in Obsidian. A change that `atlas-obsidian change propose` writes from a
-  terminal names no session, so only these two apply it.
+- Two ways to apply have no gate, because you take each one yourself:
+  `atlas-obsidian change apply` in your terminal, and Approve in the change document in
+  Obsidian. Approve runs that same command as you. Cancel runs `atlas-obsidian change
+  reject`. A change that `atlas-obsidian change propose` writes from a terminal names no
+  session, so only these two apply it.
 
 ### An agent edits files that code owns
 
@@ -66,10 +69,11 @@ The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
 `lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
 edit of:
 
-- `wiki/documents/`: a new document, which the change and source tools make; and a
-  topic, a source, or a repository, which change only through a change.
-- `wiki/assets/`, and any other folder under `wiki/`.
-- `changes/` and `views/`, which code writes.
+- `source-core/documents/`: a new document, which the change and source tools make; and
+  a topic, a source, or a repository, which change only through a change.
+- `source-core/originals/`, and any other folder under `source-core/`.
+- `changes/` and `wiki-view/`, which code writes.
+- `journals/`: your own writing. No agent edits a file there.
 - `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
 - `sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.
@@ -121,10 +125,10 @@ Two files in a vault decide what Atlas runs:
 - `.obsidian/plugins/atlas/data.json` holds `binaryPath`, the binary that the Obsidian
   plugin runs. The plugin uses a value that is not empty as it is, with no check.
 
-`.git/info/exclude` does not list these files. So the next Atlas write commits them with
-the snapshot of your hand edits, and a `git pull` of a shared vault brings in another
-person's values. The Obsidian plugin runs `terminal_command` and the agent command through
-a shell, as written. Trust a shared vault's `.atlas/` and `.obsidian/` folders as you
+`.git/info/exclude` does not list these files. So the Obsidian plugin's quiet snapshot,
+or the next Atlas write, commits them with your hand edits, and a `git pull` of a shared
+vault brings in another person's values. The Obsidian plugin runs `terminal_command` and
+the agent command through a shell, as written. Trust a shared vault's `.atlas/` and `.obsidian/` folders as you
 trust code: read a change to them before you pull it.
 
 The guard refuses an agent's edit of these files and of the machine's config file, and the
@@ -168,7 +172,7 @@ nodes.
 
 ### Machine-specific files reach a shared vault
 
-`.git/info/exclude` lists `views/`, `.claude/settings.local.json`,
+`.git/info/exclude` lists `wiki-view/`, `.claude/settings.local.json`,
 `.obsidian/workspace.json`, `.obsidian/workspace-mobile.json`, `.obsidian/graph.json`,
 `.DS_Store`, and Atlas's temporary `.atlas-*` files, so they stay out of the vault's
 history. It does not list `.atlas/config.json` or the Obsidian plugin's `data.json`; see

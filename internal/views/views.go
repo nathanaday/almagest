@@ -1,7 +1,7 @@
-// Package views writes the navigation notes of views/: a home note, the timeline, the
+// Package views writes the navigation notes of wiki-view/: a home note, the timeline, the
 // library, the repositories, and a note per tag in a folder per tag. A view lists, counts,
 // and links; it never copies a document's content, and code can write every view from
-// the documents alone. Git ignores views/, and a sync writes over any edit.
+// the documents alone. Git ignores wiki-view/, and a sync writes over any edit.
 package views
 
 import (
@@ -30,7 +30,7 @@ const (
 	Timeline    = "View · Timeline"
 	Library     = "View · Library"
 	Repos       = "View · Repositories"
-	TagFolder   = "tags"
+	NavFolder   = "nav"
 	TimeFolder  = "timeline"
 	TimelineAge = 30 * 24 * time.Hour
 	MaxRecent   = 10
@@ -47,13 +47,13 @@ func TagTitle(t string) string {
 
 // TagPath is where a tag's view lives: in a folder per tag.
 func TagPath(t string) string {
-	return vault.Views + "/" + TagFolder + "/" + t + "/" + TagTitle(t) + ".md"
+	return vault.WikiView + "/" + NavFolder + "/" + t + "/" + TagTitle(t) + ".md"
 }
 
 // Write writes every view from an index of the vault, a file only when its content
 // differs, and removes the views that stand for nothing now. It returns the paths it wrote
-// or removed, and the strays: notes in views/ that code did not write, which it moves to
-// inbox/ instead of deleting, since git does not hold views/. The caller holds the lock.
+// or removed, and the strays: notes in wiki-view/ that code did not write, which it moves
+// to ingest/ instead of deleting, since git does not hold wiki-view/. The caller holds the lock.
 func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Moved, err error) {
 	files := Render(idx, now)
 	v := idx.V
@@ -67,7 +67,7 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 		}
 	}
 	var stale []string
-	filepath.WalkDir(v.Abs(vault.Views), func(abs string, e fs.DirEntry, err error) error {
+	filepath.WalkDir(v.Abs(vault.WikiView), func(abs string, e fs.DirEntry, err error) error {
 		if err != nil || e.IsDir() {
 			return nil
 		}
@@ -88,24 +88,24 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 			}
 			continue
 		}
-		to, err := moveToInbox(v, rel)
+		to, err := moveToIngest(v, rel)
 		if err != nil {
 			return written, strays, err
 		}
 		strays = append(strays, vault.Moved{From: rel, To: to})
 	}
-	pruneEmpty(v.Abs(vault.Views))
+	pruneEmpty(v.Abs(vault.WikiView))
 	sort.Strings(written)
 	sort.Slice(strays, func(i, j int) bool { return strays[i].From < strays[j].From })
 	return written, strays, nil
 }
 
-// moveToInbox moves a note to inbox/ under a free name, and returns where it went.
-func moveToInbox(v *vault.Vault, rel string) (string, error) {
+// moveToIngest moves a note to ingest/ under a free name, and returns where it went.
+func moveToIngest(v *vault.Vault, rel string) (string, error) {
 	base := strings.TrimSuffix(path.Base(rel), ".md")
-	to := vault.Inbox + "/" + base + ".md"
+	to := vault.Ingest + "/" + base + ".md"
 	for n := 2; v.Exists(to); n++ {
-		to = fmt.Sprintf("%s/%s (%d).md", vault.Inbox, base, n)
+		to = fmt.Sprintf("%s/%s (%d).md", vault.Ingest, base, n)
 	}
 	if err := v.Contain(rel); err != nil {
 		return "", err
@@ -113,7 +113,7 @@ func moveToInbox(v *vault.Vault, rel string) (string, error) {
 	if err := v.Contain(to); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(v.Abs(vault.Inbox), 0o755); err != nil {
+	if err := os.MkdirAll(v.Abs(vault.Ingest), 0o755); err != nil {
 		return "", err
 	}
 	return to, os.Rename(v.Abs(rel), v.Abs(to))
@@ -137,14 +137,14 @@ func pruneEmpty(root string) {
 func Render(idx *vault.Index, now time.Time) map[string]string {
 	r := &renderer{idx: idx, now: now, name: filepath.Base(idx.V.Root)}
 	out := map[string]string{
-		vault.Views + "/" + Home + ".md":    r.home(),
-		vault.Views + "/" + Library + ".md": r.library(),
-		vault.Views + "/" + Repos + ".md":   r.repositories(),
+		vault.WikiView + "/" + Home + ".md":    r.home(),
+		vault.WikiView + "/" + Library + ".md": r.library(),
+		vault.WikiView + "/" + Repos + ".md":   r.repositories(),
 	}
 	main, months := r.timeline()
-	out[vault.Views+"/"+Timeline+".md"] = main
+	out[vault.WikiView+"/"+Timeline+".md"] = main
 	for month, content := range months {
-		out[vault.Views+"/"+TimeFolder+"/"+Timeline+" "+month+".md"] = content
+		out[vault.WikiView+"/"+TimeFolder+"/"+Timeline+" "+month+".md"] = content
 	}
 	for t := range idx.TagCounts() {
 		out[TagPath(t)] = r.tagView(t)
@@ -197,8 +197,7 @@ func (r *renderer) home() string {
 			live = append(live, s)
 		}
 	}
-	mentions := idx.OpenTasks(func(t string) bool { return strings.Contains(t, "@atlas") }, vault.Documents, vault.Changes, vault.Sessions, vault.Views, vault.Scratchpad)
-	todos := idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.Views, vault.Changes, vault.Scratchpad)
+	todos := idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.WikiView, vault.Changes, vault.Scratchpad)
 	pending := len(idx.PendingDocs())
 	var typeCounts []string
 	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories"}
@@ -214,9 +213,6 @@ func (r *renderer) home() string {
 	}
 	for _, s := range waiting {
 		wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))
-	}
-	for _, m := range mentions {
-		wait = append(wait, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(m.Doc)), doc.OneLine(m.Text, 120)))
 	}
 	var todoLines []string
 	for _, t := range todos {
@@ -243,10 +239,10 @@ func (r *renderer) home() string {
 		section("Recent", strings.Join(r.recentLines(MaxRecent), "\n")))
 }
 
-// base is an inline Base over wiki/documents with the filters given and one table view.
+// base is an inline Base over the documents with the filters given and one table view.
 func base(name string, filters []string, order []string, groupBy string, sortBy ...string) string {
 	var b strings.Builder
-	b.WriteString("```base\nfilters:\n  and:\n    - file.inFolder(\"wiki/documents\")\n")
+	b.WriteString("```base\nfilters:\n  and:\n    - file.inFolder(\"" + vault.Documents + "\")\n")
 	for _, f := range filters {
 		b.WriteString("    - '" + strings.ReplaceAll(f, "'", "''") + "'\n")
 	}

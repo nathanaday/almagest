@@ -24,17 +24,25 @@ import (
 // The layout, relative to the vault.
 const (
 	Marker     = "Atlas.md"
-	Inbox      = "inbox"
+	Ingest     = "ingest"
 	Scratchpad = "scratchpad"
 	Sessions   = "sessions"
 	Changes    = "changes"
 	// Threads holds the thread documents and chord canvases of 8.x, which the 9.0
-	// migration moved out of wiki/documents and chords/. Atlas reads none of it.
-	Threads   = "threads"
-	Wiki      = "wiki"
-	Documents = "wiki/documents"
-	Assets    = "wiki/assets"
-	Views     = "views"
+	// migration moved out of the documents and chords/. Atlas reads none of it.
+	Threads = "threads"
+	// Core is the store of the wiki: the documents, and the originals they describe.
+	Core      = "source-core"
+	Documents = "source-core/documents"
+	Originals = "source-core/originals"
+	// WikiView is the reading layer that code writes from the documents.
+	WikiView = "wiki-view"
+	// Journals holds the user's own writing, one volume per folder; agents never change it.
+	Journals = "journals"
+	// Checkout holds the librarian's copies of documents, and its ledger.
+	Checkout = "checkout"
+	// Trash holds what safe delete removed; the user empties it.
+	Trash     = "trash"
 	Settings  = ".claude/settings.local.json"
 	Obsidian  = ".obsidian"
 	PluginDir = ".obsidian/plugins/atlas"
@@ -42,21 +50,22 @@ const (
 )
 
 // Layout is the layout version this binary reads and writes, kept in Atlas.md's layout
-// field: 5 is 9.0; 4 is the threads and chords of 8.x. Only the migrate command writes a
-// vault of an older layout, and only from 4.
+// field: 6 is 10.0; 5 is 9.0; 4 is the threads and chords of 8.x. Only the migrate
+// command writes a vault of an older layout, and only from 4 or 5.
 const (
-	Layout        = 5
+	Layout        = 6
+	LayoutKB      = 5
 	LayoutThreads = 4
 )
 
-// Folders are every folder of the layout. EnsureFolders makes the ones a clone left out,
-// because git keeps no empty folder.
-var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Wiki, Documents, Assets, Views}
+// Folders are the folders every vault has. EnsureFolders makes the ones a clone left
+// out, because git keeps no empty folder. Checkout and Trash appear when first used.
+var Folders = []string{Ingest, Scratchpad, Sessions, Changes, Core, Documents, Originals, WikiView, Journals}
 
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
 // Obsidian files it rewrites on every click and zoom, and the plugin on every change.
-var Excluded = []string{"/views/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store", ".atlas-*"}
+var Excluded = []string{"/wiki-view/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store", ".atlas-*"}
 
 // Defaults of the vault document.
 var (
@@ -77,7 +86,7 @@ func ReservedTitle(title string) bool {
 	return false
 }
 
-// DocPath is where a document of wiki/documents with a title lives.
+// DocPath is where a document with a title lives.
 func DocPath(title string) string { return Documents + "/" + title + ".md" }
 
 // Vault is one vault: its folder and the settings of its vault document.
@@ -263,13 +272,13 @@ func (v *Vault) Local(rel string) bool {
 	return !strings.EqualFold(top, ".git") && !strings.EqualFold(top, Obsidian) && !strings.EqualFold(top, ".claude")
 }
 
-// InboxFile resolves a file the caller names in inbox/ (with or without the folder) to its
-// vault-relative path. It refuses anything but a regular file whose real path lies in
-// inbox/: a folder, a link, or a file behind a folder that links out.
-func (v *Vault) InboxFile(name string) (string, error) {
-	rel := path.Join(Inbox, strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(name, Inbox+"/")), "/"))
-	missing := fmt.Errorf("inbox: %s is not a file in inbox/; vault status lists what waits there", name)
-	if rel == Inbox {
+// IngestFile resolves a file the caller names in ingest/ (with or without the folder) to
+// its vault-relative path. It refuses anything but a regular file whose real path lies in
+// ingest/: a folder, a link, or a file behind a folder that links out.
+func (v *Vault) IngestFile(name string) (string, error) {
+	rel := path.Join(Ingest, strings.TrimPrefix(path.Clean("/"+strings.TrimPrefix(name, Ingest+"/")), "/"))
+	missing := fmt.Errorf("ingest: %s is not a file in ingest/; vault status lists what waits there", name)
+	if rel == Ingest {
 		return "", missing
 	}
 	st, err := os.Lstat(v.Abs(rel))
@@ -277,15 +286,15 @@ func (v *Vault) InboxFile(name string) (string, error) {
 	case err != nil:
 		return "", missing
 	case st.Mode()&fs.ModeSymlink != 0:
-		return "", fmt.Errorf("inbox: %s is a link; capture takes only a file kept in inbox/, so copy the file there", name)
+		return "", fmt.Errorf("ingest: %s is a link; capture takes only a file kept in ingest/, so copy the file there", name)
 	case !st.Mode().IsRegular():
 		return "", missing
 	}
-	if real, err := filepath.EvalSymlinks(v.Abs(rel)); err != nil || !Within(real, v.Abs(Inbox)) {
-		return "", fmt.Errorf("inbox: %s lies behind a folder that links out of inbox/; capture takes only a file kept in inbox/, so copy the file there", name)
+	if real, err := filepath.EvalSymlinks(v.Abs(rel)); err != nil || !Within(real, v.Abs(Ingest)) {
+		return "", fmt.Errorf("ingest: %s lies behind a folder that links out of ingest/; capture takes only a file kept in ingest/, so copy the file there", name)
 	}
 	if err := v.Contain(rel); err != nil {
-		return "", fmt.Errorf("inbox: %w", err)
+		return "", fmt.Errorf("ingest: %w", err)
 	}
 	return rel, nil
 }
@@ -540,16 +549,15 @@ type Repo struct {
 }
 
 // Repositories reads the frontmatter of the repository documents only, fast enough for a
-// hook. It reads every markdown file under wiki/, so a 6.x vault, whose repository pages
-// lie in folders, is read the same way.
+// hook.
 func (v *Vault) Repositories() []Repo {
 	var out []Repo
-	filepath.WalkDir(v.Abs(Wiki), func(abs string, e fs.DirEntry, err error) error {
+	filepath.WalkDir(v.Abs(Documents), func(abs string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
 		if e.IsDir() {
-			if strings.HasPrefix(e.Name(), ".") || abs == v.Abs(Assets) || abs == v.Abs("wiki/sources/files") {
+			if abs != v.Abs(Documents) {
 				return filepath.SkipDir
 			}
 			return nil

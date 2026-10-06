@@ -46,7 +46,7 @@ writes:
 
 | Op | Takes | Does |
 |---|---|---|
-| `create` | `type` (topic or repository), `kind` for a topic, `title`, `fields`, `body` | a new document in `wiki/documents/` |
+| `create` | `type` (topic or repository), `kind` for a topic, `title`, `fields`, `body` | a new document in `source-core/documents/` |
 | `modify` | `id`, `fields` (merged; `null` removes one), `body` (replaces; leave out to keep), `base` | rewrites a source, a repository, or a topic |
 | `rename` | `id`, `title` | renames the file and rewrites every link to the old title |
 | `remove` | `id`, optional `redirect` | deletes the document; links to it go to the redirect |
@@ -54,15 +54,15 @@ writes:
 | `retag` | `from`, `to` | renames a tag and every tag below it, in every document |
 
 - Give a type, a kind for a topic, and a title for a new document. Code mints the id,
-  writes the path (`wiki/documents/<title>.md`), and writes `id`, `type`, `created`,
-  `updated`, and `refreshed`. It drops any field it owns and warns.
+  writes the path (`source-core/documents/<title>.md`), and writes `id`, `type`,
+  `created`, `updated`, and `refreshed`. It drops any field it owns and warns.
 - Name a document that exists by its id. Give `base` only when you read the document's
   hash; code records it otherwise, and apply refuses when the file changed since.
-- Use rename, never a remove and a create: code rewrites every link to the old title,
-  in every markdown file of the vault, in the same commit.
+- Use rename, never a remove and a create: code rewrites every link to the old title in
+  the same commit. It rewrites no note in `scratchpad/`, `threads/`, or `journals/`.
 - Use retag to rename a tag: code rewrites it in `tags` and `defines` of every typed
-  document, and every inline `#tag` in every note. A retag to a tag that exists merges
-  the two.
+  document, and every inline `#tag` in every note outside those three folders. A retag
+  to a tag that exists merges the two.
 - A source comes only from `source` capture. A change modifies it; it never creates one.
 - A repository is unlinked with a modify `{fields: {unlinked: true}}`; code empties its
   `path`.
@@ -98,14 +98,21 @@ A link in new content that resolves to nothing is a warning, not a refusal.
    change document by its path, so the user can read every document in Obsidian and
    edit one before saying yes.
 3. Stop and wait for the user's answer. Do not apply in the same turn: the tool refuses
-   it. The user may also press Apply in Obsidian; then the change is applied when you
-   read it again (`change` show).
+   it. The user may also press Approve or Cancel in the change document in Obsidian;
+   `change` show then reports the change as applied or rejected.
 4. On yes, call `change` with `action: apply` and the change's `id`. Say the commit in
    one line.
 5. On no, call `change` with `action: reject`, the `id`, and the user's `reason`.
 
 A change with no writes (the sources held nothing new) changes no document. Apply it
 at once and say in one line that the sources are no longer pending.
+
+## A session that ended
+
+Apply refuses a change when the session that proposed it ended, or is lost, before the
+user answered there. No answer reaches that session. Tell the user to press Approve in
+the change document, or propose the plan again from this session with `supersedes` set
+to the old change's id.
 
 ## Conflicts
 

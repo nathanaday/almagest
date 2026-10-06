@@ -1,6 +1,5 @@
 // Package core is the vault tool's backend: the state of the vault in one read, the sync
-// that rewrites every derived part and writes the views, and the mentions that ask the
-// agent for work.
+// that rewrites every derived part and writes the views, and the snapshot of hand edits.
 package core
 
 import (
@@ -14,7 +13,6 @@ import (
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
@@ -59,18 +57,11 @@ type ChangeLists struct {
 	Recent   []vault.Ref `json:"recent"`
 }
 
-// InboxItem is one file in the inbox.
-type InboxItem struct {
+// IngestItem is one file that waits in ingest/.
+type IngestItem struct {
 	Name string `json:"name"`
 	Size string `json:"size"`
 	Kind string `json:"kind"`
-}
-
-// Mention is an open task line addressed to the agent.
-type Mention struct {
-	Doc  vault.Ref `json:"doc"`
-	Line int       `json:"line"`
-	Text string    `json:"text"`
 }
 
 // Status is the state of the vault in one read.
@@ -80,10 +71,9 @@ type Status struct {
 	Topics    TopicCounts       `json:"topics"`
 	Tags      []TagCount        `json:"tags"`
 	Sessions  SessionLists      `json:"sessions"`
-	Inbox     []InboxItem       `json:"inbox"`
+	Ingest    []IngestItem      `json:"ingest"`
 	Pending   []vault.Ref       `json:"pending"`
 	Changes   ChangeLists       `json:"changes"`
-	Mentions  []Mention         `json:"mentions"`
 	Problems  int               `json:"problems"`
 	Versions  map[string]string `json:"versions,omitempty"`
 }
@@ -100,10 +90,9 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 		Topics:    TopicCounts{Kinds: map[string]int{}},
 		Tags:      []TagCount{},
 		Sessions:  SessionLists{Running: []vault.Ref{}, Waiting: []vault.Ref{}, Idle: []vault.Ref{}},
-		Inbox:     Inbox(v),
+		Ingest:    Ingest(v),
 		Pending:   idx.Refs(idx.PendingDocs()),
 		Changes:   ChangeLists{Proposed: []vault.Ref{}, Recent: []vault.Ref{}},
-		Mentions:  Mentions(idx),
 	}
 	for _, t := range schema.DocumentTypes {
 		st.Documents[t] = 0
@@ -167,10 +156,10 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 	return st
 }
 
-// Inbox lists what waits in inbox/.
-func Inbox(v *vault.Vault) []InboxItem {
-	out := []InboxItem{}
-	root := v.Abs(vault.Inbox)
+// Ingest lists what waits in ingest/.
+func Ingest(v *vault.Vault) []IngestItem {
+	out := []IngestItem{}
+	root := v.Abs(vault.Ingest)
 	filepath.WalkDir(root, func(abs string, e fs.DirEntry, err error) error {
 		if err != nil || e.IsDir() || strings.HasPrefix(e.Name(), ".") {
 			return nil
@@ -180,7 +169,7 @@ func Inbox(v *vault.Vault) []InboxItem {
 			return nil
 		}
 		rel, _ := filepath.Rel(root, abs)
-		out = append(out, InboxItem{Name: filepath.ToSlash(rel), Size: humanSize(info.Size()), Kind: source.Media(e.Name())})
+		out = append(out, IngestItem{Name: filepath.ToSlash(rel), Size: humanSize(info.Size()), Kind: source.Media(e.Name())})
 		return nil
 	})
 	return out
@@ -196,103 +185,6 @@ func humanSize(n int64) string {
 	return fmt.Sprintf("%d B", n)
 }
 
-// mentionSkip are the folders whose files hold no mention.
-var mentionSkip = []string{vault.Documents, vault.Changes, vault.Sessions, vault.Views, vault.Scratchpad}
-
-// isMention reports whether a task line addresses the agent.
-func isMention(text string) bool {
-	i := strings.Index(text, "@atlas")
-	if i < 0 {
-		return false
-	}
-	before := ""
-	if i > 0 {
-		before = text[i-1 : i]
-	}
-	after := ""
-	if i+6 < len(text) {
-		after = text[i+6 : i+7]
-	}
-	word := func(s string) bool {
-		return s != "" && (s[0] == '_' || s[0] == '-' || s[0] == '.' || s[0] == '@' || (s[0] >= 'a' && s[0] <= 'z') || (s[0] >= 'A' && s[0] <= 'Z') || (s[0] >= '0' && s[0] <= '9'))
-	}
-	return !word(before) && !word(after)
-}
-
-// Mentions finds every open @atlas task line outside the documents, the changes, the
-// sessions, the views, and the scratchpad.
-func Mentions(idx *vault.Index) []Mention {
-	out := []Mention{}
-	for _, t := range idx.OpenTasks(isMention, mentionSkip...) {
-		ref := vault.Ref{Title: vault.Title(t.Doc), Path: t.Doc.Path, Tags: []string{}}
-		if idx.ByID(t.Doc.ID()) == t.Doc {
-			ref = idx.Ref(t.Doc)
-		}
-		out = append(out, Mention{Doc: ref, Line: t.Line, Text: t.Text})
-	}
-	return out
-}
-
-// mentionNote refuses a note that can hold no mention CloseMention may close: one the
-// index does not hold, one in a folder that holds no mentions, and a link.
-func mentionNote(v *vault.Vault, idx *vault.Index, rel string) error {
-	list := "; vault status lists each open mention with its note"
-	if idx.ByPath(rel) == nil {
-		return fmt.Errorf("note: %s is no note of the vault%s", rel, list)
-	}
-	for _, s := range mentionSkip {
-		if strings.HasPrefix(rel, s+"/") {
-			return fmt.Errorf("note: %s lies in %s/, whose files hold no mentions%s", rel, s, list)
-		}
-	}
-	if st, err := os.Lstat(v.Abs(rel)); err != nil || st.Mode()&fs.ModeSymlink != 0 {
-		return fmt.Errorf("note: %s is a link; a mention is closed only in a note kept in the vault%s", rel, list)
-	}
-	if err := v.Contain(rel); err != nil {
-		return fmt.Errorf("note: %w", err)
-	}
-	return nil
-}
-
-// CloseMention checks a mention's box and appends a link to what answered it. It is the
-// one write code makes into a note the user owns, and it is the answer asked for. It
-// commits nothing; the next snapshot keeps it.
-func CloseMention(v *vault.Vault, rel string, line int, link string) (*Mention, error) {
-	unlock, err := v.Lock()
-	if err != nil {
-		return nil, err
-	}
-	defer unlock()
-	idx, err := vault.Load(v)
-	if err != nil {
-		return nil, err
-	}
-	answer, err := idx.Resolve(link)
-	if err != nil {
-		return nil, fmt.Errorf("link: %w", err)
-	}
-	if err := mentionNote(v, idx, rel); err != nil {
-		return nil, err
-	}
-	data, err := v.Read(rel)
-	if err != nil {
-		return nil, fmt.Errorf("%s: %w", rel, err)
-	}
-	lines := strings.Split(string(data), "\n")
-	if line < 1 || line > len(lines) {
-		return nil, fmt.Errorf("%s has no line %d", rel, line)
-	}
-	text, ok := vault.OpenTaskText(lines[line-1])
-	if !ok || !isMention(text) {
-		return nil, fmt.Errorf("line %d of %s is no open @atlas mention; it may be closed already", line, rel)
-	}
-	lines[line-1] = strings.Replace(lines[line-1], "[ ]", "[x]", 1) + " → " + doc.Link(vault.Title(answer))
-	if err := v.Write(rel, []byte(strings.Join(lines, "\n"))); err != nil {
-		return nil, err
-	}
-	return &Mention{Doc: vault.Ref{Title: vault.NoteTitle(rel), Path: rel, Tags: []string{}}, Line: line, Text: strings.TrimSpace(lines[line-1])}, nil
-}
-
 // Synced is what a sync changed.
 type Synced struct {
 	Moved     []string `json:"moved"`
@@ -301,7 +193,7 @@ type Synced struct {
 	Sessions  []string `json:"sessions"`
 	Settings  bool     `json:"settings"`
 	Views     int      `json:"views"`
-	// Strays are the notes found in views/ that code did not write, moved to inbox/.
+	// Strays are the notes found in wiki-view/ that code did not write, moved to ingest/.
 	Strays []vault.Moved `json:"strays"`
 	// Skipped are the documents saved after the sync read them, which it left as saved.
 	Skipped []string `json:"skipped"`
@@ -398,8 +290,8 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	return out, nil
 }
 
-// FileByHand finishes a hand move: a typed document of wiki/documents that lies anywhere
-// else under wiki/ goes back into wiki/documents, when its title is free there. It
+// FileByHand finishes a hand move: a typed document that lies anywhere else under
+// source-core/ goes back into source-core/documents, when its title is free there. It
 // commits nothing; the next snapshot records the move. The caller holds the lock.
 func FileByHand(v *vault.Vault) ([]string, error) {
 	idx, err := vault.Load(v)
@@ -408,7 +300,7 @@ func FileByHand(v *vault.Vault) ([]string, error) {
 	}
 	var out []string
 	for _, d := range idx.Misplaced {
-		if !schema.IsDocument(d.Type()) || !strings.HasPrefix(d.Path, vault.Wiki+"/") || strings.HasPrefix(d.Path, vault.Assets+"/") {
+		if !schema.IsDocument(d.Type()) || !strings.HasPrefix(d.Path, vault.Core+"/") || strings.HasPrefix(d.Path, vault.Originals+"/") {
 			continue
 		}
 		to := vault.DocPath(path.Base(strings.TrimSuffix(d.Path, ".md")))
@@ -445,9 +337,33 @@ func Views(v *vault.Vault, now time.Time) ([]vault.Moved, error) {
 	return strays, err
 }
 
-// StrayLine is the line that tells the user where a note found in views/ went.
+// StrayLine is the line that tells the user where a note found in wiki-view/ went.
 func StrayLine(m vault.Moved) string {
-	return fmt.Sprintf("Moved %s to %s: code writes every file in views/, so a note of yours waits in the inbox.", m.From, m.To)
+	return fmt.Sprintf("Moved %s to %s: code writes every file in wiki-view/, so a note of yours waits in ingest/.", m.From, m.To)
+}
+
+// Snapshot commits every hand edit of the vault as one snapshot commit. It returns the
+// commit and the count of files, or "" and 0 when the tree is clean. It takes the lock
+// without waiting: a held lock means a write is running, and that write commits the
+// hand edits itself.
+func Snapshot(v *vault.Vault) (string, int, error) {
+	unlock, err := v.LockWithin(0)
+	if err != nil {
+		return "", 0, err
+	}
+	defer unlock()
+	if err := v.Git().CheckIdle(); err != nil {
+		return "", 0, err
+	}
+	entries, err := v.Git().Status()
+	if err != nil || len(entries) == 0 {
+		return "", 0, err
+	}
+	sha, err := vault.CommitSnapshot(v)
+	if err != nil || sha == "" {
+		return "", 0, err
+	}
+	return sha, len(entries), nil
 }
 
 // Init makes a new vault, writes its views, and returns its status.

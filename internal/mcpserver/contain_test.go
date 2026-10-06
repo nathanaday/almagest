@@ -13,10 +13,10 @@ import (
 
 func TestACaptureWhoseNameCleansToNothingKeepsTheServerAnswering(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write("inbox/###.txt", "notes with no name\n")
-	tv.Write("inbox/"+strings.Repeat("n", 250)+".txt", "notes with a long name\n")
+	tv.Write("ingest/###.txt", "notes with no name\n")
+	tv.Write("ingest/"+strings.Repeat("n", 250)+".txt", "notes with a long name\n")
 	c := connect(t, tv, tv.V.Root)
-	out, _ := c.call("source", map[string]any{"action": "capture", "inbox": []any{"###.txt", strings.Repeat("n", 250) + ".txt"}}, false)
+	out, _ := c.call("source", map[string]any{"action": "capture", "ingest": []any{"###.txt", strings.Repeat("n", 250) + ".txt"}}, false)
 	captured, _ := out["captured"].([]any)
 	if len(captured) != 2 {
 		t.Fatalf("captured %v", out)
@@ -38,24 +38,6 @@ func TestACaptureWhoseNameCleansToNothingKeepsTheServerAnswering(t *testing.T) {
 	if hits, _ := found["hits"].([]any); len(hits) == 0 {
 		t.Fatalf("search after the capture: %v", found)
 	}
-}
-
-func TestTheMentionToolRefusesANoteOutsideTheVault(t *testing.T) {
-	tv := testvault.New(t)
-	victim := filepath.Join(filepath.Dir(tv.V.Root), "outside", "victim.md")
-	tv.WriteFile(victim, "- [ ] @atlas track this\n")
-	tv.Write("Ideas.md", "- [ ] @atlas track this\n")
-	tv.Doc("topic", "Idea", map[string]any{"kind": "overview"}, "")
-	tv.Commit()
-	c := connect(t, tv, tv.V.Root)
-	_, msg := c.call("vault", map[string]any{"action": "mention", "note": "../outside/victim.md", "line": 1, "link": "Idea"}, true)
-	if !strings.Contains(msg, "is no note of the vault") {
-		t.Fatalf("the refusal: %s", msg)
-	}
-	if data, _ := os.ReadFile(victim); string(data) != "- [ ] @atlas track this\n" {
-		t.Fatalf("the outside note changed: %q", data)
-	}
-	c.call("vault", map[string]any{"action": "mention", "note": "Ideas.md", "line": 1, "link": "Idea"}, false)
 }
 
 func TestNoReadFollowsALinkOutOfTheRepositoryOrTheVault(t *testing.T) {
@@ -88,13 +70,13 @@ func TestNoReadFollowsALinkOutOfTheRepositoryOrTheVault(t *testing.T) {
 	}
 	snap, _ := c.call("source", map[string]any{"action": "capture", "repository": "p3-edge"}, false)
 	id, _ := dig(snap["captured"].([]any)[0].(map[string]any), "ref", "id").(string)
-	report := tv.Read("wiki/assets/" + id + ".md")
+	report := tv.Read("source-core/originals/" + id + ".md")
 	if strings.Contains(report, "OUTSIDE") || !strings.Contains(report, "score boxes") {
 		t.Fatalf("the snapshot:\n%s", report)
 	}
 	for _, action := range []string{"chunks", "read"} {
 		_, msg := c.call("source", map[string]any{"action": action, "doc": creds, "chunk": 1}, true)
-		if !strings.Contains(msg, "names no file of wiki/assets/") {
+		if !strings.Contains(msg, "names no file of source-core/originals/") {
 			t.Errorf("%s: %s", action, msg)
 		}
 	}
@@ -102,20 +84,20 @@ func TestNoReadFollowsALinkOutOfTheRepositoryOrTheVault(t *testing.T) {
 
 func TestAWriteToolSaysWhereANoteFromViewsWent(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write("views/Draft.md", "# Draft\n\nMine.\n")
+	tv.Write("wiki-view/Draft.md", "# Draft\n\nMine.\n")
 	c := connect(t, tv, tv.V.Root)
 	out, _ := c.call("change", map[string]any{"action": "propose", "title": "Add Idea", "writes": []any{
 		map[string]any{"op": "create", "type": "topic", "kind": "overview", "title": "Idea", "fields": map[string]any{"description": "An idea."}},
 	}}, false)
-	moved, _ := out["moved_from_views"].([]any)
+	moved, _ := out["moved_from_wiki_view"].([]any)
 	if len(moved) != 1 {
 		t.Fatalf("the result does not name the move: %v", out)
 	}
 	m := moved[0].(map[string]any)
-	if m["from"] != "views/Draft.md" || m["to"] != "inbox/Draft.md" {
+	if m["from"] != "wiki-view/Draft.md" || m["to"] != "ingest/Draft.md" {
 		t.Fatalf("moved %v", m)
 	}
-	if tv.Read("inbox/Draft.md") != "# Draft\n\nMine.\n" {
+	if tv.Read("ingest/Draft.md") != "# Draft\n\nMine.\n" {
 		t.Fatal("the note is not in the inbox")
 	}
 }

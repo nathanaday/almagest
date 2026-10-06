@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -32,7 +33,7 @@ var Version = "dev"
 
 // CLI is one run of the command.
 type CLI struct {
-	// moved are the notes the views step of this command moved out of views/.
+	// moved are the notes the views step of this command moved out of wiki-view/.
 	moved  []vault.Moved
 	In     io.Reader
 	Out    io.Writer
@@ -43,7 +44,7 @@ type CLI struct {
 }
 
 // views writes the views after a write, and tells the user, on stderr so JSON output
-// stays clean, where each note found in views/ went.
+// stays clean, where each note found in wiki-view/ went.
 func (c *CLI) views(v *vault.Vault, now time.Time) {
 	moved, _ := core.Views(v, now)
 	c.moved = append(c.moved, moved...)
@@ -75,9 +76,8 @@ No --json: setup, open, doctor, version, help, hook, mcp.
 
 // commands are the usage of each command, in the order help lists them.
 var commands = []struct{ name, usage string }{
-	{"vault", `  atlas-obsidian vault [status] | sync [--views] | migrate [--dry-run]
+	{"vault", `  atlas-obsidian vault [status] | sync [--views] | snapshot | migrate [--dry-run]
                        | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
-                       | mention --note DOC --line N --link DOC
 `},
 	{"search", `  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
 `},
@@ -85,7 +85,7 @@ var commands = []struct{ name, usage string }{
 `},
 	{"match", `  atlas-obsidian match --items FILE.json | --docs ID... [--tag T]... [--across]
 `},
-	{"source", `  atlas-obsidian source capture [--inbox NAME]... | [--text FILE --title T [--locator URL]] | [--repository R]
+	{"source", `  atlas-obsidian source capture [--ingest NAME]... | [--text FILE --title T [--locator URL]] | [--repository R]
                                 [--tag T]... [--new-tags]
   atlas-obsidian source chunks DOC
   atlas-obsidian source read DOC CHUNK
@@ -310,7 +310,7 @@ func (c *CLI) emit(a args, v any, human func(w io.Writer)) error {
 	return nil
 }
 
-// withMoved adds moved_from_views to a JSON result, whatever its type, so a caller that
+// withMoved adds moved_from_wiki_view to a JSON result, whatever its type, so a caller that
 // reads only stdout (the Obsidian plugin) learns where each note went.
 func withMoved(v any, moved []vault.Moved) any {
 	data, err := json.Marshal(v)
@@ -321,7 +321,7 @@ func withMoved(v any, moved []vault.Moved) any {
 	if json.Unmarshal(data, &out) != nil || out == nil {
 		return v
 	}
-	out["moved_from_views"] = moved
+	out["moved_from_wiki_view"] = moved
 	return out
 }
 
@@ -398,18 +398,22 @@ func (c *CLI) vaultCmd(argv []string) error {
 				fmt.Fprintf(w, "Left %s as saved during the sync; the next sync derives it.\n", p)
 			}
 		})
-	case "mention":
+	case "snapshot":
 		v, err := c.open(a)
 		if err != nil {
 			return err
 		}
-		line, _ := strconv.Atoi(a.get("line"))
-		m, err := core.CloseMention(v, a.get("note"), line, a.get("link"))
+		sha, n, err := core.Snapshot(v)
 		if err != nil {
 			return err
 		}
-		c.views(v, now)
-		return c.emit(a, map[string]any{"mention": m}, func(w io.Writer) { fmt.Fprintf(w, "Closed: %s\n", m.Text) })
+		return c.emit(a, map[string]any{"snapshot": map[string]any{"commit": sha, "files": n}}, func(w io.Writer) {
+			if sha == "" {
+				fmt.Fprintln(w, "Nothing to commit: the vault holds no hand edits.")
+				return
+			}
+			fmt.Fprintf(w, "Committed %s as a snapshot, %s.\n", count(n, "hand edit", "hand edits"), short(sha))
+		})
 	case "migrate":
 		v, err := c.open(a)
 		if err != nil {
@@ -428,21 +432,34 @@ func (c *CLI) vaultCmd(argv []string) error {
 		}
 		return c.emit(a, r, func(w io.Writer) { printMigration(w, r, true) })
 	}
-	return fmt.Errorf("vault takes status, init, sync, mention, or migrate, not %q", a.arg(0))
+	return fmt.Errorf("vault takes status, init, sync, snapshot, or migrate, not %q", a.arg(0))
 }
 
 func printMigration(w io.Writer, r *migrate.Report, done bool) {
 	if done {
-		fmt.Fprintf(w, "Migrated %s from the %s layout to 9.0 in one commit, %s.\n", r.Vault, r.From, short(r.Commit))
+		fmt.Fprintf(w, "Migrated %s from the %s layout to 10.0 in one commit, %s.\n", r.Vault, r.From, short(r.Commit))
 	} else {
-		fmt.Fprintf(w, "The migration of %s from the %s layout to 9.0 would make these moves; run it without --dry-run to write them.\n", r.Vault, r.From)
+		fmt.Fprintf(w, "The migration of %s from the %s layout to 10.0 would make these moves; run it without --dry-run to write them, or add --json to list every file.\n", r.Vault, r.From)
 	}
-	fmt.Fprintf(w, "To %s/: %s · %s lose the fields or sections of the threads\n", vault.Threads, count(len(r.Moved), "file", "files"), count(len(r.Edited), "document", "documents"))
+	// The moves, counted by the folders they leave and reach.
+	type pair struct{ from, to string }
+	counts := map[pair]int{}
+	var order []pair
 	for _, m := range r.Moved {
-		fmt.Fprintf(w, "  move  %s → %s\n", m.From, m.To)
+		k := pair{path.Dir(m.From), path.Dir(m.To)}
+		if counts[k] == 0 {
+			order = append(order, k)
+		}
+		counts[k]++
 	}
-	for _, p := range r.Edited {
-		fmt.Fprintf(w, "  edit  %s\n", p)
+	for _, k := range order {
+		fmt.Fprintf(w, "  move  %s/ → %s/: %s\n", k.from, k.to, count(counts[k], "file", "files"))
+	}
+	if n := len(r.Edited); n > 0 {
+		fmt.Fprintf(w, "  edit  %s: the fields and sections of the threads, or the paths they name\n", count(n, "file", "files"))
+	}
+	if n := len(r.Removed); n > 0 {
+		fmt.Fprintf(w, "  remove  %s that code writes again in %s/\n", count(n, "view", "views"), vault.WikiView)
 	}
 	for _, x := range r.Warnings {
 		fmt.Fprintf(w, "  warning: %s\n", x)
@@ -490,12 +507,9 @@ func printStatus(w io.Writer, st *core.Status) {
 	for _, s := range st.Sessions.Waiting {
 		fmt.Fprintf(w, "  waits for you: %s %s\n", s.Title, s.Description)
 	}
-	fmt.Fprintf(w, "Inbox: %d · Pending: %d · Proposed changes: %d · Mentions: %d · Problems: %d\n", len(st.Inbox), len(st.Pending), len(st.Changes.Proposed), len(st.Mentions), st.Problems)
+	fmt.Fprintf(w, "Ingest: %d · Pending: %d · Proposed changes: %d · Problems: %d\n", len(st.Ingest), len(st.Pending), len(st.Changes.Proposed), st.Problems)
 	for _, c := range st.Changes.Proposed {
 		fmt.Fprintf(w, "  proposed: %s (%s)\n", c.Title, c.ID)
-	}
-	for _, m := range st.Mentions {
-		fmt.Fprintf(w, "  mention: %s:%d %s\n", m.Doc.Path, m.Line, m.Text)
 	}
 }
 
@@ -610,11 +624,14 @@ func (c *CLI) sourceCmd(argv []string) error {
 		if err := a.removed("resolves", "a stub no longer exists in Atlas 9.0; capture the source without --resolves"); err != nil {
 			return err
 		}
+		if err := a.removed("inbox", "the inbox is ingest/ since Atlas 10.0; name the files with --ingest"); err != nil {
+			return err
+		}
 		v, err := c.open(a)
 		if err != nil {
 			return err
 		}
-		req := source.Request{Inbox: a.list("inbox"), Title: a.get("title"), Repository: a.get("repository"), Tags: a.list("tag"), Locator: a.get("locator"), NewTags: a.has("new-tags")}
+		req := source.Request{Ingest: a.list("ingest"), Title: a.get("title"), Repository: a.get("repository"), Tags: a.list("tag"), Locator: a.get("locator"), NewTags: a.has("new-tags")}
 		if a.has("text") {
 			text, err := c.readText(a.get("text"))
 			if err != nil {

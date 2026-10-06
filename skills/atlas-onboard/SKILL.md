@@ -33,8 +33,10 @@ Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
    change and proposes the tags of each.
 6. Tell the user to open the vault in Obsidian (`atlas-obsidian open --register`, or
    Open folder as vault) and to turn on the Atlas plugin under Community plugins once.
-   The vault works without the plugin; the plugin adds the colors and icons of the
-   callouts, the sessions pane, the repository panel, and the Apply button.
+   The vault works without the plugin. The plugin adds the colors and icons of the
+   callouts, the Approve and Cancel buttons in each change document, the Atlas
+   navigator, the sessions pane, the repository panel, and quiet snapshots of the
+   user's edits.
 
 ## Gate
 

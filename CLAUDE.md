@@ -5,17 +5,34 @@ plugin `atlas-obsidian` in the repository's own marketplace, and the Obsidian pl
 `obsidian/`. Read `README.md` first. This file holds what the code and the README do not
 say.
 
+10.0.0 (layout 6) renamed the vault's folders: `wiki/documents/` became
+`source-core/documents/`, `wiki/assets/` became `source-core/originals/`, `inbox/` became
+`ingest/`, and `views/` became `wiki-view/` (tag views in `wiki-view/nav/`). It added
+`journals/`, the user's own writing, and reserved `checkout/` and `trash/` for later
+releases. It removed `@atlas` mentions and every patch the Obsidian plugin made on
+Obsidian's own interface: file explorer badges, graph colors, view folders, the change
+bar, and mention marks. A widget inside the change document replaced the change bar. The
+plan is `scratchpad/Atlas 10 Strategy.md` in the SoftwareProjects vault.
+`atlas-obsidian vault migrate` takes a 9.0 or 8.x vault to 10.0 in one commit
+(`internal/migrate`: `v9.go` is the step from 8.x, `v10.go` the step from 9.0).
+
+Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
+editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
+editor and both wrap `Vault.modify`. From 10.1 on, Atlas starts an agent through Duet's
+API for other plugins (Duet 0.3.0: `app.plugins.getPlugin("duet")?.api`, with
+`newConversation`, `conversationStatus`, and `onTurnEnd`). Atlas 10.0 does not call it
+yet. Duet's mentions replace the `@atlas` mentions.
+
 9.0.0 removed threads and chords, which 8.0.0 had put in place of the plans of 7.x. They
 are a standalone reference project now, obsidian-threads (`~/projects/software/obsidian-threads`),
 and the tag `threads-final` is the last commit that has them. Atlas keeps the knowledge
-base: sources, repositories, topics, tags, views, sessions, and changes.
-`atlas-obsidian vault migrate` moves an 8.x vault to the 9.0 layout in one commit
-(`internal/migrate`): the thread documents and the chord canvases go to `threads/`
+base: sources, repositories, topics, tags, views, sessions, and changes. The 8.x step of
+the migration moves the thread documents and the chord canvases to `threads/`
 unchanged, and the documents that stay lose the fields and sections that served threads.
 A vault older than 8.0 migrates with 8.1.1 first.
 
-7.0.0 replaced the scope tree of 6.x with tags. Every document lies flat in
-`wiki/documents/`, and code writes `views/`.
+7.0.0 replaced the scope tree of 6.x with tags. Every document lies flat in one folder
+(`source-core/documents/` since 10.0), and code writes the views.
 6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
 repository, and a terminal view). Nothing reads a 5.x file. The 5.x code is on the `v1`
 branch and the `v1-final` tag.
@@ -59,17 +76,34 @@ The design pages are the spec. When the code departs from them, the reason is be
   opens a real terminal with a probe; record each result in TESTED.md.
 - **A tag page that does not hold its tag's parent is a warning.** No document is lost
   by it; lint names the fix.
-- **The migration warns about a live session, and does not refuse.** An 8.x agent in it
-  still calls the thread tool, which 9.0 does not have. It refuses while a change is
-  proposed, and when a file is in the way in `threads/`.
+- **The 8.x step of the migration warns about a live session, and does not refuse.** An
+  8.x agent in it still calls the thread tool, which 9.0 does not have. The migration
+  refuses while a change is proposed, and when a file exists at a path it moves one to.
+  The dry run of an 8.x vault lists the 8.x step only, since the 9.0 step reads what the
+  first one moves.
+- **The migration rewrites a path only where it stands as a path.** `rewriteRefs`
+  (`v10.go`) changes an old folder only right after `[[`, `![[`, `](`, or a quote, with
+  its slash; alone between quotes it changes only `wiki/documents` and `wiki/assets`
+  (a Base's `inFolder`). Prose that names a folder stays as written. It reads every
+  `.md`, `.canvas`, and `.base` file outside the dot folders, `trash/`, and `wiki-view/`. A note of `views/` that opens with
+  `views.Notice` is deleted, since code writes it again; any other file there moves to
+  `ingest/` and is reported as a stray.
+- **"inbox" became "ingest" wherever a user or an agent sees it:** the folder, the status
+  key `ingest`, `source capture --ingest` (`--inbox` is refused with a message), the
+  source tool's `ingest` input, and `origin: ingest`. The JSON key `moved_from_views`
+  became `moved_from_wiki_view`.
 - **`threads/` is an archive Atlas does not read.** The index keeps its files as link
   targets, as it does the scratchpad's (`vault.Unread`), so a topic's link to an archived
   spec is no dead link. A rename does not rewrite the links inside it, as it does not in
   the scratchpad. The guard does not judge edits there, and lint does not lint it. A
-  note of an archived type left in `wiki/documents` is the lint error `archived`.
+  note of an archived type left in `source-core/documents` is the lint error `archived`.
+- **`journals/` is the user's.** The guard refuses every agent edit under it. The index
+  keeps its notes as link targets only (`vault.Unread`, with the scratchpad, `threads/`,
+  and `checkout/`), so search, lint, a rename's link rewrite, and a retag skip them. The
+  index skips `wiki-view/` and `trash/` entirely.
 - **A topic's `## Origin` is a plain section.** Promote wrote it from a stub's idea; 9.0
   has no promote, and the section stays the user's text.
-- **`vault migrate` refuses a vault that has the 9.0 layout already**, and the guard
+- **`vault migrate` refuses a vault that has the 10.0 layout already**, and the guard
   refuses it from an agent's shell.
 - **Packages:** the design's context package is `internal/brief`, since `context` is a
   standard Go package. `internal/derive` writes the code-owned parts of sources,
@@ -110,11 +144,11 @@ The design pages are the spec. When the code departs from them, the reason is be
   `WriteIfUnchanged` with the bytes the index read. It compares before the write and again right
   before the rename, skips a file saved in between, and records it in `Skipped`; the next
   sync derives it. `SyncSettings` merges again when the harness wrote the file meanwhile.
-- **The views sync never deletes a user's note.** A `.md` file in `views/` that no view
-  stands for and that lacks `views.Notice` moves to `inbox/` under a free name, and every
-  write says so: `moved_from_views` in each MCP write tool's result and in the JSON of each
-  CLI write (with a line on stderr), `strays` in a sync and in the migration's report, and
-  a notice in the plugin, whose runner reads `moved_from_views` from any result.
+- **The views sync never deletes a user's note.** A `.md` file in `wiki-view/` that no
+  view stands for and that lacks `views.Notice` moves to `ingest/` under a free name, and
+  every write says so: `moved_from_wiki_view` in the result of the source and change
+  tools and in the JSON of each CLI write (with a line on stderr), `strays` in a sync and
+  in the migration's report, and a notice in the plugin.
 - **Every path built from input is contained.** `Vault.Contain` refuses an absolute or
   unclean path, `..`, `.git` in any case, a name over 255 bytes, and a path whose folders
   or final link resolve outside the vault. `Vault.Write`, `WriteIfChanged`, and `Remove`
@@ -123,21 +157,45 @@ The design pages are the spec. When the code departs from them, the reason is be
   The one unchecked writer, `WriteMachineIfChanged`, takes only fixed paths under
   `.obsidian/` and `.claude/`, so a user who links `.obsidian` to a shared folder keeps a
   working vault; `settings.go` and `prefs.go` write their machine files with
-  `writeAtomic` directly. Inbox files pass
-  `Vault.InboxFile` (a regular file kept in `inbox/`), a mention's note must be one the
-  index holds, and a repository's files and a source's captured file are read through
-  `os.Root`. Go 1.24's `os.Root` has no rename, so writes check the path before the
-  atomic rename instead.
+  `writeAtomic` directly. A file named for capture passes `Vault.IngestFile` (a regular
+  file kept in `ingest/`), and a repository's files and a source's captured file are
+  read through `os.Root`. Go 1.24's `os.Root` has no rename, so writes check the path
+  before the atomic rename instead.
 - **Each MCP tool handler recovers a panic** (`safe`), so one bad call returns an error
   and the server keeps serving.
 - **The change tool keeps the gate, not the guard.** `change.Apply` takes a `Gate`; the
   MCP server passes `sessions.UserAnswered`, which reads the change's `session` and that
   session's `last_prompt`. It judges the document Apply resolved, under the lock, so no
   other name for the change and no other working folder gets past it. The CLI passes
-  none: the terminal and Obsidian's Apply button are the user's. A change with no writes,
-  which only absorbs sources, needs no answer and applies at once. Any other change with no `session`, or whose session ended with no prompt after the
-  proposal, waits for Obsidian or the terminal; `change propose` from the CLI records no
-  session.
+  none: the terminal and Approve in the change document are the user's, since Approve
+  runs `change apply` as the user. A change with no writes, which only absorbs sources,
+  needs no answer and applies at once. Any other change with no `session` waits for
+  Obsidian or the terminal; `change propose` from the CLI records no session.
+- **A change from a session that ended gets its own refusal.** When the proposing
+  session is `ended` or `lost` and had no prompt after the proposal, `UserAnswered` says
+  so: the user presses Approve in the change document, or the agent proposes again with
+  `supersedes`. A live session without a prompt gets the plain "wait for the yes".
+- **The change widget holds no data.** Every change document that code writes holds an
+  empty `atlas-change` block right after its lead callout (`change.Widget`). The plugin
+  draws it from the note's frontmatter: Approve and Cancel while `proposed`, a line for
+  `applying`, and the result for `applied`, `rejected`, `superseded`, and `undone`.
+  Approve saves the open note, then runs `change apply`; Cancel runs `change reject`,
+  and an empty reason becomes "cancelled in Obsidian". The body stays the record.
+- **The plugin commits hand edits as quiet snapshots.** After `snapshotQuietSeconds`
+  (default 120; 0 turns it off) with no create, modify, delete, or rename outside the
+  config folder and `wiki-view/`, it runs `vault snapshot`, which commits every hand
+  edit as one snapshot (`core.Snapshot`, `vault.CommitSnapshot`). `vault snapshot` is CLI
+  only, not an MCP action, and takes the lock without waiting (`LockWithin(0)`): when a
+  write holds it, the command fails at once and the plugin tries again after the next
+  quiet period. The plugin shows no notice for a failed snapshot. Every write still
+  commits a snapshot first. The skills tell agents never to report the vault's git
+  state.
+- **The Obsidian plugin touches only what it owns.** It adds custom views, ribbon
+  buttons, commands, in-document widgets (code block processors), and CSS for its own
+  callouts and widgets. It patches no pane of Obsidian's own and styles none. Two parts
+  sit outside that list: a status bar item with the count of waiting sessions, and the
+  `tagClick` setting (off by default), whose click listener on the document opens a
+  clicked `#tag` in the navigator.
 - **Times carry seconds.** `proposed` and `last_prompt` are `2006-01-02T15:04:05`. With
   minutes, a yes typed in the minute of the proposal would not open the gate.
 - **The gate counts only the user's turns.** A host sends a subagent's hand-back and a
@@ -179,8 +237,9 @@ The design pages are the spec. When the code departs from them, the reason is be
   so a session outside the vault gets the same refusals. A file in no vault meets only
   the rule on the home's `config.json`.
 - **The guard judges the path the disk names.** `canonical` resolves links on the part
-  that exists and spells each part as its folder entry, so `ATLAS.md`, `Wiki/documents/…`,
-  a repository in another case, or a link into the vault meet the rule of the real file.
+  that exists and spells each part as its folder entry, so `ATLAS.md`,
+  `Source-Core/documents/…`, a repository in another case, or a link into the vault meet
+  the rule of the real file.
   A session document's code sections come from `doc.SectionOffsets`, which skips fenced
   headings, and an Edit, a MultiEdit, or a patch is judged by the document it leaves (`Input.leaves`,
   `codeChanged`): the frontmatter, the lead, and each code section come out as they went
@@ -213,7 +272,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   path the documents name and removes only the paths the documents named before a write
   and no longer do. Apply and undo pass their before-list.
 - **Machine files stay out of git** through `.git/info/exclude` (`vault.Excluded`:
-  `views/`, `.claude/settings.local.json`, `.obsidian/workspace.json`,
+  `wiki-view/`, `.claude/settings.local.json`, `.obsidian/workspace.json`,
   `.obsidian/workspace-mobile.json`, `.obsidian/graph.json`, `.DS_Store`, and the
   temporary `.atlas-*` files), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
@@ -291,9 +350,7 @@ property a note lacks fails, and the note drops out: `!x` and `!x || x == ""` bo
 note with no `x`. `x.isEmpty()` is true for a missing property and for `""`. A hidden window renders nothing, so a DevTools screenshot hangs; bring the
 second instance to the front by its pid with `osascript` first.
 
-Obsidian 1.13.7, verified live (2026-09-28): the graph colors. A group's
-`path:/^(?:…)$/` regex colors nodes, `view.dataEngine.setOptions({colorGroups})` recolors
-an open graph, and a hidden window pauses timers and rendering.
+Obsidian 1.13.7, verified live (2026-09-28): a hidden window pauses timers and rendering.
 
 To drive Obsidian without touching the user's app, run a second instance with its own data
 folder: copy `obsidian-<version>.asar` from `~/Library/Application Support/obsidian/` into
@@ -310,11 +367,17 @@ entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.
 Verified live in Obsidian (TESTED.md): Start agent, Resume from the sessions pane, and the
 settings tab.
 
+Verified by script in a separate Obsidian (`npm run test:obsidian` in `obsidian/`,
+`obsidian/test/obsidian/`, adapted from Duet's harness; TESTED.md): the plugin loads in a
+10.0 vault and adds nothing to the file explorer; it loads at Obsidian's start; the
+change widget's Approve and Cancel; quiet snapshots; and the 10.0 migration from the
+plugin's notice. Each test builds the binary from the checkout and runs a temporary
+profile and vault, so it never touches the user's Obsidian or `~/.atlas`.
+
 Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
 the rest is untested on Codex), an atlas tool called from a Codex session, the
-Notification types in a live session, and the rest of the Obsidian plugin inside Obsidian
-(the Atlas navigator, repository panel, view folders, change bar, and badges have not run
-in the app).
+Notification types in a live session, and, inside Obsidian, the Atlas navigator and the
+repository panel.
 
 ## Constraints
 

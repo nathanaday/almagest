@@ -12,6 +12,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/cli"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/views"
 )
 
 type run struct {
@@ -48,7 +49,7 @@ func TestCommands(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
 	repo := tv.Repo("p3-edge", nil)
-	tv.Write("inbox/notes.md", "# Notes\n\nMotion scoring.\n")
+	tv.Write("ingest/notes.md", "# Notes\n\nMotion scoring.\n")
 
 	if out := r.ok("", "vault"); !strings.Contains(out, "Work · ") || !strings.Contains(out, "Documents: 0 topic") {
 		t.Fatalf("status:\n%s", out)
@@ -87,7 +88,7 @@ func TestCommands(t *testing.T) {
 		t.Fatalf("search by tag:\n%s", out)
 	}
 
-	out := r.ok("", "source", "capture", "--inbox", "notes.md", "--tag", "work/p3/p3-edge")
+	out := r.ok("", "source", "capture", "--ingest", "notes.md", "--tag", "work/p3/p3-edge")
 	if !strings.Contains(out, "captured: notes (doc-") {
 		t.Fatalf("capture:\n%s", out)
 	}
@@ -107,11 +108,11 @@ func TestCommands(t *testing.T) {
 		t.Fatalf("sync:\n%s", out)
 	}
 	r.ok("", "vault", "sync", "--views")
-	if !tv.V.Exists("views/View · Home.md") {
+	if !tv.V.Exists("wiki-view/View · Home.md") {
 		t.Fatal("the views")
 	}
-	if code, _, errOut := r.atlas("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "9.0 layout already") {
-		t.Fatalf("a 9.0 vault: %d %s", code, errOut)
+	if code, _, errOut := r.atlas("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "10.0 layout already") {
+		t.Fatalf("a 10.0 vault: %d %s", code, errOut)
 	}
 
 	code, _, errOut := r.atlas("", "change", "apply", "chg-zzzzzz")
@@ -132,7 +133,7 @@ func TestThreadAndChordAreNoCommands(t *testing.T) {
 			t.Fatalf("%v: exit %d %q %q", args, code, out, errOut)
 		}
 	}
-	if code, _, errOut := r.atlas("", "source", "capture", "--inbox", "x.md", "--resolves", "An idea"); code != 1 || !strings.Contains(errOut, "--resolves") {
+	if code, _, errOut := r.atlas("", "source", "capture", "--ingest", "x.md", "--resolves", "An idea"); code != 1 || !strings.Contains(errOut, "--resolves") {
 		t.Fatalf("capture with --resolves: exit %d %q", code, errOut)
 	}
 	for _, args := range [][]string{{"help"}, {"help", "thread"}} {
@@ -145,37 +146,50 @@ func TestThreadAndChordAreNoCommands(t *testing.T) {
 func TestMigrateCommand(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 5", "layout: 4", 1))
-	stub := "---\nid: doc-idea01\ntype: stub\ndescription: An idea.\ncreated: 2026-09-03T10:00:00\nupdated: 2026-09-03T10:00:00\nstatus: open\n---\n\n## Idea\n\nAn idea.\n"
-	tv.Write("wiki/documents/Idea.md", stub)
-	tv.Write("chords/Quiet alarms.canvas", `{"nodes": [], "edges": []}`)
-	tv.Doc("topic", "P3", map[string]any{"kind": "overview", "from": "[[Idea]]"}, "")
+	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
+	topic := "---\nid: doc-p3aaaa\ntype: topic\nkind: overview\ndescription: P3.\ncreated: 2026-09-03T10:00:00\nupdated: 2026-09-03T10:00:00\n---\n\n## Summary\n\nThe stack, as drawn: ![[wiki/assets/diagram.png]]. Agents read wiki/documents.\n"
+	tv.Write("wiki/documents/P3.md", topic)
+	tv.Write("wiki/assets/diagram.png", "png")
+	tv.Write("inbox/paper.pdf", "%PDF")
+	tv.Write("views/View · Home.md", views.Notice+"\n\nHome.\n")
+	tv.Write("views/My note.md", "mine\n")
 	tv.Commit()
 	out := r.ok("", "vault", "migrate", "--dry-run")
-	if !strings.Contains(out, "from the 8.x layout to 9.0 would make these moves") || !strings.Contains(out, "To threads/: 2 files · 2 documents") ||
-		!strings.Contains(out, "move  wiki/documents/Idea.md → threads/Idea.md") || !strings.Contains(out, "move  chords/Quiet alarms.canvas → threads/Quiet alarms.canvas") ||
-		!strings.Contains(out, "edit  wiki/documents/P3.md") {
-		t.Fatalf("dry run:\n%s", out)
+	for _, want := range []string{"from the 9.0 layout to 10.0 would make these moves", "move  wiki/documents/ → source-core/documents/: 1 file", "move  wiki/assets/ → source-core/originals/: 1 file", "move  inbox/ → ingest/: 1 file", "move  views/ → ingest/: 1 file", "remove  1 view"} {
+		if !strings.Contains(out, want) {
+			t.Fatalf("dry run lacks %q:\n%s", want, out)
+		}
 	}
-	if !tv.V.Exists("wiki/documents/Idea.md") || tv.V.Exists("threads/Idea.md") {
+	if !tv.V.Exists("wiki/documents/P3.md") || tv.V.Exists("source-core/documents/P3.md") {
 		t.Fatal("the dry run moved a file")
 	}
 	out = r.ok("", "vault", "migrate")
-	if !strings.Contains(out, "Migrated Work from the 8.x layout to 9.0 in one commit") {
+	if !strings.Contains(out, "Migrated Work from the 9.0 layout to 10.0 in one commit") {
 		t.Fatalf("migrate:\n%s", out)
 	}
-	if tv.Read("threads/Idea.md") != stub || tv.V.Exists("wiki/documents/Idea.md") || !tv.V.Exists("threads/Quiet alarms.canvas") || tv.V.Exists("chords") {
-		t.Fatal("the thread files did not move to threads/ unchanged")
+	want := strings.Replace(topic, "![[wiki/assets/diagram.png]]", "![[source-core/originals/diagram.png]]", 1)
+	if got := tv.Read("source-core/documents/P3.md"); !strings.Contains(got, strings.TrimPrefix(want[strings.Index(want, "## Summary"):], "")) {
+		t.Fatalf("the topic:\n%s", got)
 	}
-	if strings.Contains(tv.Read("wiki/documents/P3.md"), "from:") || !strings.Contains(tv.Read("Atlas.md"), "\nlayout: 5\n") {
-		t.Fatalf("migrated:\n%s\n%s", tv.Read("wiki/documents/P3.md"), tv.Read("Atlas.md"))
+	for _, rel := range []string{"source-core/originals/diagram.png", "ingest/paper.pdf", "ingest/My note.md"} {
+		if !tv.V.Exists(rel) {
+			t.Errorf("%s is missing", rel)
+		}
+	}
+	for _, rel := range []string{"wiki", "inbox", "views"} {
+		if tv.V.Exists(rel) {
+			t.Errorf("%s/ is still there", rel)
+		}
+	}
+	if !strings.Contains(tv.Read("Atlas.md"), "\nlayout: 6\n") || !tv.V.Exists("wiki-view/View · Home.md") {
+		t.Fatalf("Atlas.md or the views:\n%s", tv.Read("Atlas.md"))
 	}
 }
 
 func TestHookCommandReadsStdin(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	event := `{"session_id": "abcdef12-0000", "cwd": "` + tv.V.Root + `", "tool_name": "Write", "tool_input": {"file_path": "` + tv.V.Root + `/wiki/documents/X.md"}}`
+	event := `{"session_id": "abcdef12-0000", "cwd": "` + tv.V.Root + `", "tool_name": "Write", "tool_input": {"file_path": "` + tv.V.Root + `/source-core/documents/X.md"}}`
 	if out := r.ok(event, "hook", "guard"); !strings.Contains(out, `"permissionDecision":"deny"`) {
 		t.Fatalf("guard:\n%s", out)
 	}
@@ -221,11 +235,11 @@ func TestConfigCommand(t *testing.T) {
 	}
 }
 
-// A write's JSON output names each note its views step moved out of views/, so a caller
+// A write's JSON output names each note its views step moved out of wiki-view/, so a caller
 // that reads only stdout, such as the Obsidian plugin, learns where it went.
 func TestTheJSONOfAWriteNamesANoteMovedOutOfViews(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write("views/Draft.md", "# Draft\n\nMine.\n")
+	tv.Write("wiki-view/Draft.md", "# Draft\n\nMine.\n")
 	r := run{t, tv}
 	plan := `{"title": "Add Idea", "writes": [{"op": "create", "type": "topic", "kind": "overview", "title": "Idea", "fields": {"description": "An idea."}}]}`
 	code, out, errOut := r.atlas(plan, "change", "propose", "-", "--json")
@@ -233,15 +247,15 @@ func TestTheJSONOfAWriteNamesANoteMovedOutOfViews(t *testing.T) {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
 	var got struct {
-		Moved []vault.Moved `json:"moved_from_views"`
+		Moved []vault.Moved `json:"moved_from_wiki_view"`
 	}
 	if err := json.Unmarshal([]byte(out), &got); err != nil {
 		t.Fatal(err)
 	}
-	if len(got.Moved) != 1 || got.Moved[0].From != "views/Draft.md" || got.Moved[0].To != "inbox/Draft.md" {
-		t.Fatalf("moved_from_views %+v in:\n%s", got.Moved, out)
+	if len(got.Moved) != 1 || got.Moved[0].From != "wiki-view/Draft.md" || got.Moved[0].To != "ingest/Draft.md" {
+		t.Fatalf("moved_from_wiki_view %+v in:\n%s", got.Moved, out)
 	}
-	if !strings.Contains(errOut, "Moved views/Draft.md to inbox/Draft.md") {
+	if !strings.Contains(errOut, "Moved wiki-view/Draft.md to ingest/Draft.md") {
 		t.Fatalf("stderr: %s", errOut)
 	}
 }

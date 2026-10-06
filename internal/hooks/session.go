@@ -132,10 +132,9 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		fmt.Fprintf(&b, "Tags (%s mode): %s\n", v.Tagging(), strings.Join(parts, " · "))
 	}
 	var counts []string
-	counts = append(counts, fmt.Sprintf("Inbox: %d file%s", len(st.Inbox), doc.Plural(len(st.Inbox), "", "s")))
+	counts = append(counts, fmt.Sprintf("Ingest: %d file%s", len(st.Ingest), doc.Plural(len(st.Ingest), "", "s")))
 	counts = append(counts, fmt.Sprintf("Pending for the wiki: %d document%s", len(st.Pending), doc.Plural(len(st.Pending), "", "s")))
 	counts = append(counts, fmt.Sprintf("Proposed changes: %d", len(st.Changes.Proposed)))
-	counts = append(counts, fmt.Sprintf("Mentions: %d", len(st.Mentions)))
 	if st.Problems > 0 {
 		counts = append(counts, fmt.Sprintf("Problems: %d (lint)", st.Problems))
 	}

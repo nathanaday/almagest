@@ -429,7 +429,7 @@ func (c *check) existing(w Write) *op {
 	case OpRemove:
 		c.gone[links.Key(o.Title)] = true
 		if d.Type() == "source" {
-			c.warn("%s: the captured file %s stays in %s", o.label(), d.Str("file"), vault.Assets)
+			c.warn("%s: the captured file %s stays in %s", o.label(), d.Str("file"), vault.Originals)
 		}
 	}
 	c.byID[o.ID] = append(c.byID[o.ID], o)

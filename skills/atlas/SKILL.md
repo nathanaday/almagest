@@ -1,6 +1,6 @@
 ---
 name: atlas
-description: "Orient in the Atlas vault, say what waits for the user, do the work a request asks in a linked repository, and route any other request to the skill that owns it. Use for /atlas, what is going on, status, what waits for me, where do I work on X, work on X, fix this, implement, build, note this, remember to, @atlas mentions, and any request when the right skill is not clear. Keeping part of this conversation is wiki-save; files to learn from are wiki-ingest."
+description: "Orient in the Atlas vault, say what waits for the user, do the work a request asks in a linked repository, and route any other request to the skill that owns it. Use for /atlas, what is going on, status, what waits for me, where do I work on X, work on X, fix this, implement, build, note this, remember to, and any request when the right skill is not clear. Keeping part of this conversation is wiki-save; files to learn from are wiki-ingest."
 ---
 
 # atlas
@@ -40,7 +40,7 @@ Tools: `vault`, `search`, `context`. References:
 | an answer, an explanation, to explore; what the vault holds under a tag | [wiki-query](../wiki-query/SKILL.md) |
 | a change to code in a linked repository: fix, build, implement, continue | this skill: [Work in a repository](#work-in-a-repository) |
 | to note an idea, a bug, or a paper for later ("note this", "remember to") | this skill: [Notes for later](#notes-for-later) |
-| to ingest files, or process the inbox | [wiki-ingest](../wiki-ingest/SKILL.md) |
+| to ingest files, or process `ingest/` | [wiki-ingest](../wiki-ingest/SKILL.md) |
 | to keep something from this conversation | [wiki-save](../wiki-save/SKILL.md) |
 | to bring the wiki up to date with new sources | [wiki-sync](../wiki-sync/SKILL.md) |
 | to link, unlink, or describe a repository | [repo-link](../repo-link/SKILL.md), [repo-unlink](../repo-unlink/SKILL.md), [repo-ingest](../repo-ingest/SKILL.md) |
@@ -70,24 +70,22 @@ the work.
 
 An idea, a bug, or a paper the user wants to remember goes in a note in `scratchpad/`:
 the user's words, with a short title as the file name. A file the wiki should learn from
-goes in `inbox/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
+goes in `ingest/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
 
 ## Status
 
 `vault` status gives the state of the vault. Say what waits for the user first: the
-proposed changes, the sessions that wait, and the mentions. Then the inbox, the sources
+proposed changes and the sessions that wait. Then the files in `ingest/`, the sources
 pending for the wiki, and the lint problems, each with the skill that handles it. The
 opening context names each repository that is behind its description
 ([repo-ingest](../repo-ingest/SKILL.md)).
 
-## Mentions
+## Vault rules
 
-The opening context counts `@atlas` mentions: open task lines in the user's notes
-addressed to the agent. When the user asks about them, or the request is unclear,
-`vault` status lists them. Offer each one. Route it like any request. When a document
-answers it (an applied change, this session's document), close it with `vault`
-`action: mention`, `note` (the note's path), `line`, and `link` (the document that
-answers it).
+- Never report the vault's git state to the user. The Obsidian plugin commits the
+  user's hand edits as quiet snapshots, and every write tool commits a snapshot first.
+- `journals/` holds the user's own writing. Read it when the request needs it; never
+  edit a file there. The guard refuses every agent edit under `journals/`.
 
 ## Gate
 

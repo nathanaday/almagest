@@ -270,10 +270,10 @@ func (r *run) tagPages(docs []*doc.Doc) {
 }
 
 // placement reports typed documents out of place, and files with no type in
-// wiki/documents.
+// source-core/documents.
 func (r *run) placement() {
 	for _, d := range r.idx.Misplaced {
-		fix := "move it into wiki/documents (sync does so for a file under wiki/)"
+		fix := "move it into " + vault.Documents + " (sync does so for a file under " + vault.Core + "/)"
 		if d.Type() == "session" || d.Type() == "change" {
 			fix = "move it back under " + d.Type() + "s/"
 		}
@@ -283,9 +283,9 @@ func (r *run) placement() {
 		switch {
 		case path.Dir(d.Path) != vault.Documents:
 		case slices.Contains(schema.ArchivedTypes, d.Type()):
-			r.add("archived", Error, d, "move it into "+vault.Threads+"/", "a %s of Atlas 8.x in wiki/documents; Atlas 9.0 keeps thread documents in %s/ and reads none of them", d.Type(), vault.Threads)
+			r.add("archived", Error, d, "move it into "+vault.Threads+"/", "a %s of Atlas 8.x in "+vault.Documents+"; Atlas keeps thread documents in %s/ and reads none of them", d.Type(), vault.Threads)
 		case !r.opts.Quick:
-			r.add("untyped", Warning, d, "wiki-ingest: capture it, or move it out of wiki/documents", "a note with no type in wiki/documents")
+			r.add("untyped", Warning, d, "wiki-ingest: capture it, or move it out of "+vault.Documents, "a note with no type in "+vault.Documents)
 		}
 	}
 }

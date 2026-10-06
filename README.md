@@ -12,12 +12,13 @@ of your work in one Obsidian vault, and the agents write most of it for you:
 - what you know: **topics**, **sources**, and **repositories**, with a citation for every
   claim;
 - what your agents do now and did before: one **session** document per agent session;
-- every edit an agent made to the knowledge: a **change** document you approve.
+- every edit an agent made to the knowledge: a **change** document you approve;
+- what you write yourself: **journals**, which no agent edits.
 
-Every document of the wiki lies flat in `wiki/documents/`. Tags sort it, and a document
-may hold many: a page tagged `cs513` and `self-driving` shows up under both, and a search
-for both tags finds it. You start an agent in the vault. It finds the repository you
-mean through its tags and its repository document, and it edits the code there. Its
+Every document of the wiki lies flat in `source-core/documents/`. Tags sort it, and a
+document may hold many: a page tagged `cs513` and `self-driving` shows up under both, and
+a search for both tags finds it. You start an agent in the vault. It finds the repository
+you mean through its tags and its repository document, and it edits the code there. Its
 session document records which repositories it touched. You read and edit every
 document in Obsidian.
 
@@ -126,22 +127,6 @@ Some parts of Atlas do not work on Codex yet:
 
 The Atlas design vault tracks these limits.
 
-A vault of 8.x needs one migration to the 9.0 layout. Obsidian shows a notice. From a
-shell, `atlas-obsidian vault migrate --dry-run` lists the moves, and
-`atlas-obsidian vault migrate` makes them in one commit:
-
-- every stub, spec, task list, verification, chord, and event document moves from
-  `wiki/documents/` to `threads/`, with its file name and content unchanged;
-- every canvas in `chords/` moves to `threads/`, and `chords/` goes;
-- topics and repositories lose their `## Threads` section; topics and sources lose
-  `from`; sessions lose `threads`, `specs`, `work`, `checked`, and `events`; changes lose `work`;
-- `Atlas.md` loses `wikify`.
-
-`threads/` is an archive that Atlas does not read. A link to a document there still
-resolves. Search and lint skip the folder, and the guard does not refuse an edit there.
-The migration refuses while a change is proposed: apply or reject it first. A vault
-older than 8.0 migrates with Atlas 8.1.1 (tag `threads-final`) first, then with 9.0.
-
 To try a checkout without installing the plugin, start Claude Code with
 `claude --plugin-dir /path/to/atlas-obsidian`.
 
@@ -157,6 +142,42 @@ atlas-obsidian open --register --vault ~/notes/work   # opens it in Obsidian; tu
 
 A command that acts on a vault takes `--vault` (a folder, or a vault's name), else the
 vault that `ATLAS_VAULT` names, else the vault above the working folder.
+
+### Migrate a vault of 9.0 or 8.x
+
+A vault of 9.0 or 8.x needs one migration to the 10.0 layout. Obsidian shows a notice
+that opens the migration. From a shell, `atlas-obsidian vault migrate --dry-run` lists
+the moves, and `atlas-obsidian vault migrate` makes them in one commit:
+
+| 9.0 | 10.0 |
+| --- | --- |
+| `wiki/documents/` | `source-core/documents/` |
+| `wiki/assets/` | `source-core/originals/` |
+| `inbox/` | `ingest/` |
+| `views/` | `wiki-view/`, written again by code; a note of yours there moves to `ingest/` |
+| `views/tags/` | `wiki-view/nav/` |
+
+- Links, embeds, and Bases that name a moved folder follow the move. Prose that names a
+  folder stays as you wrote it.
+- A source captured from the old inbox gets `origin: ingest`.
+- New attachments go to `source-core/originals/`, and `wiki-view/` stays out of
+  Obsidian's search, unless you chose other settings.
+- The vault gets the 10.0 Obsidian plugin. Reload Obsidian after the migration.
+
+A vault of 8.x first takes the step to 9.0, in the same commit. Its dry run lists that
+step only:
+
+- every stub, spec, task list, verification, chord, and event document moves from
+  `wiki/documents/` to `threads/`, with its file name and content unchanged;
+- every canvas in `chords/` moves to `threads/`, and `chords/` goes;
+- topics and repositories lose their `## Threads` section; topics and sources lose
+  `from`; sessions lose `threads`, `specs`, `work`, `checked`, and `events`; changes
+  lose `work`;
+- `Atlas.md` loses `wikify`.
+
+The migration refuses while a change is proposed: apply or reject it first. It also
+refuses when a file already exists where it would move one. A vault older than 8.0
+migrates with Atlas 8.1.1 (tag `threads-final`) first.
 
 ### Agent preferences
 
@@ -198,24 +219,31 @@ apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
 
 ### Files in a vault
 
-Besides `wiki/documents/`, Atlas writes these files in a vault:
+Besides `source-core/documents/`, Atlas writes these files and folders in a vault:
 
-- `Atlas.md`, the vault's own document, and the folders `inbox/`, `scratchpad/`,
-  `sessions/`, `changes/`, `wiki/assets/`, and `views/`. `wiki/assets/` holds the
-  captured originals and your attachments. `inbox/` holds files for the wiki to learn
-  from; `scratchpad/` holds your notes and the ideas you ask an agent to note for later.
+- `Atlas.md`, the vault's own document.
+- `ingest/`: files for the wiki to learn from.
+- `source-core/originals/`: the captured originals and your attachments.
+- `scratchpad/`: your notes, and the ideas you ask an agent to note for later.
+- `journals/`: your own writing. No agent edits it.
+- `sessions/` and `changes/`: the session and change documents.
+- `wiki-view/`: the notes that code writes for reading. Each sync writes them again.
 - `threads/`, in a vault that the 9.0 migration moved: the thread and chord documents of
-  8.x. Atlas does not read it.
-- `.obsidian/app.json`: `vault init` sends new attachments to `wiki/assets/` (unless you
-  chose a folder) and keeps `views/` out of Obsidian's graph and search. It keeps every
-  other key.
+  8.x.
+- `.obsidian/app.json`: `vault init` sends new attachments to `source-core/originals/`
+  (unless you chose a folder) and keeps `wiki-view/` out of Obsidian's graph and search.
+  It keeps every other key.
 - `.obsidian/plugins/atlas/`: the Obsidian plugin.
 - `.claude/settings.local.json`: the linked repositories, for Claude Code.
-- `.git/info/exclude`: `views/`, `.claude/settings.local.json`, Obsidian's workspace and
-  graph files, `.DS_Store`, and Atlas's temporary `.atlas-*` files stay out of the vault's
-  history.
+- `.git/info/exclude`: `wiki-view/`, `.claude/settings.local.json`, Obsidian's workspace
+  and graph files, `.DS_Store`, and Atlas's temporary `.atlas-*` files stay out of the
+  vault's history.
 - `.atlas/config.json`: the vault's agent preferences. Git commits it, so a shared vault
   shares it; see [SECURITY.md](SECURITY.md).
+
+Search and lint skip `scratchpad/`, `journals/`, and `threads/`, but a link to a note
+there still resolves. Atlas also reserves `checkout/` and `trash/`; search and lint skip
+both.
 
 ## Usage
 
@@ -223,8 +251,9 @@ Start the agent in the vault and ask in plain words. The `atlas` skill routes ea
 request.
 
 - "Link the repository at ~/code/p3-edge under the tag work/p3." The agent proposes a
-  change; you say yes, or press Apply in Obsidian. The agent cannot apply a change that
-  writes until you send a prompt in the session that proposed it. A change with no writes
+  change; you say yes, or press Approve in the change document in Obsidian. The agent
+  cannot apply a change that writes until you send a prompt in the session that
+  proposed it. A change with no writes
   that only marks sources as absorbed applies at once. This gate holds against the atlas
   tools; it is not a sandbox against an agent's shell. [SECURITY.md](SECURITY.md) gives
   the full rule.
@@ -239,9 +268,9 @@ request.
   preferences choose the agent and the terminal (see
   [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
   the open sessions and the ones that closed in the last two hours, with Resume.
-- "Ingest the inbox." Files you dropped in `inbox/` become cited wiki pages.
-- "What waits for me?" The agent lists the proposed changes, the mentions, the inbox,
-  and the sources that wait for the wiki.
+- "Ingest my files." Files you dropped in `ingest/` become cited wiki pages.
+- "What waits for me?" The agent lists the proposed changes, the files in `ingest/`, and
+  the sources that wait for the wiki.
 - "What do we know about my cs513 self-driving project?" The agent searches the
   documents that hold both tags.
 
@@ -252,13 +281,32 @@ atlas-obsidian vault                      # the state of the vault
 atlas-obsidian search "remote update" --tag work/p3
 atlas-obsidian change show chg-r8m3tb     # a proposed change
 atlas-obsidian lint                       # the health check
+atlas-obsidian vault snapshot             # commit your hand edits now
 ```
 
-In Obsidian, `views/` holds the notes that code writes: Home, Timeline, Library,
-Repositories, one timeline per month under `views/timeline/`, and one view per tag under
-`views/tags/`. The Atlas navigator narrows the documents one tag at a time.
-`sessions/Sessions.base` shows what runs now, and `changes/Changes.base` lists the
-changes that wait for you.
+In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
+Repositories, one timeline per month under `wiki-view/timeline/`, and one view per tag
+under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
+`changes/Changes.base` lists the changes that wait for you.
+
+### The Obsidian plugin
+
+The vault works without the plugin. With it, Obsidian adds:
+
+- **Approve and Cancel** in each change document. Approve applies the change, as
+  `atlas-obsidian change apply` does in a terminal. Cancel asks for an optional reason
+  and rejects the change. After the decision, the document shows the result.
+- **Quiet snapshots.** After two minutes with no file change, the plugin commits your
+  edits to the vault's git history. Set the period in the Atlas settings; 0 turns it
+  off. Every Atlas write also commits your edits first, so you need not commit by hand.
+- **The Atlas navigator** in the left sidebar, which narrows the documents one tag at a
+  time.
+- **The sessions pane** in the right sidebar, with Resume, and the **Start agent**
+  command.
+- **The repository panel** in each repository document: the branch, the head, and the
+  uncommitted files of the linked repository.
+- Colors and icons for the callouts of Atlas documents.
+- A sync of the views a few seconds after you edit a note.
 
 ## Patterns and conventions
 

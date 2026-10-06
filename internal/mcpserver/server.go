@@ -74,7 +74,7 @@ func (s *Server) index(name string) (*vault.Index, error) {
 	return vault.Load(v)
 }
 
-// views writes the views after a write, and returns the notes it moved out of views/. A
+// views writes the views after a write, and returns the notes it moved out of wiki-view/. A
 // view that fails to write fails no call: the next sync writes it.
 func (s *Server) views(v *vault.Vault) []vault.Moved {
 	moved, _ := core.Views(v, s.opts.Now())
@@ -83,24 +83,19 @@ func (s *Server) views(v *vault.Vault) []vault.Moved {
 
 // VaultIn is the vault tool's input.
 type VaultIn struct {
-	Action      string `json:"action,omitempty" jsonschema:"status (the default), init, sync, or mention"`
+	Action      string `json:"action,omitempty" jsonschema:"status (the default), init, or sync"`
 	Vault       string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
 	Name        string `json:"name,omitempty" jsonschema:"init: the vault's name"`
 	Path        string `json:"path,omitempty" jsonschema:"init: the folder that becomes the vault"`
 	Tagging     string `json:"tagging,omitempty" jsonschema:"init: open (the default; the agent adds tags freely) or known (only tags that exist, unless the user agrees)"`
 	Description string `json:"description,omitempty" jsonschema:"init: one or two sentences on what the vault is for; the body of Atlas.md"`
 	Views       bool   `json:"views,omitempty" jsonschema:"sync: the statuses, callouts, and views only, with no git"`
-	Note        string `json:"note,omitempty" jsonschema:"mention: the path of the note that holds the mention"`
-	Line        int    `json:"line,omitempty" jsonschema:"mention: the mention's line"`
-	Link        string `json:"link,omitempty" jsonschema:"mention: the document that answers it (id or title)"`
 }
 
 // VaultOut is the vault tool's output.
 type VaultOut struct {
-	Status         *core.Status  `json:"status,omitempty"`
-	Synced         *core.Synced  `json:"synced,omitempty"`
-	Mention        *core.Mention `json:"mention,omitempty"`
-	MovedFromViews []vault.Moved `json:"moved_from_views,omitempty" jsonschema:"notes of the user's found in views/, moved to inbox/; tell the user where each went"`
+	Status *core.Status `json:"status,omitempty"`
+	Synced *core.Synced `json:"synced,omitempty"`
 }
 
 func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in VaultIn) (*mcp.CallToolResult, VaultOut, error) {
@@ -134,18 +129,8 @@ func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in Vau
 			return nil, VaultOut{}, err
 		}
 		return nil, VaultOut{Synced: synced}, nil
-	case "mention":
-		v, err := s.open(in.Vault)
-		if err != nil {
-			return nil, VaultOut{}, err
-		}
-		m, err := core.CloseMention(v, in.Note, in.Line, in.Link)
-		if err != nil {
-			return nil, VaultOut{}, err
-		}
-		return nil, VaultOut{Mention: m, MovedFromViews: s.views(v)}, nil
 	}
-	return nil, VaultOut{}, fmt.Errorf("vault takes action status, init, sync, or mention, not %q", in.Action)
+	return nil, VaultOut{}, fmt.Errorf("vault takes action status, init, or sync, not %q", in.Action)
 }
 
 // SearchIn is the search tool's input.
@@ -204,11 +189,11 @@ type SourceIn struct {
 
 // SourceOut is the source tool's output.
 type SourceOut struct {
-	Captured       []source.Captured `json:"captured,omitempty"`
-	Commit         string            `json:"commit,omitempty"`
-	Chunks         []source.Chunk    `json:"chunks,omitempty"`
-	Blob           *source.TextBlob  `json:"blob,omitempty"`
-	MovedFromViews []vault.Moved     `json:"moved_from_views,omitempty" jsonschema:"notes of the user's found in views/, moved to inbox/; tell the user where each went"`
+	Captured          []source.Captured `json:"captured,omitempty"`
+	Commit            string            `json:"commit,omitempty"`
+	Chunks            []source.Chunk    `json:"chunks,omitempty"`
+	Blob              *source.TextBlob  `json:"blob,omitempty"`
+	MovedFromWikiView []vault.Moved     `json:"moved_from_wiki_view,omitempty" jsonschema:"notes of the user's found in wiki-view/, moved to ingest/; tell the user where each went"`
 }
 
 func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in SourceIn) (*mcp.CallToolResult, SourceOut, error) {
@@ -222,7 +207,7 @@ func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in So
 		if err != nil {
 			return nil, SourceOut{}, err
 		}
-		return nil, SourceOut{Captured: res.Captured, Commit: res.Commit, MovedFromViews: s.views(v)}, nil
+		return nil, SourceOut{Captured: res.Captured, Commit: res.Commit, MovedFromWikiView: s.views(v)}, nil
 	case "chunks":
 		idx, err := s.index(in.Vault)
 		if err != nil {
@@ -263,7 +248,7 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 	now := s.opts.Now()
 	done := func(pv *change.Preview, err error) (*mcp.CallToolResult, *change.Preview, error) {
 		if err == nil {
-			pv.MovedFromViews = s.views(v)
+			pv.MovedFromWikiView = s.views(v)
 		}
 		return nil, pv, err
 	}
@@ -308,15 +293,15 @@ func readOnly() *mcp.ToolAnnotations { return &mcp.ToolAnnotations{ReadOnlyHint:
 func (s *Server) MCP() *mcp.Server {
 	server := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Atlas", Version: s.opts.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "vault",
-		Description: "The state of the vault in one read (status: documents by type, tags with counts, live sessions, inbox, pending sources, proposed and recent changes, @atlas mentions, problems); init makes a vault; sync rewrites the derived fields that are out of date and writes the views; mention closes an @atlas mention with a link to its answer."}, safe("vault", s.vaultTool))
+		Description: "The state of the vault in one read (status: documents by type, tags with counts, live sessions, the files in ingest/, pending sources, proposed and recent changes, problems); init makes a vault; sync rewrites the derived fields that are out of date and writes the views."}, safe("vault", s.vaultTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "search", Annotations: readOnly(),
-		Description: "Ranked search (BM25 over title, aliases, tags, description, body) over the documents of wiki/documents (source, repository, topic). Filter by types, kinds, tags (a document must hold every one), status, and repository. Returns Doc Refs with snippets, and facets: the counts of the tags, types, and statuses of every match, to narrow a broad query."}, safe("search", s.searchTool))
+		Description: "Ranked search (BM25 over title, aliases, tags, description, body) over the documents of source-core/documents (source, repository, topic). Filter by types, kinds, tags (a document must hold every one), status, and repository. Returns Doc Refs with snippets, and facets: the counts of the tags, types, and statuses of every match, to narrow a broad query."}, safe("search", s.searchTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "context", Annotations: readOnly(),
 		Description: "Everything an agent needs to work in a repository (by id or title, or a path inside it) or under tags: the tag pages from the top down with their Context, the repositories, the policies that apply (most specific first), and for a repository its AGENTS.md and CLAUDE.md and git facts now (branch, head, dirty files, ahead and behind, recent commits, commits past its description)."}, safe("context", s.contextTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "match", Annotations: readOnly(),
 		Description: "Join the subjects of Item Maps across chunks and match each against the topics and sources: hit (a document holds its name or alias), near (neighbors above the threshold), or new. With docs, or one tag and across, compare topics with topics under a different child tag of that tag, for wiki-map."}, safe("match", s.matchTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "source",
-		Description: "capture brings inbox files, pasted text, or a snapshot of a linked repository into wiki/documents as sources, with the originals in wiki/assets, as one commit (a source is pending until a change absorbs it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, safe("source", s.sourceTool))
+		Description: "capture brings files from ingest/, pasted text, or a snapshot of a linked repository into source-core/documents as sources, with the originals in source-core/originals, as one commit (a source is pending until a change absorbs it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, safe("source", s.sourceTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "change",
 		Description: "The only way knowledge changes: sources, repositories, and topics. propose validates a Wiki Change Plan (create, modify, rename, remove, confirm, retag) and writes a change document (no commit) for the user to review; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, safe("change", s.changeTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Annotations: readOnly(),

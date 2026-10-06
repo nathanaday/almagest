@@ -23,104 +23,19 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian10 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 
-// src/badges.ts
+// src/change.ts
 var import_obsidian = require("obsidian");
-var BADGE = "atlas-badge";
-function badgeFor(app, path) {
-  const file = app.vault.getAbstractFileByPath(path);
-  if (!(file instanceof import_obsidian.TFile) || file.extension !== "md") return null;
-  const fm = app.metadataCache.getFileCache(file)?.frontmatter;
-  if (!fm) return null;
-  return fm.type === "session" && typeof fm.status === "string" ? fm.status : null;
-}
-function ownMutation(m) {
-  const inBadge = (n) => n instanceof Element ? n.classList.contains(BADGE) || n.closest(`.${BADGE}`) !== null : n.parentElement?.closest(`.${BADGE}`) != null;
-  const nodes = [...Array.from(m.addedNodes), ...Array.from(m.removedNodes)];
-  return inBadge(m.target) || nodes.length > 0 && nodes.every(inBadge);
-}
-var Badges = class extends import_obsidian.Component {
-  constructor(app) {
-    super();
-    this.app = app;
-  }
-  app;
-  observers = [];
-  observed = [];
-  enabled = false;
-  refresh = (0, import_obsidian.debounce)(() => this.apply(), 300, true);
-  onload() {
-    this.registerEvent(this.app.metadataCache.on("changed", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("rename", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
-    this.registerEvent(this.app.workspace.on("layout-change", () => this.refresh()));
-    this.app.workspace.onLayoutReady(() => this.refresh());
-  }
-  onunload() {
-    this.disconnect();
-    this.clear();
-  }
-  setEnabled(on) {
-    this.enabled = on;
-    if (on) this.refresh();
-    else {
-      this.disconnect();
-      this.clear();
-    }
-  }
-  explorers() {
-    return this.app.workspace.getLeavesOfType("file-explorer").map((leaf) => leaf.view.containerEl);
-  }
-  apply() {
-    if (!this.enabled) return;
-    this.observe();
-    for (const root of this.explorers()) {
-      root.querySelectorAll(".nav-file-title[data-path]").forEach((title) => {
-        const path = title.getAttribute("data-path") ?? "";
-        const badge = badgeFor(this.app, path);
-        let span = title.querySelector(`:scope > .${BADGE}`);
-        if (!badge) {
-          span?.remove();
-          return;
-        }
-        if (!span) span = title.createSpan({ cls: BADGE });
-        if (span.dataset.value !== badge) span.dataset.value = badge;
-        if (span.textContent !== badge) span.textContent = badge;
-      });
-    }
-  }
-  // A folder opened in the explorer renders new rows without a workspace event.
-  observe() {
-    const roots = this.explorers();
-    if (roots.length === this.observed.length && roots.every((r, i) => r === this.observed[i])) return;
-    this.disconnect();
-    this.observed = roots;
-    for (const root of roots) {
-      const o = new MutationObserver((records) => {
-        if (records.every(ownMutation)) return;
-        this.refresh();
-      });
-      o.observe(root, { childList: true, subtree: true });
-      this.observers.push(o);
-    }
-  }
-  disconnect() {
-    this.observers.forEach((o) => o.disconnect());
-    this.observers = [];
-    this.observed = [];
-  }
-  clear() {
-    for (const root of this.explorers()) {
-      root.querySelectorAll(`.${BADGE}`).forEach((el) => el.remove());
-    }
-  }
-};
-
-// src/changebar.ts
-var import_obsidian2 = require("obsidian");
 
 // src/helpers.ts
+var DOCUMENTS = "source-core/documents/";
+var WIKI_VIEW = "wiki-view/";
+var NAV_FOLDER = "wiki-view/nav/";
+var INGEST = "ingest/";
+function isDocumentPath(path) {
+  return path.startsWith(DOCUMENTS);
+}
 function binaryCandidates(home) {
   return [`${home}/.atlas/bin/atlas-obsidian`, `${home}/go/bin/atlas-obsidian`];
 }
@@ -169,12 +84,12 @@ function strayNotices(s) {
 }
 function movedNotices(out) {
   if (typeof out !== "object" || out === null) return [];
-  const moved = out.moved_from_views;
+  const moved = out.moved_from_wiki_view;
   if (!Array.isArray(moved)) return [];
   return moved.filter((m) => typeof m?.from === "string" && typeof m?.to === "string").map(movedLine);
 }
 function movedLine(m) {
-  return `Moved ${m.from} to ${m.to}: code writes every file in views/, so your note waits in the inbox.`;
+  return `Moved ${m.from} to ${m.to}: code writes every file in ${WIKI_VIEW}, so your note waits in ${INGEST}.`;
 }
 function countsLine(counts) {
   if (typeof counts === "string") {
@@ -236,47 +151,32 @@ function lastProgressLine(markdown) {
   }
   return last;
 }
-var TASK_LINE = /^\s*(?:[-*+]|\d+[.)])\s+\[.\]\s/;
-var MENTION = /@atlas(?![\w-])/g;
-function mentionRanges(line) {
-  if (!TASK_LINE.test(line)) return [];
-  return textMentions(line);
-}
-function textMentions(text) {
-  const out = [];
-  for (const m of text.matchAll(MENTION)) {
-    const i = m.index ?? 0;
-    if (i > 0 && /[\w@.]/.test(text[i - 1])) continue;
-    out.push([i, i + m[0].length]);
-  }
-  return out;
-}
 function isWatchedPath(path) {
-  return path.endsWith(".md") && !path.startsWith("views/") && !path.startsWith(".");
+  return path.endsWith(".md") && !path.startsWith(WIKI_VIEW) && !path.startsWith(".");
+}
+function isSnapshotPath(path, configDir) {
+  return path !== "" && !path.startsWith(configDir + "/") && !path.startsWith(WIKI_VIEW);
+}
+var SNAPSHOT_QUIET_DEFAULT = 120;
+var SNAPSHOT_QUIET_MAX = 86400;
+function quietSeconds(value) {
+  const raw = typeof value === "string" ? value.trim() : value;
+  if (raw === "" || raw === null || raw === void 0 || typeof raw === "boolean") return SNAPSHOT_QUIET_DEFAULT;
+  const n = Number(raw);
+  if (!Number.isFinite(n)) return SNAPSHOT_QUIET_DEFAULT;
+  return Math.min(SNAPSHOT_QUIET_MAX, Math.max(0, Math.round(n)));
+}
+function isLockHeld(message) {
+  return /atlas\.lock|holds the lock/.test(message);
 }
 function waitingLabel(n) {
   return n === 1 ? "Atlas: 1 session waits" : `Atlas: ${n} sessions wait`;
 }
-function cssString(s) {
-  return `"${s.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\a ")}"`;
-}
-var TAG_FOLDER = "views/tags/";
 function tagTitle(tag) {
   return "Tag \xB7 " + tag.split("/").join(" \u203A ");
 }
-function tagOfFolder(folder) {
-  if (!folder.startsWith(TAG_FOLDER)) return null;
-  const tag = folder.slice(TAG_FOLDER.length);
-  return tag === "" ? null : tag;
-}
 function tagViewPath(tag) {
-  return `${TAG_FOLDER}${tag}/${tagTitle(tag)}.md`;
-}
-function isTagView(path) {
-  const i = path.lastIndexOf("/");
-  if (i < 0) return false;
-  const tag = tagOfFolder(path.slice(0, i));
-  return tag !== null && tagViewPath(tag) === path;
+  return `${NAV_FOLDER}${tag}/${tagTitle(tag)}.md`;
 }
 function normalTag(t) {
   return t.trim().replace(/^#/, "").toLowerCase();
@@ -340,106 +240,242 @@ function layoutOf(fields) {
   const n = Number(fields?.layout ?? 0);
   return Number.isFinite(n) ? n : 0;
 }
-var LAYOUT = 5;
+var LAYOUT = 6;
+var MIGRATES_FROM = 4;
+function migrationSteps(layout) {
+  const steps = [];
+  if (layout === 4) {
+    steps.push("Moves the thread documents of 8.x (stubs, specs, task lists, verifications, chords, and events) and the chord canvases to threads/, an archive Atlas does not read.");
+  }
+  steps.push(
+    "Moves wiki/documents/ to source-core/documents/.",
+    "Moves wiki/assets/ to source-core/originals/, and any other file of wiki/ to source-core/.",
+    "Moves inbox/ to ingest/.",
+    "Removes views/ and writes the views again in wiki-view/, with the tag views in wiki-view/nav/. A note of yours in views/ goes to ingest/.",
+    "Rewrites each link, embed, and Base that names one of these folders. Prose that names a folder stays as you wrote it.",
+    "Sets origin: ingest on each source that came from the inbox.",
+    "Sends new attachments to source-core/originals/ and keeps wiki-view/ out of Obsidian's search, unless you chose other settings."
+  );
+  return steps;
+}
+function migrationSummary(r) {
+  const parts = [`Migrated to the ${layoutName(LAYOUT)} layout in one commit${r.commit ? `, ${r.commit.slice(0, 7)}` : ""}.`];
+  const moved = r.moved?.length ?? 0;
+  const edited = r.edited?.length ?? 0;
+  if (moved || edited) parts.push(`${plural(moved, "file", "files")} moved, ${edited} edited.`);
+  if (r.problems) parts.push(`Lint finds ${plural(r.problems, "error", "errors")}.`);
+  if (r.plugin) parts.push(`The Obsidian plugin is now ${r.plugin}; reload Obsidian to use it.`);
+  return parts.join(" ");
+}
 function layoutName(layout) {
-  if (layout >= LAYOUT) return "9.0";
+  if (layout >= LAYOUT) return "10.0";
+  if (layout === 5) return "9.0";
   if (layout === 4) return "8.x";
   return layout === 3 ? "7.x" : "6.x";
 }
 
-// src/changebar.ts
-var BAR = "atlas-change-bar";
-function proposed(app, view) {
-  if (!view.file) return null;
-  const fm = app.metadataCache.getFileCache(view.file)?.frontmatter;
-  if (!fm || fm.type !== "change" || fm.status !== "proposed" || !fm.id) return null;
-  return { id: String(fm.id), counts: countsLine(fm.counts) };
+// src/changestate.ts
+var RESULT = {
+  applying: () => "Being applied. If this stays, the apply stopped; the next Atlas write puts the documents back and sets the change to proposed.",
+  applied: (fm) => {
+    const when = stampText(fm.applied);
+    return when ? `Applied ${when}.` : "Applied.";
+  },
+  rejected: (fm) => {
+    const reason = typeof fm.reason === "string" ? fm.reason.trim() : "";
+    return reason ? `Rejected: ${reason}` : "Rejected.";
+  },
+  superseded: () => "A later change replaced this one.",
+  undone: () => "Undone. The documents are back as they were before it."
+};
+function changeCard(fm, busy = null) {
+  if (!fm || fm.type !== "change") {
+    return { state: "none", label: "Change", line: "This block shows a change. This note is not a change document.", counts: "", id: "", actions: false };
+  }
+  const id = typeof fm.id === "string" ? fm.id.trim() : "";
+  const status = typeof fm.status === "string" ? fm.status.trim() : "";
+  const counts = countsLine(fm.counts);
+  const card = { id, counts };
+  if (busy === "apply") return { ...card, state: "busy", label: "Applying", line: "Atlas applies this change.", actions: false };
+  if (busy === "reject") return { ...card, state: "busy", label: "Cancelling", line: "Atlas rejects this change.", actions: false };
+  if (status === "proposed") {
+    if (!id) return { ...card, state: "proposed", label: "Proposed", line: "This change has no id, so it cannot be applied from here.", actions: false };
+    return {
+      ...card,
+      state: "proposed",
+      label: "Proposed",
+      line: "Review the writes below. Approve applies them in one commit. Cancel rejects the change, and this document stays as the record.",
+      actions: true
+    };
+  }
+  const result = RESULT[status];
+  if (result) return { ...card, state: status, label: capital(status), line: result(fm), actions: false };
+  return { ...card, state: "other", label: status ? capital(status) : "Change", line: status ? `Status: ${status}.` : "This change has no status.", actions: false };
 }
-var ChangeBar = class extends import_obsidian2.Component {
+function rejectReason(input) {
+  const line = input.replace(/\s+/g, " ").trim();
+  return line || "cancelled in Obsidian";
+}
+function stampText(value) {
+  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2}:\d{2})/.exec(String(value ?? ""));
+  return m ? `${m[1]} ${m[2]}` : "";
+}
+function capital(s) {
+  return s.charAt(0).toUpperCase() + s.slice(1);
+}
+
+// src/change.ts
+var ChangeRunner = class {
   constructor(plugin) {
-    super();
     this.plugin = plugin;
   }
   plugin;
-  busy = false;
-  refresh = (0, import_obsidian2.debounce)(() => this.update(), 100, true);
-  get app() {
-    return this.plugin.app;
+  current = null;
+  listeners = /* @__PURE__ */ new Set();
+  /** The command that runs for this change, if one does. */
+  actionFor(id) {
+    return this.current?.id === id ? this.current.action : null;
   }
-  onload() {
-    const ws = this.app.workspace;
-    this.registerEvent(ws.on("active-leaf-change", () => this.refresh()));
-    this.registerEvent(ws.on("file-open", () => this.refresh()));
-    this.registerEvent(ws.on("layout-change", () => this.refresh()));
-    this.registerEvent(this.app.metadataCache.on("changed", () => this.refresh()));
-    ws.onLayoutReady(() => this.refresh());
+  get busy() {
+    return this.current !== null;
   }
-  onunload() {
-    document.querySelectorAll(`.${BAR}`).forEach((el) => el.remove());
+  /** Calls fn when a command starts or ends; returns the call that stops it. */
+  listen(fn) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
   }
-  update() {
-    for (const leaf of this.app.workspace.getLeavesOfType("markdown")) {
-      if (leaf.view instanceof import_obsidian2.MarkdownView) this.updateView(leaf.view);
-    }
-  }
-  updateView(view) {
-    const change = proposed(this.app, view);
-    const existing = view.containerEl.querySelector(`:scope > .${BAR}`);
-    if (!change) {
-      existing?.remove();
-      return;
-    }
-    const key = `${change.id}
-${change.counts}`;
-    if (existing?.dataset.key === key) return;
-    existing?.remove();
-    const bar = createDiv({ cls: BAR });
-    bar.dataset.key = key;
-    bar.createSpan({ cls: "atlas-change-bar-label", text: "Proposed change" });
-    if (change.counts) bar.createSpan({ cls: "atlas-change-bar-counts", text: change.counts });
-    const buttons = bar.createDiv({ cls: "atlas-change-bar-buttons" });
-    const apply = buttons.createEl("button", { cls: "mod-cta", text: "Apply" });
-    const reject = buttons.createEl("button", { cls: "mod-warning", text: "Reject" });
-    apply.onclick = () => void this.apply(view, change.id, [apply, reject]);
-    reject.onclick = () => new ReasonModal(this.app, (reason) => void this.reject(change.id, reason, [apply, reject])).open();
-    view.containerEl.insertBefore(bar, view.contentEl);
-  }
-  async run(buttons, action) {
-    if (this.busy) return;
-    this.busy = true;
-    buttons.forEach((b) => b.disabled = true);
-    try {
-      await action();
-    } catch (e) {
-      new import_obsidian2.Notice(`Atlas: ${e.message}`);
-    } finally {
-      this.busy = false;
-      buttons.forEach((b) => b.disabled = false);
-      this.refresh();
-    }
-  }
-  apply(view, id, buttons) {
-    return this.run(buttons, async () => {
-      await view.save();
+  async apply(id, sourcePath) {
+    await this.run(id, "apply", sourcePath, async () => {
+      await saveOpen(this.plugin.app, sourcePath);
       const p = await this.plugin.atlas(["change", "apply", id]);
       const counts = countsLine(p.counts);
       const commit = p.commit ? ` Commit ${p.commit.slice(0, 7)}.` : "";
-      new import_obsidian2.Notice(`Applied ${p.ref?.title ?? id}${counts ? `: ${counts}` : ""}.${commit}`);
+      new import_obsidian.Notice(`Atlas: applied ${p.ref?.title ?? id}${counts ? `: ${counts}` : ""}.${commit}`);
       warn(p.warnings);
     });
   }
-  reject(id, reason, buttons) {
-    return this.run(buttons, async () => {
-      const p = await this.plugin.atlas(["change", "reject", id, "--reason", reason]);
-      new import_obsidian2.Notice(`Rejected ${p.ref?.title ?? id}.`);
+  async reject(id, reason, sourcePath) {
+    await this.run(id, "reject", sourcePath, async () => {
+      const p = await this.plugin.atlas(["change", "reject", id, "--reason", rejectReason(reason)]);
+      new import_obsidian.Notice(`Atlas: rejected ${p.ref?.title ?? id}.`);
       warn(p.warnings);
     });
+  }
+  /**
+   * Runs one command. The widget stays busy until Obsidian reads the document's new
+   * status, so it never offers Approve again for a change that was just applied.
+   */
+  async run(id, action, sourcePath, fn) {
+    if (this.current) {
+      new import_obsidian.Notice("Atlas: a change command runs. Wait for it to finish.");
+      return;
+    }
+    this.current = { id, action };
+    this.emit();
+    const decided = decision(this.plugin.app, sourcePath, SETTLE_MS);
+    try {
+      await fn();
+      await decided.done;
+    } catch (e) {
+      new import_obsidian.Notice(`Atlas: ${e.message}`, 1e4);
+    } finally {
+      decided.stop();
+      this.current = null;
+      this.emit();
+    }
+  }
+  emit() {
+    for (const fn of this.listeners) fn();
   }
 };
-function warn(warnings) {
-  for (const w of warnings ?? []) new import_obsidian2.Notice(`Atlas: ${w}`);
+var SETTLE_MS = 5e3;
+function decision(app, path, ms) {
+  let stop = () => {
+  };
+  const done = new Promise((resolve) => {
+    const ref = app.metadataCache.on("changed", (file, _data, cache) => {
+      const status = cache.frontmatter?.status;
+      if (file.path === path && status !== "proposed" && status !== "applying") finish();
+    });
+    const timer = window.setTimeout(() => finish(), ms);
+    function finish() {
+      app.metadataCache.offref(ref);
+      window.clearTimeout(timer);
+      resolve();
+    }
+    stop = finish;
+  });
+  return { done, stop };
 }
-var ReasonModal = class extends import_obsidian2.Modal {
+async function saveOpen(app, path) {
+  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+    const view = leaf.view;
+    if (view instanceof import_obsidian.MarkdownView && view.file?.path === path) await view.save();
+  }
+}
+function warn(warnings) {
+  for (const w of warnings ?? []) new import_obsidian.Notice(`Atlas: ${w}`, 1e4);
+}
+var ChangeWidget = class extends import_obsidian.MarkdownRenderChild {
+  constructor(containerEl, plugin, runner, path) {
+    super(containerEl);
+    this.plugin = plugin;
+    this.runner = runner;
+    this.path = path;
+  }
+  plugin;
+  runner;
+  path;
+  onload() {
+    const { metadataCache, vault } = this.plugin.app;
+    this.registerEvent(
+      metadataCache.on("changed", (file) => {
+        if (file.path === this.path) this.render();
+      })
+    );
+    this.registerEvent(
+      vault.on("rename", (file, oldPath) => {
+        if (oldPath === this.path) this.path = file.path;
+      })
+    );
+    this.register(this.runner.listen(() => this.render()));
+    this.render();
+  }
+  frontmatter() {
+    const file = this.plugin.app.vault.getFileByPath(this.path);
+    return file ? this.plugin.app.metadataCache.getFileCache(file)?.frontmatter : void 0;
+  }
+  render() {
+    const fm = this.frontmatter();
+    const card = changeCard(fm, this.runner.actionFor(typeof fm?.id === "string" ? fm.id : ""));
+    const el = this.containerEl;
+    el.empty();
+    el.addClass("atlas-change");
+    el.dataset.state = card.state;
+    const head = el.createDiv({ cls: "atlas-change-head" });
+    head.createSpan({ cls: "atlas-change-label", text: card.label });
+    if (card.counts) head.createSpan({ cls: "atlas-change-counts", text: card.counts });
+    el.createDiv({ cls: "atlas-change-line", text: card.line });
+    if (!card.actions) return;
+    const buttons = el.createDiv({ cls: "atlas-change-buttons" });
+    const approve = buttons.createEl("button", { cls: "mod-cta", text: "Approve" });
+    const cancel = buttons.createEl("button", { text: "Cancel" });
+    if (this.runner.busy) {
+      for (const b of [approve, cancel]) {
+        b.disabled = true;
+        b.setAttr("title", "Another change command runs.");
+      }
+    }
+    approve.onclick = () => void this.runner.apply(card.id, this.path);
+    cancel.onclick = () => new CancelModal(this.plugin.app, (reason) => void this.runner.reject(card.id, reason, this.path)).open();
+  }
+};
+function changeProcessor(plugin, runner) {
+  return (_source, el, ctx) => {
+    ctx.addChild(new ChangeWidget(el, plugin, runner, ctx.sourcePath));
+  };
+}
+var CancelModal = class extends import_obsidian.Modal {
   constructor(app, done) {
     super(app);
     this.done = done;
@@ -447,13 +483,16 @@ var ReasonModal = class extends import_obsidian2.Modal {
   done;
   reason = "";
   onOpen() {
-    this.setTitle("Reject the change");
+    this.setTitle("Cancel this change");
+    this.contentEl.createEl("p", {
+      text: "Atlas rejects the change. Nothing it would write changes, and its document stays as the record."
+    });
     const submit = () => {
       this.close();
       this.done(this.reason);
     };
-    new import_obsidian2.Setting(this.contentEl).setName("Reason").addText((text) => {
-      text.setPlaceholder("One line").onChange((v) => this.reason = v);
+    new import_obsidian.Setting(this.contentEl).setName("Reason").setDesc("Optional. One line.").addText((text) => {
+      text.setPlaceholder("Why not").onChange((v) => this.reason = v);
       text.inputEl.addClass("atlas-reason-input");
       text.inputEl.addEventListener("keydown", (e) => {
         if (e.key === "Enter" && !e.isComposing) {
@@ -463,7 +502,7 @@ var ReasonModal = class extends import_obsidian2.Modal {
       });
       window.setTimeout(() => text.inputEl.focus(), 0);
     });
-    new import_obsidian2.Setting(this.contentEl).addButton((b) => b.setButtonText("Cancel").onClick(() => this.close())).addButton((b) => b.setButtonText("Reject").setWarning().onClick(submit));
+    new import_obsidian.Setting(this.contentEl).addButton((b) => b.setButtonText("Back").onClick(() => this.close())).addButton((b) => b.setButtonText("Cancel the change").setWarning().onClick(submit));
   }
   onClose() {
     this.contentEl.empty();
@@ -474,7 +513,7 @@ var ReasonModal = class extends import_obsidian2.Modal {
 var import_child_process = require("child_process");
 var import_fs = require("fs");
 var import_os = require("os");
-var import_obsidian3 = require("obsidian");
+var import_obsidian2 = require("obsidian");
 var AtlasError = class extends Error {
 };
 function findBinary(override) {
@@ -512,415 +551,88 @@ async function runAtlas(bin, vault, args) {
   } catch {
     throw new AtlasError(`atlas-obsidian ${args[0]} did not print JSON`);
   }
-  for (const line of movedNotices(parsed)) new import_obsidian3.Notice(`Atlas: ${line}`, 0);
+  for (const line of movedNotices(parsed)) new import_obsidian2.Notice(`Atlas: ${line}`, 0);
   return parsed;
 }
 async function binaryVersion(bin) {
   return (await exec(bin, ["version"], void 0)).trim();
 }
 
-// src/graphcolors.ts
-var import_obsidian4 = require("obsidian");
-
-// src/graphgroups.ts
-var GRAPH_MODES = [
-  { mode: "off", label: "Off" },
-  { mode: "tag", label: "Tag" },
-  { mode: "focus", label: "Focus" },
-  { mode: "type", label: "Type" },
-  { mode: "activity", label: "Activity" }
-];
-function isGraphMode(value) {
-  return GRAPH_MODES.some((m) => m.mode === value);
-}
-var CATEGORICAL = {
-  light: ["#2a78d6", "#eb6834", "#1baf7a", "#eda100", "#e87ba4", "#008300", "#4a3aa7", "#e34948"],
-  dark: ["#3987e5", "#d95926", "#199e70", "#c98500", "#d55181", "#008300", "#9085e9", "#e66767"]
-};
-var RECENCY = {
-  light: ["#104281", "#256abf", "#5598e7", "#9ec5f4"],
-  dark: ["#b7d3f6", "#6da7ec", "#2a78d6", "#1c5cab"]
-};
-var MUTED = "#898781";
-var TYPE_GROUPS = [
-  { name: "Sources", query: "[type:source]", test: (f) => f.type === "source" },
-  { name: "Repositories", query: "[type:repository]", test: (f) => f.type === "repository" },
-  { name: "Concepts", query: "[type:topic] [kind:concept]", test: (f) => f.type === "topic" && f.kind === "concept" },
-  { name: "Entities", query: "[type:topic] [kind:entity]", test: (f) => f.type === "topic" && f.kind === "entity" },
-  { name: "Policies", query: "[type:topic] [kind:policy]", test: (f) => f.type === "topic" && f.kind === "policy" },
-  { name: "Overviews", query: "[type:topic] [kind:overview]", test: (f) => f.type === "topic" && f.kind === "overview" }
-];
-var QUARTERS = ["Newest 25%", "25\u201350%", "50\u201375%", "Oldest 25%"];
-function graphGroups(mode, docs, resolve, theme, focus = []) {
-  const vault = new Vault(docs, resolve);
-  let groups;
-  switch (mode) {
-    case "tag":
-      groups = vault.byTag(theme);
-      break;
-    case "focus":
-      groups = byFocus(docs, focus, theme);
-      break;
-    case "type":
-      groups = vault.byType(theme);
-      break;
-    case "activity":
-      groups = byActivity(docs, theme);
-      break;
-    default:
-      groups = [];
+// src/quiet.ts
+var QuietTimer = class {
+  constructor(clock, task, quietMs) {
+    this.clock = clock;
+    this.task = task;
+    this.quietMs = quietMs;
   }
-  return groups.filter((g) => g.paths.length > 0);
-}
-function tagsOf(fields) {
-  const list = asList(fields.tags);
-  if (typeof fields.defines === "string" && fields.defines) list.push(fields.defines);
-  return list.map(normalTag).filter((t) => t !== "");
-}
-function topTags2(fields) {
-  return [...new Set(tagsOf(fields).map((t) => t.split("/")[0]))];
-}
-function tagQuery(tag) {
-  return `tag:#${tag} OR [defines:/^${tag}(\\/|$)/]`;
-}
-function allTagsQuery(tags) {
-  return tags.length === 1 ? tagQuery(tags[0]) : tags.map((t) => `(${tagQuery(t)})`).join(" ");
-}
-var Vault = class {
-  constructor(docs, resolve) {
-    this.docs = docs;
-    this.resolve = resolve;
-    for (const d of docs) this.byPath.set(d.path, d);
+  clock;
+  task;
+  quietMs;
+  handle = null;
+  running = false;
+  /** The quiet period ended while the task ran. */
+  again = false;
+  /** Starts the quiet period again. */
+  touch() {
+    if (this.quietMs <= 0) return;
+    this.arm();
   }
-  docs;
-  resolve;
-  byPath = /* @__PURE__ */ new Map();
-  type(path) {
-    const t = path === null ? void 0 : this.byPath.get(path)?.fields.type;
-    return typeof t === "string" ? t : "";
-  }
-  links(doc, field) {
-    return asList(doc.fields[field]).map((l) => this.resolve(linkTitle(l), doc.path)).filter((p) => p !== null && this.byPath.has(p));
-  }
-  /** The top tag a document belongs to: its own, or a session's or a change's first document's. */
-  tagOf(doc, depth = 0) {
-    if (depth > 3) return null;
-    const own = topTags2(doc.fields)[0];
-    if (own) return own;
-    const via = (field) => {
-      for (const p of this.links(doc, field)) {
-        const t = this.tagOf(this.byPath.get(p), depth + 1);
-        if (t) return t;
-      }
-      return null;
-    };
-    switch (this.type(doc.path)) {
-      case "session":
-        return via("repositories") ?? via("changes");
-      case "change":
-        return via("absorbs");
+  /** Sets the quiet period; a waiting timer starts again with it. */
+  setQuiet(ms) {
+    this.quietMs = ms;
+    if (ms <= 0) {
+      this.cancel();
+      this.again = false;
+    } else if (this.handle !== null) {
+      this.arm();
     }
-    return null;
   }
-  /**
-   * A group per top tag of the typed documents, at most eight: the tags held first take
-   * the first colors, so a new tag never repaints the others, and of two tags held first
-   * on one day, the one more documents hold. The graph colors a node by the first group
-   * that matches, so the legend counts each document in the first group whose tag it
-   * holds. Sessions and changes hold no tags: each joins the group of the work it touched,
-   * by its path. A tag past the eighth, and a note with no type, get no group.
-   */
-  byTag(theme) {
-    const typed = this.docs.filter((d) => this.type(d.path) !== "");
-    const first = /* @__PURE__ */ new Map();
-    const count = /* @__PURE__ */ new Map();
-    for (const d of typed) {
-      const created = String(d.fields.created ?? "9999").slice(0, 10);
-      for (const t of topTags2(d.fields)) {
-        if (!first.has(t) || created < (first.get(t) ?? "")) first.set(t, created);
-        count.set(t, (count.get(t) ?? 0) + 1);
-      }
-    }
-    const order = [...first.keys()].sort(
-      (a, b) => (first.get(a) ?? "").localeCompare(first.get(b) ?? "") || (count.get(b) ?? 0) - (count.get(a) ?? 0) || a.localeCompare(b)
-    );
-    const palette = CATEGORICAL[theme];
-    const groups = order.slice(0, palette.length).map((t, i) => ({ name: "#" + t, color: palette[i], tag: t, paths: [], records: [] }));
-    for (const d of typed) {
-      const own = topTags2(d.fields);
-      if (own.length > 0) {
-        groups.find((g2) => own.includes(g2.tag))?.paths.push(d.path);
-        continue;
-      }
-      const type = this.type(d.path);
-      if (type !== "session" && type !== "change") continue;
-      const g = groups.find((x) => x.tag === this.tagOf(d));
-      if (g) {
-        g.paths.push(d.path);
-        g.records.push(d.path);
-      }
-    }
-    return groups.map((g) => ({
-      name: g.name,
-      color: g.color,
-      paths: g.paths,
-      query: [tagQuery(g.tag), ...g.records.sort().map((p) => `path:"${p}"`)].join(" OR ")
-    }));
+  /** Stops the timer; a task that runs ends as it would. */
+  stop() {
+    this.quietMs = 0;
+    this.again = false;
+    this.cancel();
   }
-  byType(theme) {
-    const palette = CATEGORICAL[theme];
-    const groups = TYPE_GROUPS.map((g, i) => ({
-      name: g.name,
-      color: palette[i],
-      paths: this.docs.filter((d) => g.test(d.fields)).map((d) => d.path),
-      query: g.query
-    }));
-    groups.push({
-      name: "Sessions and changes",
-      color: MUTED,
-      paths: this.docs.filter((d) => this.type(d.path) === "session" || this.type(d.path) === "change").map((d) => d.path),
-      query: "[type:session] OR [type:change]"
-    });
-    return groups;
+  get waiting() {
+    return this.handle !== null;
+  }
+  get busy() {
+    return this.running;
+  }
+  arm() {
+    this.cancel();
+    this.handle = this.clock.set(() => {
+      this.handle = null;
+      void this.fire();
+    }, this.quietMs);
+  }
+  cancel() {
+    if (this.handle !== null) this.clock.clear(this.handle);
+    this.handle = null;
+  }
+  async fire() {
+    if (this.running) {
+      this.again = true;
+      return;
+    }
+    this.running = true;
+    this.again = false;
+    let retry = false;
+    try {
+      retry = await this.task();
+    } catch {
+      retry = false;
+    } finally {
+      this.running = false;
+    }
+    if ((retry || this.again) && this.quietMs > 0 && this.handle === null) this.arm();
+    this.again = false;
   }
 };
-function byFocus(docs, chosen, theme) {
-  const tags = [...new Set(chosen.map(normalTag).filter((t) => t !== ""))];
-  if (tags.length === 0) return [];
-  return [
-    {
-      name: tags.map((t) => "#" + t).join(" + "),
-      color: CATEGORICAL[theme][0],
-      paths: docs.filter((d) => tags.every((t) => holds(tagsOf(d.fields), t))).map((d) => d.path),
-      query: allTagsQuery(tags)
-    }
-  ];
-}
-function byActivity(docs, theme) {
-  const key = (d) => {
-    const updated = String(d.fields.updated ?? "").slice(0, 10);
-    return /^\d{4}-\d{2}-\d{2}$/.test(updated) ? updated : localDate(d.mtime);
-  };
-  const sorted = [...docs].sort((a, b) => key(b).localeCompare(key(a)) || b.mtime - a.mtime);
-  const groups = QUARTERS.map((name, i) => ({ name, color: RECENCY[theme][i], paths: [] }));
-  sorted.forEach((d, i) => groups[Math.floor(i * 4 / sorted.length)].paths.push(d.path));
-  return groups;
-}
-function localDate(ms) {
-  const t = new Date(ms);
-  const pad = (n) => String(n).padStart(2, "0");
-  return `${t.getFullYear()}-${pad(t.getMonth() + 1)}-${pad(t.getDate())}`;
-}
-function pathQuery(paths) {
-  const alternatives = paths.map((p) => p.replace(/[.*+?^${}()|[\]\\]/g, "\\$&").replace(/\//g, "\\/"));
-  return `path:/^(?:${alternatives.join("|")})$/`;
-}
-function colorGroups(groups) {
-  return groups.map((g) => ({
-    query: g.query ?? pathQuery(g.paths),
-    color: { a: 1, rgb: parseInt(g.color.slice(1), 16) }
-  }));
-}
-function isAtlasQuery(query) {
-  return query.startsWith("path:/^(?:") && query.endsWith(")$/");
-}
-function mergeColorGroups(current, ours, owned = []) {
-  const mine = /* @__PURE__ */ new Set([...owned, ...ours.map((g) => g.query)]);
-  return [...ours, ...current.filter((g) => !isAtlasQuery(g.query) && !mine.has(g.query))];
-}
-
-// src/graphcolors.ts
-var BAR2 = "atlas-graph-colors";
-function graphInstance(app) {
-  const internal = app.internalPlugins;
-  const plugin = internal?.getPluginById?.("graph");
-  const instance = plugin?.enabled ? plugin.instance : void 0;
-  return instance && typeof instance.saveOptions === "function" && instance.options ? instance : null;
-}
-function engineOf(view) {
-  const v = view;
-  const engine = v.dataEngine ?? v.engine;
-  return engine && typeof engine.setOptions === "function" && typeof engine.getOptions === "function" ? engine : null;
-}
-function same(a, b) {
-  return JSON.stringify(a) === JSON.stringify(b);
-}
-var GraphColors = class extends import_obsidian4.Component {
-  constructor(host) {
-    super();
-    this.host = host;
-  }
-  host;
-  groups = [];
-  refresh = (0, import_obsidian4.debounce)(() => this.apply(), 1e3, true);
-  get app() {
-    return this.host.app;
-  }
-  onload() {
-    this.registerEvent(this.app.metadataCache.on("resolved", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("rename", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
-    this.registerEvent(this.app.workspace.on("css-change", () => this.refresh()));
-    this.registerEvent(this.app.workspace.on("layout-change", () => this.refresh()));
-    this.app.workspace.onLayoutReady(() => this.apply());
-  }
-  onunload() {
-    this.write([]);
-    for (const leaf of this.app.workspace.getLeavesOfType("graph")) {
-      leaf.view.containerEl.querySelector(`.${BAR2}`)?.remove();
-    }
-  }
-  /** The tags Focus mode crosses: the Atlas navigator's choice. */
-  async setFocus(tags) {
-    if (JSON.stringify(tags) === JSON.stringify(this.host.settings.focusTags)) return;
-    this.host.settings.focusTags = [...tags];
-    await this.host.saveSettings();
-    if (this.host.settings.graphColors === "focus") this.apply();
-  }
-  async setMode(mode) {
-    this.host.settings.graphColors = mode;
-    await this.host.saveSettings();
-    this.apply();
-  }
-  apply() {
-    const mode = this.host.settings.graphColors;
-    const theme = document.body.hasClass("theme-dark") ? "dark" : "light";
-    const cache = this.app.metadataCache;
-    this.groups = mode === "off" ? [] : graphGroups(mode, this.docs(), (link, from) => cache.getFirstLinkpathDest(link, from)?.path ?? null, theme, this.host.settings.focusTags);
-    this.write(colorGroups(this.groups));
-    this.renderBars();
-  }
-  docs() {
-    const cache = this.app.metadataCache;
-    return this.app.vault.getMarkdownFiles().map((file) => ({
-      path: file.path,
-      fields: cache.getFileCache(file)?.frontmatter ?? {},
-      mtime: file.stat.mtime
-    }));
-  }
-  /** Puts our groups in the graph's saved options and in every open graph. */
-  write(ours) {
-    const instance = graphInstance(this.app);
-    if (!instance) return;
-    const owned = this.host.settings.graphOwned;
-    const merged = mergeColorGroups(instance.options.colorGroups ?? [], ours, owned);
-    if (!same(instance.options.colorGroups ?? [], merged)) {
-      instance.options.colorGroups = merged;
-      instance.saveOptions();
-    }
-    for (const type of ["graph", "localgraph"]) {
-      for (const leaf of this.app.workspace.getLeavesOfType(type)) {
-        const engine = engineOf(leaf.view);
-        if (!engine) continue;
-        const current = engine.getOptions().colorGroups ?? [];
-        const next = mergeColorGroups(current, ours, owned);
-        if (!same(current, next)) engine.setOptions({ colorGroups: next });
-      }
-    }
-    const queries = ours.map((g) => g.query);
-    if (JSON.stringify(queries) !== JSON.stringify(owned)) {
-      this.host.settings.graphOwned = queries;
-      void this.host.saveSettings();
-    }
-  }
-  /** The mode buttons and the legend, over each graph view. */
-  renderBars() {
-    const mode = this.host.settings.graphColors;
-    const on = graphInstance(this.app) !== null;
-    for (const leaf of this.app.workspace.getLeavesOfType("graph")) {
-      const content = leaf.view.containerEl.querySelector(".view-content");
-      if (!content) continue;
-      let bar = content.querySelector(`:scope > .${BAR2}`);
-      if (!on) {
-        bar?.remove();
-        continue;
-      }
-      if (!bar) bar = content.createDiv({ cls: BAR2 });
-      bar.empty();
-      const modes = bar.createDiv({ cls: "atlas-graph-modes" });
-      for (const m of GRAPH_MODES) {
-        const button = modes.createEl("button", { text: m.label, cls: "atlas-graph-mode" });
-        button.toggleClass("is-active", m.mode === mode);
-        button.setAttr("aria-pressed", String(m.mode === mode));
-        button.onClickEvent(() => void this.setMode(m.mode));
-      }
-      if (mode === "focus" && this.host.settings.focusTags.length === 0) {
-        bar.createDiv({ cls: "atlas-graph-legend-row", text: "Open the Atlas navigator (left ribbon) and choose tags to focus on them." });
-        continue;
-      }
-      if (mode === "focus" && this.groups.length === 0) {
-        bar.createDiv({ cls: "atlas-graph-legend-row", text: "No document holds all the chosen tags." });
-        continue;
-      }
-      if (this.groups.length === 0) continue;
-      const legend = bar.createDiv({ cls: "atlas-graph-legend" });
-      for (const g of this.groups) {
-        const row = legend.createDiv({ cls: "atlas-graph-legend-row" });
-        row.createSpan({ cls: "atlas-graph-swatch" }).style.backgroundColor = g.color;
-        row.createSpan({ cls: "atlas-graph-legend-name", text: g.name });
-        row.createSpan({ cls: "atlas-graph-legend-count", text: String(g.paths.length) });
-      }
-    }
-  }
-};
-
-// src/mentions.ts
-var import_state = require("@codemirror/state");
-var import_view = require("@codemirror/view");
-var mark = import_view.Decoration.mark({ class: "atlas-mention" });
-function build(view) {
-  const builder = new import_state.RangeSetBuilder();
-  for (const { from, to } of view.visibleRanges) {
-    let pos = from;
-    while (pos <= to) {
-      const line = view.state.doc.lineAt(pos);
-      for (const [a, b] of mentionRanges(line.text)) builder.add(line.from + a, line.from + b, mark);
-      pos = line.to + 1;
-    }
-  }
-  return builder.finish();
-}
-var mentionEditor = import_view.ViewPlugin.fromClass(
-  class {
-    decorations;
-    constructor(view) {
-      this.decorations = build(view);
-    }
-    update(u) {
-      if (u.docChanged || u.viewportChanged) this.decorations = build(u.view);
-    }
-  },
-  { decorations: (v) => v.decorations }
-);
-var mentionReading = (el) => {
-  el.querySelectorAll("li.task-list-item").forEach((item) => {
-    const walker = document.createTreeWalker(item, NodeFilter.SHOW_TEXT);
-    const nodes = [];
-    for (let n = walker.nextNode(); n; n = walker.nextNode()) {
-      const text = n;
-      if (text.parentElement?.closest("li.task-list-item") !== item) continue;
-      if (text.parentElement?.closest(".atlas-mention, code, a")) continue;
-      if (textMentions(text.data).length > 0) nodes.push(text);
-    }
-    nodes.forEach(wrap);
-  });
-};
-function wrap(node) {
-  const ranges = textMentions(node.data);
-  const frag = document.createDocumentFragment();
-  let at = 0;
-  for (const [a, b] of ranges) {
-    if (a > at) frag.append(node.data.slice(at, a));
-    frag.append(createSpan({ cls: "atlas-mention", text: node.data.slice(a, b) }));
-    at = b;
-  }
-  if (at < node.data.length) frag.append(node.data.slice(at));
-  node.replaceWith(frag);
-}
 
 // src/repo.ts
-var import_obsidian5 = require("obsidian");
-var RepoPanel = class extends import_obsidian5.MarkdownRenderChild {
+var import_obsidian3 = require("obsidian");
+var RepoPanel = class extends import_obsidian3.MarkdownRenderChild {
   constructor(containerEl, plugin, id, branch) {
     super(containerEl);
     this.plugin = plugin;
@@ -1003,7 +715,7 @@ function repoFields(plugin, id, sourcePath) {
   const fm = own ? cache.getFileCache(own)?.frontmatter : void 0;
   if (fm?.id === id) return fm;
   for (const f of plugin.app.vault.getMarkdownFiles()) {
-    if (!f.path.startsWith("wiki/documents/")) continue;
+    if (!isDocumentPath(f.path)) continue;
     const other = cache.getFileCache(f)?.frontmatter;
     if (other?.id === id) return other;
   }
@@ -1011,7 +723,7 @@ function repoFields(plugin, id, sourcePath) {
 }
 
 // src/sessions.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian4 = require("obsidian");
 var import_os3 = require("os");
 
 // src/agents.ts
@@ -1274,14 +986,14 @@ async function sessionGroups(app, staleHours) {
 async function resume(plugin, s) {
   const id = s.harness_id.trim();
   if (!id || s.parent) {
-    new import_obsidian6.Notice("Atlas: this session has no conversation of its own to resume.");
+    new import_obsidian4.Notice("Atlas: this session has no conversation of its own to resume.");
     return;
   }
   let target = { harness: s.harness, id, cwd: expandHome(s.cwd, (0, import_os3.homedir)()), configDir: "" };
   if (s.harness !== "codex") {
     const transcript = findTranscript(s.transcript, id);
     if (!transcript) {
-      new import_obsidian6.Notice("Atlas: Claude Code has no saved conversation for this session, so it cannot resume.", 8e3);
+      new import_obsidian4.Notice("Atlas: Claude Code has no saved conversation for this session, so it cannot resume.", 8e3);
       return;
     }
     const place = resumePlace(transcript);
@@ -1290,7 +1002,7 @@ async function resume(plugin, s) {
   await plugin.runInTerminal(resumeCommand(target), "the resume command");
 }
 var STATE_CLASS = { "needs you": "waiting", working: "working", idle: "idle", ended: "ended", lost: "ended" };
-var SessionsView = class extends import_obsidian6.ItemView {
+var SessionsView = class extends import_obsidian4.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -1368,20 +1080,16 @@ var SessionsView = class extends import_obsidian6.ItemView {
 };
 
 // src/settings.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian5 = require("obsidian");
 var import_os4 = require("os");
 var shortHome = (p) => p.startsWith((0, import_os4.homedir)() + "/") ? "~" + p.slice((0, import_os4.homedir)().length) : p;
 var DEFAULT_SETTINGS = {
   binaryPath: "",
   syncOnChange: true,
-  badges: true,
-  viewFolders: true,
   tagClick: false,
-  graphColors: "tag",
-  graphOwned: [],
-  focusTags: []
+  snapshotQuietSeconds: SNAPSHOT_QUIET_DEFAULT
 };
-var AtlasSettingTab = class extends import_obsidian7.PluginSettingTab {
+var AtlasSettingTab = class extends import_obsidian5.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -1391,7 +1099,7 @@ var AtlasSettingTab = class extends import_obsidian7.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const found = findBinary("");
-    const binary = new import_obsidian7.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
+    const binary = new import_obsidian5.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
       (text) => text.setPlaceholder(found ?? "Not found").setValue(this.plugin.settings.binaryPath).onChange(async (value) => {
         this.plugin.settings.binaryPath = value.trim();
         await this.plugin.saveSettings();
@@ -1412,40 +1120,31 @@ var AtlasSettingTab = class extends import_obsidian7.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian7.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
+    new import_obsidian5.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian7.Setting(containerEl).setName("Badges in the file explorer").setDesc("Shows the status of each session.").addToggle(
-      (toggle) => toggle.setValue(this.plugin.settings.badges).onChange(async (value) => {
-        this.plugin.settings.badges = value;
-        await this.plugin.saveSettings();
-        this.plugin.badges.setEnabled(value);
-      })
-    );
-    new import_obsidian7.Setting(containerEl).setName("Open a tag's view from its folder").setDesc("In the file explorer, a click on a folder under views/tags opens the tag's view, and the view itself is hidden inside the folder.").addToggle(
-      (toggle) => toggle.setValue(this.plugin.settings.viewFolders).onChange(async (value) => {
-        this.plugin.settings.viewFolders = value;
-        await this.plugin.saveSettings();
-        this.plugin.viewFolders.setEnabled(value);
-      })
-    );
-    new import_obsidian7.Setting(containerEl).setName("Open a tag in the Atlas navigator").setDesc("A click on a #tag in a note opens the Atlas navigator at that tag, in place of Obsidian's search.").addToggle(
+    new import_obsidian5.Setting(containerEl).setName("Snapshot after a quiet period").setDesc("Seconds with no file change before Atlas commits your edits to the vault's history. 0 turns it off.").addText((text) => {
+      text.inputEl.type = "number";
+      text.inputEl.min = "0";
+      text.setPlaceholder(String(DEFAULT_SETTINGS.snapshotQuietSeconds)).setValue(String(this.plugin.settings.snapshotQuietSeconds));
+      text.inputEl.addEventListener("change", async () => {
+        const seconds = quietSeconds(text.getValue());
+        text.setValue(String(seconds));
+        await this.plugin.setSnapshotQuiet(seconds);
+      });
+    });
+    new import_obsidian5.Setting(containerEl).setName("Open a tag in the Atlas navigator").setDesc("A click on a #tag in a note opens the Atlas navigator at that tag, in place of Obsidian's search.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.tagClick).onChange(async (value) => {
         this.plugin.settings.tagClick = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian7.Setting(containerEl).setName("Agents").setHeading();
+    new import_obsidian5.Setting(containerEl).setName("Agents").setHeading();
     const agents = containerEl.createDiv();
     void this.agents(agents);
-    new import_obsidian7.Setting(containerEl).setName("Graph").setHeading();
-    new import_obsidian7.Setting(containerEl).setName("Graph colors").setDesc("Colors the nodes of the graph by top tag, by the navigator's tags, by type, or by how recently they changed. The graph view has the same buttons.").addDropdown((dropdown) => {
-      for (const { mode, label } of GRAPH_MODES) dropdown.addOption(mode, label);
-      dropdown.setValue(this.plugin.settings.graphColors).onChange((value) => void this.plugin.graphColors.setMode(value));
-    });
   }
   /**
    * The agent preferences, from the binary: one group for every vault, one for this vault.
@@ -1467,34 +1166,34 @@ var AtlasSettingTab = class extends import_obsidian7.PluginSettingTab {
       try {
         await this.plugin.setPreference(key, value, global);
       } catch (e) {
-        new import_obsidian7.Notice(`Atlas: ${e.message}`, 8e3);
+        new import_obsidian5.Notice(`Atlas: ${e.message}`, 8e3);
       }
       void this.agents(el);
     };
     const group = (name, global) => {
-      new import_obsidian7.Setting(el).setName(name).setHeading();
+      new import_obsidian5.Setting(el).setName(name).setHeading();
       const own = global ? config.global : config.vault;
-      const same2 = (key, label) => global ? "" : `Same as all vaults (${label || inherited(config, key)})`;
-      new import_obsidian7.Setting(el).setName("Agent").addDropdown((d) => {
-        if (!global) d.addOption("", same2("agent", AGENT_NAMES[inherited(config, "agent")]));
+      const same = (key, label) => global ? "" : `Same as all vaults (${label || inherited(config, key)})`;
+      new import_obsidian5.Setting(el).setName("Agent").addDropdown((d) => {
+        if (!global) d.addOption("", same("agent", AGENT_NAMES[inherited(config, "agent")]));
         for (const a of AGENTS) d.addOption(a, AGENT_NAMES[a]);
         d.setValue(preference(own, "agent") || (global ? "claude" : "")).onChange((v) => void set("agent", v, global));
       });
       for (const a of AGENTS) {
         const key = `agent_commands.${a}`;
-        new import_obsidian7.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
+        new import_obsidian5.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
           t.setPlaceholder(global ? a : inherited(config, key)).setValue(preference(own, key));
           t.inputEl.addEventListener("change", () => void set(key, t.getValue(), global));
         });
       }
-      new import_obsidian7.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
-        if (!global) d.addOption("", same2("terminal", TERMINAL_NAMES[inherited(config, "terminal")]));
+      new import_obsidian5.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
+        if (!global) d.addOption("", same("terminal", TERMINAL_NAMES[inherited(config, "terminal")]));
         for (const t of TERMINALS) d.addOption(t, TERMINAL_NAMES[t]);
         d.setValue(preference(own, "terminal") || (global ? "terminal" : "")).onChange((v) => void set("terminal", v, global));
       });
       const terminal = preference(own, "terminal") || inherited(config, "terminal");
       if (terminal === "custom") {
-        new import_obsidian7.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
+        new import_obsidian5.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
           t.setPlaceholder(global ? "" : inherited(config, "terminal_command")).setValue(preference(own, "terminal_command"));
           t.inputEl.addEventListener("change", () => void set("terminal_command", t.getValue(), global));
         });
@@ -1506,14 +1205,14 @@ var AtlasSettingTab = class extends import_obsidian7.PluginSettingTab {
 };
 
 // src/tagnav.ts
-var import_obsidian8 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 var TAG_NAV_VIEW = "atlas-tag-navigator";
 var NAV_ICON = "compass";
 var MAX_WITH = 30;
 function tagDocs(app) {
   const out = [];
   for (const file of app.vault.getMarkdownFiles()) {
-    if (!file.path.startsWith("wiki/documents/")) continue;
+    if (!isDocumentPath(file.path)) continue;
     const fm = app.metadataCache.getFileCache(file)?.frontmatter;
     if (!fm || !isDocumentType(fm.type)) continue;
     const own = asList(fm.tags).map(normalTag);
@@ -1530,18 +1229,12 @@ function tagDocs(app) {
   }
   return out;
 }
-var TagNavigator = class extends import_obsidian8.ItemView {
-  constructor(leaf, onChoose = () => {
-  }, onGraph = () => {
-  }) {
-    super(leaf);
-    this.onChoose = onChoose;
-    this.onGraph = onGraph;
-  }
-  onChoose;
-  onGraph;
+var TagNavigator = class extends import_obsidian6.ItemView {
   chosen = [];
-  rerender = (0, import_obsidian8.debounce)(() => this.render(), 500, true);
+  rerender = (0, import_obsidian6.debounce)(() => this.render(), 500, true);
+  constructor(leaf) {
+    super(leaf);
+  }
   getViewType() {
     return TAG_NAV_VIEW;
   }
@@ -1579,7 +1272,6 @@ var TagNavigator = class extends import_obsidian8.ItemView {
     this.render();
   }
   render() {
-    this.onChoose([...this.chosen]);
     const root = this.contentEl;
     root.empty();
     root.addClass("atlas-tagnav");
@@ -1611,9 +1303,6 @@ var TagNavigator = class extends import_obsidian8.ItemView {
     const search = view.createEl("button", { text: "Search" });
     search.setAttr("aria-label", "Find these documents in Obsidian's search");
     search.onclick = () => this.openSearch();
-    const graph = view.createEl("button", { text: "Graph" });
-    graph.setAttr("aria-label", "Color these documents in the graph");
-    graph.onclick = () => this.onGraph();
     const page = view.createEl("button", { text: "Tag view" });
     page.setAttr("aria-label", "Open the view of #" + this.chosen[this.chosen.length - 1]);
     page.onclick = () => void this.openView(this.chosen[this.chosen.length - 1]);
@@ -1633,7 +1322,7 @@ var TagNavigator = class extends import_obsidian8.ItemView {
         row.createSpan({ cls: "atlas-tagnav-doc-meta", text: meta });
         row.onclick = (evt) => {
           const file = this.app.vault.getAbstractFileByPath(d.path);
-          if (file instanceof import_obsidian8.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
+          if (file instanceof import_obsidian6.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
         };
       }
     }
@@ -1658,58 +1347,7 @@ var TagNavigator = class extends import_obsidian8.ItemView {
   }
   async openView(tag) {
     const file = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
-    if (file instanceof import_obsidian8.TFile) await this.app.workspace.getLeaf(false).openFile(file);
-  }
-};
-
-// src/viewfolders.ts
-var import_obsidian9 = require("obsidian");
-var ViewFolders = class extends import_obsidian9.Component {
-  constructor(app) {
-    super();
-    this.app = app;
-  }
-  app;
-  style = null;
-  enabled = false;
-  refresh = (0, import_obsidian9.debounce)(() => this.apply(), 300, true);
-  onload() {
-    this.style = document.head.createEl("style", { attr: { id: "atlas-view-folders" } });
-    this.registerEvent(this.app.vault.on("create", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("delete", () => this.refresh()));
-    this.registerEvent(this.app.vault.on("rename", () => this.refresh()));
-    this.registerDomEvent(document, "click", (evt) => this.onClick(evt), { capture: true });
-    this.app.workspace.onLayoutReady(() => this.refresh());
-  }
-  onunload() {
-    this.style?.remove();
-    this.style = null;
-  }
-  setEnabled(on) {
-    this.enabled = on;
-    this.apply();
-  }
-  apply() {
-    if (!this.style) return;
-    const rules = [
-      `.nav-folder-title[data-path^="views/tags/"] .nav-folder-title-content { font-weight: var(--font-semibold); }`
-    ];
-    if (this.enabled) {
-      rules.push(`.nav-folder-title[data-path^="views/tags/"] { cursor: pointer; }`);
-      for (const file of this.app.vault.getMarkdownFiles()) {
-        if (isTagView(file.path)) rules.push(`.nav-file-title[data-path=${cssString(file.path)}] { display: none; }`);
-      }
-    }
-    this.style.textContent = rules.join("\n");
-  }
-  onClick(evt) {
-    if (!this.enabled || !(evt.target instanceof Element)) return;
-    if (evt.target.closest(".nav-folder-collapse-indicator")) return;
-    const title = evt.target.closest(".nav-folder-title");
-    const tag = tagOfFolder(title?.getAttribute("data-path") ?? "");
-    if (!tag) return;
-    const note = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
-    if (note instanceof import_obsidian9.TFile) void this.app.workspace.getLeaf(import_obsidian9.Keymap.isModEvent(evt)).openFile(note);
+    if (file instanceof import_obsidian6.TFile) await this.app.workspace.getLeaf(false).openFile(file);
   }
 };
 
@@ -1717,48 +1355,33 @@ var ViewFolders = class extends import_obsidian9.Component {
 var SYNC_DELAY = 2e3;
 var LEGACY_KEYS = ["agentCommand", "terminal", "terminalCommand"];
 var ECHO_WINDOW = 5e3;
-var AtlasPlugin = class extends import_obsidian10.Plugin {
+var AtlasPlugin = class extends import_obsidian7.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   /** The agent settings of 8.0.2, kept in data.json until they move to the vault's config file. */
   legacy = null;
-  badges;
-  viewFolders;
-  graphColors;
   syncing = false;
   syncTimer = null;
   pending = /* @__PURE__ */ new Set();
   echoes = /* @__PURE__ */ new Set();
   echoUntil = 0;
   lastAutoError = "";
+  /** Commits the user's edits after a quiet period. */
+  snapshots = new QuietTimer(
+    { set: (fn, ms) => window.setTimeout(fn, ms), clear: (h) => window.clearTimeout(h) },
+    () => this.snapshot(),
+    0
+  );
+  lastSnapshotError = "";
   sessionsRibbon = null;
   statusItem = null;
   async onload() {
     await this.loadSettings();
     this.addSettingTab(new AtlasSettingTab(this.app, this));
-    this.badges = this.addChild(new Badges(this.app));
-    this.badges.setEnabled(this.settings.badges);
-    this.addChild(new ChangeBar(this));
-    this.viewFolders = this.addChild(new ViewFolders(this.app));
-    this.viewFolders.setEnabled(this.settings.viewFolders);
     this.registerMarkdownCodeBlockProcessor("atlas-repo", repoProcessor(this));
-    this.graphColors = this.addChild(new GraphColors(this));
-    for (const { mode, label } of GRAPH_MODES) {
-      this.addCommand({
-        id: `graph-colors-${mode}`,
-        name: mode === "off" ? "Stop coloring the graph" : `Color the graph by ${label.toLowerCase()}`,
-        callback: () => void this.graphColors.setMode(mode)
-      });
-    }
+    this.registerMarkdownCodeBlockProcessor("atlas-change", changeProcessor(this, new ChangeRunner(this)));
     this.addRibbonIcon("refresh-cw", "Atlas: sync the vault", () => void this.sync(true));
     this.addCommand({ id: "sync", name: "Sync the vault", callback: () => void this.sync(true) });
-    this.registerView(
-      TAG_NAV_VIEW,
-      (leaf) => new TagNavigator(
-        leaf,
-        (tags) => void this.graphColors.setFocus(tags),
-        () => void this.focusGraph()
-      )
-    );
+    this.registerView(TAG_NAV_VIEW, (leaf) => new TagNavigator(leaf));
     this.addRibbonIcon(NAV_ICON, "Atlas: open the Atlas navigator", () => void this.openTags());
     this.addCommand({ id: "open-tags", name: "Open the Atlas navigator", callback: () => void this.openTags() });
     this.registerDomEvent(document, "click", (evt) => this.onTagClick(evt), { capture: true });
@@ -1770,9 +1393,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     this.statusItem = this.addStatusBarItem();
     this.statusItem.addClass("atlas-status-waiting");
     this.statusItem.onClickEvent(() => void this.openSessions());
-    this.addCommand({ id: "migrate", name: "Migrate this vault to the 9.0 layout", callback: () => void this.migrate() });
-    this.registerEditorExtension(mentionEditor);
-    this.registerMarkdownPostProcessor(mentionReading);
+    this.addCommand({ id: "migrate", name: `Migrate this vault to the ${layoutName(LAYOUT)} layout`, callback: () => void this.migrate() });
     this.registerEvent(
       this.app.metadataCache.on("changed", (file) => {
         if (file.path.startsWith("sessions/")) this.refreshSessions();
@@ -1797,6 +1418,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
       this.refreshSessions();
       this.checkLayout();
       void this.moveLegacyPreferences();
+      this.watchForSnapshots();
     });
     const first = this.app.metadataCache.on("resolved", () => {
       this.app.metadataCache.offref(first);
@@ -1806,13 +1428,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   }
   onunload() {
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
-  }
-  /** Colors the graph by the navigator's tags, and opens the graph. */
-  async focusGraph() {
-    await this.graphColors.setMode("focus");
-    const open = this.app.workspace.getLeavesOfType("graph")[0];
-    if (open) this.app.workspace.revealLeaf(open);
-    else this.app.commands?.executeCommandById?.("graph:open");
+    this.snapshots.stop();
   }
   async loadSettings() {
     const saved = await this.loadData();
@@ -1822,12 +1438,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     for (const key of Object.keys(DEFAULT_SETTINGS)) {
       if (saved && saved[key] !== void 0) this.settings[key] = saved[key];
     }
-    if (saved?.folderPages !== void 0 && saved.viewFolders === void 0) this.settings.viewFolders = saved.folderPages;
-    if (!isGraphMode(this.settings.graphColors)) this.settings.graphColors = DEFAULT_SETTINGS.graphColors;
-    for (const key of ["graphOwned", "focusTags"]) {
-      const list = this.settings[key];
-      this.settings[key] = Array.isArray(list) ? list.filter((x) => typeof x === "string") : [];
-    }
+    this.settings.snapshotQuietSeconds = quietSeconds(this.settings.snapshotQuietSeconds);
   }
   async saveSettings() {
     await this.saveData({ ...this.legacy, ...this.settings });
@@ -1835,7 +1446,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   /** Runs one atlas command in this vault and returns its JSON. */
   atlas(args) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian10.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian7.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args);
@@ -1844,7 +1455,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   /** A manual sync runs every step; an automatic one runs the steps that read no git. */
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian10.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian7.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -1857,11 +1468,11 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
       const out = await this.atlas(args);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian10.Notice(`Atlas: ${syncSummary(out.synced)}`);
-      for (const line of strayNotices(out.synced)) new import_obsidian10.Notice(`Atlas: ${line}`, 0);
+      if (manual) new import_obsidian7.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      for (const line of strayNotices(out.synced)) new import_obsidian7.Notice(`Atlas: ${line}`, 0);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian10.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian7.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -1895,6 +1506,42 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
       void this.sync(false);
     }, SYNC_DELAY);
   }
+  // Quiet snapshots
+  /** Counts file events from now on: the events of Obsidian's first load are not edits. */
+  watchForSnapshots() {
+    const touch = (...paths) => {
+      if (paths.some((p) => isSnapshotPath(p, this.app.vault.configDir))) this.snapshots.touch();
+    };
+    this.registerEvent(this.app.vault.on("create", (f) => touch(f.path)));
+    this.registerEvent(this.app.vault.on("modify", (f) => touch(f.path)));
+    this.registerEvent(this.app.vault.on("delete", (f) => touch(f.path)));
+    this.registerEvent(this.app.vault.on("rename", (f, oldPath) => touch(f.path, oldPath)));
+    this.snapshots.setQuiet(this.settings.snapshotQuietSeconds * 1e3);
+    this.snapshots.touch();
+  }
+  async setSnapshotQuiet(seconds) {
+    this.settings.snapshotQuietSeconds = seconds;
+    await this.saveSettings();
+    if (this.app.workspace.layoutReady) this.snapshots.setQuiet(seconds * 1e3);
+  }
+  /**
+   * Commits the hand edits as one snapshot. It shows no notice: a held lock tries again
+   * after the next quiet period, and any other failure waits for the next edit.
+   */
+  async snapshot() {
+    if (!this.migrated()) return false;
+    try {
+      await this.atlas(["vault", "snapshot"]);
+      this.lastSnapshotError = "";
+      return false;
+    } catch (e) {
+      const message = e.message;
+      if (isLockHeld(message)) return true;
+      if (message !== this.lastSnapshotError) console.warn(`Atlas: the snapshot failed: ${message}`);
+      this.lastSnapshotError = message;
+      return false;
+    }
+  }
   // Layout
   /** The layout the vault document records; this plugin's when there is none to read. */
   layout() {
@@ -1902,20 +1549,21 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     if (!atlas) return LAYOUT;
     return layoutOf(this.app.metadataCache.getFileCache(atlas)?.frontmatter);
   }
-  /** Whether the vault has the 9.0 layout. */
+  /** Whether the vault has the layout this plugin reads. */
   migrated() {
     return this.layout() >= LAYOUT;
   }
   checkLayout() {
     if (this.migrated()) return;
-    const notice = new import_obsidian10.Notice("", 0);
+    const notice = new import_obsidian7.Notice("", 0);
     const el = notice.messageEl;
     const layout = this.layout();
-    if (layout < 4) {
-      el.createDiv({ text: `Atlas: this vault has the ${layoutName(layout)} layout. This plugin needs the 9.0 layout. Migrate the vault to 8.x with Atlas 8.1.1 first.` });
+    const needs = `Atlas: this vault has the ${layoutName(layout)} layout. This plugin needs the ${layoutName(LAYOUT)} layout.`;
+    if (layout < MIGRATES_FROM) {
+      el.createDiv({ text: `${needs} Migrate the vault to 8.x with Atlas 8.1.1 first.` });
       return;
     }
-    el.createDiv({ text: `Atlas: this vault has the ${layoutName(layout)} layout. This plugin needs the 9.0 layout.` });
+    el.createDiv({ text: needs });
     const button = el.createEl("button", { text: "Show the migration", cls: "mod-cta atlas-notice-button" });
     button.onclick = () => {
       notice.hide();
@@ -1925,16 +1573,17 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   async migrate() {
     try {
       const report = await this.atlas(["vault", "migrate", "--dry-run"]);
-      new MigrationModal(this.app, report, async () => {
+      new MigrationModal(this.app, report, this.layout(), async () => {
         try {
           const done = await this.atlas(["vault", "migrate"]);
-          new import_obsidian10.Notice(`Atlas: migrated in one commit, ${String(done.commit ?? "").slice(0, 7)}.${done.problems ? ` Lint finds ${done.problems} errors.` : ""}`, 1e4);
+          new import_obsidian7.Notice(`Atlas: ${migrationSummary(done)}`, 1e4);
+          for (const line of strayNotices(done)) new import_obsidian7.Notice(`Atlas: ${line}`, 0);
         } catch (e) {
-          new import_obsidian10.Notice(`Atlas: ${e.message}`, 1e4);
+          new import_obsidian7.Notice(`Atlas: ${e.message}`, 1e4);
         }
       }).open();
     } catch (e) {
-      new import_obsidian10.Notice(`Atlas: ${e.message}`, 1e4);
+      new import_obsidian7.Notice(`Atlas: ${e.message}`, 1e4);
     }
   }
   // Tags
@@ -1972,7 +1621,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian10.debounce)(
+  refreshSessions = (0, import_obsidian7.debounce)(
     () => {
       void sessionGroups(this.app, this.staleHours()).then(({ groups }) => {
         const waiting = groups.open.filter((s) => s.state === "needs you").length;
@@ -2025,21 +1674,21 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
         await openTerminal(prefs.terminal, command, prefs.terminal_command);
         return;
       } catch (e) {
-        new import_obsidian10.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
+        new import_obsidian7.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
       }
     }
     await navigator.clipboard.writeText(command);
-    new import_obsidian10.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
+    new import_obsidian7.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
   }
   /** Starts the agent in the vault. */
   async startAgent() {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian10.FileSystemAdapter)) return;
+    if (!(adapter instanceof import_obsidian7.FileSystemAdapter)) return;
     let config;
     try {
       config = await this.agentConfig();
     } catch (e) {
-      new import_obsidian10.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
+      new import_obsidian7.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
       return;
     }
     await this.runInTerminal(startCommand(adapter.getBasePath(), config.preferences.agent_command), "the agent command", config);
@@ -2056,27 +1705,37 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     await workspace.revealLeaf(leaf);
   }
 };
-var MigrationModal = class extends import_obsidian10.Modal {
-  constructor(app, report, run) {
+var MigrationModal = class extends import_obsidian7.Modal {
+  constructor(app, report, layout, run) {
     super(app);
     this.report = report;
+    this.layout = layout;
     this.run = run;
   }
   report;
+  layout;
   run;
   onOpen() {
     const r = this.report;
-    this.setTitle("Migrate to the 9.0 layout");
+    const from = r.from || layoutName(this.layout);
+    this.setTitle(`Migrate to the ${layoutName(LAYOUT)} layout`);
     const el = this.contentEl;
     el.addClass("atlas-migration");
-    el.createEl("p", { text: `The migration of ${r.vault} moves the thread documents of 8.x (stubs, specs, task lists, verifications, chords, and events) and the chord canvases to threads/, an archive that Atlas does not own. It is one commit; git revert takes it back.` });
-    const warnings = r.warnings ?? [];
-    if (warnings.length > 0) {
+    el.createEl("p", { text: `The migration moves ${r.vault} from the ${from} layout to the ${layoutName(LAYOUT)} layout in one commit. git revert takes it back. It:` });
+    const steps = el.createEl("ul");
+    for (const step of migrationSteps(this.layout)) steps.createEl("li", { text: step });
+    const list = (items, title, line) => {
+      if (!items || items.length === 0) return;
       const d = el.createEl("details");
-      d.createEl("summary", { text: `Warnings (${warnings.length})` });
+      d.createEl("summary", { text: `${title} (${items.length})` });
       const ul = d.createEl("ul");
-      for (const w of warnings) ul.createEl("li", { text: w });
-    }
+      for (const item of items) ul.createEl("li", { text: line(item) });
+    };
+    const move = (m) => `${m.from} \u2192 ${m.to}`;
+    list(r.moved, "Files to move", move);
+    list(r.edited, "Files to edit", (p) => p);
+    list(r.strays, "Your notes in views/, to move to ingest/", move);
+    list(r.warnings, "Warnings", (w) => w);
     const buttons = el.createDiv({ cls: "atlas-migration-buttons" });
     buttons.createEl("button", { text: "Cancel" }).onclick = () => this.close();
     const go = buttons.createEl("button", { text: "Migrate", cls: "mod-cta" });

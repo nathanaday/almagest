@@ -46,13 +46,13 @@ func write(v *vault.Vault, rel string) (err error) {
 	return err
 }
 
-// linkOut makes wiki/documents/Linked.md a link to a topic outside the vault, so the next
+// linkOut makes source-core/documents/Linked.md a link to a topic outside the vault, so the next
 // sync of derived parts fails.
 func linkOut(t *testing.T, tv *testvault.T) {
 	t.Helper()
 	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
 	tv.WriteFile(filepath.Join(away, "Linked.md"), "---\nid: doc-linked\ntype: topic\nkind: concept\ndescription: x\n---\n\n## Definition\n\nx\n")
-	if err := os.Symlink(filepath.Join(away, "Linked.md"), tv.V.Abs("wiki/documents/Linked.md")); err != nil {
+	if err := os.Symlink(filepath.Join(away, "Linked.md"), tv.V.Abs("source-core/documents/Linked.md")); err != nil {
 		t.Fatal(err)
 	}
 	tv.Commit()
@@ -64,7 +64,7 @@ func TestAnApplyWhoseCommitFailsStaysProposed(t *testing.T) {
 	// With the proposal committed, the write starts clean and the lock bites at its commit.
 	tv.Commit()
 	proposed := tv.Read(pv.Ref.Path)
-	topic := tv.Read("wiki/documents/Motion scoring.md")
+	topic := tv.Read("source-core/documents/Motion scoring.md")
 	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -74,7 +74,7 @@ func TestAnApplyWhoseCommitFailsStaysProposed(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "the vault is back as it was") {
 		t.Fatalf("apply with the index locked: %v", err)
 	}
-	if tv.Read(pv.Ref.Path) != proposed || tv.Read("wiki/documents/Motion scoring.md") != topic || tv.V.Exists("wiki/documents/Radar.md") {
+	if tv.Read(pv.Ref.Path) != proposed || tv.Read("source-core/documents/Motion scoring.md") != topic || tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatal("the failed apply left files changed")
 	}
 	apply(t, tv, pv.Ref.ID)
@@ -87,7 +87,7 @@ func TestAnApplyWhoseCommitFailsStaysProposed(t *testing.T) {
 func TestACrashBeforeTheCommitIsPutBack(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
-	before := tv.Read("wiki/documents/Motion scoring.md")
+	before := tv.Read("source-core/documents/Motion scoring.md")
 	apply(t, tv, pv.Ref.ID)
 	final := tv.Read(pv.Ref.Path)
 	git := func(args ...string) {
@@ -98,9 +98,9 @@ func TestACrashBeforeTheCommitIsPutBack(t *testing.T) {
 	}
 	git("reset", "-q", "--soft", "HEAD~1")
 	git("reset", "-q")
-	tv.Write(pv.Ref.Path, doc.SetField(final, "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"}))
+	tv.Write(pv.Ref.Path, doc.SetField(final, "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"}))
 	nextWrite(t, tv)
-	if tv.Read("wiki/documents/Motion scoring.md") != before || tv.V.Exists("wiki/documents/Radar.md") {
+	if tv.Read("source-core/documents/Motion scoring.md") != before || tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatal("recovery did not put the documents back")
 	}
 	got := tv.Read(pv.Ref.Path)
@@ -118,13 +118,13 @@ func TestACrashAfterTheCommitIsFinished(t *testing.T) {
 	pv, _ := crashPlan(t, tv)
 	apply(t, tv, pv.Ref.ID)
 	applied := tv.Read(pv.Ref.Path)
-	inFlight := doc.SetField(applied, "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	inFlight := doc.SetField(applied, "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 	tv.Write(pv.Ref.Path, inFlight)
 	nextWrite(t, tv)
 	if got := tv.Read(pv.Ref.Path); got != applied {
 		t.Fatalf("recovery did not finish the change:\n%s", got)
 	}
-	if !strings.Contains(tv.Read("wiki/documents/Motion scoring.md"), "New.") || !tv.V.Exists("wiki/documents/Radar.md") {
+	if !strings.Contains(tv.Read("source-core/documents/Motion scoring.md"), "New.") || !tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatal("recovery took back the applied documents")
 	}
 	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err != nil {
@@ -151,23 +151,23 @@ func TestAnAppliedChangeHoldsNoPaths(t *testing.T) {
 func TestRecoveryKeepsAnEditMadeAfterTheCrash(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
-	before := tv.Read("wiki/documents/Motion scoring.md")
-	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applying"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	before := tv.Read("source-core/documents/Motion scoring.md")
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applying"), "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 	tv.Write(pv.Ref.Path, content)
-	tv.Write("wiki/documents/Motion scoring.md", before+"\nA paragraph the user wrote after the crash.\n")
+	tv.Write("source-core/documents/Motion scoring.md", before+"\nA paragraph the user wrote after the crash.\n")
 	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
 		t.Fatal(err)
 	}
-	if got := tv.Read("wiki/documents/Motion scoring.md"); strings.Contains(got, "after the crash") {
+	if got := tv.Read("source-core/documents/Motion scoring.md"); strings.Contains(got, "after the crash") {
 		t.Fatalf("the file was not put back:\n%s", got)
 	}
 	if got := tv.Read(pv.Ref.Path); !strings.Contains(got, "status: proposed") || strings.Contains(got, "paths:") {
 		t.Fatalf("the change is not proposed again:\n%s", got)
 	}
-	if tv.V.Exists("wiki/documents/Radar.md") {
+	if tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatal("the created document stayed")
 	}
-	out, err := exec.Command("git", "-C", tv.V.Root, "log", "-p", "--", "wiki/documents/Motion scoring.md").CombinedOutput()
+	out, err := exec.Command("git", "-C", tv.V.Root, "log", "-p", "--", "source-core/documents/Motion scoring.md").CombinedOutput()
 	if err != nil || !strings.Contains(string(out), "+A paragraph the user wrote after the crash.") || !strings.Contains(string(out), "recovery: ") {
 		t.Fatalf("git does not keep the paragraph:\n%s %v", out, err)
 	}
@@ -180,10 +180,10 @@ func TestTheRecoveryCommitHoldsOnlyItsPaths(t *testing.T) {
 	pv, _ := crashPlan(t, tv)
 	tv.Commit()
 	content := tv.Read(pv.Ref.Path)
-	inFlight := doc.SetField(doc.SetField(content, "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	inFlight := doc.SetField(doc.SetField(content, "status", "applied"), "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 	tv.Write(pv.Ref.Path, inFlight)
-	tv.Write("wiki/documents/Motion scoring.md", "half written")
-	tv.Write("wiki/documents/Radar.md", "half written")
+	tv.Write("source-core/documents/Motion scoring.md", "half written")
+	tv.Write("source-core/documents/Radar.md", "half written")
 	if err := tv.V.Git().StageContent(pv.Ref.Path, []byte(doc.SetField(content, "status", "applied"))); err != nil {
 		t.Fatal(err)
 	}
@@ -195,7 +195,7 @@ func TestTheRecoveryCommitHoldsOnlyItsPaths(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := strings.Split(strings.TrimSpace(string(out)), "\n")
-	if strings.Join(got, "|") != "wiki/documents/Motion scoring.md|wiki/documents/Radar.md" {
+	if strings.Join(got, "|") != "source-core/documents/Motion scoring.md|source-core/documents/Radar.md" {
 		t.Fatalf("the recovery commit holds:\n%s", out)
 	}
 	if staged, err := exec.Command("git", "-C", tv.V.Root, "diff", "--cached", "--name-only").CombinedOutput(); err != nil || strings.TrimSpace(string(staged)) != "" {
@@ -206,10 +206,10 @@ func TestTheRecoveryCommitHoldsOnlyItsPaths(t *testing.T) {
 func TestRecoveryLeavesNothingStaged(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
-	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applying"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applying"), "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 	tv.Write(pv.Ref.Path, content)
-	tv.Write("wiki/documents/Motion scoring.md", "half written")
-	tv.Write("wiki/documents/Radar.md", "half written")
+	tv.Write("source-core/documents/Motion scoring.md", "half written")
+	tv.Write("source-core/documents/Radar.md", "half written")
 	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
 		t.Fatal(err)
 	}
@@ -226,7 +226,7 @@ func TestRecoveryKeepsAnEditOfTheChangeDocument(t *testing.T) {
 	pv, _ := crashPlan(t, tv)
 	apply(t, tv, pv.Ref.ID)
 	applied := tv.Read(pv.Ref.Path)
-	inFlight := doc.SetField(applied, "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	inFlight := doc.SetField(applied, "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 	tv.Write(pv.Ref.Path, inFlight+"\nA line the user added after the crash.\n")
 	nextWrite(t, tv)
 	if got := tv.Read(pv.Ref.Path); got != applied {
@@ -243,12 +243,12 @@ func TestAnUndoThatFailsLeavesNothingStaged(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
 	apply(t, tv, pv.Ref.ID)
-	topic := tv.Read("wiki/documents/Motion scoring.md")
+	topic := tv.Read("source-core/documents/Motion scoring.md")
 	linkOut(t, tv)
 	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err == nil || !strings.Contains(err.Error(), "Linked.md") || !strings.Contains(err.Error(), "the vault is back as it was before this call") {
 		t.Fatalf("the undo through a linked document: %v", err)
 	}
-	if tv.Read("wiki/documents/Motion scoring.md") != topic || !tv.V.Exists("wiki/documents/Radar.md") {
+	if tv.Read("source-core/documents/Motion scoring.md") != topic || !tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatal("the failed undo left files changed")
 	}
 	out, err := exec.Command("git", "-C", tv.V.Root, "diff", "--cached", "--name-only").CombinedOutput()
@@ -262,8 +262,8 @@ func TestAnUndoThatFailsLeavesNothingStaged(t *testing.T) {
 // the apply listed it before it wrote it.
 func TestACrashAfterTheDerivedSyncPutsTheSourceBack(t *testing.T) {
 	tv := testvault.New(t)
-	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[doc-aaaaaa.pdf]]", "media": "pdf", "origin": "inbox"}, "")
-	tv.Write("wiki/assets/doc-aaaaaa.pdf", "%PDF")
+	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[doc-aaaaaa.pdf]]", "media": "pdf", "origin": "ingest"}, "")
+	tv.Write("source-core/originals/doc-aaaaaa.pdf", "%PDF")
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Absorb", Absorbs: []string{src}, Writes: []change.Write{{Op: "create", Type: "topic", Kind: "entity", Title: "Radar", Fields: map[string]any{"description": "A sensor."}}}})
 	crashed := filepath.Join(t.TempDir(), "crashed")
@@ -274,7 +274,7 @@ func TestACrashAfterTheDerivedSyncPutsTheSourceBack(t *testing.T) {
 	})
 	defer change.SetBeforeApplyCommit(nil)
 	apply(t, tv, pv.Ref.ID)
-	if !strings.Contains(tv.Read("wiki/documents/DINOv2.md"), "status: absorbed") {
+	if !strings.Contains(tv.Read("source-core/documents/DINOv2.md"), "status: absorbed") {
 		t.Fatal("the apply did not absorb the source, so the test proves nothing")
 	}
 	v, err := vault.Open(crashed)
@@ -286,11 +286,11 @@ func TestACrashAfterTheDerivedSyncPutsTheSourceBack(t *testing.T) {
 	if err := write(v, "After.md"); err != nil {
 		t.Fatal(err)
 	}
-	got, _ := os.ReadFile(filepath.Join(crashed, "wiki/documents/DINOv2.md"))
+	got, _ := os.ReadFile(filepath.Join(crashed, "source-core/documents/DINOv2.md"))
 	if strings.Contains(string(got), "status: absorbed") || strings.Contains(string(got), "absorbed by") {
 		t.Fatalf("the source stays absorbed:\n%s", got)
 	}
-	if _, err := os.Stat(filepath.Join(crashed, "wiki/documents/Radar.md")); err == nil {
+	if _, err := os.Stat(filepath.Join(crashed, "source-core/documents/Radar.md")); err == nil {
 		t.Fatal("the created topic stayed")
 	}
 	doc, _ := os.ReadFile(filepath.Join(crashed, pv.Ref.Path))
@@ -310,23 +310,23 @@ func TestARecoveryStoppedPartwayFinishesNextTime(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+	content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 	tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", head))
-	tv.Write("wiki/documents/Motion scoring.md", "half written")
-	tv.Write("wiki/documents/Radar.md", "half written")
+	tv.Write("source-core/documents/Motion scoring.md", "half written")
+	tv.Write("source-core/documents/Radar.md", "half written")
 	// The state the first recovery left: its recovery commit of the crash state.
 	g := tv.V.Git()
-	if err := g.Add("wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"); err != nil {
+	if err := g.Add("source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := g.CommitOnly("recovery: 2 files as found after a crash", "wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"); err != nil {
+	if _, err := g.CommitOnly("recovery: 2 files as found after a crash", "source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"); err != nil {
 		t.Fatal(err)
 	}
 	if _, err := core.Sync(tv.V, tv.Tick(time.Minute), core.SyncOptions{}); err != nil {
 		t.Fatal(err)
 	}
 	// The sync also derives the topic's lead, so the test checks the text it put back.
-	if got := tv.Read("wiki/documents/Motion scoring.md"); !strings.Contains(got, "Old.") || strings.Contains(got, "half written") || tv.V.Exists("wiki/documents/Radar.md") {
+	if got := tv.Read("source-core/documents/Motion scoring.md"); !strings.Contains(got, "Old.") || strings.Contains(got, "half written") || tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatalf("the second recovery did not put the paths back:\n%s", got)
 	}
 	got := tv.Read(pv.Ref.Path)
@@ -342,7 +342,7 @@ func TestALandedApplysRecoveryStoppedPartwayFinishesNextTime(t *testing.T) {
 	pv, _ := crashPlan(t, tv)
 	apply(t, tv, pv.Ref.ID)
 	applied := tv.Read(pv.Ref.Path)
-	tv.Write(pv.Ref.Path, doc.SetField(applied, "paths", []string{"wiki/documents/Motion scoring.md"})+"\nAn edit after the crash.\n")
+	tv.Write(pv.Ref.Path, doc.SetField(applied, "paths", []string{"source-core/documents/Motion scoring.md"})+"\nAn edit after the crash.\n")
 	tv.Commit() // the state the first recovery left: the edited document in a commit
 	nextWrite(t, tv)
 	if got := tv.Read(pv.Ref.Path); got != applied {
@@ -357,13 +357,13 @@ func TestAFailedUndoKeepsASaveMadeDuringIt(t *testing.T) {
 	apply(t, tv, pv.Ref.ID)
 	linkOut(t, tv)
 	saved := "a save made while the undo ran\n"
-	change.SetAfterUndoRestore(func() { tv.Write("wiki/documents/Motion scoring.md", saved) })
+	change.SetAfterUndoRestore(func() { tv.Write("source-core/documents/Motion scoring.md", saved) })
 	defer change.SetAfterUndoRestore(nil)
 	_, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute))
 	if err == nil || !strings.Contains(err.Error(), "left as saved") || !strings.Contains(err.Error(), "Motion scoring.md") {
 		t.Fatalf("the failed undo: %v", err)
 	}
-	if got := tv.Read("wiki/documents/Motion scoring.md"); got != saved {
+	if got := tv.Read("source-core/documents/Motion scoring.md"); got != saved {
 		t.Fatalf("the save was rolled back:\n%s", got)
 	}
 }
@@ -382,15 +382,15 @@ func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
 			case "a commit outside the history":
 				value = strings.TrimSpace(git(t, tv.V.Root, "commit-tree", "HEAD^{tree}", "-m", "loose"))
 			}
-			content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md"})
+			content := doc.SetField(doc.SetField(tv.Read(pv.Ref.Path), "status", "applied"), "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md"})
 			tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", value))
-			tv.Write("wiki/documents/Motion scoring.md", "half written")
+			tv.Write("source-core/documents/Motion scoring.md", "half written")
 			head := git(t, tv.V.Root, "rev-parse", "HEAD")
 			err := write(tv.V, "After.md")
 			if err == nil || !strings.Contains(err.Error(), "not the full id of a commit") {
 				t.Fatalf("the write after recovering: %s: %v", value, err)
 			}
-			if tv.Read("wiki/documents/Motion scoring.md") != "half written" || git(t, tv.V.Root, "rev-parse", "HEAD") != head {
+			if tv.Read("source-core/documents/Motion scoring.md") != "half written" || git(t, tv.V.Root, "rev-parse", "HEAD") != head {
 				t.Fatal("recovery changed the vault")
 			}
 		})

@@ -62,7 +62,7 @@ func TestProposeThenApply(t *testing.T) {
 	if !strings.Contains(warnings, "id is code's") || !strings.Contains(warnings, "[[ViT]] resolves to nothing") {
 		t.Fatalf("warnings %v", pv.Warnings)
 	}
-	if tv.V.Exists("wiki/documents/p3-edge.md") {
+	if tv.V.Exists("source-core/documents/p3-edge.md") {
 		t.Fatal("propose writes no document")
 	}
 	content := tv.Read(pv.Ref.Path)
@@ -75,13 +75,13 @@ func TestProposeThenApply(t *testing.T) {
 	if applied.Status != "applied" || applied.Commit == "" {
 		t.Fatalf("applied %+v", applied)
 	}
-	topic := tv.Read("wiki/documents/Motion scoring.md")
+	topic := tv.Read("source-core/documents/Motion scoring.md")
 	for _, want := range []string{"type: topic", "kind: concept", "tags: [work/p3/p3-edge, ml]", "refreshed: 2026-09-27T14:34:00", "> [!concept] Draft · Concept", "## Definition"} {
 		if !strings.Contains(topic, want) {
 			t.Errorf("topic lacks %q:\n%s", want, topic)
 		}
 	}
-	rp := tv.Read("wiki/documents/p3-edge.md")
+	rp := tv.Read("source-core/documents/p3-edge.md")
 	for _, want := range []string{"defines: work/p3/p3-edge", "branch: ", "head: ", "> [!repository] `", "```atlas-repo", "## Knowledge"} {
 		if !strings.Contains(rp, want) {
 			t.Errorf("repository lacks %q:\n%s", want, rp)
@@ -124,10 +124,10 @@ func TestApplyRefusesADocumentChangedSinceTheProposal(t *testing.T) {
 	id := tv.Doc("topic", "Motion scoring", map[string]any{"kind": "concept"}, "## Definition\n\nOld.\n")
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Edit", Writes: []change.Write{{Op: "modify", ID: id, Body: str("## Definition\n\nNew.\n")}}})
-	tv.Write("wiki/documents/Motion scoring.md", tv.Read("wiki/documents/Motion scoring.md")+"hand edit\n")
+	tv.Write("source-core/documents/Motion scoring.md", tv.Read("source-core/documents/Motion scoring.md")+"hand edit\n")
 	_, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil)
 	var c *change.Conflict
-	if !errors.As(err, &c) || c.Paths[0] != "wiki/documents/Motion scoring.md" {
+	if !errors.As(err, &c) || c.Paths[0] != "source-core/documents/Motion scoring.md" {
 		t.Fatalf("conflict: %v", err)
 	}
 }
@@ -139,7 +139,7 @@ func TestASyncBetweenProposalAndApplyIsNoConflict(t *testing.T) {
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Describe", Writes: []change.Write{{Op: "modify", ID: id, Fields: map[string]any{"description": "The edge."}, Body: str("## What it is\n\nNew.\n")}}})
 	// A sync refreshes what code derives: a git fact, the lead callout, a code section.
-	rel := "wiki/documents/p3-edge.md"
+	rel := "source-core/documents/p3-edge.md"
 	synced := strings.Replace(strings.Replace(tv.Read(rel), "head: aaaaaaa", "head: bbbbbbb", 1), "> [!repository] old", "> [!repository] new", 1)
 	tv.Write(rel, strings.Replace(synced, "behind: 0", "behind: 3", 1)+"\n## Knowledge\n\n```base\nfilters: x\n```\n")
 	apply(t, tv, pv.Ref.ID)
@@ -170,11 +170,11 @@ func TestRenameRewritesLinksEverywhere(t *testing.T) {
 		t.Fatalf("counts %+v", pv.Counts)
 	}
 	apply(t, tv, pv.Ref.ID)
-	if tv.V.Exists("wiki/documents/Motion scoring.md") || !tv.V.Exists("wiki/documents/Motion score.md") {
+	if tv.V.Exists("source-core/documents/Motion scoring.md") || !tv.V.Exists("source-core/documents/Motion score.md") {
 		t.Fatal("the file moved")
 	}
 	for rel, want := range map[string]string{
-		"wiki/documents/Tracking.md":                 "Uses [[Motion score|scores]] and [[Motion score#Definition]].",
+		"source-core/documents/Tracking.md":          "Uses [[Motion score|scores]] and [[Motion score#Definition]].",
 		"sessions/2026-09/2026-09-26 0900 aaaaaa.md": "Apply [[Motion score]].",
 		"My note.md": "See [[Motion score]].",
 	} {
@@ -196,7 +196,7 @@ func TestRemoveRepositoryAndUnlink(t *testing.T) {
 	}
 	pv := propose(t, tv, change.Plan{Title: "Unlink p3-edge", Supersedes: removal.Ref.ID, Writes: []change.Write{{Op: "modify", ID: rid, Fields: map[string]any{"unlinked": true}}}})
 	apply(t, tv, pv.Ref.ID)
-	got := tv.Read("wiki/documents/p3-edge.md")
+	got := tv.Read("source-core/documents/p3-edge.md")
 	if !strings.Contains(got, "unlinked: true") || !strings.Contains(got, `path: ""`) || !strings.Contains(got, "> [!repository-missing] Unlinked") {
 		t.Fatalf("unlinked:\n%s", got)
 	}
@@ -227,7 +227,7 @@ func TestUndo(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if undone.Status != "undone" || tv.V.Exists("wiki/documents/Radar.md") || !strings.Contains(tv.Read("wiki/documents/Motion scoring.md"), "Old.") {
+	if undone.Status != "undone" || tv.V.Exists("source-core/documents/Radar.md") || !strings.Contains(tv.Read("source-core/documents/Motion scoring.md"), "Old.") {
 		t.Fatalf("undo %+v", undone)
 	}
 	if tv.Log()[0] != "undo: Edit" {
@@ -235,7 +235,7 @@ func TestUndo(t *testing.T) {
 	}
 	pv = propose(t, tv, change.Plan{Title: "Edit again", Writes: []change.Write{{Op: "modify", ID: id, Body: str("## Definition\n\nNewer.\n")}}})
 	apply(t, tv, pv.Ref.ID)
-	tv.Write("wiki/documents/Motion scoring.md", tv.Read("wiki/documents/Motion scoring.md")+"hand\n")
+	tv.Write("source-core/documents/Motion scoring.md", tv.Read("source-core/documents/Motion scoring.md")+"hand\n")
 	if _, err := change.Undo(tv.V, pv.Ref.ID, testvault.Now); err == nil || !strings.Contains(err.Error(), "changed since") {
 		t.Fatalf("undo refuses a document edited since: %v", err)
 	}
@@ -247,16 +247,16 @@ func TestRecoveryAfterACrash(t *testing.T) {
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Crash", Writes: []change.Write{{Op: "modify", ID: id, Body: str("## Definition\n\nNew.\n")}, {Op: "create", Type: "topic", Kind: "entity", Title: "Radar", Fields: map[string]any{"description": "A sensor."}}}})
 	content := tv.Read(pv.Ref.Path)
-	content = doc.SetField(doc.SetField(content, "status", "applying"), "paths", []string{"wiki/documents/Motion scoring.md", "wiki/documents/Radar.md", "../victim.md", ".git/config"})
+	content = doc.SetField(doc.SetField(content, "status", "applying"), "paths", []string{"source-core/documents/Motion scoring.md", "source-core/documents/Radar.md", "../victim.md", ".git/config"})
 	tv.Write(pv.Ref.Path, content)
-	tv.Write("wiki/documents/Motion scoring.md", "half written")
-	tv.Write("wiki/documents/Radar.md", "half written")
+	tv.Write("source-core/documents/Motion scoring.md", "half written")
+	tv.Write("source-core/documents/Radar.md", "half written")
 	victim := filepath.Join(filepath.Dir(tv.V.Root), "victim.md")
 	tv.WriteFile(victim, "keep")
 	if _, err := change.Reject(tv.V, pv.Ref.ID, "not now", testvault.Now); err != nil {
 		t.Fatal(err)
 	}
-	if !strings.Contains(tv.Read("wiki/documents/Motion scoring.md"), "Old.") || tv.V.Exists("wiki/documents/Radar.md") {
+	if !strings.Contains(tv.Read("source-core/documents/Motion scoring.md"), "Old.") || tv.V.Exists("source-core/documents/Radar.md") {
 		t.Fatal("recovery puts the documents back")
 	}
 	if _, err := os.Stat(victim); err != nil {
@@ -270,8 +270,8 @@ func TestRecoveryAfterACrash(t *testing.T) {
 
 func TestAbsorbConfirmRetag(t *testing.T) {
 	tv := testvault.New(t)
-	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[doc-aaaaaa.pdf]]", "media": "pdf", "origin": "inbox", "tags": []string{"p3", "paper"}}, "")
-	tv.Write("wiki/assets/doc-aaaaaa.pdf", "%PDF")
+	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[doc-aaaaaa.pdf]]", "media": "pdf", "origin": "ingest", "tags": []string{"p3", "paper"}}, "")
+	tv.Write("source-core/originals/doc-aaaaaa.pdf", "%PDF")
 	old := tv.Doc("topic", "Old idea", map[string]any{"kind": "concept", "tags": []string{"p3/edge"}}, "## Definition\n\nx\n")
 	tv.Write("My note.md", "- [ ] check #p3/edge later\n")
 	tv.Commit()
@@ -292,19 +292,19 @@ func TestAbsorbConfirmRetag(t *testing.T) {
 	if idx.Pending(idx.ByID(src)) {
 		t.Fatal("the source is absorbed")
 	}
-	source := tv.Read("wiki/documents/DINOv2.md")
+	source := tv.Read("source-core/documents/DINOv2.md")
 	for _, want := range []string{"status: absorbed", "tags: [work/p3, paper]", "absorbed by [[2026-09-27 Ingest DINOv2]]", "![[doc-aaaaaa.pdf]]", "## Summary\n\nSelf-supervised features."} {
 		if !strings.Contains(source, want) {
 			t.Errorf("source lacks %q:\n%s", want, source)
 		}
 	}
-	topic := tv.Read("wiki/documents/Motion scoring.md")
+	topic := tv.Read("source-core/documents/Motion scoring.md")
 	for _, want := range []string{"type: topic", "kind: concept", "tags: [work/p3]", "sources: [\"[[DINOv2]]\"]", "> [!concept]"} {
 		if !strings.Contains(topic, want) {
 			t.Errorf("created topic lacks %q:\n%s", want, topic)
 		}
 	}
-	if got := tv.Read("wiki/documents/Old idea.md"); !strings.Contains(got, "tags: [work/p3/edge]") || !strings.Contains(got, "refreshed: 2026-09-27T14:34:00") || !strings.Contains(got, "\nx\n") {
+	if got := tv.Read("source-core/documents/Old idea.md"); !strings.Contains(got, "tags: [work/p3/edge]") || !strings.Contains(got, "refreshed: 2026-09-27T14:34:00") || !strings.Contains(got, "\nx\n") {
 		t.Fatalf("confirmed and retagged:\n%s", got)
 	}
 	if got := tv.Read("My note.md"); got != "- [ ] check #work/p3/edge later\n" {
@@ -341,7 +341,7 @@ func TestDescribedFollowsAbsorbedSnapshot(t *testing.T) {
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Describe p3-edge", Absorbs: []string{src}, Writes: []change.Write{{Op: "modify", ID: src, Fields: map[string]any{"description": "A snapshot."}}}})
 	apply(t, tv, pv.Ref.ID)
-	got := tv.Read("wiki/documents/p3-edge.md")
+	got := tv.Read("source-core/documents/p3-edge.md")
 	// A short hash such as 9572e60 reads as a number, so YAML quotes it.
 	described := strings.Contains(got, "described: "+head[:7]) || strings.Contains(got, `described: "`+head[:7]+`"`)
 	if !described || !strings.Contains(got, "behind: 0") || !strings.Contains(got, "current") {

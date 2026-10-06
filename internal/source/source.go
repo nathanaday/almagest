@@ -1,5 +1,5 @@
 // Package source brings outside documents into the vault and reads any document in
-// chunks. Capture copies a file into wiki/assets/, never to be edited again, and writes
+// chunks. Capture copies a file into source-core/originals/, never to be edited again, and writes
 // its source document; the source stays pending until a change absorbs it.
 package source
 
@@ -23,9 +23,9 @@ import (
 // MaxFileSize bounds a file capture takes.
 const MaxFileSize = 200 << 20
 
-// Request is what to capture: files in the inbox, pasted text, or a repository.
+// Request is what to capture: files in ingest/, pasted text, or a repository.
 type Request struct {
-	Inbox      []string `json:"inbox,omitempty" jsonschema:"names of files waiting in inbox/"`
+	Ingest     []string `json:"ingest,omitempty" jsonschema:"names of files waiting in ingest/"`
 	Text       string   `json:"text,omitempty" jsonschema:"text pasted in the conversation, or a passage to keep"`
 	Title      string   `json:"title,omitempty" jsonschema:"the title of pasted text"`
 	Locator    string   `json:"locator,omitempty" jsonschema:"for text: where it came from, such as this session's document or a URL"`
@@ -57,7 +57,7 @@ type item struct {
 	data    []byte
 	origin  string
 	locator string
-	inbox   string
+	ingest  string
 	tags    []string
 }
 
@@ -85,7 +85,7 @@ func Media(name string) string {
 // Capture brings the requested documents into the vault as one commit.
 func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) {
 	n := 0
-	if len(req.Inbox) > 0 {
+	if len(req.Ingest) > 0 {
 		n++
 	}
 	if strings.TrimSpace(req.Text) != "" {
@@ -95,7 +95,7 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		n++
 	}
 	if n != 1 {
-		return nil, errors.New("capture takes one of inbox, text, or repository")
+		return nil, errors.New("capture takes one of ingest, text, or repository")
 	}
 	now = now.Truncate(time.Second)
 	tx, err := vault.BeginWrite(v)
@@ -118,9 +118,9 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 	}
 	var items []item
 	switch {
-	case len(req.Inbox) > 0:
-		for _, name := range req.Inbox {
-			rel, err := v.InboxFile(name)
+	case len(req.Ingest) > 0:
+		for _, name := range req.Ingest {
+			rel, err := v.IngestFile(name)
 			if err != nil {
 				return nil, err
 			}
@@ -129,7 +129,7 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 				return nil, err
 			}
 			if st.Size() > MaxFileSize {
-				return nil, fmt.Errorf("inbox: %s is %d MB; capture takes files up to 200 MB", name, st.Size()>>20)
+				return nil, fmt.Errorf("ingest: %s is %d MB; capture takes files up to 200 MB", name, st.Size()>>20)
 			}
 			data, err := v.Read(rel)
 			if err != nil {
@@ -140,7 +140,7 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 			// The name is the user's file's, so a long one is cut, not refused; room is left
 			// for the " (n)" that tells two captures of one name apart.
 			title := doc.CutTitle(doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), doc.MaxTitleBytes-len(" (99)"))
-			items = append(items, item{title: title, ext: ext, data: data, origin: "inbox", locator: base, inbox: rel, tags: tagList})
+			items = append(items, item{title: title, ext: ext, data: data, origin: "ingest", locator: base, ingest: rel, tags: tagList})
 		}
 	case strings.TrimSpace(req.Text) != "":
 		title := doc.CleanTitle(req.Title)
@@ -180,8 +180,8 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		sum := doc.FileHash(it.data)
 		if dup := bySHA(idx, sum); dup != nil {
 			out.Captured = append(out.Captured, Captured{Ref: idx.Ref(dup), SHA256: sum, Measure: dup.Str("measure"), Duplicate: dup.ID()})
-			if it.inbox != "" {
-				if err := tx.Remove(it.inbox); err != nil {
+			if it.ingest != "" {
+				if err := tx.Remove(it.ingest); err != nil {
 					return nil, err
 				}
 			}
@@ -199,7 +199,7 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 				return true
 			}
 			for _, p := range idx.TitleHolders(title) {
-				if p != it.inbox {
+				if p != it.ingest {
 					return true
 				}
 			}
@@ -212,7 +212,7 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		file := id + it.ext
 		media := Media(file)
 		m := measure(media, it.data)
-		if err := tx.Write(path.Join(vault.Assets, file), it.data); err != nil {
+		if err := tx.Write(path.Join(vault.Originals, file), it.data); err != nil {
 			return nil, err
 		}
 		stamp := vault.Stamp(now)
@@ -239,8 +239,8 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		if err := tx.Write(rel, []byte(doc.Render(fields, ""))); err != nil {
 			return nil, err
 		}
-		if it.inbox != "" {
-			if err := tx.Remove(it.inbox); err != nil {
+		if it.ingest != "" {
+			if err := tx.Remove(it.ingest); err != nil {
 				return nil, err
 			}
 		}

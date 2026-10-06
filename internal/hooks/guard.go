@@ -123,7 +123,7 @@ func commandRefusal(words []string) string {
 		case rest[0] == "hook":
 			return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
 		case rest[0] == "change" && slices.Contains(rest[1:], "apply"):
-			return "apply a change with the change tool after the user's yes; the user can also apply it with Apply in Obsidian, or run the command with !"
+			return "apply a change with the change tool after the user's yes; the user can also press Approve in the change document in Obsidian, or run the command with !"
 		case rest[0] == "config" && (slices.Contains(rest[1:], "set") || slices.Contains(rest[1:], "unset")) && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
 			return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
@@ -178,13 +178,13 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " is the Atlas plugin, whose code and binaryPath decide what runs; vault init and vault sync install it, and the user sets binaryPath in the Atlas settings in Obsidian"
 	case strings.EqualFold(path.Dir(rel), vault.Documents):
 		return documentRefusal(v, f, rel)
-	case under(vault.Assets):
+	case under(vault.Originals):
 		return rel + " is a captured original or an attachment; source capture writes the originals, and you add attachments in Obsidian"
-	case under(vault.Wiki):
-		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from change propose or source capture"
+	case under(vault.Core):
+		return rel + " is in " + vault.Core + "/, which holds " + vault.Documents + " and " + vault.Originals + " only; a document comes from change propose or source capture"
 	case under(vault.Changes):
-		return rel + " is a change document, and only the change tool writes it. To change a proposed change, propose a new one with supersedes; the user can edit one in Obsidian before Apply"
-	case under(vault.Views):
+		return rel + " is a change document, and only the change tool writes it. To change a proposed change, propose a new one with supersedes; the user can edit one in Obsidian before pressing Approve"
+	case under(vault.WikiView):
 		return rel + " is a view, which code writes from the documents; change the documents instead"
 	case is(vault.Marker):
 		return "Atlas.md is the user's; ask the user to edit it"
@@ -194,11 +194,13 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " lists the linked repositories; vault sync keeps it"
 	case under(vault.Sessions):
 		return sessionRefusal(v, in, f, rel)
+	case under(vault.Journals):
+		return rel + " is in a journal, the user's own writing, which no agent changes; a journal reaches the wiki when the user publishes it"
 	}
 	return ""
 }
 
-// documentRefusal keeps the documents of wiki/documents to their writers: a new file
+// documentRefusal keeps the documents of source-core/documents to their writers: a new file
 // comes from a tool, and knowledge changes through a change.
 func documentRefusal(v *vault.Vault, f patchFile, rel string) string {
 	data, err := v.Read(rel)

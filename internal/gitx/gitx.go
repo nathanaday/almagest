@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"time"
@@ -554,6 +555,29 @@ func (r Repo) Exclude(patterns ...string) error {
 	}
 	text += strings.Join(add, "\n") + "\n"
 	return os.WriteFile(file, []byte(text), 0o644)
+}
+
+// Unexclude removes patterns from the repository's info/exclude file.
+func (r Repo) Unexclude(patterns ...string) error {
+	file := filepath.Join(r.GitDir(), "info", "exclude")
+	data, err := os.ReadFile(file)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return err
+	}
+	lines := strings.Split(string(data), "\n")
+	kept := lines[:0]
+	for _, l := range lines {
+		if !slices.Contains(patterns, strings.TrimSpace(l)) {
+			kept = append(kept, l)
+		}
+	}
+	if len(kept) == len(lines) {
+		return nil
+	}
+	return os.WriteFile(file, []byte(strings.Join(kept, "\n")), 0o644)
 }
 
 // HeadTime is the commit time of HEAD, in the local zone, or the zero time.

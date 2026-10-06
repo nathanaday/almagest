@@ -61,18 +61,18 @@ func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 	if d.Type() == "source" {
 		file := doc.LinkTarget(d.Str("file"))
 		if file == "" || file == "." || file == ".." || strings.ContainsAny(file, `/\`) {
-			return nil, fmt.Errorf("%s: its file field %q names no file of %s/; a source's file is a plain file name there, as capture writes it", vault.Title(d), file, vault.Assets)
+			return nil, fmt.Errorf("%s: its file field %q names no file of %s/; a source's file is a plain file name there, as capture writes it", vault.Title(d), file, vault.Originals)
 		}
-		assets, err := os.OpenRoot(v.Abs(vault.Assets))
+		assets, err := os.OpenRoot(v.Abs(vault.Originals))
 		if err != nil {
 			return nil, err
 		}
 		defer assets.Close()
-		// The root refuses a link that leads out of wiki/assets.
+		// The root refuses a link that leads out of source-core/originals.
 		if _, err := assets.Stat(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
-			return nil, fmt.Errorf("%s: the captured file %s leads out of %s/ (%v)", vault.Title(d), file, vault.Assets, err)
+			return nil, fmt.Errorf("%s: the captured file %s leads out of %s/ (%v)", vault.Title(d), file, vault.Originals, err)
 		}
-		rel := path.Join(vault.Assets, file)
+		rel := path.Join(vault.Originals, file)
 		m := &material{kind: Media(file), file: rel}
 		switch m.kind {
 		case "pdf":

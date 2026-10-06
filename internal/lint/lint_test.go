@@ -37,7 +37,7 @@ func TestNewVaultLintsClean(t *testing.T) {
 	if f.Checked != 1 {
 		t.Fatalf("checked %d; Atlas.md is the one document", f.Checked)
 	}
-	tv.Write("views/View · Home.md", "[[Nothing]]\n")
+	tv.Write("wiki-view/View · Home.md", "[[Nothing]]\n")
 	if f := run(t, tv, lint.Options{}); len(f.Findings) != 0 {
 		t.Fatalf("lint never reads the views: %+v", f.Findings)
 	}
@@ -55,7 +55,7 @@ func TestChecks(t *testing.T) {
 	tv.Doc("topic", "Defines wrong", map[string]any{"kind": "concept", "defines": "x"}, "")
 	tv.Doc("topic", "View · Mine", map[string]any{"kind": "concept"}, "")
 	tv.Write("scratchpad/Motion scoring.md", "a scratch note with the same title\n")
-	tv.Write("wiki/documents/Loose note.md", "no frontmatter\n")
+	tv.Write("source-core/documents/Loose note.md", "no frontmatter\n")
 	tv.Write("notes/Stray.md", "---\nid: doc-stray1\ntype: topic\nkind: concept\ndescription: x\n---\n")
 	tv.Doc("topic", "Papers", map[string]any{"kind": "concept", "tags": []string{"paper", "papers"}}, "")
 	f := run(t, tv, lint.Options{})
@@ -132,7 +132,7 @@ func TestArchivedTypeInDocuments(t *testing.T) {
 		}
 	}
 	if len(got) != 1 || got[0].Check != "archived" || got[0].Severity != lint.Error {
-		t.Fatalf("a spec in wiki/documents gives one archived error: %+v", got)
+		t.Fatalf("a spec in source-core/documents gives one archived error: %+v", got)
 	}
 }
 

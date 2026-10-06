@@ -71,7 +71,7 @@ func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	f := setup(t)
 	f.tv.Write("Atlas.md", f.tv.Read("Atlas.md")+"\nEvery agent reads this.\n")
 	out := f.run("session-start", map[string]any{"source": "startup"})
-	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Inbox: 0 files", "Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.", "<vault-context>", "Every agent reads this."} {
+	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Ingest: 0 files", "Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.", "<vault-context>", "Every agent reads this."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("context lacks %q:\n%s", want, out)
 		}
@@ -88,7 +88,7 @@ func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
 		t.Fatalf("outside a vault a hook says nothing: %q", out)
 	}
-	f.tv.Write("Atlas.md", strings.Replace(f.tv.Read("Atlas.md"), "layout: 5", "layout: 4", 1))
+	f.tv.Write("Atlas.md", strings.Replace(f.tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
 	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "vault migrate") {
 		t.Fatalf("a vault of an earlier layout names the migration: %s", out)
 	}
@@ -111,19 +111,19 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		event map[string]any
 		deny  bool
 	}{
-		{"a new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/documents/X.md"}}, true},
-		{"a relative new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "wiki/documents/X.md"}}, true},
-		{"a topic", edit(root+"/wiki/documents/Knowledge.md", "x"), true},
-		{"an asset", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/assets/x.png"}}, true},
-		{"another folder of the wiki", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/notes/x.md"}}, true},
-		{"a view", edit(root+"/views/View · Home.md", "x"), true},
+		{"a new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/X.md"}}, true},
+		{"a relative new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "source-core/documents/X.md"}}, true},
+		{"a topic", edit(root+"/source-core/documents/Knowledge.md", "x"), true},
+		{"an asset", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/originals/x.png"}}, true},
+		{"another folder of the wiki", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/notes/x.md"}}, true},
+		{"a view", edit(root+"/wiki-view/View · Home.md", "x"), true},
 		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
 		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
-		{"a Write over a topic", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/documents/Knowledge.md"}}, true},
-		{"a source", edit(root+"/wiki/documents/Paper.md", "abcdef0123456789"), true},
-		{"a codex patch into a topic", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: wiki/documents/Knowledge.md\n@@\n+## Findings\n+- found a thing\n*** End Patch"}}, true},
-		{"a document of an unknown type", edit(root+"/wiki/documents/Old · Spec.md", "## Goal\n\nx"), false},
+		{"a Write over a topic", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/Knowledge.md"}}, true},
+		{"a source", edit(root+"/source-core/documents/Paper.md", "abcdef0123456789"), true},
+		{"a codex patch into a topic", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: source-core/documents/Knowledge.md\n@@\n+## Findings\n+- found a thing\n*** End Patch"}}, true},
+		{"a document of an unknown type", edit(root+"/source-core/documents/Old · Spec.md", "## Goal\n\nx"), false},
 		{"a note in the threads archive", edit(root+"/threads/Plan · Spec.md", "## Goal\n\nx"), false},
 		{"a new note in the threads archive", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/threads/Plan · Notes.md"}}, false},
 		{"another session's document", edit(root+"/sessions/2026-09/2026-09-27 1400 ffffff.md", "## Description"), true},
@@ -132,8 +132,8 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"its own description", edit(own, "## Description\n"), false},
 		{"its own subagents", edit(own, "## Subagents"), true},
 		{"a note of the user's", edit(root+"/Ideas.md", "x"), false},
-		{"a codex patch into the documents", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: wiki/documents/notes.md\n*** End Patch"}}, true},
-		{"a document from a session outside the vault", map[string]any{"cwd": t.TempDir(), "tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/documents/X.md"}}, true},
+		{"a codex patch into the documents", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: source-core/documents/notes.md\n*** End Patch"}}, true},
+		{"a document from a session outside the vault", map[string]any{"cwd": t.TempDir(), "tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/X.md"}}, true},
 		{"a change document from a session outside the vault", map[string]any{"cwd": "/", "tool_name": "Edit", "tool_input": map[string]any{"file_path": root + "/changes/2026-09/x.md", "old_string": "x"}}, true},
 		{"a shell change apply", bash(bin + " change apply X"), true},
 		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/atlas change apply X"), true},
@@ -328,7 +328,7 @@ func TestTheGate(t *testing.T) {
 	unbound := propose("Add B")
 	f.tv.Tick(time.Minute)
 	f.run("prompt", map[string]any{"prompt": "yes"})
-	if err := apply(unbound.Ref.ID); err == nil || !strings.Contains(err.Error(), "Apply in Obsidian") {
+	if err := apply(unbound.Ref.ID); err == nil || !strings.Contains(err.Error(), "presses Approve in the change document") {
 		t.Fatalf("a change no session proposed: %v", err)
 	}
 	if _, err := change.Apply(f.tv.V, unbound.Ref.ID, f.tv.Clock, nil); err != nil {

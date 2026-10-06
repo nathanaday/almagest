@@ -47,6 +47,34 @@ func eight(t *testing.T) *testvault.T {
 	tv.Write("sessions/2026-09/2026-09-08 0900 bbbbbb.md", "---\nid: ses-bbbbbb\ntype: session\ncreated: 2026-09-08T09:00:00\nupdated: 2026-09-08T10:00:00\nharness: claude\nharness_id: bbbbbb\nstatus: ended\nthreads: [\"[[Filter alarms]]\"]\nspecs: []\nwork: [\"[[Filter alarms · Spec]]\"]\nrepositories: [\"[[p3-edge]]\"]\nchanges: []\nevents: 1\nchecked: 1\n---\n\n> [!session] ended · [[Filter alarms]] · [[p3-edge]]\n\n## Description\n\nScoring.\n")
 	tv.Write("changes/2026-09/2026-09-10 Learn from the spec.md", "---\nid: chg-learn1\ntype: change\ncreated: 2026-09-10T12:00:00\nupdated: 2026-09-10T12:00:00\nstatus: applied\nabsorbs: [\"[[DINOv2]]\"]\nwork: \"[[Filter alarms]]\"\napplied: 2026-09-10T12:00:00\ncounts: 0 create, 1 modify\n---\n\n## Notes\n\nx\n")
 	tv.Write("Ideas.md", "Next: [[Filter alarms · Tasks (p3-edge)]], per [[Filter alarms · Spec|the spec]].\n")
+	return older(t, tv)
+}
+
+// older puts the files that testvault wrote in the 10.0 folders into the folders of 9.0
+// and 8.x, commits the tree, and opens the vault again.
+func older(t *testing.T, tv *testvault.T) *testvault.T {
+	t.Helper()
+	for _, m := range [][2]string{{vault.Documents, "wiki/documents"}, {vault.Originals, "wiki/assets"}, {vault.Ingest, "inbox"}, {vault.WikiView, "views"}} {
+		from, to := tv.V.Abs(m[0]), tv.V.Abs(m[1])
+		if err := os.MkdirAll(to, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		entries, _ := os.ReadDir(from)
+		for _, e := range entries {
+			if err := os.Rename(filepath.Join(from, e.Name()), filepath.Join(to, e.Name())); err != nil {
+				t.Fatal(err)
+			}
+		}
+		os.RemoveAll(from)
+	}
+	os.RemoveAll(tv.V.Abs(vault.Core))
+	os.RemoveAll(tv.V.Abs(vault.Journals))
+	if err := tv.V.Git().Unexclude("/wiki-view/"); err != nil {
+		t.Fatal(err)
+	}
+	if err := tv.V.Git().Exclude("/views/"); err != nil {
+		t.Fatal(err)
+	}
 	tv.Commit()
 	v, err := vault.Open(tv.V.Root)
 	if err != nil {
@@ -85,7 +113,7 @@ func TestMigration(t *testing.T) {
 	if plan.From != "8.x" || len(plan.Moved) != len(moved) || !strings.Contains(strings.Join(plan.Warnings, " "), "chords/Chord notes.md") {
 		t.Fatalf("the plan: %+v", plan)
 	}
-	for _, p := range []string{"Atlas.md", vault.DocPath("Motion scoring"), vault.DocPath("p3-edge"), vault.DocPath("DINOv2"), "sessions/2026-09/2026-09-08 0900 bbbbbb.md", "changes/2026-09/2026-09-10 Learn from the spec.md"} {
+	for _, p := range []string{"Atlas.md", "wiki/documents/Motion scoring.md", "wiki/documents/p3-edge.md", "wiki/documents/DINOv2.md", "sessions/2026-09/2026-09-08 0900 bbbbbb.md", "changes/2026-09/2026-09-10 Learn from the spec.md"} {
 		if !slices.Contains(plan.Edited, p) {
 			t.Errorf("the plan does not edit %s: %v", p, plan.Edited)
 		}
@@ -99,7 +127,7 @@ func TestMigration(t *testing.T) {
 		t.Fatalf("the report: %+v", report)
 	}
 	tv.Clean()
-	if log := tv.Log(); log[0] != "layout: migrate to 9.0" || slices.ContainsFunc(log, func(s string) bool { return strings.HasPrefix(s, "layout: upgrade") }) {
+	if log := tv.Log(); log[0] != "layout: migrate to 10.0" || slices.ContainsFunc(log, func(s string) bool { return strings.HasPrefix(s, "layout: upgrade") }) {
 		t.Fatalf("the commits: %v", log)
 	}
 	// The canvas card and the chord's embed follow the moves; every other file moves as it was.
@@ -177,8 +205,103 @@ func TestMigration(t *testing.T) {
 		}
 	}
 
-	if _, err := migrate.Run(v, testvault.Now.Add(2*time.Hour)); err == nil || !strings.Contains(err.Error(), "9.0 layout already") {
+	if _, err := migrate.Run(v, testvault.Now.Add(2*time.Hour)); err == nil || !strings.Contains(err.Error(), "10.0 layout already") {
 		t.Fatalf("a second migration: %v", err)
+	}
+}
+
+// nine writes a vault as 9.0 left it, with paths in links, a Base, and a canvas.
+func nine(t *testing.T) *testvault.T {
+	tv := testvault.New(t)
+	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
+	tv.Doc("source", "DINOv2", map[string]any{"file": "[[doc-aaaaaa.pdf]]", "sha256": "3f9c1e2a7b8d44aa", "origin": "inbox", "locator": "DINOv2.pdf"}, "## Summary\n\nFeatures.\n")
+	tv.Write(vault.Originals+"/doc-aaaaaa.pdf", "%PDF")
+	tv.Write(vault.Originals+"/diagram.png", "png")
+	tv.Doc("topic", "Stack", map[string]any{"kind": "concept", "sources": []string{"[[DINOv2]]"}}, nineTopic)
+	tv.Write("Reading.base", "filters:\n  and:\n    - file.inFolder(\"wiki/documents\")\n")
+	tv.Write("threads/Plan.canvas", "{\"nodes\":[{\"id\":\"a\",\"type\":\"file\",\"file\":\"wiki/assets/diagram.png\"}],\"edges\":[]}\n")
+	tv.Write(vault.Ingest+"/paper.pdf", "%PDF")
+	tv.Write(vault.WikiView+"/View · Home.md", "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync.\n\nHome.\n")
+	tv.Write(vault.WikiView+"/My note.md", "mine\n")
+	tv.Write(vault.AppJSON, `{"attachmentFolderPath": "wiki/assets", "userIgnoreFilters": ["views/"], "promptDelete": false}`+"\n")
+	tv.Write(vault.Originals+"/doc-snap01.md", snapshot9)
+	tv.Write("scratchpad/Record.md", record9)
+	return older(t, tv)
+}
+
+// snapshot9 is a captured original that quotes paths: it stays as it was captured.
+const snapshot9 = "var TAG_FOLDER = \"views/tags/\";\nsee [[wiki/documents/X]]\n"
+
+// record9 is a note whose prose and code quote paths, beside a link and a base block.
+const record9 = "The sync moved it to 'inbox/Meeting notes.md', as \"views/x.md\" said. See [[wiki/documents/X|X]] and `[[wiki/documents/Y]]`.\n\n```go\nroot := \"wiki/documents\"\n```\n\n```base\nfilters:\n  and:\n    - file.inFolder(\"wiki/documents\")\n```\n"
+
+const nineTopic = "## Definition\n\nThe stack, as drawn: ![[wiki/assets/diagram.png]], and as a [file](wiki/assets/diagram.png). Agents read `wiki/documents` and inbox/ notes.\n"
+
+func TestMigrationFrom9(t *testing.T) {
+	tv := nine(t)
+	plan, err := migrate.Plan(tv.V)
+	if err != nil || plan.From != "9.0" || len(plan.Removed) != 1 || len(plan.Strays) != 1 {
+		t.Fatalf("the plan: %+v %v", plan, err)
+	}
+	tv.Clean()
+	report, err := migrate.Run(tv.V, testvault.Now.Add(time.Hour))
+	if err != nil || report.Commit == "" || report.Problems != 0 {
+		t.Fatalf("the report: %+v %v", report, err)
+	}
+	tv.Clean()
+	if log := tv.Log(); log[0] != "layout: migrate to 10.0" {
+		t.Fatalf("the commits: %v", log)
+	}
+	for _, rel := range []string{"wiki", "inbox", "views"} {
+		if tv.V.Exists(rel) {
+			t.Errorf("%s/ is still there", rel)
+		}
+	}
+	for _, rel := range []string{vault.Originals + "/doc-aaaaaa.pdf", vault.Originals + "/diagram.png", vault.Ingest + "/paper.pdf", vault.Ingest + "/My note.md", vault.Journals, "wiki-view/View · Home.md"} {
+		if !tv.V.Exists(rel) {
+			t.Errorf("%s is missing", rel)
+		}
+	}
+	topic := tv.Read(vault.DocPath("Stack"))
+	if !strings.Contains(topic, "![[source-core/originals/diagram.png]], and as a [file](source-core/originals/diagram.png). Agents read `wiki/documents` and inbox/ notes.") {
+		t.Errorf("the topic's paths:\n%s", topic)
+	}
+	if got := tv.Read(vault.Originals + "/doc-snap01.md"); got != snapshot9 {
+		t.Errorf("a captured original changed:\n%s", got)
+	}
+	want := strings.Replace(strings.Replace(record9, "[[wiki/documents/X|X]]", "[[source-core/documents/X|X]]", 1), `file.inFolder("wiki/documents")`, `file.inFolder("source-core/documents")`, 1)
+	if got := tv.Read("scratchpad/Record.md"); got != want {
+		t.Errorf("the record:\n%s\nwant:\n%s", got, want)
+	}
+	if got := tv.Read("Reading.base"); !strings.Contains(got, `file.inFolder("source-core/documents")`) {
+		t.Errorf("the Base:\n%s", got)
+	}
+	if got := tv.Read("threads/Plan.canvas"); !strings.Contains(got, `"file":"source-core/originals/diagram.png"`) {
+		t.Errorf("the canvas:\n%s", got)
+	}
+	if src := doc.Parse("", []byte(tv.Read(vault.DocPath("DINOv2")))); src.Str("origin") != "ingest" {
+		t.Errorf("the source:\n%s", src.Content)
+	}
+	app := tv.Read(vault.AppJSON)
+	if !strings.Contains(app, `"attachmentFolderPath": "source-core/originals"`) || strings.Contains(app, `"views/"`) || !strings.Contains(app, `"wiki-view/"`) || !strings.Contains(app, `"promptDelete": false`) {
+		t.Errorf("app.json:\n%s", app)
+	}
+	exclude, _ := os.ReadFile(filepath.Join(tv.V.Root, ".git", "info", "exclude"))
+	if strings.Contains(string(exclude), "/views/") || !strings.Contains(string(exclude), "/wiki-view/") {
+		t.Errorf("the exclude file:\n%s", exclude)
+	}
+	idx, err := vault.Load(tv.V)
+	if err != nil {
+		t.Fatal(err)
+	}
+	f, err := lint.Run(idx, lint.Options{Now: testvault.Now.Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, x := range f.Findings {
+		if x.Severity == lint.Error {
+			t.Errorf("lint: %s %s: %s", x.Check, x.Doc.Path, x.Message)
+		}
 	}
 }
 

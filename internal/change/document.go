@@ -22,6 +22,11 @@ const (
 	Undone     = "undone"
 )
 
+// Widget is the block the Obsidian plugin renders as the change's buttons: Approve and
+// Cancel while it is proposed, its result after. It holds no data; the plugin reads the
+// document's frontmatter.
+const Widget = "```atlas-change\n```"
+
 // rewriteNote marks a modify the link or tag rewrite pass made.
 const rewriteNote = "Rewrite only."
 
@@ -146,7 +151,7 @@ func lead(status string, counts Counts, absorbs []string, applied, reason string
 	var line string
 	switch status {
 	case Proposed:
-		line = "Review the documents below. Edit any of them here if you want. Then say yes in the chat, or press Apply."
+		line = "Review the documents below. Edit any of them here if you want. Then press Approve, or say yes in the chat."
 	case Applying:
 		line = "Apply stopped halfway. The next write of any kind puts the documents back and sets this change to proposed."
 	case Applied:
@@ -233,6 +238,7 @@ func renderDocument(p *planned, id string, now time.Time) string {
 	}
 	var b strings.Builder
 	b.WriteString(lead(Proposed, counts, titles, "", "") + "\n\n")
+	b.WriteString(Widget + "\n\n")
 	b.WriteString("## Notes\n\n")
 	if p.Notes != "" {
 		b.WriteString(p.Notes + "\n\n")

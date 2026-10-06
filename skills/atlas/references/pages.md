@@ -1,6 +1,7 @@
 # Documents
 
-Every document of the wiki lives flat in `wiki/documents/`. There are three types:
+Every document of the wiki lives flat in `source-core/documents/`. There are three
+types:
 
 | Type | Kinds | Written by |
 |---|---|---|
@@ -10,7 +11,7 @@ Every document of the wiki lives flat in `wiki/documents/`. There are three type
 
 These documents are what the vault knows; only an applied change writes them
 ([changes.md](changes.md)). The file name is the title. Code routes every new document
-to `wiki/documents/<title>.md`, so give a type, a kind, and a title, never a path.
+to `source-core/documents/<title>.md`, so give a type, a kind, and a title, never a path.
 
 ## Fields every document has
 
@@ -64,7 +65,7 @@ in `defines` (`defines: school/cs513`).
 ## Source
 
 Capture writes a source with the fields code owns: `status` (pending, absorbed),
-`file`, `media`, `sha256`, `origin` (inbox, pasted, url, repository), `locator`,
+`file`, `media`, `sha256`, `origin` (ingest, pasted, url, repository), `locator`,
 `measure`, `captured`. The ingest change sets the rest:
 
 | Field | Value |

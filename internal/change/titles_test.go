@@ -19,14 +19,14 @@ func TestARenameAppliesTheTitleItsPreviewShowed(t *testing.T) {
 	previewed := ""
 	for _, w := range pv.Writes {
 		if w.Op == "rename" {
-			previewed = strings.TrimSuffix(strings.TrimPrefix(w.Path, "wiki/documents/"), ".md")
+			previewed = strings.TrimSuffix(strings.TrimPrefix(w.Path, "source-core/documents/"), ".md")
 		}
 	}
 	if previewed != "Old New" {
 		t.Fatalf("the preview shows %q: %+v", previewed, pv.Writes)
 	}
 	apply(t, tv, pv.Ref.ID)
-	if !tv.V.Exists("wiki/documents/" + previewed + ".md") {
+	if !tv.V.Exists("source-core/documents/" + previewed + ".md") {
 		t.Fatalf("the applied title is not the previewed one; the documents are %v", tv.Index().Docs)
 	}
 	tv.Clean()
@@ -44,7 +44,7 @@ func TestACaseOnlyRenameStillApplies(t *testing.T) {
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Rename", Writes: []change.Write{{Op: "rename", ID: id, Title: "Motion Scoring"}}})
 	apply(t, tv, pv.Ref.ID)
-	if got := tv.V.OnDisk("wiki/documents/Motion Scoring.md"); got != "wiki/documents/Motion Scoring.md" {
+	if got := tv.V.OnDisk("source-core/documents/Motion Scoring.md"); got != "source-core/documents/Motion Scoring.md" {
 		t.Fatalf("the file on disk is %s", got)
 	}
 	tv.Clean()
