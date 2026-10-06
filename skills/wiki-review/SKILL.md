@@ -35,9 +35,8 @@ Tools: `lint`, `vault`. Agents: [wiki-audit](../../agents/wiki-audit.md).
      the finding's `fix` says;
    - `pending` → [wiki-sync](../wiki-sync/SKILL.md);
    - `untyped` → [wiki-ingest](../wiki-ingest/SKILL.md);
-   - `thread`, `spec`, `task`, `section`, `requirement`, and `event` findings →
-     [atlas](../atlas/SKILL.md) for the quick moves, or
-     [thread-work](../thread-work/SKILL.md) on the thread.
+   - `archived` → the user moves the file into `threads/`: a thread document of
+     Atlas 8.x, which 9.0 does not read.
 
 ## Gate
 

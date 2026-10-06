@@ -1,23 +1,26 @@
 ---
 name: atlas
-description: "Orient in the Atlas vault, show the board of threads and chords, make the quick moves on one, and route any request to the skill that owns it. Use for /atlas, what is going on, status, where do I work on X, the board, what is open, what should I work on, why is this still open, block, unblock, reprioritize, rename, drop, reopen, reorder, review the board, @atlas mentions, and any request when the right skill is not clear. Noting an idea is thread-stub; starting or resuming work is thread-work or chord-work."
+description: "Orient in the Atlas vault, say what waits for the user, do the work a request asks in a linked repository, and route any other request to the skill that owns it. Use for /atlas, what is going on, status, what waits for me, where do I work on X, work on X, fix this, implement, build, note this, remember to, @atlas mentions, and any request when the right skill is not clear. Keeping part of this conversation is wiki-save; files to learn from are wiki-ingest."
 ---
 
 # atlas
 
 Every request passes this skill first. It reads where the session stands, names the kind
-of request, finds the repository or the tags that the request names, and hands off. It
-makes the small moves itself: the board, one thread or chord, and the calls that change
-one field or one state.
+of request, finds the repository or the tags that the request names, and hands off. A
+request to change code in a linked repository goes to no other skill: this skill finds
+the repository and does the work.
 
-Tools: `vault`, `search`, `context`, `thread` (list, load, set, block, unblock, drop,
-reopen, note), `chord` (list, load, add, remove, order, set). References:
-[threads.md](references/threads.md).
+Threads and chords left Atlas in 9.0. They live in the standalone project
+obsidian-threads. The 9.0 migration moved the old thread documents to `threads/`, which
+Atlas does not read.
+
+Tools: `vault`, `search`, `context`. References:
+[conventions.md](references/conventions.md).
 
 ## Procedure
 
-1. Read the opening context: the vault, the tags with their counts, the open threads,
-   the live sessions, and this session's document. Call `vault` when the context is
+1. Read the opening context: the vault, its repositories, the live sessions, the tags
+   with their counts, and this session's document. Call `vault` when the context is
    missing or the user asks for the state.
 2. Name the kind of request with the table below.
 3. When the request names work in a repository, find the repository: `search` with
@@ -29,88 +32,66 @@ reopen, note), `chord` (list, load, add, remove, order, set). References:
    opening context and `vault` list the tags that exist.
 5. Once the work is known, write one line under `## Description` in this session's
    document (the opening context links it). Use Edit.
-6. Hand off.
+6. Do the work in the repository ([Work in a repository](#work-in-a-repository)), or
+   hand off.
 
-| The user wants | Skill | Needs a started thread? |
-|---|---|---|
-| an answer, an explanation, to explore; what the vault holds under a tag | [wiki-query](../wiki-query/SKILL.md) | no |
-| `Resume Atlas thread <id>`; a change to a repository; to continue a piece of work | [thread-work](../thread-work/SKILL.md) | yes, with an open task |
-| `Resume Atlas chord <id>`; to continue a goal of several threads | [chord-work](../chord-work/SKILL.md) | per thread |
-| a goal too large for one thread; to order threads | [chord-create](../chord-create/SKILL.md) | no |
-| to note an idea, a bug, or a paper for later ("note this", "remember to") | [thread-stub](../thread-stub/SKILL.md) | no |
-| one step of a thread by name: the spec, the tasks, the verification, the close | [thread-spec](../thread-spec/SKILL.md), [thread-tasks](../thread-tasks/SKILL.md), [thread-run](../thread-run/SKILL.md), [thread-verify](../thread-verify/SKILL.md), [thread-close](../thread-close/SKILL.md) | as the step needs |
-| to close a chord | [chord-close](../chord-close/SKILL.md) | no |
-| to ingest files, or process the inbox | [wiki-ingest](../wiki-ingest/SKILL.md) | no |
-| to keep something from this conversation | [wiki-save](../wiki-save/SKILL.md) | no |
-| to bring the wiki up to date with new documents | [wiki-sync](../wiki-sync/SKILL.md) | no |
-| to link, unlink, or describe a repository | [repo-link](../repo-link/SKILL.md), [repo-unlink](../repo-unlink/SKILL.md), [repo-ingest](../repo-ingest/SKILL.md) | no |
-| to check the wiki | [wiki-review](../wiki-review/SKILL.md) | no |
-| to fix, rewrite, merge, or retag knowledge, or rename a tag | [wiki-edit](../wiki-edit/SKILL.md) | no |
-| to organize the knowledge under a tag | [wiki-map](../wiki-map/SKILL.md) | no |
-| a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) | no |
+| The user wants | Skill |
+|---|---|
+| an answer, an explanation, to explore; what the vault holds under a tag | [wiki-query](../wiki-query/SKILL.md) |
+| a change to code in a linked repository: fix, build, implement, continue | this skill: [Work in a repository](#work-in-a-repository) |
+| to note an idea, a bug, or a paper for later ("note this", "remember to") | this skill: [Notes for later](#notes-for-later) |
+| to ingest files, or process the inbox | [wiki-ingest](../wiki-ingest/SKILL.md) |
+| to keep something from this conversation | [wiki-save](../wiki-save/SKILL.md) |
+| to bring the wiki up to date with new sources | [wiki-sync](../wiki-sync/SKILL.md) |
+| to link, unlink, or describe a repository | [repo-link](../repo-link/SKILL.md), [repo-unlink](../repo-unlink/SKILL.md), [repo-ingest](../repo-ingest/SKILL.md) |
+| to check the wiki | [wiki-review](../wiki-review/SKILL.md) |
+| to fix, rewrite, merge, or retag knowledge, or rename a tag | [wiki-edit](../wiki-edit/SKILL.md) |
+| to organize the knowledge under a tag | [wiki-map](../wiki-map/SKILL.md) |
+| a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) |
 
-A question can turn into work. When the user then asks for a change to a repository,
-route to thread-work. The guard refuses an edit in a linked repository unless this
-session started a thread with an open task for it.
+A question can turn into work. When the user then asks for a change to a repository, do
+the work.
 
-## The board and the quick moves
+## Work in a repository
 
-These are small, so this skill does them itself.
+1. Read what `context` returned for the repository in step 3: follow its `instructions`
+   (the paths of AGENTS.md and CLAUDE.md, and what they require) and the policies that
+   bind the work ([conventions.md](references/conventions.md)).
+2. Do the work. Change files with Edit and Write, not with the shell; use the shell to
+   run commands. Test what can break.
+3. When the work is long, or stops before it is done, add a dated line to `## Progress`
+   in this session's document: where the work stands.
+4. What you learn on the way has a home:
+   - a fact the wiki should hold (how a tool behaves, a result, a pitfall) →
+     [wiki-save](../wiki-save/SKILL.md);
+   - work for later → a note in `scratchpad/`.
 
-- **The board**: `thread` list, with `tags`, `repository`, or `chord` when the request
-  names them. Show the chords first, each with its threads in order and their statuses.
-  Then the threads in no chord, in this order: `active` (with the session on each),
-  `started`, `verified` (each waits for its wiki change), `ready`, `blocked` (with the
-  reason), `waiting` (it comes after a thread not yet verified), and `stubs`. Mention
-  the last few of `ended` only when the user asks what finished. Link `View · Threads`
-  for the live view.
-- **One thread**: `thread` load with `thread`. Say its status, its task count, what
-  `missing` lists, and `next`. This answers "why is this still open": the status is
-  derived, and `missing` is what stands between the thread and closed. No call and no
-  button closes a thread; never tell the user to close one by hand.
-- **One chord**: `chord` load with `chord`. Say its threads in order, the ready ones,
-  and `next`.
-- **A quick move**: one call, then one line back with the result.
-  - priority: `thread` set with `set: {doc, priority}` (high, normal, low, someday);
-  - rename: `thread` set with `set: {doc, title}`. Code renames every document of the
-    thread and rewrites every link in the same commit;
-  - tags: `thread` set with `set: {doc, tags}`; the thread's documents follow. In
-    `tagging: known`, a tag that no document holds needs the user's yes, then
-    `new_tags: true` in `set`;
-  - order: `thread` set with `set: {doc, after: [...]}`, or `chord` order for several
-    threads at once; `chord` add and `chord` remove move a thread in or out;
-  - block: `thread` block with `thread` and `reason` (one line on what it waits on);
-  - unblock: `thread` unblock with `thread`;
-  - drop: `thread` drop with `thread` and `reason`; for a chord, `chord` drop, which
-    drops each of its threads that is not ended;
-  - reopen: `thread` reopen, or `chord` reopen, for one that was dropped. A closed
-    thread needs no reopen: a new task takes it up again;
-  - a remark to keep: `thread` note with `thread` and `text`.
-- **What should I work on**: rank by priority; then by readiness (a verified thread
-  that waits for its wiki change, then a started one, then a ready one, then a stub);
-  then by how long it waited. A thread that comes after one not yet verified is not a
-  candidate. Recommend one, with the reason and its hand-off line.
-- **Review the board**, on request: threads started long ago with no recent event,
-  verified threads nobody closed, blocked threads with no way to unblock, chords where
-  nothing is ready, likely duplicates (`search` with each stub's words and
-  `types: [stub]`), and work the user mentioned that has no thread.
+## Notes for later
 
-`thread` list, `thread` load, and `chord` load bind nothing and write nothing. Only
-`thread` start binds a session to a thread; that belongs to thread-run.
+An idea, a bug, or a paper the user wants to remember goes in a note in `scratchpad/`:
+the user's words, with a short title as the file name. A file the wiki should learn from
+goes in `inbox/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
+
+## Status
+
+`vault` status gives the state of the vault. Say what waits for the user first: the
+proposed changes, the sessions that wait, and the mentions. Then the inbox, the sources
+pending for the wiki, and the lint problems, each with the skill that handles it. The
+opening context names each repository that is behind its description
+([repo-ingest](../repo-ingest/SKILL.md)).
 
 ## Mentions
 
 The opening context counts `@atlas` mentions: open task lines in the user's notes
 addressed to the agent. When the user asks about them, or the request is unclear,
 `vault` status lists them. Offer each one. Route it like any request. When a document
-answers it (a new stub, an applied change, a spec, this session's document), close it
-with `vault` `action: mention`, `note` (the note's path), `line`, and `link` (the
-document that answers it).
+answers it (an applied change, this session's document), close it with `vault`
+`action: mention`, `note` (the note's path), `line`, and `link` (the document that
+answers it).
 
 ## Gate
 
-None for reads. A quick move is one line back, not a question. Ask first only when the
-move is a drop of a chord, since the drop reaches every thread in it.
+None. The skill that the request routes to keeps its own gate.
 
 ## Hand off
 

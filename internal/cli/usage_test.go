@@ -56,7 +56,7 @@ func TestTheUsageNamesEveryOptionACommandReads(t *testing.T) {
 			switch fn := call.Fun.(type) {
 			case *ast.SelectorExpr:
 				switch fn.Sel.Name {
-				case "get", "has", "list", "ptr", "listPtr":
+				case "get", "has", "list":
 					if len(call.Args) == 1 {
 						if s, ok := literal(call.Args[0]); ok {
 							opts = append(opts, s)

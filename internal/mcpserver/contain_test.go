@@ -45,8 +45,9 @@ func TestTheMentionToolRefusesANoteOutsideTheVault(t *testing.T) {
 	victim := filepath.Join(filepath.Dir(tv.V.Root), "outside", "victim.md")
 	tv.WriteFile(victim, "- [ ] @atlas track this\n")
 	tv.Write("Ideas.md", "- [ ] @atlas track this\n")
+	tv.Doc("topic", "Idea", map[string]any{"kind": "overview"}, "")
+	tv.Commit()
 	c := connect(t, tv, tv.V.Root)
-	c.call("thread", map[string]any{"action": "stub", "text": "Track this.", "title": "Idea"}, false)
 	_, msg := c.call("vault", map[string]any{"action": "mention", "note": "../outside/victim.md", "line": 1, "link": "Idea"}, true)
 	if !strings.Contains(msg, "is no note of the vault") {
 		t.Fatalf("the refusal: %s", msg)
@@ -103,7 +104,9 @@ func TestAWriteToolSaysWhereANoteFromViewsWent(t *testing.T) {
 	tv := testvault.New(t)
 	tv.Write("views/Draft.md", "# Draft\n\nMine.\n")
 	c := connect(t, tv, tv.V.Root)
-	out, _ := c.call("thread", map[string]any{"action": "stub", "text": "An idea.", "title": "Idea"}, false)
+	out, _ := c.call("change", map[string]any{"action": "propose", "title": "Add Idea", "writes": []any{
+		map[string]any{"op": "create", "type": "topic", "kind": "overview", "title": "Idea", "fields": map[string]any{"description": "An idea."}},
+	}}, false)
 	moved, _ := out["moved_from_views"].([]any)
 	if len(moved) != 1 {
 		t.Fatalf("the result does not name the move: %v", out)

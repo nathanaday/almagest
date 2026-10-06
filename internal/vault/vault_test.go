@@ -9,6 +9,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -19,8 +20,8 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 	if v.Name() != "Work" || v.Tagging() != "open" || v.StaleHours() != 12 || v.LayoutVersion() != vault.Layout || v.CheckLayout() != nil {
 		t.Fatalf("settings: %s %s %d %d", v.Name(), v.Tagging(), v.StaleHours(), v.LayoutVersion())
 	}
-	if got := strings.Join(v.Wikify(), ","); got != "source,spec,verification,chord,event" {
-		t.Fatalf("wikify %s", got)
+	if strings.Contains(tv.Read(vault.Marker), "wikify") {
+		t.Fatalf("Atlas.md names wikify:\n%s", tv.Read(vault.Marker))
 	}
 	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/plugins/atlas/manifest.json", ".obsidian/app.json", "wiki/documents", "wiki/assets", "views", "inbox", "scratchpad"} {
 		if !v.Exists(rel) {
@@ -155,41 +156,66 @@ func TestIndexResolvesIdsTitlesAliasesAndTags(t *testing.T) {
 func TestPendingFollowsAbsorbedHashes(t *testing.T) {
 	tv := testvault.New(t)
 	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44", "file": "[[x.pdf]]"}, "")
-	tv.Doc("stub", "Plan", nil, "## Idea\n\nDo it.\n")
-	spec := tv.Doc("spec", "Plan · Spec", map[string]any{"thread": "[[Plan]]", "status": "complete (verified)"}, "> [!spec] Complete (verified)\n\n## Goal\n\nDo it.\n\n## Requirements\n\n- R1: done\n")
-	open := tv.Doc("spec", "Other · Spec", map[string]any{"thread": "[[Other]]", "status": "not implemented"}, "## Goal\n\nLater.\n")
-	round := tv.Doc("verification", "Plan · Verification 1", map[string]any{"thread": "[[Plan]]", "round": 1, "verdict": "pass"}, "## Scope\n\nx\n")
-	stale := tv.Doc("verification", "Plan · Verification 0", map[string]any{"thread": "[[Plan]]", "round": 0, "verdict": "stale"}, "## Scope\n\nx\n")
-	chord := tv.Doc("chord", "Goal", map[string]any{"status": "done"}, "> [!chord] Done\n\n## Goal\n\nAll of it.\n\n## Threads\n\n| a |\n")
-	note := tv.Doc("event", "Plan · note", map[string]any{"kind": "note", "subject": "[[Plan]]"}, "## Note\n\nx\n")
-	started := tv.Doc("event", "Plan · started", map[string]any{"kind": "started", "subject": "[[Plan]]"}, "")
+	other := tv.Doc("source", "Notes", map[string]any{"sha256": "aaaaaaaaaaaa11", "file": "[[y.md]]"}, "")
+	topic := tv.Doc("topic", "Plan", map[string]any{"kind": "concept"}, "## Definition\n\nDo it.\n")
+	repo := tv.Doc("repository", "p3-edge", map[string]any{"path": "/y"}, "## What it is\n\nx\n")
 	idx := tv.Index()
-	for _, id := range []string{src, spec, round, chord, note} {
+	for _, id := range []string{src, other} {
 		if !idx.Pending(idx.ByID(id)) {
-			t.Fatalf("%s is pending: a source, a verified spec, a passing verification, a done chord, a prose event", idx.ByID(id).Title())
+			t.Fatalf("%s is pending: a source no change absorbed", idx.ByID(id).Title())
 		}
 	}
-	for _, id := range []string{open, stale, started} {
+	for _, id := range []string{topic, repo} {
 		if idx.Pending(idx.ByID(id)) {
-			t.Fatalf("%s is not pending: a spec of an open thread, a stale verification, a started event", idx.ByID(id).Title())
+			t.Fatalf("%s is not pending: only a source is", idx.ByID(id).Title())
 		}
 	}
-	h := vault.Hash(idx.ByID(chord))
-	tv.Write("changes/2026-09/2026-09-27 Ingest.md", "---\nid: chg-aaaaaa\ntype: change\nstatus: applied\n---\n\n## Absorbed\n\n| Document | Id | Hash |\n|---|---|---|\n| [[DINOv2]] | "+src+" | 3f9c1e2a7b8d |\n| [[Goal]] | "+chord+" | "+h[:12]+" |\n")
+	if vault.Hash(idx.ByID(src)) != "3f9c1e2a7b8d44" {
+		t.Fatalf("a source's hash is its sha256: %s", vault.Hash(idx.ByID(src)))
+	}
+	tv.Write("changes/2026-09/2026-09-27 Ingest.md", "---\nid: chg-aaaaaa\ntype: change\nstatus: applied\n---\n\n## Absorbed\n\n| Document | Id | Hash |\n|---|---|---|\n| [[DINOv2]] | "+src+" | 3f9c1e2a7b8d |\n| [[Notes]] | "+other+" | 0000000000aa |\n")
 	idx = tv.Index()
-	if idx.Pending(idx.ByID(src)) || idx.Pending(idx.ByID(chord)) {
-		t.Fatal("an applied change absorbed them")
+	if idx.Pending(idx.ByID(src)) {
+		t.Fatal("an applied change absorbed it")
 	}
-	// A new callout or a new row of a code section is no edit of the prose.
-	tv.Write("wiki/documents/Goal.md", strings.Replace(strings.Replace(tv.Read("wiki/documents/Goal.md"), "| a |", "| a |\n| b |", 1), "[!chord] Done", "[!chord-closed] Closed", 1))
-	if idx := tv.Index(); idx.Pending(idx.ByID(chord)) {
-		t.Fatal("a code section is not prose")
+	if !idx.Pending(idx.ByID(other)) {
+		t.Fatal("a change that absorbed another hash leaves a source pending")
 	}
-	// A verification's sections are its content: an outcome on a finding is an edit.
-	hv := vault.Hash(idx.ByID(round))
-	tv.Write("wiki/documents/Plan · Verification 1.md", strings.Replace(tv.Read("wiki/documents/Plan · Verification 1.md"), "## Scope\n\nx", "## Scope\n\ny", 1))
-	if idx := tv.Index(); vault.Hash(idx.ByID(round)) == hv {
-		t.Fatal("a verification's hash covers the sections code wrote")
+	if got := idx.PendingDocs(); len(got) != 1 || got[0].ID() != other {
+		t.Fatalf("pending docs %v", got)
+	}
+	// A new file under the same source is pending again.
+	tv.Write("wiki/documents/DINOv2.md", strings.Replace(tv.Read("wiki/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
+	if idx := tv.Index(); !idx.Pending(idx.ByID(src)) {
+		t.Fatal("a source with a new hash is pending")
+	}
+}
+
+// The archive of threads/ resolves links, and holds no document.
+func TestTheThreadsArchiveHoldsLinkTargetsOnly(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("threads/Fix alarms.md", "---\nid: doc-aaaaaa\ntype: stub\ndescription: x\n---\n\n## Idea\n\nx\n")
+	tv.Write("threads/Fix alarms · Spec.md", "---\nid: doc-bbbbbb\ntype: spec\nthread: \"[[Fix alarms]]\"\n---\n\n## Goal\n\nx\n")
+	tv.Doc("topic", "Alarms", map[string]any{"kind": "concept"}, "From [[Fix alarms]].\n")
+	idx := tv.Index()
+	for _, list := range [][]*doc.Doc{idx.Docs, idx.Notes, idx.Misplaced} {
+		for _, d := range list {
+			if strings.HasPrefix(d.Path, "threads/") {
+				t.Fatalf("the index holds %s", d.Path)
+			}
+		}
+	}
+	if idx.ByID("doc-aaaaaa") != nil {
+		t.Fatal("an archived stub is no document")
+	}
+	if got := idx.LinkPaths("Fix alarms"); len(got) != 1 || got[0] != "threads/Fix alarms.md" {
+		t.Fatalf("link paths %v", got)
+	}
+	if typ, err := idx.TypeOfLink("[[Fix alarms · Spec]]"); err != nil || typ != "file" {
+		t.Fatalf("an archived spec is a link target: %q %v", typ, err)
+	}
+	if !vault.Unread("threads/Fix alarms.md") || !vault.Unread("scratchpad/Draft.md") || vault.Unread("wiki/documents/Alarms.md") {
+		t.Fatal("unread")
 	}
 }
 

@@ -11,7 +11,7 @@ convention, and the work its TODO lines point at. The snapshot that capture take
 source every claim cites. Every topic this skill writes holds the repository's own tag,
 so a lookup under that tag finds it.
 
-Tools: `context`, `source` (capture, chunks, read), `match`, `change`, `thread` (stub).
+Tools: `context`, `source` (capture, chunks, read), `match`, `change`.
 Agents: [wiki-extract](../../agents/wiki-extract.md), [wiki-draft](../../agents/wiki-draft.md).
 References: [changes.md](../atlas/references/changes.md),
 [pages.md](../atlas/references/pages.md).
@@ -50,16 +50,15 @@ References: [changes.md](../atlas/references/changes.md),
    component entities, one line each), and `## Instructions`. `absorbs` names the
    snapshot. In `tagging: known`, ask before a tag that no document holds, and set
    `new_tags: true` after the yes.
-7. List the TODO, FIXME, and roadmap items as candidate stubs. They are work, not
-   knowledge, so they never become topics.
+7. List the TODO, FIXME, and roadmap items. They are work, not knowledge, so they
+   never become topics.
 
 ## Gate
 
 Propose the change, show the preview, and wait for the yes. Apply sets the repository
-document's `described` to the snapshot's commit. Then offer the candidate stubs as one
-numbered list. For each one the user picks, call `thread` with `action: stub`, `text` (the
-TODO line and its `path:line`, as written), a short `title`, and `tags` set to the
-repository's tag.
+document's `described` to the snapshot's commit. Then show the items of step 7 as one
+numbered list. Write the ones the user picks in one note in `scratchpad/`, named after
+the repository: each TODO line as written, with its `path:line`.
 
 ## Hand off
 

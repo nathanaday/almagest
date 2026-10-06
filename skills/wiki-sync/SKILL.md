@@ -1,12 +1,12 @@
 ---
 name: wiki-sync
-description: "Absorb documents into the wiki through one pipeline: chunk, extract, match, draft, change. It serves every way knowledge enters: a captured source, a repository snapshot, the spec and the verification of a verified thread, a closed chord, a saved passage. Use for sync the wiki, absorb the pending documents, update the wiki from this work, wikify this, what does the wiki still need to learn. Capturing files is wiki-ingest; changing topics that exist is wiki-edit."
+description: "Absorb sources into the wiki through one pipeline: chunk, extract, match, draft, change. It serves every way knowledge enters: a captured file, a repository snapshot, a saved passage. Use for sync the wiki, absorb the pending sources, update the wiki from this source, what does the wiki still need to learn. Capturing files is wiki-ingest; changing topics that exist is wiki-edit."
 ---
 
 # wiki-sync
 
-A document is pending until an applied change absorbs it. This skill drains pending
-documents: it cuts each into chunks, sends a worker to extract what each chunk says,
+A source is pending until an applied change absorbs it. This skill drains pending
+sources: it cuts each into chunks, sends a worker to extract what each chunk says,
 matches the subjects against the wiki in code, sends drafters to decide and write, and
 proposes one change the user reviews.
 
@@ -17,21 +17,15 @@ References: [changes.md](../atlas/references/changes.md),
 
 ## Procedure
 
-1. **Documents.** Take the ids given, or the `pending` list from `vault`. Pending
-   documents are sources, the spec and the passing verification of a verified thread,
-   a chord whose threads are closed or dropped, and events of kind dropped and note.
-   Sources come first, then events, then specs with their verifications. A spec and its verification
-   go into one change: together they close their thread. One change holds at most about ten
-   documents or forty chunks; more is several changes, one after another. From the
-   same `vault` call, keep the tag list (every tag with its count), the `tagging` mode,
-   and the vault's description.
-2. **Chunks.** Call `source` with `action: chunks` and `doc` for each document.
+1. **Sources.** Take the ids given, or the `pending` list from `vault`. One change holds
+   at most about ten sources or forty chunks; more is several changes, one after another.
+   From the same `vault` call, keep the tag list (every tag with its count), the
+   `tagging` mode, and the vault's description.
+2. **Chunks.** Call `source` with `action: chunks` and `doc` for each source.
 3. **Extract.** Send one [wiki-extract](../../agents/wiki-extract.md) per chunk, in waves
-   of at most eight. Give each the document id, the chunk index, the document's tags,
-   the tag list, and the vault's description. A single small chunk, extract yourself:
-   `source` with `action: read`, then the procedure of wiki-extract. For a
-   verification, the findings with the outcome `knowledge` and `## Notes` are the first
-   things to read.
+   of at most eight. Give each the source id, the chunk index, the source's tags, the
+   tag list, and the vault's description. A single small chunk, extract yourself:
+   `source` with `action: read`, then the procedure of wiki-extract.
 4. **Check.** Each Item Map names its chunk and is complete. Send a `partial` chunk
    again, narrower.
 5. **Match.** Call `match` with every Item Map at once in `items`, so a subject named in
@@ -39,15 +33,14 @@ References: [changes.md](../atlas/references/changes.md),
 6. **Slice.** Put every subject that hits or nears one topic into one slice, so two
    drafters never write one topic. At most eight subjects per slice.
 7. **Draft.** Send one [wiki-draft](../../agents/wiki-draft.md) per slice, with the ids
-   of the documents being absorbed, their tags, the tag list, and the `tagging` mode.
+   of the sources being absorbed, their tags, the tag list, and the `tagging` mode.
    Draft yourself when there are one or two slices.
 8. **Assemble** the Wiki Change Plan:
    - every drafted write;
    - for each source: a modify of the source, with its `description`, `tags`,
      `authority`, `## Summary`, and `## Structure` (from the chunk summaries; keep the
      embed line at the top of the body);
-   - `absorbs`: the document ids; `work`: the thread or the chord, when every document
-     serves one;
+   - `absorbs`: the source ids;
    - `new_tags: true` when a write adds a tag that no document holds, and the user
      agreed to it in `tagging: known` mode;
    - `title`: a short name ("Ingest the DINOv2 paper"); `notes`: what the change does,
@@ -63,10 +56,8 @@ in Obsidian and edit one before the yes. Say the coverage: every chunk read, any
 partial, the subjects skipped, and each new tag. Wait for the yes, then apply. The
 change tool refuses apply in the same turn as the proposal.
 
-A change with no writes (the documents held nothing new) needs no yes, unless it absorbs
-a spec, a verification, or a chord: that change closes a thread or a chord, and the
-change tool waits for the user's answer. Apply the first kind and say so in one line:
-the documents are no longer pending.
+A change with no writes (the sources held nothing new) needs no yes. Apply it and say
+so in one line: the sources are no longer pending.
 
 ## Hand off
 

@@ -21,10 +21,6 @@ func TestBriefOfARepositoryAndOfTags(t *testing.T) {
 	tv.Doc("topic", "P3 rule", map[string]any{"kind": "policy", "strength": "must", "tags": []string{"work/p3"}}, "")
 	tv.Doc("topic", "Edge rule", map[string]any{"kind": "policy", "strength": "should", "tags": []string{"work/p3/p3-edge"}}, "")
 	tv.Doc("topic", "TS rule", map[string]any{"kind": "policy", "tags": []string{"ts"}}, "")
-	tv.Doc("stub", "Score boxes", nil, "")
-	tv.Doc("tasks", "Score boxes · Tasks (p3-edge)", map[string]any{"thread": "[[Score boxes]]", "repository": "[[p3-edge]]"}, "## Tasks\n\n- [ ] T1: score (R1)\n")
-	tv.Doc("stub", "Idea for edge", map[string]any{"tags": []string{"work/p3/p3-edge"}}, "")
-	tv.Doc("stub", "Idea for cloud", map[string]any{"tags": []string{"work/p3/p3-cloud"}}, "")
 	os.WriteFile(filepath.Join(repo, "new.txt"), []byte("x"), 0o644)
 	idx := tv.Index()
 	b, err := brief.Of(idx, brief.Input{Path: filepath.Join(repo, "src")})
@@ -41,11 +37,11 @@ func TestBriefOfARepositoryAndOfTags(t *testing.T) {
 	if len(pol) != 4 || pol[0] != "Pin Go deps" || pol[1] != "Edge rule" || pol[2] != "P3 rule" || pol[3] != "Everywhere" {
 		t.Fatalf("policies %v", pol)
 	}
-	if len(b.Work) != 2 || len(b.Instructions) != 1 || b.Repository == nil || !b.Repository.Exists || len(b.Repository.Dirty) != 1 || len(b.Repository.Recent) != 1 {
-		t.Fatalf("work %+v instructions %+v facts %+v", b.Work, b.Instructions, b.Repository)
+	if len(b.Instructions) != 1 || b.Repository == nil || !b.Repository.Exists || len(b.Repository.Dirty) != 1 || len(b.Repository.Recent) != 1 {
+		t.Fatalf("instructions %+v facts %+v", b.Instructions, b.Repository)
 	}
 	b, err = brief.Of(idx, brief.Input{Tags: []string{"work/p3"}})
-	if err != nil || len(b.Repositories) != 2 || len(b.Work) != 2 || b.Repository != nil {
+	if err != nil || len(b.Repositories) != 2 || b.Repository != nil {
 		t.Fatalf("tags: %+v %v", b, err)
 	}
 	b, _ = brief.Of(idx, brief.Input{})

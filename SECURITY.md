@@ -46,11 +46,8 @@ change, you read the preview and answer, and then the agent applies the change.
   is about to apply, while it holds the vault's lock.
 - A subagent's report and a background task's notice arrive as prompts, but they do not
   count as your turn.
-- One kind of change needs no prompt: a change with no writes that absorbs no spec,
-  verification, or chord. It only marks sources and events as absorbed, so the agent
-  applies it in the same turn, with or without a recorded session.
-- A change that closes a thread or a chord waits for your prompt, even when it has no
-  writes.
+- One kind of change needs no prompt: a change with no writes. It only marks sources as
+  absorbed, so the agent applies it in the same turn, with or without a recorded session.
 - The tool refuses a change that names no session, a change whose proposal time does not
   parse, and a change whose session ended with no prompt from you after the proposal. No
   later prompt reaches that session. Apply such a change with the Apply button in Obsidian
@@ -65,45 +62,37 @@ change, you read the preview and answer, and then the agent applies the change.
 
 The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
 `apply_patch`, and Bash call, and before each call of the atlas tools that can write:
-`change`, `thread`, `chord`, `source`, and `vault`. The other four, `search`, `context`,
-`match`, and `lint`, only read, and the guard does not see them. In a vault, it refuses an
-agent's edit of:
+`change`, `source`, and `vault`. The other four, `search`, `context`, `match`, and
+`lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
+edit of:
 
-- `wiki/documents/`: a new document, which the thread, chord, change, and source tools
-  make; a topic, a source, or a repository, which change only through a change; a Write
-  over a stub, a spec, a task list, a verification, a chord, or an event; the frontmatter
-  and the lead callout of each of these; and the sections that code owns in the first
-  five. The guard allows an Edit of their prose in the sections of their type. A stub's
-  Idea and Notes hold at most 40 lines together.
+- `wiki/documents/`: a new document, which the change and source tools make; and a
+  topic, a source, or a repository, which change only through a change.
 - `wiki/assets/`, and any other folder under `wiki/`.
-- `changes/`, `chords/`, and `views/`, which code writes.
+- `changes/` and `views/`, which code writes.
 - `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
 - `sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.
 - `.atlas/config.json`, anything under `.obsidian/plugins/atlas/`, and the machine's
   `config.json` in `~/.atlas` (or `$ATLAS_HOME`). These files decide what Atlas runs; see
   [A shared vault changes what runs](#a-shared-vault-changes-what-runs).
-- A file inside a linked repository, when the session has no started thread with an open
-  task for that repository.
+
+The guard does not refuse an edit inside a linked repository, or in `threads/`, the
+archive that the 9.0 migration writes.
 
 The guard judges a path as the disk names it. It follows links, and it matches each folder
 name without regard to case, so another spelling of a path meets the rule of the real file.
-It uses the vault that holds the edited file, not the vault of the session's folder. A file
-in no vault belongs to the vault that links its repository. So a session that runs outside
-the vault gets the same refusals.
+It uses the vault that holds the edited file, not the vault of the session's folder. So a
+session that runs outside the vault gets the same refusals. A file in no vault meets only
+the rule on the machine's `config.json`.
 
 ### A read-only agent writes
 
-The plugin's four read-only agents are `thread-audit`, `wiki-audit`, `wiki-draft`, and
-`wiki-extract`. For each of them, the guard refuses the edit tools and every atlas call
-except the calls that only read: `search`, `context`, `match`, and `lint`; `vault status`;
-`change show`; `thread` and `chord` with `list` or `load`; and `source` with `chunks` or
-`read`. The guard counts a call that this list does not name as a write.
-
-`wiki-audit`, `wiki-draft`, and `wiki-extract` run no shell command. `thread-audit` checks
-work by running tests and git, so it can run any shell command except the atlas commands
-that the guard refuses for every agent (next section). Its shell can write files; see
-[What Atlas does not guard against](#what-atlas-does-not-guard-against).
+The plugin's three read-only agents are `wiki-audit`, `wiki-draft`, and `wiki-extract`.
+For each of them, the guard refuses the edit tools, every shell command, and every atlas
+call except the calls that only read: `search`, `context`, `match`, and `lint`;
+`vault status`; `change show`; and `source` with `chunks` or `read`. The guard counts a
+call that this list does not name as a write.
 
 ### An agent uses the shell to skip the gate or to change what runs
 

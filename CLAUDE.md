@@ -5,15 +5,17 @@ plugin `atlas-obsidian` in the repository's own marketplace, and the Obsidian pl
 `obsidian/`. Read `README.md` first. This file holds what the code and the README do not
 say.
 
-8.0.0 replaced the plans of 7.x with threads and chords (`internal/thread`). A thread is
-a stub, a spec, task lists, and verifications; code derives its status and no call sets
-it. A chord orders threads, and code writes its canvas in `chords/`. Each skill's
-contract and `skills/atlas/references/threads.md` are the record of the 8.0 design.
+9.0.0 removed threads and chords, which 8.0.0 had put in place of the plans of 7.x. They
+are a standalone reference project now, obsidian-threads (`~/projects/software/obsidian-threads`),
+and the tag `threads-final` is the last commit that has them. Atlas keeps the knowledge
+base: sources, repositories, topics, tags, views, sessions, and changes.
+`atlas-obsidian vault migrate` moves an 8.x vault to the 9.0 layout in one commit
+(`internal/migrate`): the thread documents and the chord canvases go to `threads/`
+unchanged, and the documents that stay lose the fields and sections that served threads.
+A vault older than 8.0 migrates with 8.1.1 first.
 
 7.0.0 replaced the scope tree of 6.x with tags. Every document lies flat in
-`wiki/documents/`, and code writes `views/`. `atlas-obsidian vault migrate` moves a 6.x
-or a 7.x vault to the 8.0 layout in one commit (`internal/migrate`; `v8.go` is the step
-from 7.x).
+`wiki/documents/`, and code writes `views/`.
 6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
 repository, and a terminal view). Nothing reads a 5.x file. The 5.x code is on the `v1`
 branch and the `v1-final` tag.
@@ -25,7 +27,7 @@ branch and the `v1-final` tag.
 | The design: rules, document types, tools, hooks, skills | the SoftwareProjects vault (`~/Vaults/SoftwareProjects`), tag `tools/atlas-obsidian`: the design pages are sources there (start with `Atlas 7`), absorbed into topics |
 | Each skill's contract | `skills/<name>/SKILL.md`, `skills/atlas/references/` |
 | Each read-only agent | `agents/<name>.md` |
-| The schemas of the twelve types | `internal/schema/schema.go` |
+| The schemas of the six types | `internal/schema/schema.go` |
 
 The design pages are the spec. When the code departs from them, the reason is below.
 
@@ -33,24 +35,9 @@ The design pages are the spec. When the code departs from them, the reason is be
 
 - **The setting is `tagging`, not `tags`.** `Atlas.md` holds `tagging: open | known`,
   and `vault init` takes `tagging`. `tags` is Obsidian's own property.
-- **Event callouts are `[!event-<kind>]`**, so no event kind shares a callout name with
-  a type.
-- **`thread resolve` takes no text.** `became` and the `resolved` event are the record.
-- **The board has a `waiting` group:** threads that come after a thread not yet verified.
-- **A thread closes with no call.** It is closed when it is verified and an applied
-  change absorbed its spec and its last verification (`Board.derive`). The gate
-  (`sessions.UserAnswered`) makes such a change wait for the user's turn even with no
-  writes, since its apply closes a thread.
-- **A verification goes stale by hash.** It records `spec_hash` (the requirements and
-  the rules) and `tasks_hash` (the ids of the tasks that are not dropped). A reworded
-  goal changes neither.
-- **The order of a chord lives on the stubs** (`chord`, `after`). The canvas is a view of
-  it that the user may edit. The chord's `canvas` field holds the hash of the graph code
-  wrote last, so a sync tells the user's edit from its own and leaves the edit alone
-  until `chord canvas --save` or `--write`.
 - **A change's base ignores what code derives** (`change.BaseHash`): code-owned fields,
   the lead callout, the code sections. A sync between a proposal and its apply refreshes
-  a repository's git facts, and that was a conflict on every close of a thread. Apply
+  a repository's git facts, and that was a conflict on every apply. Apply
   keeps the document's current code-owned fields (`keepDerived`).
 - **A session records its agent's process and conversation.** The hooks walk up from
   their own process to the nearest `claude` or `codex` and keep its id in `pid`, and keep
@@ -70,18 +57,19 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A terminal launch fails where no one sees it** (osascript and `open` exit after the
   spawn), so `openTerminal` checks for the app first. `obsidian/scripts/probe-launch.mjs`
   opens a real terminal with a probe; record each result in TESTED.md.
-- **The canvas legend is in the canvas bar, not on the canvas.** 8.0.2 to 8.1.0 put six
-  groups (`atlas-legend-1` to `-6`) on each chord canvas; any canvas write removes them
-  (`dropLegend`). The bar's swatches use `--color-*-rgb`, because the `--canvas-color-*`
-  variables exist only inside a canvas.
-- **thread-audit runs shell commands.** It checks work by running its tests. The guard
-  refuses its edits and its atlas writes, not its shell.
 - **A tag page that does not hold its tag's parent is a warning.** No document is lost
   by it; lint names the fix.
-- **The migration warns about a live session, and does not refuse.** Its threads and
-  tasks become plans in the first step, and threads in the second. A root plan takes the tag of every
-  scope of its thread, area or repository.
-- **`vault migrate` refuses a vault that has the 8.0 layout already**, and the guard
+- **The migration warns about a live session, and does not refuse.** An 8.x agent in it
+  still calls the thread tool, which 9.0 does not have. It refuses while a change is
+  proposed, and when a file is in the way in `threads/`.
+- **`threads/` is an archive Atlas does not read.** The index keeps its files as link
+  targets, as it does the scratchpad's (`vault.Unread`), so a topic's link to an archived
+  spec is no dead link. A rename does not rewrite the links inside it, as it does not in
+  the scratchpad. The guard does not judge edits there, and lint does not lint it. A
+  note of an archived type left in `wiki/documents` is the lint error `archived`.
+- **A topic's `## Origin` is a plain section.** Promote wrote it from a stub's idea; 9.0
+  has no promote, and the section stays the user's text.
+- **`vault migrate` refuses a vault that has the 9.0 layout already**, and the guard
   refuses it from an agent's shell.
 - **Packages:** the design's context package is `internal/brief`, since `context` is a
   standard Go package. `internal/derive` writes the code-owned parts of sources,
@@ -97,7 +85,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   else, commits the listed paths that differ from `HEAD` as `recovery: N files as found
   after a crash` (`CommitOnly`: those paths alone), puts the listed local documents
   (`Vault.Local`: a `.md` path that `Vault.Contain` accepts, outside `.git`, `.obsidian`,
-  and `.claude` in any case, and a listed chord canvas) back from the base, and sets the
+  and `.claude` in any case) back from the base, and sets the
   change to proposed without `paths` or `recovering`. So a recovery that a crash stops
   partway does the same again.
   A `recovering` value that is not the full id of a commit in the history (or `none` in a
@@ -113,16 +101,13 @@ The design pages are the spec. When the code departs from them, the reason is be
   or the migration left at its kept paths, so their later saves count too. Rollback
   unstages once the commit staged the paths, or once `Tx.Indexed` said a git checkout did
   (undo). The migration keeps every
-  path it touches and commits with `Tx.CommitAll`. A crash in the middle of a thread write
-  has no journal: the snapshot before the next write commits what it left, so no text is
-  lost.
+  path it touches and commits with `Tx.CommitAll`.
 - **`writeAtomic` syncs** the file before the rename and the folder after it. On macOS
-  that is `F_FULLFSYNC`, about 0.2 s for a thread write. `writeAtomicIf` runs a check
+  that is `F_FULLFSYNC`, about 0.2 s for a write. `writeAtomicIf` runs a check
   after the sync, right before the rename.
-- **A derived write keeps a newer save.** Every sync (derive, git facts, thread documents
-  and canvases) writes through a `vault.Guard`: `NewGuard(idx, v or tx)`, whose `Write`
-  calls `WriteIfUnchanged` with the bytes the index read (or the bytes a canvas registered
-  with `Expect`, through `Board.SyncWith`). It compares before the write and again right
+- **A derived write keeps a newer save.** Every sync (derive and git facts) writes
+  through a `vault.Guard`: `NewGuard(idx, v or tx)`, whose `Write` calls
+  `WriteIfUnchanged` with the bytes the index read. It compares before the write and again right
   before the rename, skips a file saved in between, and records it in `Skipped`; the next
   sync derives it. `SyncSettings` merges again when the harness wrote the file meanwhile.
 - **The views sync never deletes a user's note.** A `.md` file in `views/` that no view
@@ -149,28 +134,26 @@ The design pages are the spec. When the code departs from them, the reason is be
   MCP server passes `sessions.UserAnswered`, which reads the change's `session` and that
   session's `last_prompt`. It judges the document Apply resolved, under the lock, so no
   other name for the change and no other working folder gets past it. The CLI passes
-  none: the terminal and Obsidian's Apply button are the user's. A change with no writes
-  that absorbs no spec, verification, or chord needs no answer and applies at once. Any
-  other change with no `session`, or whose session ended with no prompt after the
+  none: the terminal and Obsidian's Apply button are the user's. A change with no writes,
+  which only absorbs sources, needs no answer and applies at once. Any other change with no `session`, or whose session ended with no prompt after the
   proposal, waits for Obsidian or the terminal; `change propose` from the CLI records no
   session.
-- **Times carry seconds.** `proposed`, `last_prompt`, and an event's `at` are
-  `2006-01-02T15:04:05`. With minutes, a yes typed in the minute of the proposal would not
-  open the gate. Two events of one subject in one second get a strict order, so the
-  status they derive is certain.
+- **Times carry seconds.** `proposed` and `last_prompt` are `2006-01-02T15:04:05`. With
+  minutes, a yes typed in the minute of the proposal would not open the gate.
 - **The gate counts only the user's turns.** A host sends a subagent's hand-back and a
   background task's notice as a UserPromptSubmit (`<agent-message …>`,
   `<task-notification …>`). The prompt hook sets `last_prompt` only for a real prompt
   (`hooks.UserTurn`). The live test found this hole.
-- **The Stop hook blocks once for the agent's own debts.** An empty `## Description`, or
-  work in a repository with no task checked and no `## Progress` line in the session
-  document, returns `decision: block`
-  with the reason, once per session (`reminded`), and never while `stop_hook_active`. A
+- **The Stop hook blocks once for the agent's own debts.** An empty `## Description` in
+  a session that touched a repository or proposed a change returns `decision: block` with
+  the reason, once per session (`reminded`), and never while `stop_hook_active`. A
   change that waits for the user is a `systemMessage`, because the user acts on it.
 - **The description follows the section.** Every hook event copies the first line of
   `## Description` into `description`, whatever tool wrote it.
-- **Shell writes reach the record, not the guard.** The design keeps Bash out of the edit
-  rule. The touched hook adds a repository to the session's `repositories` when a Bash
+- **An edit in a linked repository needs no ceremony.** 8.x refused it without a started
+  thread with an open task; the user found that it blocked everyday work. The guard
+  judges only files inside a vault, by the vault above the file.
+- **Shell writes reach the record, not the guard.** The touched hook adds a repository to the session's `repositories` when a Bash
   command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or names
   it. The skills tell the agent to change files with Edit and Write.
 - **The shell runs neither the apply command of `change`, `vault migrate`, nor
@@ -193,18 +176,15 @@ The design pages are the spec. When the code departs from them, the reason is be
   is out of its reach. `config set` and `config unset` of `terminal_command` or
   `agent_commands` are refused too.
 - **The guard takes the vault above the file**, not the vault of the session's folder,
-  so a session outside the vault gets the same refusals. A file in no vault belongs to
-  the vault that links its repository (the session's first, then the machine's
-  config); when that is not the session's vault, the refusal names it and says to start
-  a session there or set `ATLAS_VAULT`.
+  so a session outside the vault gets the same refusals. A file in no vault meets only
+  the rule on the home's `config.json`.
 - **The guard judges the path the disk names.** `canonical` resolves links on the part
   that exists and spells each part as its folder entry, so `ATLAS.md`, `Wiki/documents/…`,
   a repository in another case, or a link into the vault meet the rule of the real file.
-  Code sections come from `doc.SectionOffsets`, which skips fenced headings, and an
-  Edit, a MultiEdit, or a patch is judged by the document it leaves (`Input.leaves`,
+  A session document's code sections come from `doc.SectionOffsets`, which skips fenced
+  headings, and an Edit, a MultiEdit, or a patch is judged by the document it leaves (`Input.leaves`,
   `codeChanged`): the frontmatter, the lead, and each code section come out as they went
-  in, with each code heading as often as before by `doc.Headings`, and no second heading
-  of any section. An Edit that applies is judged by that alone, so its anchor may hold a
+  in, with each code heading as often as before by `doc.Headings`. An Edit that applies is judged by that alone, so its anchor may hold a
   code heading it keeps; its old text matches with curly and straight quotes as one, as
   the host's Edit may. A Codex patch is read as Codex 0.155.1 reads it: file markers with
   whitespace before them, context and removed lines that match with trailing whitespace
@@ -220,19 +200,14 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The PreToolUse matcher anchors itself** (`^(…)$`) and names the atlas server of both
   hosts (`mcp__plugin_atlas-obsidian_atlas__…`, Codex's `mcp__atlas__…`): hosts test it
   unanchored.
-- **The guard finds task lists by their `thread` field.** The lists named after the
-  thread answer first; when none has an open task, it reads the index, so a list renamed
-  by hand still counts.
 - **Every hook waits for the lock half its timeout at most** (`hooks.Deadlines`,
   `Vault.LockWithin`, which bounds the in-process mutex too), then exits 1 with the held
   lock named, before the host kills it. The plugin test holds each deadline against
   `hooks.json`; SessionEnd's timeout is 3 s.
-- **`thread-audit` names a repository by its path**: `git -C <path> …`, since it runs
-  in the vault.
 - **The host's own quiet agents are workers.** `Explore`, `Plan`, `claude-code-guide`,
-  and `statusline-setup` get a line under `## Subagents`, like the plugin's four, and no
+  and `statusline-setup` get a line under `## Subagents`, like the plugin's three, and no
   document (`quietAgents`). `statusline-setup` has Edit; its edits meet the path rules
-  like any agent's but stay off the session's record. Only the plugin's four are refused
+  like any agent's but stay off the session's record. Only the plugin's three are refused
   writes.
 - **The harness settings keep no memory.** `SyncSettings(drop)` adds every repository
   path the documents name and removes only the paths the documents named before a write
@@ -248,7 +223,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   (`layout: upgrade <paths>`, `CommitOnly`), so no snapshot calls it a hand edit and no
   undo counts it. A refused commit puts the old copy back and the write goes on; the
   upgrade commit stays when the write then fails. A sync does not upgrade. Each shipped
-  copy lives in `template/old/` (6.5) and `template/old/7.0/` (7.0 to 8.1).
+  copy lives in `template/old/` (6.5), `template/old/7.0/` (7.x), and
+  `template/old/8.1/` (8.x).
 - **Titles also drop `[ ] # ^`**, which break a wikilink, `→`, which splits the old and
   new titles of a change heading, and control characters. A title the caller gives holds
   at most 150 bytes (`doc.CheckTitle`), so the titles code derives from it fit a file
@@ -260,7 +236,6 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Match merges the hits of one kind on one document** (`mergeHits`), so one drafter
   writes that document. A near or a new subject is never merged, and neither are two
   subjects of different kinds that hit one document.
-- **A dropped thread does not block** the threads after it.
 - **The binary is `atlas-obsidian`, not `atlas`.** Other programs install a binary named
   `atlas`, so that name could run the wrong program. 6.0 to 6.2 shipped `atlas`; the
   guard's shell rule still refuses both names.
@@ -301,7 +276,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   `permission_mode`. SessionStart has `source`; SessionEnd has `reason`; Stop has
   `stop_hook_active` and `last_assistant_message`.
 - A subagent's SubagentStart, SubagentStop, and tool events carry `agent_id` and
-  `agent_type` (`atlas-obsidian:thread-audit`), and the parent's `session_id`.
+  `agent_type` (`atlas-obsidian:wiki-audit`), and the parent's `session_id`.
 - PostToolUse gives `tool_response` for every tool. For an MCP tool it is a JSON string
   that holds the result's JSON; `hooks.decodeAll` reads both.
 - `cwd` follows the agent's `cd`: after `cd repo && …`, later events carry the
@@ -312,9 +287,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   each. Use it to check a host's events.
 
 Obsidian 1.13.7, verified live (2026-10-01): in a Base filter, an expression on a
-property a note lacks fails, and the note drops out: `!chord` and `!chord || chord == ""`
-both hide a stub with no `chord`. `chord.isEmpty()` is true for a missing property and
-for `""`. A hidden window renders nothing, so a DevTools screenshot hangs; bring the
+property a note lacks fails, and the note drops out: `!x` and `!x || x == ""` both hide a
+note with no `x`. `x.isEmpty()` is true for a missing property and for `""`. A hidden window renders nothing, so a DevTools screenshot hangs; bring the
 second instance to the front by its pid with `osascript` first.
 
 Obsidian 1.13.7, verified live (2026-09-28): the graph colors. A group's
@@ -329,12 +303,6 @@ evaluate JavaScript and take screenshots through the DevTools protocol at
 `localhost:9333/json/list`, after `Page.bringToFront`. The settings open as a second page
 of that list; choose the page whose title does not begin with "Settings". Point the
 plugin at the build under test: set `binaryPath` in the plugin's settings.
-
-Verified live on 8.0.0 (2026-09-30), Obsidian 1.13.7 and Claude Code 2.1.286: the thread
-bar on a stub and its folded properties; the chord canvas, its bar, and Save order from a
-redrawn arrow; `View · Threads`; and one thread from a request to closed in a scratch
-vault with `claude -p`, where the agent used thread stub, spec, tasks, start, check,
-verify (three rounds with thread-audit), finding, and the closing change.
 
 Verified with Codex 0.155.1 in a scratch `CODEX_HOME` (2026-10-04): the plugin's server
 entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.md).
@@ -363,7 +331,7 @@ in the app).
 
 To try the migration on a copy of a real vault, copy the vault, then run
 `ATLAS_MIGRATE_COPY=<copy> go test ./internal/migrate/ -run TestMigrateACopy -v`. It
-prints the report, every lint finding, and each thread's status.
+prints the report and every lint finding.
 
 ## Build, test, and try
 

@@ -1,6 +1,5 @@
-// Package schema holds the document types: the nine of wiki/documents (source, repository,
-// topic, stub, spec, tasks, verification, chord, event), the vault document, and the two
-// records (session, change).
+// Package schema holds the document types: the three of wiki/documents (source,
+// repository, topic), the vault document, and the two records (session, change).
 // For each: its fields, the owner of each field, its kinds, and the sections of its body.
 // Every check of a document against its type reads these tables.
 package schema
@@ -62,8 +61,6 @@ const (
 	Root Family = "root"
 	// Knowledge is what the vault knows: only a change writes it.
 	Knowledge Family = "knowledge"
-	// Work is what the user means to do: the thread and chord tools write it.
-	Work Family = "work"
 	// Record is what happened: code writes it.
 	Record Family = "record"
 )
@@ -113,7 +110,7 @@ func (t *Type) SectionsOf(kind string) []string {
 
 // Document reports whether the type lives in wiki/documents.
 func (t *Type) Document() bool {
-	return t.Family == Knowledge || t.Family == Work || t.Name == "event"
+	return t.Family == Knowledge
 }
 
 // The prefix of every new document of wiki/documents. A document from a 6.x vault keeps
@@ -123,16 +120,6 @@ const DocPrefix = "doc"
 // Kinds of the types that have one.
 var (
 	TopicKinds = []string{"concept", "entity", "policy", "overview"}
-	EventKinds = []string{"started", "continued", "dropped", "reopened", "blocked", "unblocked", "promoted", "resolved", "note"}
-	Priorities = []string{"high", "normal", "low", "someday"}
-)
-
-// Statuses of the thread documents. Code derives each one; no call sets it.
-var (
-	StubStatuses         = []string{"stub", "specified", "planned", "started", "unverified", "verified", "closed", "dropped", "resolved"}
-	SpecStatuses         = []string{"not implemented", "complete (unverified)", "complete (verified)"}
-	VerificationVerdicts = []string{"pass", "fail", "findings", "stale"}
-	ChordStatuses        = []string{"open", "started", "done", "closed", "dropped"}
 )
 
 var topicStatus = []string{"draft", "stable", "contested", "deprecated"}
@@ -171,7 +158,6 @@ var Types = []*Type{
 		{Name: "created", Kind: Time, Owner: Code, Required: true},
 		{Name: "updated", Kind: Time, Owner: Code, Required: true},
 		{Name: "tagging", Kind: Enum, Values: []string{"open", "known"}},
-		{Name: "wikify", Kind: List},
 		{Name: "stale_hours", Kind: Int},
 		{Name: "layout", Kind: Int, Owner: Code},
 	}},
@@ -187,7 +173,6 @@ var Types = []*Type{
 		Field{Name: "locator", Kind: Text, Owner: Code},
 		Field{Name: "measure", Kind: Text, Owner: Code},
 		Field{Name: "captured", Kind: Time, Owner: Code},
-		Field{Name: "from", Kind: Link, Owner: Code, Targets: []string{"stub"}},
 	), Sections: []string{"Summary", "Structure", "Notes"}},
 	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "wiki/documents", Fields: common(
 		Field{Name: "defines", Kind: Tag},
@@ -199,77 +184,20 @@ var Types = []*Type{
 		Field{Name: "head_time", Kind: Time, Owner: Code},
 		Field{Name: "described", Kind: Text, Owner: Code},
 		Field{Name: "behind", Kind: Int, Owner: Code},
-	), Sections: []string{"What it is", "How it is built", "Layout", "Components", "Instructions", "Threads", "Knowledge", "Notes"},
-		CodeSections: []string{"Threads", "Knowledge"}},
+	), Sections: []string{"What it is", "How it is built", "Layout", "Components", "Instructions", "Knowledge", "Notes"},
+		CodeSections: []string{"Knowledge"}},
 	{Name: "topic", Prefix: DocPrefix, Family: Knowledge, Folder: "wiki/documents", Fields: common(
 		Field{Name: "kind", Kind: Enum, Required: true, Values: TopicKinds},
 		Field{Name: "status", Kind: Enum, Values: topicStatus},
 		Field{Name: "sources", Kind: Links},
 		Field{Name: "strength", Kind: Enum, Values: []string{"must", "should", "may"}},
 		Field{Name: "defines", Kind: Tag},
-		Field{Name: "from", Kind: Link, Targets: []string{"stub"}},
 	), Kinds: TopicKinds, KindSections: map[string][]string{
-		"concept":  {"Definition", "Explanation", "Related", "Sources", "Threads", "Origin", "Notes"},
-		"entity":   {"What it is", "Facts", "Related", "Sources", "Threads", "Origin", "Notes"},
-		"policy":   {"Rule", "Why", "Applies when", "Exceptions", "Sources", "Threads", "Origin", "Notes"},
-		"overview": {"Summary", "Context", "Map", "Related", "Sources", "Threads", "Origin", "Notes"},
-	}, CodeSections: []string{"Map", "Threads", "Origin"}},
-	{Name: "stub", Prefix: DocPrefix, Family: Work, Folder: "wiki/documents", Fields: common(
-		Field{Name: "priority", Kind: Enum, Values: Priorities},
-		Field{Name: "chord", Kind: Link, Targets: []string{"chord"}},
-		Field{Name: "after", Kind: Links, Targets: []string{"stub"}},
-		Field{Name: "status", Kind: Enum, Owner: Code, Values: StubStatuses},
-		Field{Name: "spec", Kind: Link, Owner: Code, Targets: []string{"spec"}},
-		Field{Name: "tasks", Kind: Text, Owner: Code},
-		Field{Name: "verification", Kind: Text, Owner: Code},
-		Field{Name: "repositories", Kind: Links, Owner: Code, Targets: []string{"repository"}},
-		Field{Name: "blocked", Kind: Text, Owner: Code},
-		Field{Name: "active", Kind: Bool, Owner: Code},
-		Field{Name: "rank", Kind: Int, Owner: Code},
-		Field{Name: "became", Kind: Links, Owner: Code},
-	), Sections: []string{"Idea", "Thread", "Notes"}, CodeSections: []string{"Thread"}},
-	{Name: "spec", Prefix: DocPrefix, Family: Work, Folder: "wiki/documents", Fields: common(
-		Field{Name: "thread", Kind: Link, Owner: Code, Required: true, Targets: []string{"stub"}},
-		Field{Name: "status", Kind: Enum, Owner: Code, Values: SpecStatuses},
-	), Sections: []string{"Goal", "Requirements", "Rules", "Decisions", "Out of scope", "Knowledge", "Open questions"}},
-	{Name: "tasks", Prefix: DocPrefix, Family: Work, Folder: "wiki/documents", Fields: common(
-		Field{Name: "thread", Kind: Link, Owner: Code, Required: true, Targets: []string{"stub"}},
-		Field{Name: "repository", Kind: Link, Owner: Code, Targets: []string{"repository"}},
-		Field{Name: "done", Kind: Int, Owner: Code},
-		Field{Name: "total", Kind: Int, Owner: Code},
-	), Sections: []string{"Tasks", "Details"}, CodeSections: []string{"Tasks"}},
-	{Name: "verification", Prefix: DocPrefix, Family: Work, Folder: "wiki/documents", Fields: common(
-		Field{Name: "thread", Kind: Link, Owner: Code, Required: true, Targets: []string{"stub"}},
-		Field{Name: "round", Kind: Int, Owner: Code, Required: true},
-		Field{Name: "at", Kind: Time, Owner: Code},
-		Field{Name: "by", Kind: Enum, Owner: Code, Values: []string{"agent", "user"}},
-		Field{Name: "session", Kind: Link, Owner: Code, Targets: []string{"session"}},
-		Field{Name: "spec_hash", Kind: Text, Owner: Code},
-		Field{Name: "tasks_hash", Kind: Text, Owner: Code},
-		Field{Name: "verdict", Kind: Enum, Owner: Code, Values: VerificationVerdicts},
-	), Sections: []string{"Scope", "Requirements", "Findings", "Notes"}, CodeSections: []string{"Scope", "Requirements", "Findings"}},
-	{Name: "chord", Prefix: DocPrefix, Family: Work, Folder: "wiki/documents", Fields: common(
-		Field{Name: "priority", Kind: Enum, Values: Priorities},
-		Field{Name: "status", Kind: Enum, Owner: Code, Values: ChordStatuses},
-		Field{Name: "threads", Kind: Text, Owner: Code},
-		Field{Name: "canvas", Kind: Text, Owner: Code},
-	), Sections: []string{"Goal", "Threads", "Notes"}, CodeSections: []string{"Threads"}},
-	{Name: "event", Prefix: DocPrefix, Family: Record, Folder: "wiki/documents", Fields: common(
-		Field{Name: "kind", Kind: Enum, Owner: Code, Required: true, Values: EventKinds},
-		Field{Name: "at", Kind: Time, Owner: Code, Required: true},
-		Field{Name: "subject", Kind: Link, Owner: Code, Required: true},
-		Field{Name: "subject_id", Kind: Text, Owner: Code},
-		Field{Name: "session", Kind: Link, Owner: Code, Targets: []string{"session"}},
-		Field{Name: "by", Kind: Enum, Owner: Code, Values: []string{"agent", "user"}},
-		Field{Name: "from_type", Kind: Text, Owner: Code},
-		Field{Name: "to_type", Kind: Text, Owner: Code},
-		Field{Name: "became", Kind: Links, Owner: Code},
-		Field{Name: "change", Kind: Link, Owner: Code, Targets: []string{"change"}},
-	), Kinds: EventKinds, KindSections: map[string][]string{
-		"dropped":  {"Why", "Follow-ups", "Notes"},
-		"reopened": {"Why", "Notes"},
-		"note":     {"Note", "Notes"},
-	}, Sections: []string{"Notes"}},
+		"concept":  {"Definition", "Explanation", "Related", "Sources", "Origin", "Notes"},
+		"entity":   {"What it is", "Facts", "Related", "Sources", "Origin", "Notes"},
+		"policy":   {"Rule", "Why", "Applies when", "Exceptions", "Sources", "Origin", "Notes"},
+		"overview": {"Summary", "Context", "Map", "Related", "Sources", "Origin", "Notes"},
+	}, CodeSections: []string{"Map"}},
 	{Name: "session", Prefix: "ses", Family: Record, Folder: "sessions", Fields: record(
 		Field{Name: "harness", Kind: Enum, Owner: Code, Values: []string{"claude", "codex"}},
 		Field{Name: "harness_id", Kind: Text, Owner: Code, Required: true},
@@ -280,13 +208,8 @@ var Types = []*Type{
 		Field{Name: "cwd", Kind: Text, Owner: Code},
 		Field{Name: "parent", Kind: Link, Owner: Code, Targets: []string{"session"}},
 		Field{Name: "agent", Kind: Text, Owner: Code},
-		Field{Name: "threads", Kind: Links, Owner: Code, Targets: []string{"stub"}},
-		Field{Name: "specs", Kind: Links, Owner: Code},
-		Field{Name: "work", Kind: Links, Owner: Code},
-		Field{Name: "checked", Kind: Int, Owner: Code},
 		Field{Name: "repositories", Kind: Links, Owner: Code, Targets: []string{"repository"}},
 		Field{Name: "changes", Kind: Links, Owner: Code, Targets: []string{"change"}},
-		Field{Name: "events", Kind: Int, Owner: Code},
 		Field{Name: "description", Kind: Text, Owner: Code},
 		Field{Name: "reminded", Kind: List, Owner: Code},
 		Field{Name: "pid", Kind: Int, Owner: Code},
@@ -295,7 +218,6 @@ var Types = []*Type{
 	{Name: "change", Prefix: "chg", Family: Record, Folder: "changes", Fields: record(
 		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"proposed", "applying", "applied", "rejected", "superseded", "undone"}},
 		Field{Name: "absorbs", Kind: Links, Owner: Code},
-		Field{Name: "work", Kind: Link, Owner: Code, Targets: []string{"stub", "chord"}},
 		Field{Name: "proposed", Kind: Time, Owner: Code},
 		Field{Name: "session", Kind: Link, Owner: Code, Targets: []string{"session"}},
 		Field{Name: "counts", Kind: Text, Owner: Code},
@@ -318,19 +240,17 @@ var byName = func() map[string]*Type {
 // Get returns the type of that name, or nil.
 func Get(name string) *Type { return byName[name] }
 
-// DocumentTypes are the nine types of wiki/documents.
-var DocumentTypes = []string{"source", "repository", "topic", "stub", "spec", "tasks", "verification", "chord", "event"}
+// DocumentTypes are the three types of wiki/documents.
+var DocumentTypes = []string{"source", "repository", "topic"}
 
-// ThreadTypes are the types that make a thread, and the chord that orders threads.
-var ThreadTypes = []string{"stub", "spec", "tasks", "verification", "chord"}
-
-// IsThread reports whether name is one of the thread types.
-func IsThread(name string) bool { return slices.Contains(ThreadTypes, name) }
+// ArchivedTypes are the types of the thread documents that 8.x kept in wiki/documents and
+// the 9.0 migration moved to threads/.
+var ArchivedTypes = []string{"stub", "spec", "tasks", "verification", "chord", "event"}
 
 // Is reports whether name is a document type.
 func Is(name string) bool { return byName[name] != nil }
 
-// IsDocument reports whether name is one of the nine types of wiki/documents.
+// IsDocument reports whether name is one of the types of wiki/documents.
 func IsDocument(name string) bool { return slices.Contains(DocumentTypes, name) }
 
 // AllKinds lists every kind of every type.
@@ -346,16 +266,14 @@ func AllKinds() []string {
 	return out
 }
 
-// Statuses lists every status any type has; a verification's status is its verdict.
+// Statuses lists every status any type has.
 func Statuses() []string {
 	var out []string
 	for _, t := range Types {
-		for _, name := range []string{"status", "verdict"} {
-			if f := t.Field(name); f != nil {
-				for _, v := range f.Values {
-					if !slices.Contains(out, v) {
-						out = append(out, v)
-					}
+		if f := t.Field("status"); f != nil {
+			for _, v := range f.Values {
+				if !slices.Contains(out, v) {
+					out = append(out, v)
 				}
 			}
 		}

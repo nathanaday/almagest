@@ -1,7 +1,6 @@
 package vault
 
 import (
-	"cmp"
 	"fmt"
 	"io/fs"
 	"os"
@@ -61,15 +60,17 @@ func cachedDoc(v *Vault, rel string) (*doc.Doc, error) {
 // Index is every document of the vault, read at one moment.
 type Index struct {
 	V *Vault
-	// Docs are the typed documents in their place: the nine types directly in
+	// Docs are the typed documents in their place: the three types directly in
 	// wiki/documents, sessions under sessions/, changes under changes/, and Atlas.md.
 	Docs []*doc.Doc
 	// Misplaced are typed documents anywhere else. Tools do not see them; lint reports
 	// them, and sync moves one under wiki/ back into wiki/documents.
 	Misplaced []*doc.Doc
-	// Notes are the other markdown files outside the scratchpad and the views: the user's.
+	// Notes are the other markdown files outside the scratchpad, the thread archive, and the
+	// views: the user's.
 	Notes []*doc.Doc
-	// Files are every other file a link may name, including the scratchpad's notes.
+	// Files are every other file a link may name, including the notes of the scratchpad and
+	// the thread archive.
 	Files []string
 
 	byID    map[string]*doc.Doc
@@ -112,7 +113,7 @@ func Load(v *Vault) (*Index, error) {
 			return nil
 		}
 		md := strings.HasSuffix(strings.ToLower(e.Name()), ".md")
-		if !md || rel == Scratchpad || strings.HasPrefix(rel, Scratchpad+"/") {
+		if !md || Unread(rel) {
 			idx.Files = append(idx.Files, rel)
 			if md {
 				key := links.BaseKey(rel)
@@ -133,6 +134,17 @@ func Load(v *Vault) (*Index, error) {
 	}
 	sort.Slice(idx.Docs, func(i, j int) bool { return idx.Docs[i].Path < idx.Docs[j].Path })
 	return idx, nil
+}
+
+// Unread reports whether a path lies in a folder whose markdown files the index keeps as
+// link targets only: the scratchpad, and the thread archive.
+func Unread(rel string) bool {
+	for _, dir := range []string{Scratchpad, Threads} {
+		if rel == dir || strings.HasPrefix(rel, dir+"/") {
+			return true
+		}
+	}
+	return false
 }
 
 // InPlace reports whether a typed document lies where its type lives.
@@ -338,17 +350,6 @@ func (idx *Index) Linked(value string) *doc.Doc {
 	return nil
 }
 
-// LinkedAll are the typed documents a list field names, skipping links to none.
-func (idx *Index) LinkedAll(values []string) []*doc.Doc {
-	var out []*doc.Doc
-	for _, v := range values {
-		if d := idx.Linked(v); d != nil {
-			out = append(out, d)
-		}
-	}
-	return out
-}
-
 // TitleHolders lists the markdown files whose title, or whose typed alias, is title,
 // without case.
 func (idx *Index) TitleHolders(title string) []string {
@@ -495,51 +496,11 @@ func (idx *Index) Ref(d *doc.Doc) Ref {
 			state["strength"] = s
 		}
 		state["sources"] = len(d.List("sources"))
-	case "stub":
-		state["priority"] = cmp.Or(d.Str("priority"), "normal")
-		state["tasks"] = d.Str("tasks")
-		state["verification"] = d.Str("verification")
-		state["blocked"] = d.Str("blocked")
-		state["active"] = d.Front.Bool("active")
-		state["repositories"] = targets(d.List("repositories"))
-		if c := d.Str("chord"); c != "" {
-			state["chord"] = doc.LinkTarget(c)
-		}
-		if a := d.List("after"); len(a) > 0 {
-			state["after"] = targets(a)
-		}
-		if b := d.List("became"); len(b) > 0 {
-			state["became"] = targets(b)
-		}
-	case "spec", "tasks", "verification":
-		state["thread"] = doc.LinkTarget(d.Str("thread"))
-		switch d.Type() {
-		case "tasks":
-			r.Status = fmt.Sprintf("%d/%d", d.Front.Int("done"), d.Front.Int("total"))
-			if repo := d.Str("repository"); repo != "" {
-				state["repository"] = doc.LinkTarget(repo)
-			}
-		case "verification":
-			r.Status = d.Str("verdict")
-			state["round"] = d.Front.Int("round")
-		}
-	case "chord":
-		state["priority"] = cmp.Or(d.Str("priority"), "normal")
-		state["threads"] = d.Str("threads")
-	case "event":
-		state["subject"] = doc.LinkTarget(d.Str("subject"))
-		state["at"] = d.Str("at")
-		state["session"] = doc.LinkTarget(d.Str("session"))
-	case "session":
-		state["threads"] = targets(append(d.List("threads"), d.List("specs")...))
 	case "change":
 		state["counts"] = d.Str("counts")
 		if notes, ok := doc.Section(d.Body, "Notes"); ok {
 			r.Description = doc.FirstLine(notes)
 		}
-	}
-	if d.Type() != "source" && idx.Wikified(d) {
-		state["pending"] = idx.Pending(d)
 	}
 	if len(state) > 0 {
 		r.State = state
@@ -556,66 +517,12 @@ func (idx *Index) Refs(ds []*doc.Doc) []Ref {
 	return out
 }
 
-func targets(values []string) []string {
-	out := make([]string, 0, len(values))
-	for _, v := range values {
-		out = append(out, doc.LinkTarget(v))
-	}
-	return out
-}
-
-// ProseEvents are the event kinds that hold prose, and so may be pending.
-var ProseEvents = []string{"dropped", "note"}
-
-// Wikified reports whether a document can be pending: its type is in the vault's wikify
-// list, and it is ready for the wiki. A spec is ready when its thread is verified, a
-// verification when it passes, a chord when every thread is closed or dropped, and an
-// event when its kind holds prose. Each reads the status sync wrote.
-func (idx *Index) Wikified(d *doc.Doc) bool {
-	if !slices.Contains(idx.V.Wikify(), d.Type()) {
-		return false
-	}
-	switch d.Type() {
-	case "source":
-		return true
-	case "stub":
-		return d.Str("status") == "stub"
-	case "spec":
-		return d.Str("status") == "complete (verified)"
-	case "verification":
-		return d.Str("verdict") == "pass"
-	case "chord":
-		return d.Str("status") == "done" || d.Str("status") == "closed"
-	case "event":
-		return slices.Contains(ProseEvents, d.Str("kind"))
-	}
-	return false
-}
-
-// Hash is a document's content hash for pending: a source's file hash; a stub's idea; a
-// verification's whole body; else
-// the hash of its prose, without the lead callout and the sections code writes.
-func Hash(d *doc.Doc) string {
-	switch d.Type() {
-	case "source":
-		return d.Str("sha256")
-	case "stub":
-		idea, _ := doc.Section(d.Body, "Idea")
-		return doc.ContentHash(idea)
-	case "verification":
-		// Code writes its sections from the report, and they are what the wiki absorbs.
-		return doc.ContentHash(d.Body)
-	}
-	var code []string
-	if t := schema.Get(d.Type()); t != nil {
-		code = t.CodeSections
-	}
-	return doc.ProseHash(d.Body, code)
-}
+// Hash is a source's content hash for pending: the hash of its file.
+func Hash(d *doc.Doc) string { return d.Str("sha256") }
 
 // Pending reports whether the wiki has not absorbed a document's current content.
 func (idx *Index) Pending(d *doc.Doc) bool {
-	if !idx.Wikified(d) {
+	if d.Type() != "source" {
 		return false
 	}
 	idx.pendingOnce.Do(idx.readAbsorbed)

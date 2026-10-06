@@ -21,7 +21,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/links"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -33,8 +32,7 @@ const MaxWrites = 100
 type Plan struct {
 	Title      string   `json:"title" jsonschema:"a short name: the file name of the change document and the commit subject"`
 	Notes      string   `json:"notes,omitempty" jsonschema:"what the change does and why, and every skipped subject with its reason; becomes the Notes section"`
-	Absorbs    []string `json:"absorbs,omitempty" jsonschema:"ids of the documents this change absorbs into the wiki"`
-	Work       string   `json:"work,omitempty" jsonschema:"the stub or spec the change serves, if any"`
+	Absorbs    []string `json:"absorbs,omitempty" jsonschema:"ids of the sources this change absorbs into the wiki"`
 	Supersedes string   `json:"supersedes,omitempty" jsonschema:"a proposed change this one replaces"`
 	NewTags    bool     `json:"new_tags,omitempty" jsonschema:"allow tags no document holds, in tagging: known; set it only after the user agreed"`
 	Writes     []Write  `json:"writes" jsonschema:"the writes, in order"`
@@ -42,15 +40,15 @@ type Plan struct {
 
 // Write is one write of a plan.
 type Write struct {
-	Op       string         `json:"op" jsonschema:"create, modify, promote, rename, remove, confirm, or retag"`
+	Op       string         `json:"op" jsonschema:"create, modify, rename, remove, confirm, or retag"`
 	Type     string         `json:"type,omitempty" jsonschema:"create: topic or repository"`
-	Kind     string         `json:"kind,omitempty" jsonschema:"create and promote of a topic: concept, entity, policy, or overview"`
-	Title    string         `json:"title,omitempty" jsonschema:"create: the new document's title; rename and promote: the new title"`
-	ID       string         `json:"id,omitempty" jsonschema:"modify, promote, rename, remove, confirm: the document's id or title"`
+	Kind     string         `json:"kind,omitempty" jsonschema:"create of a topic: concept, entity, policy, or overview"`
+	Title    string         `json:"title,omitempty" jsonschema:"create: the new document's title; rename: the new title"`
+	ID       string         `json:"id,omitempty" jsonschema:"modify, rename, remove, confirm: the document's id or title"`
 	Base     string         `json:"base,omitempty" jsonschema:"the hash of the document as read; code records it when omitted"`
 	Redirect string         `json:"redirect,omitempty" jsonschema:"remove: the document that links to the removed one now name"`
-	Fields   map[string]any `json:"fields,omitempty" jsonschema:"create, modify, promote: the type's fields; links as ids or titles; modify merges them over the document's fields"`
-	Body     *string        `json:"body,omitempty" jsonschema:"create, modify, promote: the body below the lead callout; modify replaces the body only when given"`
+	Fields   map[string]any `json:"fields,omitempty" jsonschema:"create, modify: the type's fields; links as ids or titles; modify merges them over the document's fields"`
+	Body     *string        `json:"body,omitempty" jsonschema:"create, modify: the body below the lead callout; modify replaces the body only when given"`
 	From     string         `json:"from,omitempty" jsonschema:"retag: the tag to rename, with every tag below it"`
 	To       string         `json:"to,omitempty" jsonschema:"retag: the new tag; an existing tag merges"`
 }
@@ -59,7 +57,6 @@ type Write struct {
 const (
 	OpCreate  = "create"
 	OpModify  = "modify"
-	OpPromote = "promote"
 	OpRename  = "rename"
 	OpRemove  = "remove"
 	OpConfirm = "confirm"
@@ -68,15 +65,15 @@ const (
 
 // op is one validated write, as a change document records it.
 type op struct {
-	Kind      string // create, modify, promote, rename, remove, confirm, retag
+	Kind      string // create, modify, rename, remove, confirm, retag
 	ID        string
 	Type      string // the type as the change leaves it
-	TopicKind string // create and promote: the topic's kind
-	Title     string // the document's title; for a rename or a promote with a title, the old one
-	NewTitle  string // rename, promote
+	TopicKind string // create: the topic's kind
+	Title     string // the document's title; for a rename, the old one
+	NewTitle  string // rename
 	Path      string // the document's path now; for a create, where it goes
 	Base      string // the hash of the document as read
-	Content   string // create, modify, promote: the whole new file
+	Content   string // create, modify: the whole new file
 	Redirect  string // remove: the id of the document links move to
 	From, To  string // retag
 	Files     int    // retag: the files it rewrites
@@ -85,7 +82,7 @@ type op struct {
 
 // writesContent reports whether the op writes a whole file.
 func (o *op) writesContent() bool {
-	return o.Kind == OpCreate || o.Kind == OpModify || o.Kind == OpPromote
+	return o.Kind == OpCreate || o.Kind == OpModify
 }
 
 // finalPath is where the op's document lands.
@@ -101,7 +98,6 @@ type planned struct {
 	Title      string
 	Notes      string
 	Absorbs    []*doc.Doc
-	Work       *doc.Doc
 	Supersedes *doc.Doc
 	Ops        []*op
 	// Outside are the files outside the change's writes whose links or tags the change
@@ -128,9 +124,9 @@ type check struct {
 	problems []string
 	warnings []string
 	newTags  []string
-	// claimed holds each title key a create, rename, or promote takes, with its op.
+	// claimed holds each title key a create or a rename takes, with its op.
 	claimed map[string]*op
-	// gone holds each title key a rename, a promote, or a remove frees.
+	// gone holds each title key a rename or a remove frees.
 	gone map[string]bool
 	// byID holds the ops on each document.
 	byID map[string][]*op
@@ -162,7 +158,7 @@ func (c *check) TypeOfLink(target string) (string, error) {
 		if c.removed(d.ID()) {
 			return "", nil
 		}
-		return c.typeAfter(d), nil
+		return d.Type(), nil
 	}
 	if c.gone[key] {
 		return "", nil
@@ -170,20 +166,10 @@ func (c *check) TypeOfLink(target string) (string, error) {
 	typ, err := c.idx.TypeOfLink(t)
 	if err == nil && typ != "" && typ != "file" {
 		if d := c.idx.Linked(t); d != nil {
-			return c.typeAfter(d), nil
+			return d.Type(), nil
 		}
 	}
 	return typ, err
-}
-
-// typeAfter is a document's type once the change applies: a promoted stub is a topic.
-func (c *check) typeAfter(d *doc.Doc) string {
-	for _, o := range c.byID[d.ID()] {
-		if o.Kind == OpPromote {
-			return "topic"
-		}
-	}
-	return d.Type()
 }
 
 func (c *check) removed(id string) bool {
@@ -209,13 +195,13 @@ func (c *check) titleOf(value string) (string, string) {
 		return title, o.Type
 	}
 	if d := c.idx.ByID(t); d != nil && !c.removed(d.ID()) {
-		return c.finalTitle(d), c.typeAfter(d)
+		return c.finalTitle(d), d.Type()
 	}
 	if c.gone[links.Key(t)] {
 		return "", ""
 	}
 	if d, err := c.idx.Resolve(t); err == nil && !c.removed(d.ID()) {
-		return c.finalTitle(d), c.typeAfter(d)
+		return c.finalTitle(d), d.Type()
 	}
 	if typ, err := c.idx.TypeOfLink(t); err == nil && typ != "" {
 		return t, typ
@@ -223,7 +209,7 @@ func (c *check) titleOf(value string) (string, string) {
 	return "", ""
 }
 
-// finalTitle is a document's title after the change's renames and promotes.
+// finalTitle is a document's title after the change's renames.
 func (c *check) finalTitle(d *doc.Doc) string {
 	for _, o := range c.byID[d.ID()] {
 		if o.NewTitle != "" {
@@ -233,7 +219,7 @@ func (c *check) finalTitle(d *doc.Doc) string {
 	return vault.Title(d)
 }
 
-// takeTitle claims a title for a create, a rename, or a promote, and refuses one that
+// takeTitle claims a title for a create or a rename, and refuses one that
 // another document or another write holds.
 func (c *check) takeTitle(o *op, title string, self string) bool {
 	key := links.Key(title)
@@ -285,8 +271,7 @@ func (o *op) label() string {
 	return fmt.Sprintf("%s %q (%s)", o.Kind, o.Title, o.ID)
 }
 
-// createTypes are the types a change creates. A source comes from capture; a thread
-// document, a chord, and an event from the thread and chord tools.
+// createTypes are the types a change creates. A source comes from capture.
 var createTypes = []string{"topic", "repository"}
 
 // knowledge reports whether a type is one a change writes.
@@ -313,21 +298,11 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			c.refuse("absorbs: %v", err)
 			continue
 		}
-		if !idx.Wikified(d) {
-			c.refuse("absorbs: %s is a %s the wiki does not absorb now; the vault's wikify setting lists %s, and the wiki takes a spec once its thread is verified, a verification that passes, a chord whose threads are closed or dropped, and a dropped or note event", vault.Title(d), d.Type(), strings.Join(idx.V.Wikify(), ", "))
+		if d.Type() != "source" {
+			c.refuse("absorbs: %s is a %s; a change absorbs sources", vault.Title(d), d.Type())
 			continue
 		}
 		out.Absorbs = append(out.Absorbs, d)
-	}
-	if strings.TrimSpace(p.Work) != "" {
-		d, err := idx.ResolveType(p.Work, "stub", "chord", "spec", "tasks", "verification")
-		if err != nil {
-			c.refuse("work: %v", err)
-		} else if t := thread.Load(idx).Thread(d); t != nil {
-			// A change serves a thread, whichever of its documents the plan named.
-			d = t.Stub
-		}
-		out.Work = d
 	}
 	if strings.TrimSpace(p.Supersedes) != "" {
 		d, err := idx.ResolveType(p.Supersedes, "change")
@@ -345,13 +320,13 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 	for i, w := range p.Writes {
 		w.Op = strings.ToLower(strings.TrimSpace(w.Op))
 		switch w.Op {
-		case OpModify, OpPromote, OpRename, OpRemove, OpConfirm:
+		case OpModify, OpRename, OpRemove, OpConfirm:
 			ops[i] = c.existing(w)
 		case OpRetag:
 			ops[i] = c.retag(w)
 		case OpCreate:
 		default:
-			c.refuse("write %d: op %q; it must be create, modify, promote, rename, remove, confirm, or retag", i+1, w.Op)
+			c.refuse("write %d: op %q; it must be create, modify, rename, remove, confirm, or retag", i+1, w.Op)
 		}
 	}
 	for i, w := range p.Writes {
@@ -365,7 +340,7 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			continue
 		}
 		switch o.Kind {
-		case OpCreate, OpModify, OpPromote:
+		case OpCreate, OpModify:
 			c.content(o, w, idx.ByID(o.ID))
 		case OpRemove:
 			if w.Redirect != "" {
@@ -408,35 +383,13 @@ func (c *check) existing(w Write) *op {
 		return nil
 	}
 	o := &op{Kind: w.Op, ID: d.ID(), Type: d.Type(), Title: vault.Title(d), Path: d.Path}
-	switch {
-	case o.Kind == OpPromote:
-		if d.Type() != "stub" {
-			c.refuse("%s: %s is a %s; a change promotes a stub with no spec to a topic", o.label(), o.Title, d.Type())
-			return nil
-		}
-		if s := thread.Load(c.idx).Status(d); s != thread.StatusStub {
-			c.refuse("%s: %s is %s; only a stub with no spec is promoted", o.label(), o.Title, s)
-			return nil
-		}
-		o.Type = "topic"
-	case !knowledge(d.Type()):
-		c.refuse("%s: %s is a %s; a change writes sources, repositories, and topics. The documents of a thread and events change through the thread tool, a chord through the chord tool", o.label(), o.Title, d.Type())
+	if !knowledge(d.Type()) {
+		c.refuse("%s: %s is a %s; a change writes sources, repositories, and topics", o.label(), o.Title, d.Type())
 		return nil
-	case o.Kind == OpRemove && d.Type() == "repository":
-		var named []string
-		for _, s := range c.idx.Of("tasks") {
-			if strings.EqualFold(doc.LinkTarget(s.Str("repository")), o.Title) {
-				named = append(named, s.Title())
-			}
-		}
-		if len(named) > 0 {
-			c.refuse("%s: %d task lists name it (%s); unlink it instead (a modify with unlinked: true), so their links hold", o.label(), len(named), strings.Join(firstN(named, 3), ", "))
-			return nil
-		}
 	}
 	for _, other := range c.byID[o.ID] {
-		if other.Kind == o.Kind || other.Kind == OpRemove || o.Kind == OpRemove || (other.Kind == OpPromote) != (o.Kind == OpPromote) {
-			c.refuse("%s: the plan already has a %s of this document; one document takes one write of each kind, and a promote or a remove alone", o.label(), other.Kind)
+		if other.Kind == o.Kind || other.Kind == OpRemove || o.Kind == OpRemove {
+			c.refuse("%s: the plan already has a %s of this document; one document takes one write of each kind, and a remove alone", o.label(), other.Kind)
 			return nil
 		}
 	}
@@ -472,8 +425,6 @@ func (c *check) existing(w Write) *op {
 			c.refuse("%s: the new title is the old one", o.label())
 			return nil
 		}
-		newTitle(w.Title)
-	case OpPromote:
 		newTitle(w.Title)
 	case OpRemove:
 		c.gone[links.Key(o.Title)] = true
@@ -526,9 +477,6 @@ func (c *check) create(w Write) *op {
 	case typ == "source":
 		c.refuse("%s: a source comes from the source tool's capture; a change modifies it", o.label())
 		return nil
-	case schema.IsThread(typ) || typ == "event":
-		c.refuse("%s: a %s comes from the thread tool or the chord tool, not a change", o.label(), typ)
-		return nil
 	case !slices.Contains(createTypes, typ):
 		c.refuse("create: type %q; a change creates a topic or a repository", w.Type)
 		return nil
@@ -545,16 +493,9 @@ func (c *check) create(w Write) *op {
 	return o
 }
 
-// content builds and checks the whole new file of a create, a modify, or a promote.
+// content builds and checks the whole new file of a create or a modify.
 func (c *check) content(o *op, w Write, current *doc.Doc) {
 	t := schema.Get(o.Type)
-	if o.Kind == OpPromote {
-		o.TopicKind = strings.ToLower(strings.TrimSpace(w.Kind))
-		if !slices.Contains(schema.TopicKinds, o.TopicKind) {
-			c.refuse("%s: kind %q; a topic is a concept, an entity, a policy, or an overview", o.label(), w.Kind)
-			return
-		}
-	}
 	fields, removed := c.fields(o, t, w.Fields)
 	stamp := vault.Stamp(c.now)
 	var content string
@@ -569,25 +510,6 @@ func (c *check) content(o *op, w Write, current *doc.Doc) {
 			content, _ = derive.Facts(doc.Parse(o.Path, []byte(content)), c.now)
 			content = doc.SetField(content, "refreshed", stamp)
 		}
-	case o.Kind == OpPromote:
-		idea, _ := doc.Section(current.Body, "Idea")
-		notes, _ := doc.Section(current.Body, "Notes")
-		if _, ok := fields["description"]; !ok {
-			fields["description"] = current.Str("description")
-		}
-		if _, ok := fields["tags"]; !ok {
-			fields["tags"] = doc.NonNil(current.List("tags"))
-		}
-		if _, ok := fields["aliases"]; !ok {
-			fields["aliases"] = doc.NonNil(current.List("aliases"))
-		}
-		list := []doc.Field{{Key: "id", Value: o.ID}, {Key: "type", Value: "topic"}, {Key: "kind", Value: o.TopicKind}}
-		body := normalizeBody(bodyOr(w.Body, skeleton(t, o.TopicKind)))
-		order := t.SectionsOf(o.TopicKind)
-		body = doc.PutSection(body, "Origin", idea, order)
-		body = doc.PutSection(body, "Notes", notes, order)
-		content = doc.Render(append(list, c.ordered(t, fields, stamp, current.Str("created"))...), body)
-		o.Path = current.Path
 	default:
 		content = current.Content
 		keys := make([]string, 0, len(fields))
@@ -750,7 +672,7 @@ func (c *check) fields(o *op, t *schema.Type, in map[string]any) (map[string]any
 	sort.Strings(keys)
 	for _, k := range keys {
 		v := in[k]
-		if k == "kind" && (o.Kind == OpCreate || o.Kind == OpPromote) {
+		if k == "kind" && o.Kind == OpCreate {
 			continue
 		}
 		if k == "kind" {
@@ -968,13 +890,12 @@ func normalizeBody(body string) string {
 	return body
 }
 
-// retitles are the titles the change's renames, promotes, and removes free, with where
-// links go.
+// retitles are the titles the change's renames and removes free, with where links go.
 func (out *planned) retitles(c *check) []vault.Retitle {
 	var list []vault.Retitle
 	for _, o := range out.Ops {
 		switch o.Kind {
-		case OpRename, OpPromote:
+		case OpRename:
 			if o.NewTitle != "" {
 				list = append(list, vault.Retitle{Old: o.Title, New: o.NewTitle})
 			}
@@ -983,7 +904,7 @@ func (out *planned) retitles(c *check) []vault.Retitle {
 				continue
 			}
 			r := c.idx.ByID(o.Redirect)
-			list = append(list, vault.Retitle{Old: o.Title, New: c.finalTitle(r), Redirect: c.typeAfter(r)})
+			list = append(list, vault.Retitle{Old: o.Title, New: c.finalTitle(r), Redirect: r.Type()})
 		}
 	}
 	return list

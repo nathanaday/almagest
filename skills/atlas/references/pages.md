@@ -1,23 +1,15 @@
 # Documents
 
-Every typed document lives flat in `wiki/documents/`. There are nine types in three
-families:
+Every document of the wiki lives flat in `wiki/documents/`. There are three types:
 
-| Type | Family | Kinds | Written by |
-|---|---|---|---|
-| source | knowledge | — | `source` capture; then `change` |
-| repository | knowledge | — | `change`; code keeps the git facts |
-| topic | knowledge | concept, entity, policy, overview | `change` |
-| stub | work | — | `thread` |
-| spec | work | — | `thread` |
-| tasks | work | — | `thread` |
-| verification | work | — | `thread` |
-| chord | work | — | `chord` |
-| event | record | started, continued, dropped, reopened, blocked, unblocked, promoted, resolved, note | code |
+| Type | Kinds | Written by |
+|---|---|---|
+| source | — | `source` capture; then `change` |
+| repository | — | `change`; code keeps the git facts |
+| topic | concept, entity, policy, overview | `change` |
 
-Knowledge is what the vault knows; only an applied change writes it
-([changes.md](changes.md)). Work is what the user means to do; see
-[threads.md](threads.md) for threads, chords, and events. The file name is the title. Code routes every new document
+These documents are what the vault knows; only an applied change writes them
+([changes.md](changes.md)). The file name is the title. Code routes every new document
 to `wiki/documents/<title>.md`, so give a type, a kind, and a title, never a path.
 
 ## Fields every document has
@@ -73,7 +65,7 @@ in `defines` (`defines: school/cs513`).
 
 Capture writes a source with the fields code owns: `status` (pending, absorbed),
 `file`, `media`, `sha256`, `origin` (inbox, pasted, url, repository), `locator`,
-`measure`, `captured`, `from`. The ingest change sets the rest:
+`measure`, `captured`. The ingest change sets the rest:
 
 | Field | Value |
 |---|---|
@@ -100,8 +92,8 @@ titled `<repository> @ <commit>`.
 Body: the live status block (code's), `## What it is`, `## How it is built` (languages,
 frameworks, build and test commands), `## Layout` (the main folders), `## Components`
 (links to entity topics tagged `component`, one line each), `## Instructions` (the paths
-of AGENTS.md and CLAUDE.md, and what they require), `## Threads` and `## Knowledge`
-(code's inline Bases), `## Notes` (the user's).
+of AGENTS.md and CLAUDE.md, and what they require), `## Knowledge` (code's inline Base),
+`## Notes` (the user's).
 
 ## Topic
 
@@ -111,7 +103,6 @@ status: stable             # draft | stable | contested | deprecated
 sources: ["[[DINOv2]]"]    # every document the topic cites
 strength: ""               # policy only: must | should | may
 defines: ""                # overview only: the tag this topic is the page of
-from: ""                   # the stub it grew from, when it spawned from one
 ```
 
 | Kind | Is | Sections |
@@ -121,13 +112,11 @@ from: ""                   # the stub it grew from, when it spawned from one
 | policy | a rule for how things must be done, and why | `## Rule` (one or two sentences, an instruction), `## Why`, `## Applies when`, `## Exceptions` |
 | overview | the page of a tag | `## Summary` (what the tag holds, for a reader), `## Context` (what an agent must know under the tag), `## Map` (code's), `## Related` |
 
-Every kind then has `## Sources` (each cited document, one line on what it gives),
-`## Threads` (code's: the specs that cite the topic, when one does), `## Origin` (code's,
-when the topic was a stub), and `## Notes` (the user's).
+Every kind then has `## Sources` (each cited document, one line on what it gives) and
+`## Notes` (the user's).
 
 - The kind of an entity is a tag: `person`, `tool`, `component`, `service`.
-- `status`: `draft` when the topic is thin or rests only on a spec that is not verified;
-  `stable` when it is complete for what its sources say; `contested` when two sources
+- `status`: `draft` when the topic is thin; `stable` when it is complete for what its sources say; `contested` when two sources
   disagree and the topic shows both; `deprecated` when the subject is gone, with a link
   to what replaced it.
 - A new topic takes the tags of what it came from: the source's tags, or the tags of
@@ -140,15 +129,16 @@ when the topic was a stub), and `## Notes` (the user's).
 
 - The lead callout, the first block of the body, is code's for every type: never write
   or edit it. A body you give below it keeps it.
-- Code's sections: `## Map`, `## Threads`, `## Origin` of a topic; `## Threads`,
-  `## Knowledge` of a repository; the embed of a source. Never write them.
+- Code's sections: `## Map` of a topic; `## Knowledge` of a repository; the embed of a
+  source. Never write them.
 - `## Notes` is the user's in every type. Add to it only when the user asks.
 
 ## Claims and citations
 
 - Cite the document for every material claim, with a locator when one exists:
   `[[DINOv2]], p. 4`, or `[[p3-edge @ 4ac19e2]], internal/score/box.go:40`. A citation
-  may name any document: a source, a spec, a verification, an event, a session. List each in `sources`.
+  may name any document: a source, a topic, a repository, a session. List each in
+  `sources`.
 - Keep a source's statements apart from your synthesis.
 - Keep contradictions: show both claims with their citations and set
   `status: contested`. Do not pick a winner in silence.

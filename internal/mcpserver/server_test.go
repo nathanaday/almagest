@@ -3,6 +3,7 @@ package mcpserver_test
 import (
 	"context"
 	"encoding/json"
+	"slices"
 	"sort"
 	"strings"
 	"testing"
@@ -99,10 +100,19 @@ func TestEveryToolAndAction(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	want := mcpserver.ToolNames()
+	if strings.Join(want, ",") != "vault,search,context,match,source,change,lint" {
+		t.Fatalf("ToolNames %v", want)
+	}
+	want = slices.Clone(want)
 	sort.Strings(want)
 	sort.Strings(names)
-	if strings.Join(names, ",") != strings.Join(want, ",") || len(names) != 9 {
+	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("tools %v", names)
+	}
+	for _, gone := range []string{"thread", "chord"} {
+		if _, err := c.sess.CallTool(context.Background(), &mcp.CallToolParams{Name: gone, Arguments: map[string]any{}}); err == nil || !strings.Contains(err.Error(), "unknown tool") {
+			t.Fatalf("%s: %v", gone, err)
+		}
 	}
 
 	st, _ := c.call("vault", map[string]any{}, false)
@@ -154,73 +164,6 @@ func TestEveryToolAndAction(t *testing.T) {
 		t.Fatalf("search by tag %v", hits)
 	}
 
-	// A thread from a stub to closed, through every action.
-	board, _ := c.call("thread", map[string]any{}, false)
-	if dig(board, "board") == nil {
-		t.Fatalf("board %v", board)
-	}
-	stubbed, _ := c.call("thread", map[string]any{"action": "stub", "text": "Cut the false alarms.", "title": "Filter alarms", "tags": []any{"work/p3/p3-edge"}}, false)
-	stub := dig(stubbed, "state", "thread", "id").(string)
-	if len(dig(stubbed, "wrote").([]any)) != 1 || dig(stubbed, "state", "next", "skill") != "thread-spec" {
-		t.Fatalf("stub %v", stubbed)
-	}
-	_, msg := c.call("thread", map[string]any{"action": "start", "thread": stub}, true)
-	if !strings.Contains(msg, "write it first (thread-spec)") {
-		t.Fatalf("a refusal teaches: %s", msg)
-	}
-	c.call("thread", map[string]any{"action": "spec", "thread": stub, "text": "## Goal\n\nFewer alarms.\n\n## Requirements\n\n- R1: Half as many alarms.\n\n## Knowledge\n\n- [[p3-edge]]\n"}, false)
-	c.call("thread", map[string]any{"action": "tasks", "thread": stub, "repository": "p3-edge", "tasks": []any{map[string]any{"text": "Score boxes", "requirements": []any{"R1"}, "details": "In score.go."}}}, false)
-	started, _ := c.call("thread", map[string]any{"action": "start", "thread": "Filter alarms"}, false)
-	if dig(started, "started") != "Filter alarms" || len(dig(started, "events").([]any)) != 1 {
-		t.Fatalf("start %v", started)
-	}
-	c.call("thread", map[string]any{"action": "block", "thread": stub, "reason": "waiting on data"}, false)
-	c.call("thread", map[string]any{"action": "unblock", "thread": stub}, false)
-	c.call("thread", map[string]any{"action": "set", "set": map[string]any{"doc": stub, "priority": "high"}}, false)
-	c.call("thread", map[string]any{"action": "note", "thread": stub, "text": "A vendor call."}, false)
-	loaded, _ := c.call("thread", map[string]any{"action": "load", "thread": stub}, false)
-	if dig(loaded, "thread", "next", "step") != "run" || dig(loaded, "thread", "thread", "state", "priority") != "high" || dig(loaded, "thread", "handoff") != "Resume Atlas thread "+stub ||
-		len(dig(loaded, "thread", "lists").([]any)) != 1 || len(dig(loaded, "thread", "knowledge").([]any)) != 1 || len(dig(loaded, "thread", "notes").([]any)) != 1 {
-		t.Fatalf("load %v", loaded)
-	}
-	c.call("thread", map[string]any{"action": "check", "thread": stub, "task": "T1", "commits": []any{"abc1234"}}, false)
-	failed, _ := c.call("thread", map[string]any{"action": "verify", "thread": stub, "scope": "p3-edge at abc1234", "results": []any{map[string]any{"requirement": "R1", "result": "fail", "evidence": "a third fewer"}}, "findings": []any{"The threshold is too low."}}, false)
-	if dig(failed, "state", "next", "step") != "findings" {
-		t.Fatalf("verify %v", failed)
-	}
-	c.call("thread", map[string]any{"action": "finding", "thread": stub, "finding": "F1", "outcome": "task", "repository": "p3-edge", "new_task": map[string]any{"text": "Raise the threshold", "requirements": []any{"R1"}}}, false)
-	c.call("thread", map[string]any{"action": "check", "thread": stub, "task": "T2", "note": "raised in config"}, false)
-	verified, _ := c.call("thread", map[string]any{"action": "verify", "thread": stub, "scope": "p3-edge at def5678", "results": []any{map[string]any{"requirement": "R1", "result": "pass", "evidence": "half as many in the log"}}}, false)
-	if dig(verified, "state", "thread", "status") != "verified" || dig(verified, "state", "next", "skill") != "thread-close" {
-		t.Fatalf("verified %v", verified)
-	}
-	idea, _ := c.call("thread", map[string]any{"action": "stub", "text": "Read the OTA paper", "title": "OTA paper"}, false)
-	c.call("thread", map[string]any{"action": "drop", "thread": dig(idea, "state", "thread", "id"), "reason": "Not now."}, false)
-	c.call("thread", map[string]any{"action": "reopen", "thread": "OTA paper", "reason": "Now."}, false)
-	c.call("thread", map[string]any{"action": "resolve", "thread": "OTA paper", "became": []any{"p3-edge"}}, false)
-
-	// A chord, through every action.
-	made, _ := c.call("chord", map[string]any{"action": "create", "title": "Quiet alarms", "text": "Alarms the user trusts.", "tags": []any{"work/p3"}, "threads": []any{
-		map[string]any{"thread": stub}, map[string]any{"title": "Tune per site", "text": "Each site gets its threshold.", "after": []any{"Filter alarms"}},
-	}}, false)
-	chord := dig(made, "view", "chord", "id").(string)
-	if len(dig(made, "view", "threads").([]any)) != 2 || !tv.V.Exists("chords/Quiet alarms.canvas") {
-		t.Fatalf("chord %v", made)
-	}
-	c.call("thread", map[string]any{"action": "stub", "text": "Report the alarm rate", "title": "Report"}, false)
-	c.call("chord", map[string]any{"action": "add", "chord": chord, "thread": "Report", "after": []any{"Tune per site"}}, false)
-	c.call("chord", map[string]any{"action": "order", "chord": chord, "order": []any{map[string]any{"thread": "Report", "after": []any{"Filter alarms"}}}}, false)
-	c.call("chord", map[string]any{"action": "order", "chord": chord, "order": []any{map[string]any{"thread": "Filter alarms", "after": []any{"Report"}}}}, true)
-	c.call("chord", map[string]any{"action": "remove", "chord": chord, "thread": "Report"}, false)
-	c.call("chord", map[string]any{"action": "set", "set": map[string]any{"doc": chord, "priority": "high"}}, false)
-	list, _ := c.call("chord", map[string]any{}, false)
-	one, _ := c.call("chord", map[string]any{"action": "load", "chord": "Quiet alarms"}, false)
-	if len(dig(list, "chords").([]any)) != 1 || dig(one, "chord", "handoff") != "Resume Atlas chord "+chord || dig(one, "chord", "chord", "state", "priority") != "high" || len(dig(one, "chord", "ready").([]any)) != 1 {
-		t.Fatalf("chords %v %v", list, one)
-	}
-	c.call("chord", map[string]any{"action": "drop", "chord": chord, "reason": "Not this quarter."}, false)
-	c.call("chord", map[string]any{"action": "reopen", "chord": chord}, false)
-
 	// The pipeline's tools.
 	captured, _ := c.call("source", map[string]any{"action": "capture", "inbox": []any{"notes.md"}, "tags": []any{"work/p3/p3-edge"}}, false)
 	src := dig(captured, "captured").([]any)[0].(map[string]any)
@@ -251,8 +194,8 @@ func TestEveryToolAndAction(t *testing.T) {
 	// An unknown action and a missing document come back as tool errors.
 	c.call("change", map[string]any{"action": "merge"}, true)
 	c.call("change", map[string]any{"id": "chg-zzzzzz"}, true)
-	c.call("thread", map[string]any{"action": "file"}, true)
-	c.call("chord", map[string]any{"action": "file"}, true)
+	c.call("vault", map[string]any{"action": "file"}, true)
+	c.call("source", map[string]any{"action": "file"}, true)
 }
 
 func TestMentionsAndInitFromTheServer(t *testing.T) {
@@ -264,7 +207,8 @@ func TestMentionsAndInitFromTheServer(t *testing.T) {
 	if len(mentions) != 1 || dig(mentions[0].(map[string]any), "line").(float64) != 1 {
 		t.Fatalf("mentions %v", mentions)
 	}
-	c.call("thread", map[string]any{"action": "stub", "text": "add these papers to the wiki", "title": "Papers"}, false)
+	tv.Doc("topic", "Papers", map[string]any{"kind": "overview"}, "")
+	tv.Commit()
 	c.call("vault", map[string]any{"action": "mention", "note": "Ideas.md", "line": 1, "link": "Papers"}, false)
 	if got := tv.Read("Ideas.md"); !strings.HasPrefix(got, "- [x] @atlas add these papers to the wiki → [[Papers]]") {
 		t.Fatalf("closed: %q", got)
@@ -284,7 +228,7 @@ func TestMentionsAndInitFromTheServer(t *testing.T) {
 
 func TestTheServerTakesTheVaultFromAtlasVault(t *testing.T) {
 	one, two := testvault.New(t), testvault.New(t)
-	two.Doc("stub", "Only in the second vault", nil, "## Idea\n\nx\n")
+	two.Doc("topic", "Only in the second vault", map[string]any{"kind": "overview"}, "")
 	two.Commit()
 	connectWith := func(envVault string) *client {
 		s := mcpserver.New(mcpserver.Options{Version: "test", Dir: one.V.Root, Getenv: func(k string) string {
@@ -307,11 +251,11 @@ func TestTheServerTakesTheVaultFromAtlasVault(t *testing.T) {
 		t.Cleanup(func() { sess.Close() })
 		return &client{t: t, sess: sess}
 	}
-	out, _ := connectWith(two.V.Root).call("thread", map[string]any{"action": "list"}, false)
+	out, _ := connectWith(two.V.Root).call("search", map[string]any{"text": "second vault"}, false)
 	if data, _ := json.Marshal(out); !strings.Contains(string(data), "Only in the second vault") {
 		t.Fatalf("ATLAS_VAULT did not choose the second vault: %s", data)
 	}
-	if _, msg := connectWith("/no/such/vault").call("thread", map[string]any{"action": "list"}, true); !strings.Contains(msg, "ATLAS_VAULT=/no/such/vault") {
+	if _, msg := connectWith("/no/such/vault").call("search", map[string]any{"text": "second vault"}, true); !strings.Contains(msg, "ATLAS_VAULT=/no/such/vault") {
 		t.Fatalf("a bad ATLAS_VAULT: %s", msg)
 	}
 }

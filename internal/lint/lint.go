@@ -17,7 +17,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/links"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -62,7 +61,6 @@ type Options struct {
 
 type run struct {
 	idx  *vault.Index
-	b    *thread.Board
 	opts Options
 	out  []Finding
 }
@@ -85,7 +83,7 @@ func Run(idx *vault.Index, opts Options) (*Findings, error) {
 		return nil, err
 	}
 	opts.Tags = want
-	r := &run{idx: idx, b: thread.Load(idx), opts: opts}
+	r := &run{idx: idx, opts: opts}
 	docs := r.selected()
 	r.titles(docs)
 	for _, d := range docs {
@@ -95,8 +93,6 @@ func Run(idx *vault.Index, opts Options) (*Findings, error) {
 		}
 	}
 	r.tagPages(docs)
-	r.threads(docs)
-	r.events(docs)
 	if len(want) == 0 {
 		r.placement()
 	}
@@ -193,10 +189,6 @@ func fixFor(d *doc.Doc) string {
 		return "your edit"
 	case t.Family == schema.Knowledge:
 		return "wiki-edit (a change)"
-	case d.Type() == "chord":
-		return "the chord tool, or thread set"
-	case t.Family == schema.Work:
-		return "the thread tool"
 	case d.Type() == "vault":
 		return "edit Atlas.md"
 	}
@@ -277,142 +269,6 @@ func (r *run) tagPages(docs []*doc.Doc) {
 	}
 }
 
-// threads checks the threads and the chords: every part names a thread, each document
-// holds only its own sections, the spec's requirements and the tasks that serve them
-// agree, and the order of the threads has no loop.
-func (r *run) threads(docs []*doc.Doc) {
-	if loop := r.b.Loop(); loop != "" {
-		for _, d := range docs {
-			if d.Type() == "stub" && strings.HasPrefix(loop, d.Title()+" waits on ") {
-				r.add("thread", Error, d, "thread set after, or chord order", "the threads wait on each other: %s", loop)
-			}
-		}
-	}
-	for _, d := range r.b.Extra {
-		if slices.Contains(docs, d) {
-			r.add("thread", Error, d, "merge it into the thread's first spec with thread spec, then remove it", "its thread %s has a spec already", d.Str("thread"))
-		}
-	}
-	for _, d := range docs {
-		if !schema.IsThread(d.Type()) || d.Front == nil {
-			continue
-		}
-		if err := thread.CheckSections(d.Type(), d.Body); err != nil && !r.opts.Quick {
-			r.add("section", Warning, d, "move the section to the document it belongs in", "%v", err)
-		}
-		t := r.b.Thread(d)
-		switch d.Type() {
-		case "stub", "chord":
-			continue
-		}
-		if t == nil {
-			r.add("thread", Error, d, "set its thread field to its stub, or remove it", "its thread field names no stub")
-			continue
-		}
-		switch d.Type() {
-		case "spec":
-			if err := thread.CheckSpec(doc.StripLead(d.Body)); err != nil {
-				r.add("spec", Error, d, "thread spec, or Edit", "%v", err)
-			}
-		case "tasks":
-			r.tasks(d, t)
-		}
-	}
-	if r.opts.Quick {
-		return
-	}
-	for _, d := range docs {
-		t := r.b.Thread(d)
-		if d.Type() != "stub" || t == nil || t.Spec == nil || len(t.Tasks()) == 0 {
-			continue
-		}
-		served := map[string]bool{}
-		for _, task := range t.Tasks() {
-			if task.State != thread.TaskDropped {
-				for _, req := range task.Requirements {
-					served[req] = true
-				}
-			}
-		}
-		var bare []string
-		for _, req := range thread.Requirements(t.Spec.Body) {
-			if !served[req.ID] {
-				bare = append(bare, req.ID)
-			}
-		}
-		if len(bare) > 0 {
-			r.add("requirement", Info, d, "thread tasks: add a task that serves it, or drop the requirement from the spec", "no task serves %s", strings.Join(bare, ", "))
-		}
-	}
-}
-
-// tasks checks one task list: each task has an id that no other holds, and serves
-// requirements the spec has.
-func (r *run) tasks(d *doc.Doc, t *thread.Thread) {
-	known := map[string]bool{}
-	if t.Spec != nil {
-		for _, req := range thread.Requirements(t.Spec.Body) {
-			known[req.ID] = true
-		}
-	}
-	count := map[string]int{}
-	for _, task := range t.Tasks() {
-		count[task.ID]++
-	}
-	for _, task := range thread.Tasks(d) {
-		switch {
-		case task.ID == "":
-			if !r.opts.Quick {
-				r.add("task", Warning, d, "give it the next free id (T7: …) and the requirements it serves in brackets", "a task has no id: %s", task.Text)
-			}
-			continue
-		case count[task.ID] > 1:
-			r.add("task", Error, d, "give one of them the next free id", "%s is the id of %d tasks of the thread", task.ID, count[task.ID])
-		}
-		if task.State == thread.TaskDropped {
-			continue
-		}
-		if len(task.Requirements) == 0 && !r.opts.Quick {
-			r.add("task", Warning, d, "name the requirements it serves in brackets: (R1, R2)", "%s names no requirement", task.ID)
-		}
-		for _, req := range task.Requirements {
-			if !known[req] {
-				r.add("task", Error, d, "name a requirement the spec has, or add it to the spec", "%s serves %s, which is no requirement of the spec", task.ID, req)
-			}
-		}
-	}
-}
-
-// eventSubjects are the subject types each event kind fits. A promoted event of 7.x is
-// about a plan, which is a stub now.
-var eventSubjects = map[string][]string{
-	"started": {"stub"}, "continued": {"stub"}, "blocked": {"stub"}, "unblocked": {"stub"},
-	"dropped": {"stub", "chord"}, "reopened": {"stub", "chord"}, "resolved": {"stub"}, "promoted": {"stub", "topic"},
-}
-
-func (r *run) events(docs []*doc.Doc) {
-	for _, e := range docs {
-		if e.Type() != "event" {
-			continue
-		}
-		s := r.b.Subject(e)
-		if s == nil {
-			r.add("event", Error, e, "delete the event, or restore its subject", "its subject %s is gone", orNone(e.Str("subject")))
-			continue
-		}
-		if fits, ok := eventSubjects[e.Str("kind")]; ok && !slices.Contains(fits, s.Type()) {
-			r.add("event", Error, e, "delete the event", "a %s event is about a %s here; it fits a %s", e.Str("kind"), s.Type(), strings.Join(fits, " or "))
-		}
-	}
-}
-
-func orNone(s string) string {
-	if s == "" {
-		return "(none)"
-	}
-	return s
-}
-
 // placement reports typed documents out of place, and files with no type in
 // wiki/documents.
 func (r *run) placement() {
@@ -424,7 +280,11 @@ func (r *run) placement() {
 		r.add("misplaced", Error, d, fix, "a %s at %s, where tools do not see it", d.Type(), d.Path)
 	}
 	for _, d := range r.idx.Notes {
-		if path.Dir(d.Path) == vault.Documents && !r.opts.Quick {
+		switch {
+		case path.Dir(d.Path) != vault.Documents:
+		case slices.Contains(schema.ArchivedTypes, d.Type()):
+			r.add("archived", Error, d, "move it into "+vault.Threads+"/", "a %s of Atlas 8.x in wiki/documents; Atlas 9.0 keeps thread documents in %s/ and reads none of them", d.Type(), vault.Threads)
+		case !r.opts.Quick:
 			r.add("untyped", Warning, d, "wiki-ingest: capture it, or move it out of wiki/documents", "a note with no type in wiki/documents")
 		}
 	}
@@ -577,15 +437,6 @@ func (r *run) info(d *doc.Doc) {
 		if d.Str("status") == "proposed" {
 			if t, ok := schema.ParseTime(d.Str("proposed")); ok && now.Sub(t) > ProposedAge {
 				r.add("change-stale", Info, d, "apply or reject it", "proposed %s and still waiting", d.Str("proposed"))
-			}
-		}
-	case "session":
-		if d.Str("status") == "lost" {
-			for _, s := range append(d.List("threads"), d.List("specs")...) {
-				if p := r.idx.Linked(s); p != nil && p.Type() == "stub" && r.b.Status(p) == thread.Started {
-					r.add("session-lost", Info, d, "thread-work: take the thread up again", "it was lost while it held the started thread %s", vault.Title(p))
-					break
-				}
 			}
 		}
 	}

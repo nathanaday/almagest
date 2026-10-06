@@ -67,8 +67,6 @@ subject is lost without a reason.
   user first.
 - A policy's tags set its reach: give it the tags of the repositories it binds, no
   more.
-- A topic that rests only on a spec that is not verified is `draft`: an intent, not yet a
-  fact.
 - A modify gives the whole new body, and `base`, the hash of the topic as read. Read
   the topic first with Read.
 - Call `source` read when an item's claim needs the text around it.

@@ -26,17 +26,18 @@ var Bases = map[string]string{
 	"Changes.base":  "changes/Changes.base",
 }
 
-// OldTemplate is a file an earlier release shipped, from template/old: the 6.5 Bases.
+// OldTemplate is a file an earlier release shipped, by its path under template/old, such
+// as 8.1/Sessions.base.
 func OldTemplate(name string) (string, error) {
 	data, err := templates.ReadFile("template/old/" + name)
 	return string(data), err
 }
 
-// shippedBases are the copies of a Base that earlier releases shipped: 6.5's, and the one
-// 7.0 to 8.1 shipped.
+// shippedBases are the copies of a Base that earlier releases shipped: 6.5's, the one 7.0
+// shipped, and the one 8.x shipped.
 func shippedBases(name string) []string {
 	var out []string
-	for _, p := range []string{"template/old/" + name, "template/old/7.0/" + name} {
+	for _, p := range []string{"template/old/" + name, "template/old/7.0/" + name, "template/old/8.1/" + name} {
 		if data, err := templates.ReadFile(p); err == nil {
 			out = append(out, string(data))
 		}
@@ -44,13 +45,10 @@ func shippedBases(name string) []string {
 	return out
 }
 
-// upgradeBases replaces each Base that equals a copy an earlier release shipped, which
-// nobody edited, with the one this binary ships, and commits the new copies alone: no
-// snapshot calls them a hand edit, and no change's undo counts them. When that commit
-// fails, the old copies go back, and the next write tries again.
-func upgradeBases(v *Vault) {
-	old := map[string][]byte{}
-	var paths []string
+// staleBases are the Bases that equal a copy an earlier release shipped, which nobody
+// edited, and differ from this release's copy, with this release's copy and the old one.
+func staleBases(v *Vault) map[string][2][]byte {
+	out := map[string][2][]byte{}
 	for name, rel := range Bases {
 		data, err := v.Read(rel)
 		if err != nil || !slices.ContainsFunc(shippedBases(path.Base(rel)), func(c string) bool { return SameYAML(string(data), c) }) {
@@ -60,10 +58,34 @@ func upgradeBases(v *Vault) {
 		if err != nil || string(current) == string(data) {
 			continue
 		}
-		if err := v.Write(rel, current); err != nil {
+		out[rel] = [2][]byte{current, data}
+	}
+	return out
+}
+
+// UpgradeBases writes this release's copy of each stale Base through write, for a caller
+// whose own commit holds them.
+func UpgradeBases(v *Vault, write func(rel string, content []byte) error) error {
+	for rel, b := range staleBases(v) {
+		if err := write(rel, b[0]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// upgradeBases replaces each Base that equals a copy an earlier release shipped, which
+// nobody edited, with the one this binary ships, and commits the new copies alone: no
+// snapshot calls them a hand edit, and no change's undo counts them. When that commit
+// fails, the old copies go back, and the next write tries again.
+func upgradeBases(v *Vault) {
+	old := map[string][]byte{}
+	var paths []string
+	for rel, b := range staleBases(v) {
+		if err := v.Write(rel, b[0]); err != nil {
 			continue
 		}
-		old[rel] = data
+		old[rel] = b[1]
 		paths = append(paths, rel)
 	}
 	if len(paths) == 0 {

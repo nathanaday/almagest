@@ -7,20 +7,15 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 )
 
-var at = thread.Opts{Now: testvault.Now}
+var at = testvault.Now
 
 func TestCaptureFromTheInbox(t *testing.T) {
 	tv := testvault.New(t)
-	stub, err := thread.Stub(tv.V, thread.StubIn{Text: "Read the DINOv2 paper", Tags: []string{"ml"}}, at)
-	if err != nil {
-		t.Fatal(err)
-	}
 	tv.Write("inbox/DINOv2.pdf", "%PDF-1.4\n1 0 obj << /Type /Pages /Count 31 >> endobj\n")
 	tv.Write("inbox/meeting notes.md", "# Notes\n\nWe met.\n")
-	res, err := source.Capture(tv.V, source.Request{Inbox: []string{"DINOv2.pdf", "meeting notes.md"}, Tags: []string{"ML", "paper"}, Resolves: stub.State.Thread.ID}, at)
+	res, err := source.Capture(tv.V, source.Request{Inbox: []string{"DINOv2.pdf", "meeting notes.md"}, Tags: []string{"ML", "paper"}}, at)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -35,16 +30,16 @@ func TestCaptureFromTheInbox(t *testing.T) {
 		t.Fatalf("the source goes in wiki/documents: %s", pdf.Ref.Path)
 	}
 	page := tv.Read(pdf.Ref.Path)
-	for _, want := range []string{"origin: inbox", "authority: unknown", "media: pdf", "tags: [ml, paper]", "status: pending", "locator: DINOv2.pdf", `from: "[[Read the DINOv2 paper]]"`, "> [!source] PDF · 31 pages · unknown", "![[" + pdf.Ref.ID + ".pdf]]"} {
+	for _, want := range []string{"origin: inbox", "authority: unknown", "media: pdf", "tags: [ml, paper]", "status: pending", "locator: DINOv2.pdf", "> [!source] PDF · 31 pages · unknown", "![[" + pdf.Ref.ID + ".pdf]]"} {
 		if !strings.Contains(page, want) {
 			t.Errorf("page lacks %q:\n%s", want, page)
 		}
 	}
+	if strings.Contains(page, "from:") {
+		t.Errorf("a source has no from field:\n%s", page)
+	}
 	if tv.Log()[0] != "capture: DINOv2, meeting notes" {
 		t.Fatalf("log %v", tv.Log())
-	}
-	if len(res.Events) != 1 || !strings.Contains(tv.Read("wiki/documents/Read the DINOv2 paper.md"), "Resolved 2026-09-27 → [[DINOv2]], [[meeting notes]]") {
-		t.Fatalf("the stub resolves: %+v", res.Events)
 	}
 	tv.Clean()
 	idx := tv.Index()

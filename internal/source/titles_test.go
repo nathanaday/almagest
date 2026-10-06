@@ -7,9 +7,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
+	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 )
 
 const (
@@ -33,10 +33,12 @@ func TestACaptureBesideATitleInAnotherUnicodeFormTakesTheNextTitle(t *testing.T)
 	if !foldsUnicode(t, tv.V.Abs("wiki/documents")) {
 		t.Skip("this file system keeps NFC and NFD names apart")
 	}
-	if _, err := thread.Stub(tv.V, thread.StubIn{Text: "A stub.", Title: cafeNFC}, at); err != nil {
+	tv.Doc("topic", cafeNFC, map[string]any{"kind": "entity"}, "## What it is\n\nA café.\n")
+	if _, err := derive.Sync(tv.Index(), tv.V.WriteIfChanged); err != nil {
 		t.Fatal(err)
 	}
-	stub := tv.Read("wiki/documents/" + cafeNFC + ".md")
+	tv.Commit()
+	topic := tv.Read("wiki/documents/" + cafeNFC + ".md")
 	tv.Write("inbox/"+cafeNFD+".md", "# Notes\n\nFrom the café.\n")
 	res, err := source.Capture(tv.V, source.Request{Inbox: []string{cafeNFD + ".md"}}, at)
 	if err != nil {
@@ -45,8 +47,8 @@ func TestACaptureBesideATitleInAnotherUnicodeFormTakesTheNextTitle(t *testing.T)
 	if got := res.Captured[0].Ref.Title; got != cafeNFD+" (2)" {
 		t.Fatalf("the source took the title %q", got)
 	}
-	if tv.Read("wiki/documents/"+cafeNFC+".md") != stub {
-		t.Fatal("the stub changed")
+	if tv.Read("wiki/documents/"+cafeNFC+".md") != topic {
+		t.Fatal("the topic changed")
 	}
 	tv.Clean()
 }

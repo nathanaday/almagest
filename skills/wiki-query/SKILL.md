@@ -41,4 +41,4 @@ None. The skill writes nothing.
 ## Hand off
 
 [wiki-save](../wiki-save/SKILL.md) when the answer is new synthesis the user wants kept.
-[thread-work](../thread-work/SKILL.md) when the question turns into work.
+[atlas](../atlas/SKILL.md) when the question turns into work in a repository.

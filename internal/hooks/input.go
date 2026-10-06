@@ -137,8 +137,6 @@ type toolInput struct {
 	} `json:"edits"`
 	Action string `json:"action"`
 	ID     string `json:"id"`
-	Thread string `json:"thread"`
-	Take   bool   `json:"take"`
 }
 
 func (in Input) tool() toolInput {

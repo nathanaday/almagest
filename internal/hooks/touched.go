@@ -7,17 +7,13 @@ import (
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // Touched links the session to what a call touched: the repository an edit landed in,
-// the documents a thread or chord call wrote and the thread it started, the events a call
-// wrote, the change a proposal wrote. It counts the tasks the session checked, copies the
-// session's own description into its frontmatter, and dates a thread document an edit
-// changed.
+// and the change a proposal wrote. It copies the session's own description into its
+// frontmatter.
 func Touched(r io.Reader, env Env) error {
 	in := readInput(r)
 	now := env.now()
@@ -27,19 +23,14 @@ func Touched(r io.Reader, env Env) error {
 	}
 	return locked(in, env, func(v *vault.Vault) error {
 		var edits []func(string) string
-		syncWork := false
 		link := func(field, title string) {
 			edits = append(edits, func(c string) string { return sessions.AddLink(c, field, title) })
 		}
-		tool := atlasTool(in.ToolName)
-		resp := decodeAll(in.ToolResponse)
 		if in.ToolName == "Bash" {
 			if repo := shellWrite(v, in); repo != "" {
 				link("repositories", repo)
 			}
 		}
-		// eventPaths get this session as their session; eventRefs are the events among them.
-		var eventPaths, eventRefs []string
 		switch {
 		case editTools[in.ToolName]:
 			for _, f := range in.paths() {
@@ -63,135 +54,30 @@ func Touched(r io.Reader, env Env) error {
 							return doc.SetField(c, "description", sessions.DescriptionLine(body))
 						})
 					}
-				case strings.HasPrefix(rel, vault.Documents+"/"):
-					if data, err := v.Read(rel); err == nil {
-						d := doc.Parse(rel, data)
-						if schema.IsThread(d.Type()) || d.Type() == "event" {
-							v.WriteIfChanged(rel, []byte(doc.SetField(d.Content, "updated", vault.Stamp(now))))
-							// An edit of a spec or a list changes what its thread's status derives from.
-							syncWork = true
-						}
+				}
+			}
+		case atlasTool(in.ToolName) == "change" && in.tool().Action == "propose" && !failed(decodeAll(in.ToolResponse)):
+			ref := findObject(decodeAll(in.ToolResponse), "ref")
+			title, _ := ref["title"].(string)
+			p, _ := ref["path"].(string)
+			if title != "" && p != "" {
+				link("changes", title)
+				if s := sessions.Find(v, e.Key()); s != nil {
+					if data, err := v.Read(p); err == nil {
+						v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(s.Title()))))
 					}
 				}
 			}
-		case (tool == "thread" || tool == "chord" || tool == "change" || tool == "source") && !failed(resp):
-			if tool == "change" && in.tool().Action == "propose" {
-				ref := findObject(resp, "ref")
-				title, _ := ref["title"].(string)
-				p, _ := ref["path"].(string)
-				if title != "" && p != "" {
-					link("changes", title)
-					if s := sessions.Find(v, e.Key()); s != nil {
-						if data, err := v.Read(p); err == nil {
-							v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(s.Title()))))
-						}
-					}
-				}
-			}
-			if tool == "thread" || tool == "chord" {
-				for _, ref := range refList(resp, "wrote") {
-					if title, _ := ref["title"].(string); title != "" {
-						link("work", title)
-					}
-					// A verification names the session that filed it, as an event does.
-					if typ, _ := ref["type"].(string); typ == "verification" {
-						if p, _ := ref["path"].(string); p != "" {
-							eventPaths = append(eventPaths, p)
-						}
-					}
-				}
-				if started := findString(resp, "started"); started != "" {
-					link("threads", started)
-				}
-				if tool == "thread" && in.tool().Action == "check" {
-					edits = append(edits, func(c string) string {
-						return doc.SetField(c, "checked", doc.Parse("", []byte(c)).Front.Int("checked")+1)
-					})
-				}
-			}
-			for _, ref := range refList(resp, "events") {
-				if p, _ := ref["path"].(string); p != "" {
-					eventPaths = append(eventPaths, p)
-					eventRefs = append(eventRefs, p)
-				}
-			}
-			syncWork = true
 		}
-		d, err := sessions.Touch(v, e, now, func(c string) string {
+		_, err := sessions.Touch(v, e, now, func(c string) string {
 			c = doc.SetField(c, "status", sessions.Running)
 			for _, edit := range edits {
 				c = edit(c)
 			}
-			if n := len(eventRefs); n > 0 {
-				c = doc.SetField(c, "events", doc.Parse("", []byte(c)).Front.Int("events")+n)
-			}
 			return c
 		})
-		if err != nil {
-			return err
-		}
-		if d != nil {
-			for _, p := range eventPaths {
-				if data, err := v.Read(p); err == nil {
-					v.WriteIfChanged(p, []byte(doc.SetField(string(data), "session", doc.Link(d.Title()))))
-				}
-			}
-		}
-		if syncWork {
-			return syncWorkDocs(v)
-		}
-		return nil
-	})
-}
-
-// syncWorkDocs brings the thread documents' derived parts up to date after a hook changed
-// a session's links or an edit changed a thread document: the statuses, the counts, the
-// active flags, and the callouts that name a session.
-func syncWorkDocs(v *vault.Vault) error {
-	idx, err := vault.Load(v)
-	if err != nil {
 		return err
-	}
-	_, err = thread.Load(idx).SyncWith(vault.NewGuard(idx, v))
-	return err
-}
-
-// refList is the list of document references a tool response holds under key.
-func refList(values []any, key string) []map[string]any {
-	var out []map[string]any
-	for _, x := range values {
-		m, ok := x.(map[string]any)
-		if !ok {
-			continue
-		}
-		list, ok := m[key].([]any)
-		if !ok {
-			continue
-		}
-		for _, item := range list {
-			if ref, ok := item.(map[string]any); ok {
-				if _, ok := ref["id"]; ok {
-					out = append(out, ref)
-				}
-			}
-		}
-		if len(out) > 0 {
-			return out
-		}
-	}
-	return out
-}
-
-// findString is the first string a tool response holds under key.
-func findString(values []any, key string) string {
-	for _, x := range values {
-		if m, ok := x.(map[string]any); ok {
-			if s, ok := m[key].(string); ok && s != "" {
-				return s
-			}
-		}
-	}
-	return ""
+	})
 }
 
 // shellWrites are the marks of a shell command that writes a file.

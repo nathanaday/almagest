@@ -206,7 +206,7 @@ func CleanTitle(s string) string {
 }
 
 // MaxTitleBytes is the longest title a document takes, so the titles code derives from it
-// (an event, a spec, a task list) still fit in a file name.
+// (a change's file name, which adds its date) still fit in a file name.
 const MaxTitleBytes = 150
 
 // CheckTitle refuses a clean title that is empty or longer than MaxTitleBytes.

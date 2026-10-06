@@ -7,14 +7,12 @@ import (
 	"os"
 	"path"
 	"path/filepath"
-	"regexp"
 	"slices"
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -37,8 +35,6 @@ var readActions = map[string]map[string]bool{
 	"lint":    nil,
 	"vault":   {"": true, "status": true},
 	"change":  {"": true, "show": true},
-	"thread":  {"": true, "list": true, "load": true},
-	"chord":   {"": true, "list": true, "load": true},
 	"source":  {"chunks": true, "read": true},
 }
 
@@ -67,16 +63,9 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		}
 		return nil
 	}
-	if tool == "thread" && in.tool().Action == "start" {
-		if reason := restartRefusal(in, env); reason != "" {
-			return deny(w, reason)
-		}
-		return nil
-	}
 	if !editTools[in.ToolName] {
 		return nil
 	}
-	session := findVault(in, env)
 	for _, f := range in.paths() {
 		// Every rule judges the file as the disk names it, whatever case, Unicode form,
 		// or link the agent wrote.
@@ -84,20 +73,16 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		if strings.EqualFold(f.Path, canonical(vault.HomeFrom(env.getenv).ConfigPath())) {
 			return deny(w, f.Path+" holds the commands Atlas runs (terminal_command, agent_commands); the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config")
 		}
-		// A file belongs to the vault above it, wherever the session runs; a file in no
-		// vault, to the vault that links its repository.
-		v := session
-		if root := vault.FindAbove(filepath.Dir(f.Path)); root != "" {
-			if fv, err := vault.Open(root); err == nil {
-				v = fv
-			}
-		} else if lv := linkingVault(f.Path, session, env); lv != nil {
-			v = lv
-		}
-		if v == nil {
+		// A file belongs to the vault above it, wherever the session runs.
+		root := vault.FindAbove(filepath.Dir(f.Path))
+		if root == "" {
 			continue
 		}
-		if reason := pathRefusal(v, in, f, session == nil || session.Root != v.Root); reason != "" {
+		v, err := vault.Open(root)
+		if err != nil {
+			continue
+		}
+		if reason := pathRefusal(v, in, f); reason != "" {
 			return deny(w, reason)
 		}
 	}
@@ -107,27 +92,6 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 // binaryNames are the binary's name and the name it had in 6.0 to 6.2, which an older
 // install may still hold.
 var binaryNames = []string{"atlas-obsidian", "atlas"}
-
-// linkingVault is the vault that links a repository holding the file: the session's when
-// it does, else the first vault of the machine's config that does, or nil.
-func linkingVault(file string, session *vault.Vault, env Env) *vault.Vault {
-	links := func(v *vault.Vault) bool {
-		return slices.ContainsFunc(v.Repositories(), func(r vault.Repo) bool { return r.Path != "" && vault.Within(file, canonical(r.Path)) })
-	}
-	if session != nil && links(session) {
-		return session
-	}
-	cfg, err := vault.HomeFrom(env.getenv).Load()
-	if err != nil {
-		return nil
-	}
-	for _, root := range cfg.Paths() {
-		if v, err := vault.Open(root); err == nil && links(v) {
-			return v
-		}
-	}
-	return nil
-}
 
 // atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
@@ -191,20 +155,16 @@ func readOnlyRefusal(in Input, tool string) string {
 	case tool != "" && !readsOnly(tool, in.tool().Action):
 		return fmt.Sprintf("%s is read-only, and %s %q is not one of the calls that only read; the skill that sent it makes that call", agent, tool, in.tool().Action)
 	case in.ToolName == "Bash":
-		// thread-audit checks work by running its tests and reading git; it edits nothing.
-		if agent == "thread-audit" {
-			return atlasCommandRefusal(in.tool().Command)
-		}
 		return agent + " is read-only and runs no shell command"
 	}
 	return ""
 }
 
 // pathRefusal is why a write tool may not touch a file, or "".
-func pathRefusal(v *vault.Vault, in Input, f patchFile, elsewhere bool) string {
+func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	rel := v.Rel(f.Path)
 	if rel == "" {
-		return repositoryRefusal(v, in, f.Path, elsewhere)
+		return ""
 	}
 	// A part that does not exist yet keeps the case the agent typed, which a disk that
 	// ignores case folds into the real folder, so fixed names compare without case.
@@ -217,15 +177,13 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile, elsewhere bool) string {
 	case is(vault.PluginDir) || under(vault.PluginDir):
 		return rel + " is the Atlas plugin, whose code and binaryPath decide what runs; vault init and vault sync install it, and the user sets binaryPath in the Atlas settings in Obsidian"
 	case strings.EqualFold(path.Dir(rel), vault.Documents):
-		return documentRefusal(v, in, f, rel)
+		return documentRefusal(v, f, rel)
 	case under(vault.Assets):
 		return rel + " is a captured original or an attachment; source capture writes the originals, and you add attachments in Obsidian"
 	case under(vault.Wiki):
-		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from the thread tool, the chord tool, change propose, or source capture"
+		return rel + " is in wiki/, which holds wiki/documents and wiki/assets only; a document comes from change propose or source capture"
 	case under(vault.Changes):
 		return rel + " is a change document, and only the change tool writes it. To change a proposed change, propose a new one with supersedes; the user can edit one in Obsidian before Apply"
-	case under(vault.Chords):
-		return rel + " is a chord's canvas, which code writes from the stubs; change the order with chord order, and the user redraws it in Obsidian"
 	case under(vault.Views):
 		return rel + " is a view, which code writes from the documents; change the documents instead"
 	case is(vault.Marker):
@@ -240,98 +198,19 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile, elsewhere bool) string {
 	return ""
 }
 
-// MaxCardLines is how many lines of prose a stub's Idea and Notes hold together before
-// the guard refuses an agent's edit that adds more: the card stays short.
-const MaxCardLines = 40
-
-// codeSection says why an agent does not edit a section code owns, by type.
-var codeSection = map[string]string{
-	"stub":         "## Thread is code's; it follows the thread's documents",
-	"tasks":        "## Tasks is code's for an agent: check, drop, or open a task with thread check, and add one with thread tasks. Edit ## Details freely",
-	"verification": "a verification is the record of one round: a correction is a new round (thread verify), and a finding's outcome is thread finding. Edit ## Notes freely",
-	"chord":        "## Threads is code's; it follows the stubs. Change the order with chord order",
-}
-
-var checkBox = regexp.MustCompile(`^\s*[-*] \[.\] `)
-
 // documentRefusal keeps the documents of wiki/documents to their writers: a new file
-// comes from a tool; knowledge changes through a change; a thread document's prose is
-// the model's, and its frontmatter, lead callout, and code sections are code's. A thread
-// document holds only the sections of its type, and a stub stays short.
-func documentRefusal(v *vault.Vault, in Input, f patchFile, rel string) string {
+// comes from a tool, and knowledge changes through a change.
+func documentRefusal(v *vault.Vault, f patchFile, rel string) string {
 	data, err := v.Read(rel)
 	if err != nil {
 		if f.Op == "delete" {
 			return ""
 		}
-		return rel + " would be a new document; a stub, a spec, a task list, or a verification comes from the thread tool, a chord from the chord tool, a topic or a repository from change propose, a source from source capture"
+		return rel + " would be a new document; a topic or a repository comes from change propose, a source from source capture"
 	}
 	d := doc.Parse(rel, data)
-	t := schema.Get(d.Type())
-	switch {
-	case t == nil || d.Front == nil:
-		return ""
-	case t.Family == schema.Knowledge:
+	if t := schema.Get(d.Type()); t != nil && d.Front != nil && t.Document() {
 		return rel + " is a " + d.Type() + ", which changes only through a change: build a plan, call change propose, show the preview, and apply after the user's yes"
-	case f.Op != "update" || in.ToolName == "Write":
-		return rel + " is a " + d.Type() + "; revise its prose with Edit, and its fields with thread set"
-	case unplaced(in, f, d.Content):
-		return unplacedWhy(rel)
-	}
-	// An Edit that applies is judged by the document it leaves alone, so its anchor may
-	// hold a code heading it keeps; a patch is judged by where each hunk lands too.
-	after, applies := in.leaves(d.Content, f)
-	whole := applies && in.ToolName != "apply_patch"
-	if !whole && touchesPrefix(in, f, d) {
-		return "the frontmatter and the lead callout of " + d.Title() + " are code's; use thread set, or the thread action that fits"
-	}
-	codeWhy := func(s string) string {
-		if why := codeSection[d.Type()]; why != "" {
-			return why
-		}
-		return "## " + s + " is code's; it follows the documents and the events"
-	}
-	for _, s := range t.CodeSections {
-		if start, end := sectionBounds(d.Content, s); !whole && start >= 0 && touchesRange(in, f, d.Content, start, end) {
-			return codeWhy(s)
-		}
-	}
-	// The document the edit leaves keeps what code owns: whatever headings, fences, or
-	// placement the edit uses, the frontmatter, the lead, and each code section come out
-	// as they went in.
-	if applies {
-		switch changed := codeChanged(d, after, t.CodeSections); changed {
-		case "":
-		case prefixPart:
-			return "the frontmatter and the lead callout of " + d.Title() + " are code's; use thread set, or the thread action that fits"
-		default:
-			return codeWhy(changed)
-		}
-		if name := secondHeading(d, after); name != "" {
-			return fmt.Sprintf("## %s is in %s once, and an edit adds no second one. %s", name, d.Title(), thread.Elsewhere)
-		}
-	}
-	if !schema.IsThread(d.Type()) {
-		return ""
-	}
-	added, removed := in.added(f)
-	for _, h := range doc.Headings(strings.Join(added, "\n")) {
-		if h.Level == 2 && !slices.ContainsFunc(t.Sections, func(s string) bool { return strings.EqualFold(s, h.Title) }) {
-			return fmt.Sprintf("## %s is no section of a %s; it holds %s. %s", h.Title, d.Type(), strings.Join(t.Sections, ", "), thread.Elsewhere)
-		}
-	}
-	for _, l := range added {
-		if d.Type() == "spec" && checkBox.MatchString(l) {
-			return "a spec holds no check box; it says what must be true, and the task list holds the steps (thread tasks)"
-		}
-	}
-	if d.Type() == "stub" {
-		idea, _ := doc.Section(d.Body, "Idea")
-		notes, _ := doc.Section(d.Body, "Notes")
-		have := len(strings.Split(strings.TrimSpace(idea+"\n"+notes), "\n"))
-		if grow := len(added) - len(removed); grow > 0 && have+grow > MaxCardLines {
-			return fmt.Sprintf("a stub is the front page of its thread and stays short (%d lines of Idea and Notes at most). %s", MaxCardLines, thread.Elsewhere)
-		}
 	}
 	return ""
 }
@@ -386,27 +265,6 @@ func unplaced(in Input, f patchFile, content string) bool {
 
 func unplacedWhy(rel string) string {
 	return "the guard cannot tell where a hunk of this patch lands in " + rel + ": its context and removed lines match no lines of the file. Read the file again, and give each hunk context lines as the file holds them"
-}
-
-// secondHeading is a level-two heading that the content after an edit holds more than
-// once and more often than before, by doc.Headings, or "".
-func secondHeading(d *doc.Doc, after string) string {
-	count := func(body string) map[string]int {
-		out := map[string]int{}
-		for _, h := range doc.Headings(body) {
-			if h.Level == 2 {
-				out[strings.ToLower(strings.TrimSpace(h.Title))]++
-			}
-		}
-		return out
-	}
-	was := count(d.Body)
-	for name, n := range count(doc.Parse(d.Path, []byte(after)).Body) {
-		if n > 1 && n > was[name] {
-			return name
-		}
-	}
-	return ""
 }
 
 // prefixPart names the frontmatter and the lead callout in codeChanged's answer.
@@ -496,128 +354,6 @@ func sectionBounds(content, title string) (int, int) {
 		return -1, -1
 	}
 	return base + start, base + end
-}
-
-// repositoryRefusal is the edit rule: an edit inside a linked repository needs a thread
-// this session started that has a task list for the repository with an open task. When
-// the vault that links the repository is not the session's, the refusal says how to work
-// there.
-func repositoryRefusal(v *vault.Vault, in Input, target string, elsewhere bool) string {
-	var repo *vault.Repo
-	for _, r := range v.Repositories() {
-		if r.Path != "" && vault.Within(target, canonical(r.Path)) {
-			rr := r
-			if repo == nil || len(rr.Path) > len(repo.Path) {
-				repo = &rr
-			}
-		}
-	}
-	if repo == nil {
-		return ""
-	}
-	s := sessions.Find(v, in.event().Key())
-	if s == nil && in.AgentID != "" {
-		s = sessions.Find(v, in.event().SessionID)
-	}
-	if s == nil && elsewhere {
-		return fmt.Sprintf("an edit in %s needs a thread started in the vault that links it, %s (%s), and this session runs outside that vault. Start a session in %s, or set ATLAS_VAULT=%s, then find or plant the thread there (thread-work) and start it", repo.Title, v.Name(), v.Root, v.Root, v.Root)
-	}
-	why := ""
-	if s != nil {
-		for _, title := range sessions.Threads(s) {
-			reason := covers(v, title, repo.Title)
-			if reason == "" {
-				return ""
-			}
-			if why == "" || strings.Contains(reason, "open task") {
-				why = reason
-			}
-		}
-	}
-	if why == "" {
-		why = "this session started no thread"
-	}
-	return fmt.Sprintf("an edit in %s needs a thread this session started, with a task list for %s that has an open task; %s. The thread-work skill finds or plants the thread; thread start binds the session; a fix after the last task needs a new task first (thread tasks)", repo.Title, repo.Title, why)
-}
-
-// covers says why a thread does not let its session edit a repository, or "" when it
-// does: the thread is not ended, and its task list for the repository has an open task.
-func covers(v *vault.Vault, title, repo string) string {
-	stub := sessions.Document(v, title)
-	if stub == nil || stub.Type() != "stub" {
-		return title + " is no thread"
-	}
-	if s := stub.Str("status"); s == thread.Dropped || s == thread.Resolved {
-		return title + " is " + s
-	}
-	// The lists named after the thread answer most calls without reading the vault; a
-	// list renamed by hand still names its thread, which the index finds.
-	why := openTask(sessions.TaskLists(v, title), title, repo)
-	if why == "" {
-		return ""
-	}
-	if idx, err := vault.Load(v); err == nil {
-		var lists []*doc.Doc
-		for _, d := range idx.Of("tasks") {
-			if strings.EqualFold(doc.LinkTarget(d.Str("thread")), title) {
-				lists = append(lists, d)
-			}
-		}
-		why = openTask(lists, title, repo)
-	}
-	return why
-}
-
-// openTask says why no list of a thread has an open task for a repository, or "".
-func openTask(lists []*doc.Doc, title, repo string) string {
-	why := title + " has no task list for " + repo
-	for _, list := range lists {
-		if !strings.EqualFold(doc.LinkTarget(list.Str("repository")), repo) {
-			continue
-		}
-		for _, task := range thread.Tasks(list) {
-			if task.State == thread.TaskOpen {
-				return ""
-			}
-		}
-		why = title + " has no open task for " + repo + ": every task of its list is done"
-	}
-	return why
-}
-
-// restartRefusal refuses a second start of a thread this session already started and
-// that is still started: one continued event per session, and the session is bound
-// already.
-func restartRefusal(in Input, env Env) string {
-	key := strings.TrimSpace(in.tool().Thread)
-	if key == "" {
-		return ""
-	}
-	v := findVault(in, env)
-	if v == nil {
-		return ""
-	}
-	s := sessions.Find(v, in.event().Key())
-	if s == nil {
-		return ""
-	}
-	stub := sessions.Document(v, doc.LinkTarget(key))
-	if stub == nil {
-		if idx, err := vault.Load(v); err == nil {
-			if d := idx.ByID(key); d != nil {
-				stub = d
-			}
-		}
-	}
-	if stub == nil || stub.Str("status") != thread.Started {
-		return ""
-	}
-	for _, t := range sessions.Threads(s) {
-		if strings.EqualFold(t, stub.Title()) {
-			return stub.Title() + " is started in this session already; go on with its open tasks, and check each one when it is done (thread check)"
-		}
-	}
-	return ""
 }
 
 // canonical is a path as the disk names it: links on the part that exists are resolved,

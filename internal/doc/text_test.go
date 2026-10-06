@@ -1,7 +1,6 @@
 package doc
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -20,13 +19,6 @@ func TestTextHelpers(t *testing.T) {
 	}
 	if Capital("started") != "Started" || Capital("") != "" {
 		t.Fatal("Capital")
-	}
-	text := "# Title\n\n> [!note] a callout\n| a | b |\n```go\n\n- 1. The first sentence. The second.\n"
-	if got := FirstSentence(text); got != "The first sentence." {
-		t.Fatalf("FirstSentence = %q", got)
-	}
-	if got := FirstSentence(strings.Repeat("word ", 100)); len([]rune(got)) != 200 || !strings.HasSuffix(got, "…") {
-		t.Fatalf("FirstSentence cuts at 200 runes: %d", len([]rune(got)))
 	}
 	if LineCount("") != 0 || LineCount("a") != 1 || LineCount("a\nb\n\n") != 2 {
 		t.Fatal("LineCount")

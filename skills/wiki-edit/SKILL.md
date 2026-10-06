@@ -1,6 +1,6 @@
 ---
 name: wiki-edit
-description: "Change knowledge that exists: rewrite, rename, merge, split, remove with a redirect, retag, confirm a topic is current, promote a stub to a topic, or repair what lint found, as one reviewed change. Use for rewrite this topic, rename, merge these topics, split this topic, tag this under p3, rename a tag, make this stub a topic, this page is still right, fix the lint findings, fix the dead links. New knowledge from documents is wiki-sync; unlinking a repository is repo-unlink."
+description: "Change knowledge that exists: rewrite, rename, merge, split, remove with a redirect, retag, confirm a topic is current, or repair what lint found, as one reviewed change. Use for rewrite this topic, rename, merge these topics, split this topic, tag this under p3, rename a tag, this page is still right, fix the lint findings, fix the dead links. New knowledge from documents is wiki-sync; unlinking a repository is repo-unlink."
 ---
 
 # wiki-edit
@@ -29,9 +29,6 @@ Tools: `search`, `lint`, `change`. References: [changes.md](../atlas/references/
    - new tags on a document: a `modify` of `fields.tags` (the whole list);
    - rename or merge a tag: a `retag` with `from` and `to`; code rewrites the tag in
      every document, the tags below it too; a `to` that exists merges the two;
-   - a stub that is one topic: a `promote` with `id` (a stub with no spec), `kind` (concept,
-     entity, policy, or overview), `fields`, `body`, and a new `title` when it needs
-     one; code keeps `## Idea` as `## Origin`;
    - a topic checked and still true: a `confirm` with `id`;
    - a dead link: create the target, or change the link in a `modify`.
    Leave `base` out unless you read the document's hash; code records it at propose,

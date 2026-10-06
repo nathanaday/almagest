@@ -1,7 +1,6 @@
 package vault_test
 
 import (
-	"encoding/json"
 	"errors"
 	"os"
 	"path/filepath"
@@ -10,7 +9,6 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -261,29 +259,17 @@ func TestSyncSettingsMergesAgainWhenTheFileChanges(t *testing.T) {
 	}
 }
 
-// A canvas the user saves while a sync writes it keeps the save.
-func TestASyncKeepsACanvasSavedDuringItsWrite(t *testing.T) {
+// A document the user saves while a sync writes it keeps the save.
+func TestASyncKeepsADocumentSavedDuringItsWrite(t *testing.T) {
 	tv := testvault.New(t)
-	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}, {Title: "Second", Text: "Then this.", After: []string{"First"}}}}, thread.Opts{Now: testvault.Now}); err != nil {
-		t.Fatal(err)
-	}
-	canvas := tv.V.Abs("chords/Plan C.canvas")
-	// Cards painted the wrong color: the sync paints them again, so it writes the canvas.
-	data, _ := os.ReadFile(canvas)
-	var c map[string]any
-	if err := json.Unmarshal(data, &c); err != nil {
-		t.Fatal(err)
-	}
-	for _, n := range c["nodes"].([]any) {
-		n.(map[string]any)["color"] = "#123456"
-	}
-	moved, _ := json.Marshal(c)
-	os.WriteFile(canvas, moved, 0o644)
+	tv.Doc("topic", "Plan C", map[string]any{"kind": "concept"}, "## Definition\n\nShip it.\n")
 	tv.Commit()
-	saved := []byte(strings.Replace(string(moved), "#123456", "#654321", 1))
+	file := tv.V.Abs("wiki/documents/Plan C.md")
+	data, _ := os.ReadFile(file)
+	saved := []byte(strings.Replace(string(data), "Ship it.", "Ship it soon.", 1))
 	vault.SetBeforeRename(func(f string) {
-		if f == canvas {
-			os.WriteFile(canvas, saved, 0o644)
+		if f == file {
+			os.WriteFile(file, saved, 0o644)
 		}
 	})
 	defer vault.SetBeforeRename(nil)
@@ -291,10 +277,10 @@ func TestASyncKeepsACanvasSavedDuringItsWrite(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got, err := os.ReadFile(canvas); string(got) != string(saved) {
-		t.Fatalf("the canvas save was overwritten (%v, skipped %v):\n%s", err, synced.Skipped, got)
+	if got, err := os.ReadFile(file); string(got) != string(saved) {
+		t.Fatalf("the save was overwritten (%v, skipped %v):\n%s", err, synced.Skipped, got)
 	}
-	if !strings.Contains(strings.Join(synced.Skipped, "|"), "chords/Plan C.canvas") {
+	if !strings.Contains(strings.Join(synced.Skipped, "|"), "wiki/documents/Plan C.md") {
 		t.Fatalf("skipped %v", synced.Skipped)
 	}
 }

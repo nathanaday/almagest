@@ -35,10 +35,10 @@ const (
 // Query is what to search for.
 type Query struct {
 	Text       string   `json:"text,omitempty" jsonschema:"free text; may be empty when the filters say enough"`
-	Types      []string `json:"types,omitempty" jsonschema:"document types: source, repository, topic, stub, spec, tasks, verification, chord, event; or session, change. Empty: the nine document types"`
-	Kinds      []string `json:"kinds,omitempty" jsonschema:"kinds by type: topic: concept, entity, policy, overview; event: started, continued, dropped, reopened, blocked, unblocked, promoted, resolved, note"`
+	Types      []string `json:"types,omitempty" jsonschema:"document types: source, repository, topic; or session, change. Empty: the three document types"`
+	Kinds      []string `json:"kinds,omitempty" jsonschema:"topic kinds: concept, entity, policy, overview"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"a document must hold every one of these tags, or a tag below it"`
-	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep, by type: source: pending, absorbed; topic: draft, stable, contested, deprecated; stub: stub, specified, planned, started, unverified, verified, closed, dropped, resolved; spec: not implemented, complete (unverified), complete (verified); verification: pass, fail, findings, stale; chord: open, started, done, closed, dropped; session: running, waiting, idle, ended, lost; change: proposed, applying, applied, rejected, superseded, undone"`
+	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep, by type: source: pending, absorbed; topic: draft, stable, contested, deprecated; session: running, waiting, idle, ended, lost; change: proposed, applying, applied, rejected, superseded, undone"`
 	Repository string   `json:"repository,omitempty" jsonschema:"only documents that name this repository or hold its tag, by id or title"`
 	Limit      int      `json:"limit,omitempty" jsonschema:"at most this many hits; 20 when 0"`
 }
@@ -128,7 +128,7 @@ func Search(idx *vault.Index, q Query) (*Hits, error) {
 		if len(want) > 0 && !vault.Holds(d, want...) {
 			continue
 		}
-		if repo != nil && !names(idx, d, repo) {
+		if repo != nil && !names(d, repo) {
 			continue
 		}
 		ref := idx.Ref(d)
@@ -193,7 +193,7 @@ func facets(docs []*doc.Doc, refs []vault.Ref, order []int, asked []string) Face
 	all := map[string]int{}
 	for _, i := range order {
 		f.Types[refs[i].Type]++
-		// Only a status the filter takes narrows a query; a task list's done/total does not.
+		// Only a status the filter takes narrows a query.
 		if refs[i].Status != "" && slices.Contains(schema.Statuses(), refs[i].Status) {
 			f.Status[refs[i].Status]++
 		}
@@ -230,34 +230,16 @@ func wanted(d *doc.Doc, types []string) bool {
 }
 
 // names reports whether a document belongs to a repository: the repository itself, a
-// thread or a session that lists it, a task list for it, a thread document or an event of
-// such a thread, or a document that holds its tag.
-func names(idx *vault.Index, d, repo *doc.Doc) bool {
+// session that lists it, or a document that holds its tag.
+func names(d, repo *doc.Doc) bool {
 	if d.ID() == repo.ID() {
 		return true
 	}
-	lists := func(x *doc.Doc) bool {
-		is := func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) }
-		return slices.ContainsFunc(x.List("repositories"), is) || is(x.Str("repository"))
-	}
-	if lists(d) {
+	if slices.ContainsFunc(d.List("repositories"), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) }) {
 		return true
 	}
-	if d.Type() == "event" {
-		if s := idx.Linked(d.Str("subject")); s != nil && lists(s) {
-			return true
-		}
-	}
-	// A spec or a verification belongs where its thread does; a task list names its own.
-	if t := d.Str("thread"); t != "" && d.Str("repository") == "" && len(d.List("repositories")) == 0 {
-		if s := idx.Linked(t); s != nil && lists(s) {
-			return true
-		}
-	}
-	if def := repo.Str("defines"); def != "" && vault.Holds(d, def) {
-		return true
-	}
-	return false
+	def := repo.Str("defines")
+	return def != "" && vault.Holds(d, def)
 }
 
 // Rank scores each document's fields against the terms with BM25F.

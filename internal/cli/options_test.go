@@ -12,16 +12,11 @@ import (
 func TestARemovedOptionIsRefused(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	tv.Write("chord.json", `{"title": "Ship it", "threads": []}`)
-	tv.Commit()
 	before := len(tv.Log())
 	for _, c := range []struct {
 		args []string
 		want string
 	}{
-		{[]string{"chord", "create", "--new-tags", "chord.json"}, `--new-tags is gone: chord takes new_tags only in the JSON of chord create`},
-		{[]string{"chord", "list", "--new-tags"}, "--new-tags is gone"},
-		{[]string{"chord", "create", "chord.json", "--new-tags=true"}, "--new-tags is gone"},
 		{[]string{"setup", "--yes", "--no-plugin"}, "--yes is gone: setup asks nothing"},
 		{[]string{"setup", "--yes=1", "--no-plugin"}, "--yes is gone"},
 	} {
@@ -39,7 +34,6 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 
 	// The same word as the value of another option is that option's value.
 	for _, args := range [][]string{
-		{"chord", "list", "--tag", "--new-tags"},
 		{"setup", "--name", "--yes", "--no-plugin"},
 	} {
 		if code, _, errOut := r.atlas("", args...); code != 0 {

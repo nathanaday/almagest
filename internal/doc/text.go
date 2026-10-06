@@ -35,23 +35,6 @@ func Capital(s string) string {
 	return strings.ToUpper(s[:1]) + s[1:]
 }
 
-// FirstSentence is the first sentence of text's first prose line, cut to 200 runes.
-func FirstSentence(text string) string {
-	line := ""
-	for _, l := range strings.Split(text, "\n") {
-		l = strings.TrimSpace(l)
-		if l == "" || strings.HasPrefix(l, "#") || strings.HasPrefix(l, ">") || strings.HasPrefix(l, "|") || strings.HasPrefix(l, "```") {
-			continue
-		}
-		line = strings.TrimLeft(l, "-*0123456789. ")
-		break
-	}
-	if i := strings.Index(line, ". "); i > 0 {
-		line = line[:i+1]
-	}
-	return OneLine(line, 200)
-}
-
 // LineCount is the number of lines in s, not counting trailing newlines.
 func LineCount(s string) int {
 	s = strings.TrimRight(s, "\n")

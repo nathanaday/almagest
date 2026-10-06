@@ -6,9 +6,9 @@ description: "Make a new Atlas vault: ask its name, its folder, and how freely t
 # atlas-onboard
 
 A vault is one Obsidian vault and one git repository that holds every document of the
-user's work: the sources, repositories, and topics of the wiki, the threads and
-chords of the work, their events, the sessions, and the changes. This skill asks the three
-questions a vault needs, makes it, and offers to link the first repositories.
+user's work: the sources, repositories, and topics of the wiki, the sessions, and the
+changes. This skill asks the three questions a vault needs, makes it, and offers to link
+the first repositories.
 
 Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
 

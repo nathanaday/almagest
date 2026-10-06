@@ -29,7 +29,6 @@ const rewriteNote = "Rewrite only."
 type Counts struct {
 	Create       int `json:"create"`
 	Modify       int `json:"modify"`
-	Promote      int `json:"promote"`
 	Rename       int `json:"rename"`
 	Remove       int `json:"remove"`
 	Confirm      int `json:"confirm"`
@@ -45,7 +44,7 @@ func (c Counts) pairs() []struct {
 	return []struct {
 		n    int
 		name string
-	}{{c.Create, "create"}, {c.Modify, "modify"}, {c.Promote, "promote"}, {c.Rename, "rename"}, {c.Remove, "remove"}, {c.Confirm, "confirm"}, {c.Retag, "retag"}, {c.LinkRewrites, "link rewrites"}, {c.TagRewrites, "tag rewrites"}}
+	}{{c.Create, "create"}, {c.Modify, "modify"}, {c.Rename, "rename"}, {c.Remove, "remove"}, {c.Confirm, "confirm"}, {c.Retag, "retag"}, {c.LinkRewrites, "link rewrites"}, {c.TagRewrites, "tag rewrites"}}
 }
 
 // String is the counts as the frontmatter holds them.
@@ -71,7 +70,7 @@ func (c Counts) short() string {
 	return strings.Join(parts, ", ")
 }
 
-var countsPattern = regexp.MustCompile(`(\d+) (create|modify|promote|rename|remove|confirm|retag|link rewrites|tag rewrites)`)
+var countsPattern = regexp.MustCompile(`(\d+) (create|modify|rename|remove|confirm|retag|link rewrites|tag rewrites)`)
 
 // ParseCounts reads the counts field.
 func ParseCounts(s string) Counts {
@@ -83,8 +82,6 @@ func ParseCounts(s string) Counts {
 			c.Create = n
 		case "modify":
 			c.Modify = n
-		case "promote":
-			c.Promote = n
 		case "rename":
 			c.Rename = n
 		case "remove":
@@ -110,8 +107,6 @@ func countOps(ops []*op, outside []vault.Rewrite) Counts {
 			c.Create++
 		case OpModify:
 			c.Modify++
-		case OpPromote:
-			c.Promote++
 		case OpRename:
 			c.Rename++
 		case OpRemove:
@@ -193,12 +188,6 @@ func (o *op) heading() string {
 		return fmt.Sprintf("### create · %s · %s · %s", typ, o.Title, o.ID)
 	case OpModify:
 		return fmt.Sprintf("### modify · %s · %s · base %s", o.Title, o.ID, doc.Short(o.Base))
-	case OpPromote:
-		to := "topic " + o.TopicKind
-		if o.NewTitle != "" {
-			return fmt.Sprintf("### promote · %s → %s · %s · %s · base %s", o.Title, o.NewTitle, to, o.ID, doc.Short(o.Base))
-		}
-		return fmt.Sprintf("### promote · %s · %s · %s · base %s", o.Title, to, o.ID, doc.Short(o.Base))
 	case OpRename:
 		return fmt.Sprintf("### rename · %s → %s · %s · base %s", o.Title, o.NewTitle, o.ID, doc.Short(o.Base))
 	case OpRemove:
@@ -221,10 +210,7 @@ func renderDocument(p *planned, id string, now time.Time) string {
 	for i, d := range p.Absorbs {
 		titles[i] = vault.Title(d)
 	}
-	work, supersedes := "", ""
-	if p.Work != nil {
-		work = doc.Link(vault.Title(p.Work))
-	}
+	supersedes := ""
 	if p.Supersedes != nil {
 		supersedes = doc.Link(vault.Title(p.Supersedes))
 	}
@@ -237,7 +223,6 @@ func renderDocument(p *planned, id string, now time.Time) string {
 		{Key: "updated", Value: stamp},
 		{Key: "status", Value: Proposed},
 		{Key: "absorbs", Value: doc.Links(titles)},
-		{Key: "work", Value: work},
 		{Key: "proposed", Value: stamp},
 		{Key: "session", Value: ""},
 		{Key: "counts", Value: counts.String()},
@@ -307,7 +292,7 @@ func renderWrites(ops []*op, outside []vault.Rewrite) string {
 }
 
 // parseWrites reads the ops of a change document's Writes section. The content of a
-// create, a modify, or a promote is the text inside its fence, which the user may have
+// create or a modify is the text inside its fence, which the user may have
 // edited.
 func parseWrites(body string) ([]*op, error) {
 	var section string
@@ -423,21 +408,6 @@ func parseHeading(h string) (*op, error) {
 		o.Title = strings.Join(rest[1:], " · ")
 	case OpModify, OpRemove, OpConfirm:
 		o.Title = strings.Join(rest, " · ")
-	case OpPromote:
-		if len(rest) < 2 {
-			return nil, fmt.Errorf("the heading %q names no kind", h)
-		}
-		kind := strings.Fields(rest[len(rest)-1])
-		if len(kind) != 2 || kind[0] != "topic" {
-			return nil, fmt.Errorf("the heading %q names no topic kind", h)
-		}
-		o.Type, o.TopicKind = "topic", kind[1]
-		titles := strings.Join(rest[:len(rest)-1], " · ")
-		if i := strings.LastIndex(titles, " → "); i >= 0 {
-			o.Title, o.NewTitle = titles[:i], titles[i+len(" → "):]
-		} else {
-			o.Title = titles
-		}
 	case OpRename:
 		titles := strings.Join(rest, " · ")
 		i := strings.LastIndex(titles, " → ")
@@ -446,9 +416,9 @@ func parseHeading(h string) (*op, error) {
 		}
 		o.Title, o.NewTitle = titles[:i], titles[i+len(" → "):]
 	default:
-		return nil, fmt.Errorf("the heading %q is not a create, modify, promote, rename, remove, confirm, or retag", h)
+		return nil, fmt.Errorf("the heading %q is not a create, modify, rename, remove, confirm, or retag", h)
 	}
-	// A title a create, a rename, or a promote takes becomes a path, so a heading edited
+	// A title a create or a rename takes becomes a path, so a heading edited
 	// by hand cannot name one the title check refuses.
 	taken := []string{o.NewTitle}
 	if o.Kind == OpCreate {

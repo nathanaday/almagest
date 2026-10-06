@@ -1,7 +1,7 @@
 // Package brief gives an agent everything it needs to work in a repository or under a set
 // of tags: the pages of the tags from the top down, the repositories that hold them, the
-// policies that apply, the open threads, and for a repository its own instruction files and
-// what git says about it now. (The spec calls this the context tool; Go's own context
+// policies that apply, and for a repository its own instruction files and what git says
+// about it now. (The spec calls this the context tool; Go's own context
 // package takes that name.)
 package brief
 
@@ -10,14 +10,12 @@ import (
 	"io"
 	"os"
 	"path/filepath"
-	"slices"
 	"sort"
 	"strings"
 
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -26,7 +24,6 @@ const (
 	MaxInstructionLines = 400
 	MaxBodyLines        = 120
 	MaxDirty            = 50
-	MaxWork             = 30
 )
 
 // InstructionFiles are the agent files a repository may hold, relative to its root.
@@ -94,7 +91,6 @@ type Brief struct {
 	Pages        []Page        `json:"pages"`
 	Repositories []vault.Ref   `json:"repositories"`
 	Policies     []Policy      `json:"policies"`
-	Work         []vault.Ref   `json:"work"`
 	Instructions []Instruction `json:"instructions,omitempty"`
 	Repository   *Facts        `json:"repository,omitempty"`
 }
@@ -129,7 +125,7 @@ func Of(idx *vault.Index, in Input) (*Brief, error) {
 		return nil, err
 	}
 	atlas := idx.ByPath(vault.Marker)
-	b := &Brief{Tags: []TagCount{}, Pages: []Page{}, Repositories: []vault.Ref{}, Policies: []Policy{}, Work: []vault.Ref{}}
+	b := &Brief{Tags: []TagCount{}, Pages: []Page{}, Repositories: []vault.Ref{}, Policies: []Policy{}}
 	if atlas != nil {
 		b.Vault = Page{Ref: idx.Ref(atlas), Body: bounded(doc.StripLead(atlas.Body), MaxBodyLines)}
 	}
@@ -191,7 +187,6 @@ func Of(idx *vault.Index, in Input) (*Brief, error) {
 		}
 	}
 	b.Policies = Policies(idx, held)
-	b.Work = openWork(idx, repo, want)
 	if repo != nil && !repo.Front.Bool("unlinked") && repo.Str("path") != "" {
 		root := vault.Expand(repo.Str("path"))
 		b.Instructions = Instructions(root)
@@ -236,39 +231,6 @@ func Policies(idx *vault.Index, held []string) []Policy {
 	out := make([]Policy, 0, len(list))
 	for _, r := range list {
 		out = append(out, r.p)
-	}
-	return out
-}
-
-// openWork is the threads that are not ended and that hold the tags, or have a task list
-// for the repository or hold its tag, the most urgent first.
-func openWork(idx *vault.Index, repo *doc.Doc, want []string) []vault.Ref {
-	b := thread.Load(idx)
-	var list []*doc.Doc
-	for _, d := range b.Stubs {
-		if thread.Ended(b.Status(d)) {
-			continue
-		}
-		switch {
-		case repo != nil:
-			names := slices.ContainsFunc(b.Thread(d).Repositories(), func(l string) bool { return strings.EqualFold(doc.LinkTarget(l), repo.Title()) })
-			if !names && !(repo.Str("defines") != "" && vault.Holds(d, repo.Str("defines"))) {
-				continue
-			}
-		case len(want) > 0:
-			if !vault.Holds(d, want...) {
-				continue
-			}
-		}
-		list = append(list, d)
-	}
-	sort.SliceStable(list, func(i, j int) bool { return b.Less(list[i], list[j]) })
-	if len(list) > MaxWork {
-		list = list[:MaxWork]
-	}
-	out := make([]vault.Ref, 0, len(list))
-	for _, d := range list {
-		out = append(out, b.Ref(d))
 	}
 	return out
 }

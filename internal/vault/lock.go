@@ -118,6 +118,16 @@ type found struct {
 // commits a dirty tree as a snapshot, and commits a Base upgrade on its own, so the
 // write's own commit holds only its paths and an undo never takes back a hand edit.
 func Begin(v *Vault, recover func() error) (*Tx, error) {
+	tx, err := BeginAsIs(v, recover)
+	if err == nil {
+		upgradeBases(v)
+	}
+	return tx, err
+}
+
+// BeginAsIs is Begin without the Base upgrade, for the migration, whose own commit
+// upgrades the Bases (UpgradeBases), so a failed migration leaves no commit behind.
+func BeginAsIs(v *Vault, recover func() error) (*Tx, error) {
 	unlock, err := v.Lock()
 	if err != nil {
 		return nil, err
@@ -143,7 +153,6 @@ func Begin(v *Vault, recover func() error) (*Tx, error) {
 		return nil, fmt.Errorf("commit the hand edits before this write: %w; nothing was written, so the vault is as it was", err)
 	}
 	tx.Snapshot = sha
-	upgradeBases(v)
 	return tx, nil
 }
 

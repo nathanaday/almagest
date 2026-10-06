@@ -51,8 +51,7 @@ matters here).
    - **concept**: an idea the chunk explains or relies on: a method, a theory, a
      pattern, a link between ideas;
    - **policy**: a rule the chunk states for how things must be done, with its reason
-     when it gives one (`strength`: must, should, or may). In a spec, a decision is a
-     policy only when it binds future work.
+     when it gives one (`strength`: must, should, or may).
 4. For each subject, write its claims: one statement each, in your words or quoted, with
    the locator (page, section, or `path:line`).
 5. Give each subject the name the document uses, and its aliases (abbreviations, other

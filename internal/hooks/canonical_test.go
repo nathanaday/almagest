@@ -5,9 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // foldsCase reports whether the file system under dir ignores case, as APFS does.
@@ -25,8 +22,6 @@ func foldsCase(t *testing.T, dir string) bool {
 func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 	f := setup(t)
 	root := f.tv.V.Root
-	repo := f.tv.Repo("repo1", nil)
-	f.tv.Doc("repository", "repo1", map[string]any{"path": repo}, "")
 	f.tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
@@ -44,7 +39,6 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 		{"a topic through a link from outside the vault", map[string]any{"cwd": outside, "tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(outside, "docs", "Alpha.md"), "old_string": "x", "new_string": "y"}}},
 	}
 	if foldsCase(t, root) {
-		upper := filepath.Join(filepath.Dir(repo), strings.ToUpper(filepath.Base(repo)))
 		cases = append(cases, []struct {
 			name  string
 			event map[string]any
@@ -52,7 +46,6 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 			{"a topic in another case", edit(root+"/Wiki/documents/Alpha.md", "x")},
 			{"Atlas.md in upper case", edit(root+"/ATLAS.md", "Work")},
 			{"a view in upper case", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/VIEWS/x.md"}}},
-			{"a repository's file in another case", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": upper + "/README.md", "old_string": "a"}}},
 		}...)
 	} else {
 		t.Log("this file system keeps case; only the link case runs")
@@ -64,20 +57,32 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 	}
 }
 
-// A heading inside a code fence moves no protected span: the real ## Thread of a stub
-// stays code's, and the fenced lines stay the model's prose.
+// own starts the session, gives its document a worker's line under ## Subagents and
+// summary under ## Summary, and returns the document's path in the vault and the line.
+func (f *fixture) own(summary string) (string, string) {
+	f.t.Helper()
+	f.run("session-start", map[string]any{})
+	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
+	rel := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	line := "- wiki-extract · `9f07d1` · started 14:32"
+	content := f.tv.Read(rel)
+	if !strings.Contains(content, "## Summary\n\n## Subagents\n\n"+line) {
+		f.t.Fatalf("the session document is not as the test needs:\n%s", content)
+	}
+	f.tv.Write(rel, strings.Replace(content, "## Summary\n", "## Summary\n\n"+summary+"\n", 1))
+	return rel, line
+}
+
+// A heading inside a code fence moves no protected span: the real ## Subagents of a
+// session document stays the hooks', and the fenced lines stay the model's prose.
 func TestAFencedHeadingMovesNoProtectedSpan(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Fenced", Text: "An idea with an example:\n\n```md\n## Thread\n\nexample line\n```"}, thread.Opts{Now: f.tv.Clock}))
-	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
-	if got := f.tv.Read(r.State.Thread.Path); !strings.Contains(got, "example line") || !strings.Contains(got, "- Spec: none") {
-		t.Fatalf("the stub is not as the test needs:\n%s", got)
+	rel, line := f.own("A summary with an example:\n\n```md\n## Subagents\n\nexample line\n```")
+	own := filepath.Join(f.tv.V.Root, rel)
+	if !denied(f.run("guard", edit(own, line))) {
+		t.Error("an edit inside the real ## Subagents was allowed")
 	}
-	if !denied(f.run("guard", edit(stub, "- Spec: none"))) {
-		t.Error("an edit inside the real ## Thread was allowed")
-	}
-	if denied(f.run("guard", edit(stub, "example line"))) {
+	if denied(f.run("guard", edit(own, "example line"))) {
 		t.Error("an edit inside the fence was refused")
 	}
 }
@@ -85,29 +90,28 @@ func TestAFencedHeadingMovesNoProtectedSpan(t *testing.T) {
 // A Codex hunk that only inserts lines is placed by its context lines.
 func TestAnInsertOnlyPatchHunkIsPlacedByItsContext(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Patched", Text: "The first idea line."}, thread.Opts{Now: f.tv.Clock}))
+	rel, line := f.own("The first summary line.")
 	patch := func(context, added string) map[string]any {
-		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n@@\n " + context + "\n+" + added + "\n*** End Patch"}}
+		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + rel + "\n@@\n " + context + "\n+" + added + "\n*** End Patch"}}
 	}
-	if !denied(f.run("guard", patch("- Spec: none", "- Spec: [[Forged]]"))) {
-		t.Errorf("an insert into ## Thread was allowed:\n%s", f.tv.Read(r.State.Thread.Path))
+	if !denied(f.run("guard", patch(line, "- forged · `000000`"))) {
+		t.Errorf("an insert into ## Subagents was allowed:\n%s", f.tv.Read(rel))
 	}
-	if denied(f.run("guard", patch("The first idea line.", "A second idea line."))) {
-		t.Error("an insert into ## Idea was refused")
+	if denied(f.run("guard", patch("The first summary line.", "A second summary line."))) {
+		t.Error("an insert into ## Summary was refused")
 	}
 	raw := func(body string) map[string]any {
-		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n" + body + "\n*** End Patch"}}
+		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + rel + "\n" + body + "\n*** End Patch"}}
 	}
 	// As Codex 0.155.1 places them: a hunk with no old line at the end of the file, a
 	// blank context line at any blank line, and lines that differ by trailing spaces.
 	for name, body := range map[string]string{
-		"an insert with no context":            "@@\n+- Spec: [[Forged]]",
-		"an insert after a header":             "@@ ## Thread\n+- Spec: [[Forged]]",
+		"an insert with no context":            "@@\n+- forged · `000000`",
+		"an insert after a header":             "@@ ## Subagents\n+- forged · `000000`",
 		"an insert after a blank line":         "@@\n \n+status: forged",
-		"a removed line with a trailing space": "@@\n-- Spec: none \n+- Spec: [[Forged]]",
-		"a context line with a trailing space": "@@\n - Spec: none  \n+- Tasks: [[Forged]]",
-		"a hunk whose context matches nowhere": "@@\n no such line\n+- Spec: [[Forged]]",
+		"a removed line with a trailing space": "@@\n-" + line + " \n+- forged · `000000`",
+		"a context line with a trailing space": "@@\n " + line + "  \n+- forged · `000000`",
+		"a hunk whose context matches nowhere": "@@\n no such line\n+- forged · `000000`",
 	} {
 		if !denied(f.run("guard", raw(body))) {
 			t.Errorf("%s: allowed", name)
@@ -134,83 +138,20 @@ func TestTheGuardRefusesTheFilesThatDecideWhatRuns(t *testing.T) {
 	}
 }
 
-// The guard finds a thread's task lists by their thread field, so a list renamed by hand
-// still lets the thread's session edit its repository.
-func TestARenamedTaskListStillCoversItsRepository(t *testing.T) {
-	f := setup(t)
-	edge := f.tv.Repo("p3-edge", nil)
-	f.tv.Doc("repository", "p3-edge", map[string]any{"path": edge}, "")
-	f.tv.Commit()
-	f.run("session-start", map[string]any{})
-	f.thread("Edge work", "p3-edge")
-	f.bind("start", f.ok(thread.Start(f.tv.V, "Edge work", false, thread.Opts{Now: f.tv.Clock})), map[string]any{"thread": "Edge work"})
-	lists, _ := filepath.Glob(filepath.Join(f.tv.V.Root, "wiki", "documents", "Edge work · Tasks*.md"))
-	if len(lists) != 1 {
-		t.Fatalf("task lists: %v", lists)
-	}
-	if err := os.Rename(lists[0], filepath.Join(f.tv.V.Root, "wiki", "documents", "Edge checklist.md")); err != nil {
-		t.Fatal(err)
-	}
-	write := map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": edge + "/main.go", "old_string": "a"}}
-	if out := f.run("guard", write); denied(out) {
-		t.Fatalf("a renamed task list with an open task does not cover its repository: %s", out)
-	}
-}
-
-// An edit adds no second heading of a section the document holds, or of a section code
-// owns, since a second heading would move the protected span.
+// An edit adds no second heading of a section the hooks own, since a second heading
+// would move the protected span.
 func TestAnEditAddsNoSecondHeading(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Twice", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
-	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
-	if !denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea.\n\n## Thread\n\n- Spec: none"))) {
-		t.Error("a second ## Thread was allowed")
-	}
-	if !denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea.\n\n## Idea\n\nMore."))) {
-		t.Error("a second ## Idea was allowed")
-	}
-	if denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea, said better."))) {
-		t.Error("an edit that keeps its own heading was refused")
-	}
-	if denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea, with an example:\n\n```md\n## Thread\n```"))) {
-		t.Error("a fenced example heading was refused")
-	}
-	own := filepath.Join(f.tv.V.Root, "sessions/2026-09/2026-09-27 1432 a1b2c3.md")
-	if !denied(f.run("guard", editNew(own, "## Description\n", "## Description\n\n## Subagents\n"))) {
+	rel, _ := f.own("A summary.")
+	own := filepath.Join(f.tv.V.Root, rel)
+	if !denied(f.run("guard", editNew(own, "## Summary\n\nA summary.", "## Summary\n\nA summary.\n\n## Subagents\n"))) {
 		t.Error("a second ## Subagents was allowed")
 	}
-}
-
-// A session outside every vault meets the edit rule in a linked repository too.
-func TestTheEditRuleHoldsForASessionOutsideEveryVault(t *testing.T) {
-	f := setup(t)
-	repo := f.tv.Repo("repo1", nil)
-	f.tv.Doc("repository", "repo1", map[string]any{"path": repo}, "")
-	f.tv.Commit()
-	outside := t.TempDir()
-	write := map[string]any{"cwd": outside, "tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(repo, "README.md"), "old_string": "a"}}
-	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "Start a session in "+f.tv.V.Root) {
-		t.Fatalf("an edit in a linked repository from outside every vault: %s", out)
+	if denied(f.run("guard", editNew(own, "## Summary\n\nA summary.", "## Summary\n\nA summary, said better."))) {
+		t.Error("an edit that keeps its own heading was refused")
 	}
-}
-
-// A session in one vault, editing a repository only another vault links, is told to work
-// in that vault.
-func TestAnotherVaultsRepositoryNamesThatVault(t *testing.T) {
-	f := setup(t)
-	f.run("session-start", map[string]any{})
-	other, err := vault.Init(vault.InitOptions{Path: filepath.Join(t.TempDir(), "other"), Name: "Other", Description: "Other notes.", Tagging: "open"}, f.tv.Home, f.tv.Clock)
-	if err != nil {
-		t.Fatal(err)
-	}
-	repo := f.tv.Repo("theirs", nil)
-	if err := os.WriteFile(filepath.Join(other.Root, "wiki", "documents", "theirs.md"), []byte("---\nid: doc-th0001\ntype: repository\ndescription: x\ncreated: 2026-09-27T14:32:00\nupdated: 2026-09-27T14:32:00\npath: "+repo+"\n---\n"), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	out := f.run("guard", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(repo, "README.md"), "old_string": "a"}})
-	if !denied(out) || !strings.Contains(out, "Start a session in "+other.Root) {
-		t.Fatalf("an edit in another vault's repository: %s", out)
+	if denied(f.run("guard", editNew(own, "## Summary\n\nA summary.", "## Summary\n\nA summary, with an example:\n\n```md\n## Subagents\n```"))) {
+		t.Error("a fenced example heading was refused")
 	}
 }
 
@@ -253,14 +194,13 @@ func TestFixedNamesCompareWithoutCase(t *testing.T) {
 // Codex takes a file marker with whitespace before it, and so does the guard.
 func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Marked", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
+	rel, line := f.own("A summary.")
 	f.tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
 	f.tv.Commit()
 	for name, body := range map[string]string{
-		"an insert into ## Thread": " *** Update File: " + r.State.Thread.Path + "\n@@\n - Verification: none\n+- Forged: yes",
-		"the vault's config":       "\t*** Add File: .atlas/config.json\n+{}",
-		"a document deleted":       " *** Delete File: wiki/documents/Alpha.md",
+		"an insert into ## Subagents": " *** Update File: " + rel + "\n@@\n " + line + "\n+- forged · `000000`",
+		"the vault's config":          "\t*** Add File: .atlas/config.json\n+{}",
+		"a document deleted":          " *** Delete File: wiki/documents/Alpha.md",
 	} {
 		patch := map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n" + body + "\n*** End Patch"}}
 		if !denied(f.run("guard", patch)) {
@@ -270,37 +210,34 @@ func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
 }
 
 // An edit is judged by the document it leaves, read by doc.Headings: no heading trick,
-// fence, or tab moves or hides a section code owns.
+// fence, or tab moves or hides a section the hooks own.
 func TestAnEditIsJudgedByTheDocumentItLeaves(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Tricks", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
-	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
+	rel, _ := f.own("A summary.")
+	own := filepath.Join(f.tv.V.Root, rel)
 	for name, added := range map[string]string{
-		"a heading after a tab":                "##\tThread\n\n- Spec: none",
-		"a heading between indented fences":    "    ```\n## Thread\n    ```",
-		"an unclosed fence":                    "```",
-		"a level-two heading of a new section": "##\tProgress\n\n- did a thing",
+		"a heading after a tab":             "##\tSubagents\n\n- forged · `000000`",
+		"a heading between indented fences": "    ```\n## Subagents\n    ```",
+		"an unclosed fence":                 "```",
 	} {
-		if !denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea.\n\n"+added))) {
+		if !denied(f.run("guard", editNew(own, "## Summary\n\nA summary.", "## Summary\n\nA summary.\n\n"+added))) {
 			t.Errorf("%s: allowed", name)
 		}
 	}
-	patch := "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n@@\n An idea.\n+```\n*** End Patch"
+	patch := "*** Begin Patch\n*** Update File: " + rel + "\n@@\n A summary.\n+```\n*** End Patch"
 	if !denied(f.run("guard", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": patch}})) {
 		t.Error("a patch that leaves an unclosed fence: allowed")
 	}
-	if denied(f.run("guard", editNew(stub, "## Idea\n\nAn idea.", "## Idea\n\nAn idea, said better.\n\n```go\nx := 1\n```"))) {
-		t.Error("an ordinary Edit of ## Idea with a closed fence was refused")
+	if denied(f.run("guard", editNew(own, "## Summary\n\nA summary.", "## Summary\n\nA summary, said better.\n\n```go\nx := 1\n```"))) {
+		t.Error("an ordinary Edit of ## Summary with a closed fence was refused")
 	}
 }
 
 // A hunk that fits nowhere is refused for that, not for a rule it may not break.
 func TestAnUnplacedHunkSaysSo(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Lost", Text: "An idea."}, thread.Opts{Now: f.tv.Clock}))
-	patch := "*** Begin Patch\n*** Update File: " + r.State.Thread.Path + "\n@@\n no such line\n+more\n*** End Patch"
+	rel, _ := f.own("A summary.")
+	patch := "*** Begin Patch\n*** Update File: " + rel + "\n@@\n no such line\n+more\n*** End Patch"
 	out := f.run("guard", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": patch}})
 	if !denied(out) || !strings.Contains(out, "cannot tell where a hunk") {
 		t.Fatalf("an unplaced hunk: %s", out)
@@ -311,19 +248,19 @@ func TestAnUnplacedHunkSaysSo(t *testing.T) {
 // target as a new file.
 func TestACodexMoveIsADeleteAndAnAdd(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	f.thread("Moved", "")
-	stub := "wiki/documents/Moved.md"
-	tasks := "wiki/documents/Moved · Tasks.md"
-	own := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	own, line := f.own("A summary.")
+	f.tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	f.tv.Commit()
+	topic := "wiki/documents/Alpha.md"
 	f.tv.Write("inbox/note.md", "A note.\n")
 	move := func(from, to, hunk string) map[string]any {
 		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + from + "\n*** Move to: " + to + "\n" + hunk + "*** End Patch"}}
 	}
 	for name, ev := range map[string]map[string]any{
-		"a task list out with a box checked": move(tasks, "inbox/x.md", "@@\n-- [ ] T1 Do it\n+- [x] T1 Do it\n"),
-		"a stub out":                         move(stub, "inbox/y.md", ""),
-		"the session's own document out":     move(own, "inbox/z.md", ""),
+		"a topic out with a line changed": move(topic, "inbox/x.md", "@@\n-x\n+y\n"),
+		"a topic out":                     move(topic, "inbox/y.md", ""),
+		"the session's own document out":  move(own, "inbox/z.md", ""),
+		"its own Subagents line out":      move(own, "inbox/w.md", "@@\n-"+line+"\n"),
 	} {
 		if !denied(f.run("guard", ev)) {
 			t.Errorf("%s: allowed", name)
@@ -337,14 +274,13 @@ func TestACodexMoveIsADeleteAndAnAdd(t *testing.T) {
 // An Edit's anchor may hold a code heading the edit leaves as it was.
 func TestAnEditMayAnchorOnACodeHeading(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Anchored", Text: "An idea with quotes."}, thread.Opts{Now: f.tv.Clock}))
-	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
-	if out := f.run("guard", editNew(stub, "An idea with quotes.\n\n## Thread", "An idea with quotes, said better.\n\n## Thread")); denied(out) {
-		t.Fatalf("an Edit anchored on ## Thread was refused: %s", out)
+	rel, line := f.own("A summary with quotes.")
+	own := filepath.Join(f.tv.V.Root, rel)
+	if out := f.run("guard", editNew(own, "A summary with quotes.\n\n## Subagents", "A summary with quotes, said better.\n\n## Subagents")); denied(out) {
+		t.Fatalf("an Edit anchored on ## Subagents was refused: %s", out)
 	}
-	if !denied(f.run("guard", editNew(stub, "## Thread\n\n- Spec: none", "## Thread\n\n- Spec: [[Forged]]"))) {
-		t.Error("an Edit of a ## Thread line was allowed")
+	if !denied(f.run("guard", editNew(own, "## Subagents\n\n"+line, "## Subagents\n\n- forged · `000000`"))) {
+		t.Error("an Edit of a ## Subagents line was allowed")
 	}
 }
 
@@ -352,14 +288,13 @@ func TestAnEditMayAnchorOnACodeHeading(t *testing.T) {
 // would apply it.
 func TestAnEditIsMatchedWithCurlyAndStraightQuotesAlike(t *testing.T) {
 	f := setup(t)
-	f.run("session-start", map[string]any{})
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Title: "Curly", Text: "It said “go”."}, thread.Opts{Now: f.tv.Clock}))
-	stub := filepath.Join(f.tv.V.Root, r.State.Thread.Path)
-	if !strings.Contains(f.tv.Read(r.State.Thread.Path), "“go”") {
-		t.Fatal("the stub lost its curly quotes, so the test proves nothing")
+	rel, line := f.own("It said “go”.")
+	own := filepath.Join(f.tv.V.Root, rel)
+	if !strings.Contains(f.tv.Read(rel), "“go”") {
+		t.Fatal("the session document lost its curly quotes, so the test proves nothing")
 	}
-	if !denied(f.run("guard", editNew(stub, "It said \"go\".\n\n## Thread\n\n- Spec: none", "It said \"go\".\n\n## Thread\n\n- Spec: [[Forged]]"))) {
-		t.Error("an Edit spanning from straight-quoted text into ## Thread was allowed")
+	if !denied(f.run("guard", editNew(own, "It said \"go\".\n\n## Subagents\n\n"+line, "It said \"go\".\n\n## Subagents\n\n- forged · `000000`"))) {
+		t.Error("an Edit spanning from straight-quoted text into ## Subagents was allowed")
 	}
 }
 

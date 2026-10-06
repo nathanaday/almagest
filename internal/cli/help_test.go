@@ -16,8 +16,7 @@ import (
 func TestHelpRunsNothing(t *testing.T) {
 	calls := [][]string{
 		{"vault", "init"}, {"vault", "sync"}, {"vault", "migrate"}, {"vault", "mention"}, {"search", "x"},
-		{"context"}, {"match"}, {"source", "capture"}, {"change", "apply", "x"}, {"thread", "stub", "an idea"},
-		{"thread", "check", "x", "T1"}, {"chord", "create", "x.json"}, {"lint"}, {"hook", "session-start"},
+		{"context"}, {"match"}, {"source", "capture"}, {"change", "apply", "x"}, {"lint"}, {"hook", "session-start"},
 		{"mcp"}, {"config", "set", "agent", "codex"}, {"setup"}, {"doctor"}, {"version"}, {"open"}, {"help"},
 	}
 	for _, call := range calls {

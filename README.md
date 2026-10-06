@@ -11,18 +11,18 @@ of your work in one Obsidian vault, and the agents write most of it for you:
 
 - what you know: **topics**, **sources**, and **repositories**, with a citation for every
   claim;
-- what you do: **threads**, each one piece of work from idea to closed: a **stub** (its
-  front page), a **spec** (what must be true), **task lists** (the steps, as check
-  boxes), and **verifications** (the work checked against the spec); and **chords**,
-  which put the threads of one goal in order;
 - what your agents do now and did before: one **session** document per agent session;
 - every edit an agent made to the knowledge: a **change** document you approve.
 
-Every document lies flat in `wiki/documents/`. Tags sort it, and a document may hold
-many: a page tagged `cs513` and `self-driving` shows up under both, and a search for both
-tags finds it. You start an agent in the vault. It finds the repository you mean through
-its tags and its repository document, and it works there in plain view. You read and
-edit every step in Obsidian.
+Every document of the wiki lies flat in `wiki/documents/`. Tags sort it, and a document
+may hold many: a page tagged `cs513` and `self-driving` shows up under both, and a search
+for both tags finds it. You start an agent in the vault. It finds the repository you
+mean through its tags and its repository document, and it edits the code there. Its
+session document records which repositories it touched. You read and edit every
+document in Obsidian.
+
+Atlas 8 also tracked work as threads and chords. Atlas 9.0 removed them. They now live in
+the standalone project obsidian-threads (`~/projects/software/obsidian-threads`).
 
 ## Quickstart
 
@@ -113,9 +113,9 @@ codex plugin add atlas-obsidian@nathanaday-atlas-obsidian
 
 Some parts of Atlas do not work on Codex yet:
 
-- **No read-only agents.** Codex does not load a plugin's agents, so thread-verify,
-  wiki-sync, wiki-review, and repo-ingest cannot send their workers, and the guard's
-  read-only rule never applies.
+- **No read-only agents.** Codex does not load a plugin's agents, so wiki-sync,
+  wiki-review, and repo-ingest cannot send their workers, and the guard's read-only rule
+  never applies.
 - **No `waiting` status.** Codex has no Notification event, so a Codex session never
   shows `waiting`.
 - **Linked repositories.** Atlas grants Claude Code write access to linked repositories
@@ -124,16 +124,23 @@ Some parts of Atlas do not work on Codex yet:
   Codex session may refuse a write in a linked repository, or ask before it.
 - **`--allow-vault`** has no effect with `--agent codex`.
 
-The thread "Make Codex agents, statuses, and repository access match Claude Code" in the
-Atlas design vault tracks these limits.
+The Atlas design vault tracks these limits.
 
-A vault of 6.x or 7.x needs one migration to the 8.0 layout. Obsidian shows a notice.
-From a shell, `atlas-obsidian vault migrate --dry-run` lists the moves, and
-`atlas-obsidian vault migrate` makes them in one commit. For a 7.x vault the dry run lists
-every move. For a 6.x vault it lists only the first step, the move to the flat layout; the
-same run then makes the 7.x moves too. Each plan of 7.x becomes a thread and keeps its id,
-its title, and its file; a plan with parts becomes a chord, and its parts its threads. The
-migration refuses while a change is proposed: apply or reject it first.
+A vault of 8.x needs one migration to the 9.0 layout. Obsidian shows a notice. From a
+shell, `atlas-obsidian vault migrate --dry-run` lists the moves, and
+`atlas-obsidian vault migrate` makes them in one commit:
+
+- every stub, spec, task list, verification, chord, and event document moves from
+  `wiki/documents/` to `threads/`, with its file name and content unchanged;
+- every canvas in `chords/` moves to `threads/`, and `chords/` goes;
+- topics and repositories lose their `## Threads` section; topics and sources lose
+  `from`; sessions lose `threads`, `specs`, `work`, `checked`, and `events`; changes lose `work`;
+- `Atlas.md` loses `wikify`.
+
+`threads/` is an archive that Atlas does not read. A link to a document there still
+resolves. Search and lint skip the folder, and the guard does not refuse an edit there.
+The migration refuses while a change is proposed: apply or reject it first. A vault
+older than 8.0 migrates with Atlas 8.1.1 (tag `threads-final`) first, then with 9.0.
 
 To try a checkout without installing the plugin, start Claude Code with
 `claude --plugin-dir /path/to/atlas-obsidian`.
@@ -194,12 +201,14 @@ apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
 Besides `wiki/documents/`, Atlas writes these files in a vault:
 
 - `Atlas.md`, the vault's own document, and the folders `inbox/`, `scratchpad/`,
-  `sessions/`, `changes/`, `chords/`, `wiki/assets/`, and `views/`. `wiki/assets/` holds
-  the captured originals and your attachments. The migration from 6.x moves the 6.x Bases
-  and canvases that you changed into `scratchpad/from 6.x/`.
-- `.obsidian/app.json`: `vault init` and the migration send new attachments to
-  `wiki/assets/` (unless you chose a folder) and keep `views/` out of Obsidian's graph and
-  search. They keep every other key.
+  `sessions/`, `changes/`, `wiki/assets/`, and `views/`. `wiki/assets/` holds the
+  captured originals and your attachments. `inbox/` holds files for the wiki to learn
+  from; `scratchpad/` holds your notes and the ideas you ask an agent to note for later.
+- `threads/`, in a vault that the 9.0 migration moved: the thread and chord documents of
+  8.x. Atlas does not read it.
+- `.obsidian/app.json`: `vault init` sends new attachments to `wiki/assets/` (unless you
+  chose a folder) and keeps `views/` out of Obsidian's graph and search. It keeps every
+  other key.
 - `.obsidian/plugins/atlas/`: the Obsidian plugin.
 - `.claude/settings.local.json`: the linked repositories, for Claude Code.
 - `.git/info/exclude`: `views/`, `.claude/settings.local.json`, Obsidian's workspace and
@@ -215,27 +224,24 @@ request.
 
 - "Link the repository at ~/code/p3-edge under the tag work/p3." The agent proposes a
   change; you say yes, or press Apply in Obsidian. The agent cannot apply a change that
-  writes, or that closes a thread or a chord, until you send a prompt in the session that
-  proposed it. A change with no writes that only marks sources and events as absorbed
-  applies at once. This gate holds against the atlas tools; it is not a sandbox against an
-  agent's shell. [SECURITY.md](SECURITY.md) gives the full rule.
+  writes until you send a prompt in the session that proposed it. A change with no writes
+  that only marks sources as absorbed applies at once. This gate holds against the atlas
+  tools; it is not a sandbox against an agent's shell. [SECURITY.md](SECURITY.md) gives
+  the full rule.
 - "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
-- "In p3-edge, score boxes by motion." The agent plants a thread, writes its spec, and
-  stops for your yes. Then it writes the tasks, does them, and checks each one with its
-  commits. A read-only agent verifies the work against each requirement. The thread
-  closes when you apply the change that writes what it built into the wiki.
-- "Resume Atlas thread doc-aswqa3." Each stub holds this line to copy. The agent loads
-  the spec, the open tasks, and the open findings in one call, and goes on.
-- "Make a chord: train a vehicle detection model with YOLO." The agent splits the goal
-  into threads and orders them. Obsidian shows the order as a canvas you can redraw,
-  colored by each thread's state. "New thread" on a chord or its canvas plants a thread
-  in it from a title and a line of idea.
-- "Start agent" on a thread or a chord opens a terminal with your agent in the vault,
-  given the hand-off line. The agent preferences choose the agent and the terminal (see
-  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows the open sessions and the ones
-  that closed in the last two hours, with Resume.
+- "In p3-edge, score boxes by motion." The agent finds the repository, reads its
+  instruction files and the policies of the wiki that apply to it, and edits the code.
+  On long work it writes where the work stands under `## Progress` in its session
+  document.
+- "Note this: try a smaller backbone on p3-edge." The agent writes the idea in a note in
+  `scratchpad/`.
+- "Start agent" in Obsidian opens a terminal with your agent in the vault. The agent
+  preferences choose the agent and the terminal (see
+  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
+  the open sessions and the ones that closed in the last two hours, with Resume.
 - "Ingest the inbox." Files you dropped in `inbox/` become cited wiki pages.
-- "What should I work on?" The agent reads the board and ranks the open threads.
+- "What waits for me?" The agent lists the proposed changes, the mentions, the inbox,
+  and the sources that wait for the wiki.
 - "What do we know about my cs513 self-driving project?" The agent searches the
   documents that hold both tags.
 
@@ -243,19 +249,16 @@ The same actions work from a shell:
 
 ```bash
 atlas-obsidian vault                      # the state of the vault
-atlas-obsidian thread                     # the board: threads and chords
-atlas-obsidian thread load doc-aswqa3     # one thread: what is missing, and the next step
 atlas-obsidian search "remote update" --tag work/p3
 atlas-obsidian change show chg-r8m3tb     # a proposed change
 atlas-obsidian lint                       # the health check
 ```
 
-In Obsidian, `views/` holds the notes that code writes: Home, Threads, Timeline, Library,
+In Obsidian, `views/` holds the notes that code writes: Home, Timeline, Library,
 Repositories, one timeline per month under `views/timeline/`, and one view per tag under
-`views/tags/`. `View · Threads` shows each
-chord with its threads in order. `chords/` holds one canvas per chord. The Atlas navigator narrows the documents one
-tag at a time. `sessions/Sessions.base` shows what runs now, and `changes/Changes.base`
-lists the changes that wait for you.
+`views/tags/`. The Atlas navigator narrows the documents one tag at a time.
+`sessions/Sessions.base` shows what runs now, and `changes/Changes.base` lists the
+changes that wait for you.
 
 ## Patterns and conventions
 
@@ -266,17 +269,15 @@ its core rules:
 - Code owns what code can derive: ids, statuses, links, hashes, git facts, the first
   callout of each document, the views. The model writes prose.
 - Knowledge changes only through a change document, and an agent's apply of a change that
-  writes or closes a thread waits for your turn.
-  The `thread` and `chord` tools write threads, chords, and events.
-- A thread's status is derived, never set: from its check boxes, its verification, and
-  the applied change that absorbs it. Each thread document holds only its own sections.
-- An edit inside a linked repository needs a started thread with an open task for it.
+  writes waits for your turn.
+- An agent edits a linked repository directly. The session record lists the repositories
+  each session touched.
 - Hooks keep a document for every session, so the record does not depend on the model.
 
 ## Layout
 
 - The binary: `cmd/atlas-obsidian/`, `internal/` (one package per part;
-  `internal/mcpserver` serves the nine tools, `internal/hooks` the nine hooks,
+  `internal/mcpserver` serves the seven tools, `internal/hooks` the nine hooks,
   `internal/cli` every command).
 - The agent plugin: `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`,
   `.claude-plugin/`, `.codex-plugin/`, and `scripts/atlas-obsidian`, the wrapper that finds

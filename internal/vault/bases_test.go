@@ -8,16 +8,17 @@ import (
 	"testing"
 
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
+	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // A Base equal to any copy Atlas shipped moves to the current one; an edited Base stays.
 func TestABaseUpgradesFromEveryShippedCopy(t *testing.T) {
 	current := read(t, "template/Sessions.base")
 	for name, before := range map[string]string{
-		"the 7.0 to 8.1 copy": read(t, "template/old/7.0/Sessions.base"),
-		"the 6.5 copy":        read(t, "template/old/Sessions.base"),
-		"an edited copy":      strings.Replace(read(t, "template/old/7.0/Sessions.base"), "name: Lost", "name: Gone", 1),
+		"the 8.x copy":   read(t, "template/old/8.1/Sessions.base"),
+		"the 7.x copy":   read(t, "template/old/7.0/Sessions.base"),
+		"the 6.5 copy":   read(t, "template/old/Sessions.base"),
+		"an edited copy": strings.Replace(read(t, "template/old/7.0/Sessions.base"), "name: Lost", "name: Gone", 1),
 	} {
 		t.Run(name, func(t *testing.T) {
 			tv := testvault.New(t)
@@ -31,7 +32,7 @@ func TestABaseUpgradesFromEveryShippedCopy(t *testing.T) {
 				return strings.TrimSpace(string(out))
 			}
 			setup := git("rev-parse", "HEAD")
-			if _, err := thread.Stub(tv.V, thread.StubIn{Title: "Next", Text: "A write."}, thread.Opts{Now: tv.Clock}); err != nil {
+			if err := write(tv, "Next"); err != nil {
 				t.Fatal(err)
 			}
 			got := tv.Read("sessions/Sessions.base")
@@ -52,9 +53,31 @@ func TestABaseUpgradesFromEveryShippedCopy(t *testing.T) {
 			}
 		})
 	}
-	if strings.Contains(current, "specs") || !strings.Contains(current, "name: By thread") {
-		t.Fatal("Sessions.base still reads specs")
+	for _, name := range []string{"Sessions.base", "Changes.base"} {
+		got := read(t, "template/"+name)
+		for _, gone := range []string{"threads", "specs", "work"} {
+			if strings.Contains(got, gone) {
+				t.Errorf("%s still reads %s", name, gone)
+			}
+		}
 	}
+	if !strings.Contains(current, "name: By repository") {
+		t.Fatal("Sessions.base lacks its repository view")
+	}
+}
+
+// write is a write of one note, with a commit of its own.
+func write(tv *testvault.T, title string) (err error) {
+	tx, err := vault.Begin(tv.V, nil)
+	if err != nil {
+		return err
+	}
+	defer tx.End(&err)
+	if err := tx.Write(vault.DocPath(title), []byte("a write\n")); err != nil {
+		return err
+	}
+	_, err = tx.Commit("write: " + title)
+	return err
 }
 
 func read(t *testing.T, rel string) string {
@@ -87,7 +110,7 @@ func TestARefusedUpgradeCommitPutsTheOldBaseBack(t *testing.T) {
 	git("commit", "-q", "-m", "ignore the Base")
 	old := read(t, "template/old/7.0/Sessions.base")
 	tv.Write("sessions/Sessions.base", old)
-	if _, err := thread.Stub(tv.V, thread.StubIn{Title: "Goes on", Text: "A write."}, thread.Opts{Now: tv.Clock}); err != nil {
+	if err := write(tv, "Goes on"); err != nil {
 		t.Fatalf("the write after a refused upgrade: %v", err)
 	}
 	if tv.Read("sessions/Sessions.base") != old {
@@ -96,7 +119,7 @@ func TestARefusedUpgradeCommitPutsTheOldBaseBack(t *testing.T) {
 	if staged := git("diff", "--cached", "--name-only"); staged != "" {
 		t.Fatalf("staged: %s", staged)
 	}
-	if !strings.HasPrefix(git("log", "-1", "--format=%s"), "thread: stub Goes on") {
+	if !strings.HasPrefix(git("log", "-1", "--format=%s"), "write: Goes on") {
 		t.Fatalf("the write did not commit: %s", git("log", "-3", "--format=%s"))
 	}
 }

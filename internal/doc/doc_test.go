@@ -101,18 +101,21 @@ func TestFormatValue(t *testing.T) {
 }
 
 func TestLeadCallout(t *testing.T) {
-	content := "---\nid: x\n---\n\n> [!spec] Old\n> old line\n\n## Goal\n\ntext\n"
-	out := ReplaceLead(content, Callout("spec", "New", "a → b"))
-	want := "---\nid: x\n---\n\n> [!spec] New\n> a → b\n\n## Goal\n\ntext\n"
+	content := "---\nid: x\n---\n\n> [!concept] Old\n> old line\n\n## Goal\n\ntext\n"
+	out := ReplaceLead(content, Callout("concept", "New", "a → b"))
+	want := "---\nid: x\n---\n\n> [!concept] New\n> a → b\n\n## Goal\n\ntext\n"
 	if out != want {
 		t.Fatalf("got\n%q\nwant\n%q", out, want)
 	}
 	user := "---\nid: x\n---\n> [!note] mine\n\ntext\n"
-	out = ReplaceLead(user, Callout("task", "T1"))
-	if !strings.Contains(out, "> [!task] T1\n\n> [!note] mine") {
+	out = ReplaceLead(user, Callout("source", "T1"))
+	if !strings.Contains(out, "> [!source] T1\n\n> [!note] mine") {
 		t.Fatalf("a user's callout stays:\n%s", out)
 	}
-	if ContentHash("> [!spec] a\n\nsome   text\n") != ContentHash("> [!spec] b\n> more\nsome text") {
+	if !strings.Contains(ReplaceLead("---\nid: x\n---\n\n> [!spec] mine\n\ntext\n", Callout("concept", "New")), "> [!spec] mine") {
+		t.Error("a callout of an archived type is the user's")
+	}
+	if ContentHash("> [!concept] a\n\nsome   text\n") != ContentHash("> [!concept] b\n> more\nsome text") {
 		t.Error("the lead and whitespace do not change the content hash")
 	}
 }

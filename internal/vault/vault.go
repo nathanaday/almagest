@@ -28,29 +28,30 @@ const (
 	Scratchpad = "scratchpad"
 	Sessions   = "sessions"
 	Changes    = "changes"
-	Chords     = "chords"
-	Wiki       = "wiki"
-	Documents  = "wiki/documents"
-	Assets     = "wiki/assets"
-	Views      = "views"
-	Settings   = ".claude/settings.local.json"
-	Obsidian   = ".obsidian"
-	PluginDir  = ".obsidian/plugins/atlas"
-	AppJSON    = ".obsidian/app.json"
+	// Threads holds the thread documents and chord canvases of 8.x, which the 9.0
+	// migration moved out of wiki/documents and chords/. Atlas reads none of it.
+	Threads   = "threads"
+	Wiki      = "wiki"
+	Documents = "wiki/documents"
+	Assets    = "wiki/assets"
+	Views     = "views"
+	Settings  = ".claude/settings.local.json"
+	Obsidian  = ".obsidian"
+	PluginDir = ".obsidian/plugins/atlas"
+	AppJSON   = ".obsidian/app.json"
 )
 
 // Layout is the layout version this binary reads and writes, kept in Atlas.md's layout
-// field: 4 is the threads and chords of 8.0; 3 is the flat wiki/documents of 7.0, with
-// plans; below that is a 6.x vault. Only the migrate command writes a vault of an older
-// layout.
+// field: 5 is 9.0; 4 is the threads and chords of 8.x. Only the migrate command writes a
+// vault of an older layout, and only from 4.
 const (
-	Layout     = 4
-	LayoutFlat = 3
+	Layout        = 5
+	LayoutThreads = 4
 )
 
 // Folders are every folder of the layout. EnsureFolders makes the ones a clone left out,
 // because git keeps no empty folder.
-var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Chords, Wiki, Documents, Assets, Views}
+var Folders = []string{Inbox, Scratchpad, Sessions, Changes, Wiki, Documents, Assets, Views}
 
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
@@ -59,7 +60,6 @@ var Excluded = []string{"/views/", "/.claude/settings.local.json", "/.obsidian/w
 
 // Defaults of the vault document.
 var (
-	DefaultWikify     = []string{"source", "spec", "verification", "chord", "event"}
 	DefaultStaleHours = 12
 	TaggingModes      = []string{"open", "known"}
 )
@@ -137,7 +137,7 @@ func (v *Vault) Tagging() string {
 func (v *Vault) LayoutVersion() int { return v.Doc.Front.Int("layout") }
 
 // ErrLegacy is the refusal of every write on a vault of an older layout.
-var ErrLegacy = errors.New("this vault has the layout of an earlier release; run `atlas-obsidian vault migrate --dry-run` to see the move to 8.0, then `atlas-obsidian vault migrate` (type it yourself, or with ! in a session)")
+var ErrLegacy = errors.New("this vault has the layout of an earlier release; run `atlas-obsidian vault migrate --dry-run` to see the move to 9.0, then `atlas-obsidian vault migrate` (type it yourself, or with ! in a session)")
 
 // CheckLayout refuses a vault whose layout this binary does not write.
 func (v *Vault) CheckLayout() error {
@@ -145,14 +145,6 @@ func (v *Vault) CheckLayout() error {
 		return ErrLegacy
 	}
 	return nil
-}
-
-// Wikify lists the types that are pending until a change absorbs them.
-func (v *Vault) Wikify() []string {
-	if v.Doc.Front != nil && v.Doc.Front.Has("wikify") {
-		return v.Doc.List("wikify")
-	}
-	return DefaultWikify
 }
 
 // StaleHours is how long a live session may go without a hook event before it is lost.
@@ -678,37 +670,26 @@ type unchangedWriter interface {
 }
 
 // Guard writes derived content only while each file still holds the bytes the write read:
-// a document's bytes as the index loaded them, or the bytes a caller registered with
-// Expect. A file saved in between, by Obsidian or by an agent's Edit, keeps the save; the
+// a document's bytes as the index loaded them. A file saved in between, by Obsidian or by an agent's Edit, keeps the save; the
 // guard records it in Skipped, and the next sync derives it again.
 type Guard struct {
 	idx     *Index
 	w       unchangedWriter
-	expect  map[string]string
 	Skipped []string
 }
 
 // NewGuard guards the writes of one sync step through w, against what idx read.
 func NewGuard(idx *Index, w unchangedWriter) *Guard {
-	return &Guard{idx: idx, w: w, expect: map[string]string{}}
+	return &Guard{idx: idx, w: w}
 }
 
-// Expect registers the bytes a write read from a file the index does not hold, such as a
-// chord canvas.
-func (g *Guard) Expect(rel string, raw []byte) { g.expect[rel] = string(raw) }
-
-// Write is the guarded write; its signature fits the writers of derive and thread.
+// Write is the guarded write; its signature fits the writers of derive.
 func (g *Guard) Write(rel string, content []byte) (bool, error) {
-	want, ok := g.expect[rel]
-	if !ok {
-		if d := g.idx.ByPath(rel); d != nil {
-			want, ok = d.Content, true
-		}
-	}
-	if !ok {
+	d := g.idx.ByPath(rel)
+	if d == nil {
 		return g.w.WriteIfChanged(rel, content)
 	}
-	wrote, err := g.w.WriteIfUnchanged(rel, content, want)
+	wrote, err := g.w.WriteIfUnchanged(rel, content, d.Content)
 	if errors.Is(err, ErrChangedSince) {
 		g.Skipped = append(g.Skipped, rel)
 		return false, nil

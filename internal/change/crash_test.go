@@ -12,7 +12,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -28,9 +27,35 @@ func crashPlan(t *testing.T, tv *testvault.T) (*change.Preview, string) {
 // nextWrite runs a write that starts with recovery.
 func nextWrite(t *testing.T, tv *testvault.T) {
 	t.Helper()
-	if _, err := thread.Stub(tv.V, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
+	if err := write(tv.V, "After.md"); err != nil {
 		t.Fatal(err)
 	}
+}
+
+// write is a write of one note that starts with recovery and derives nothing.
+func write(v *vault.Vault, rel string) (err error) {
+	tx, err := vault.BeginWrite(v)
+	if err != nil {
+		return err
+	}
+	defer tx.End(&err)
+	if err := tx.Write(rel, []byte("After the crash.\n")); err != nil {
+		return err
+	}
+	_, err = tx.Commit("write: " + rel)
+	return err
+}
+
+// linkOut makes wiki/documents/Linked.md a link to a topic outside the vault, so the next
+// sync of derived parts fails.
+func linkOut(t *testing.T, tv *testvault.T) {
+	t.Helper()
+	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
+	tv.WriteFile(filepath.Join(away, "Linked.md"), "---\nid: doc-linked\ntype: topic\nkind: concept\ndescription: x\n---\n\n## Definition\n\nx\n")
+	if err := os.Symlink(filepath.Join(away, "Linked.md"), tv.V.Abs("wiki/documents/Linked.md")); err != nil {
+		t.Fatal(err)
+	}
+	tv.Commit()
 }
 
 func TestAnApplyWhoseCommitFailsStaysProposed(t *testing.T) {
@@ -218,19 +243,10 @@ func TestAnUndoThatFailsLeavesNothingStaged(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
 	apply(t, tv, pv.Ref.ID)
-	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}}}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
-		t.Fatal(err)
-	}
 	topic := tv.Read("wiki/documents/Motion scoring.md")
-	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
-	os.MkdirAll(away, 0o755)
-	os.RemoveAll(tv.V.Abs("chords"))
-	if err := os.Symlink(away, tv.V.Abs("chords")); err != nil {
-		t.Fatal(err)
-	}
-	tv.Commit()
-	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err == nil || !strings.Contains(err.Error(), "the vault is back as it was before this call") {
-		t.Fatalf("the undo through a linked chords/: %v", err)
+	linkOut(t, tv)
+	if _, err := change.Undo(tv.V, pv.Ref.ID, tv.Tick(time.Minute)); err == nil || !strings.Contains(err.Error(), "Linked.md") || !strings.Contains(err.Error(), "the vault is back as it was before this call") {
+		t.Fatalf("the undo through a linked document: %v", err)
 	}
 	if tv.Read("wiki/documents/Motion scoring.md") != topic || !tv.V.Exists("wiki/documents/Radar.md") {
 		t.Fatal("the failed undo left files changed")
@@ -265,9 +281,9 @@ func TestACrashAfterTheDerivedSyncPutsTheSourceBack(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// The next write is a thread write, which runs recovery but derives no source; a sync
-	// would derive the source back from the proposed change and hide the gap.
-	if _, err := thread.Stub(v, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
+	// The next write runs recovery but derives no source; a sync would derive the source
+	// back from the proposed change and hide the gap.
+	if err := write(v, "After.md"); err != nil {
 		t.Fatal(err)
 	}
 	got, _ := os.ReadFile(filepath.Join(crashed, "wiki/documents/DINOv2.md"))
@@ -339,16 +355,7 @@ func TestAFailedUndoKeepsASaveMadeDuringIt(t *testing.T) {
 	tv := testvault.New(t)
 	pv, _ := crashPlan(t, tv)
 	apply(t, tv, pv.Ref.ID)
-	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}}}, thread.Opts{Now: tv.Tick(time.Minute)}); err != nil {
-		t.Fatal(err)
-	}
-	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
-	os.MkdirAll(away, 0o755)
-	os.RemoveAll(tv.V.Abs("chords"))
-	if err := os.Symlink(away, tv.V.Abs("chords")); err != nil {
-		t.Fatal(err)
-	}
-	tv.Commit()
+	linkOut(t, tv)
 	saved := "a save made while the undo ran\n"
 	change.SetAfterUndoRestore(func() { tv.Write("wiki/documents/Motion scoring.md", saved) })
 	defer change.SetAfterUndoRestore(nil)
@@ -379,7 +386,7 @@ func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
 			tv.Write(pv.Ref.Path, doc.SetField(content, "recovering", value))
 			tv.Write("wiki/documents/Motion scoring.md", "half written")
 			head := git(t, tv.V.Root, "rev-parse", "HEAD")
-			_, err := thread.Stub(tv.V, thread.StubIn{Text: "After the crash.", Title: "After"}, thread.Opts{Now: tv.Tick(time.Minute)})
+			err := write(tv.V, "After.md")
 			if err == nil || !strings.Contains(err.Error(), "not the full id of a commit") {
 				t.Fatalf("the write after recovering: %s: %v", value, err)
 			}
@@ -387,47 +394,6 @@ func TestARecoveringFieldThatNamesNoCommitIsRefused(t *testing.T) {
 				t.Fatal("recovery changed the vault")
 			}
 		})
-	}
-}
-
-// A promote of a stub in a chord rewrites the chord's canvas. A crash before the commit
-// leaves the canvas listed, and recovery puts it back with the documents.
-func TestACrashBeforeTheCommitPutsTheCanvasBack(t *testing.T) {
-	tv := testvault.New(t)
-	_, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Motion helps to score boxes."}, {Title: "Second", Text: "Then this.", After: []string{"First"}}}}, thread.Opts{Now: tv.Tick(time.Minute)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	tv.Commit()
-	canvas := "chords/Plan C.canvas"
-	before := tv.Read(canvas)
-	first := tv.Index().ByPath("wiki/documents/First.md")
-	pv := propose(t, tv, change.Plan{Title: "Promote", Writes: []change.Write{{Op: "promote", ID: first.ID(), Kind: "concept", Title: "Motion scoring", Fields: map[string]any{"description": "Scoring boxes by motion."}, Body: str("## Definition\n\nMotion.\n")}}})
-	crashed := filepath.Join(t.TempDir(), "crashed")
-	change.SetBeforeApplyCommit(func() {
-		if err := os.CopyFS(crashed, os.DirFS(tv.V.Root)); err != nil {
-			t.Fatal(err)
-		}
-	})
-	defer change.SetBeforeApplyCommit(nil)
-	apply(t, tv, pv.Ref.ID)
-	if tv.Read(canvas) == before {
-		t.Fatal("the promote did not rewrite the canvas, so the test proves nothing")
-	}
-	inFlight, _ := os.ReadFile(filepath.Join(crashed, pv.Ref.Path))
-	if !strings.Contains(string(inFlight), canvas) {
-		t.Fatalf("the in-flight paths do not list the canvas:\n%s", inFlight)
-	}
-	v, err := vault.Open(crashed)
-	if err != nil {
-		t.Fatal(err)
-	}
-	// Recovery alone, before any sync could derive the canvas back.
-	if err := vault.Recover(v); err != nil {
-		t.Fatal(err)
-	}
-	if got, _ := os.ReadFile(filepath.Join(crashed, canvas)); string(got) != before {
-		t.Fatalf("recovery did not put the canvas back:\n%s", got)
 	}
 }
 

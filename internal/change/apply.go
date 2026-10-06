@@ -16,7 +16,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/gitx"
 	"github.com/nathanaday/atlas-obsidian/internal/links"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -33,8 +32,6 @@ type Preview struct {
 	Rewrites []vault.Ref `json:"rewrites"`
 	NewTags  []string    `json:"new_tags"`
 	Absorbs  []vault.Ref `json:"absorbs"`
-	// Events are the events apply wrote: the promoted events of its promotes.
-	Events   []vault.Ref `json:"events,omitempty"`
 	Warnings []string    `json:"warnings"`
 	Commit   string      `json:"commit,omitempty"`
 	Reason   string      `json:"reason,omitempty"`
@@ -208,14 +205,11 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 		switch o.Kind {
 		case OpCreate:
 			w.Lines = fmt.Sprintf("+%d", doc.LineCount(o.Content))
-		case OpModify, OpPromote:
+		case OpModify:
 			added, removed := diffLines(prior(o), o.Content)
 			w.Lines = fmt.Sprintf("+%d −%d", added, removed)
 			if o.Rewrite {
 				w.Note = "rewrite"
-			}
-			if o.Kind == OpPromote {
-				w.Note = "stub → topic " + o.TopicKind
 			}
 		case OpRemove:
 			if r := idx.ByID(o.Redirect); r != nil {
@@ -344,11 +338,6 @@ func (c *Conflict) Error() string {
 // Gate refuses to apply a change document with this many writes, or returns nil.
 type Gate func(d *doc.Doc, writes int) error
 
-// newEvent is an event apply writes, with its path known before it writes.
-type newEvent struct {
-	rel, content, id string
-}
-
 // Apply reads a proposed change document again, validates it again, writes its
 // documents, and makes one commit. A gate, when given, judges the document Apply
 // resolved, under the lock, before anything is written.
@@ -404,26 +393,6 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 		}
 	}
 	derived := describedWrites(idx, p, now)
-	titles := thread.NewTitles(idx)
-	for _, o := range p.Ops {
-		titles.Take(o.Title)
-		if o.NewTitle != "" {
-			titles.Take(o.NewTitle)
-		}
-	}
-	var events []newEvent
-	for _, o := range p.Ops {
-		if o.Kind != OpPromote {
-			continue
-		}
-		title := o.Title
-		if o.NewTitle != "" {
-			title = o.NewTitle
-		}
-		nd := doc.Parse(o.Path, []byte(o.Content))
-		rel, content, id := thread.NewEvent(titles, thread.EventIn{Kind: "promoted", SubjectTitle: title, SubjectID: o.ID, SubjectTags: nd.List("tags"), At: now, By: thread.ByAgent, FromType: "stub", ToType: "topic", Change: vault.Title(d)})
-		events = append(events, newEvent{rel: rel, content: content, id: id})
-	}
 	before := repoPaths(idx)
 	lines := preview(idx, d, p.Ops, nil, nil, current(idx)).Writes
 
@@ -438,9 +407,6 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 	for rel := range derived {
 		paths = append(paths, rel)
 	}
-	for _, e := range events {
-		paths = append(paths, e.rel)
-	}
 	paths = uniqueSorted(paths)
 	applying := doc.SetField(setStatus(d.Content, Applying), "paths", paths)
 	if err := tx.Write(d.Path, []byte(applying)); err != nil {
@@ -448,13 +414,6 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 	}
 	if err := writeOps(tx, idx, p, derived, now); err != nil {
 		return nil, err
-	}
-	var eventIDs []string
-	for _, e := range events {
-		if err := tx.Write(e.rel, []byte(e.content)); err != nil {
-			return nil, err
-		}
-		eventIDs = append(eventIDs, e.id)
 	}
 	counts := countOps(p.Ops, p.Outside)
 	final := replaceWrites(record, renderWrites(p.Ops, p.Outside))
@@ -498,11 +457,6 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 	pv := preview(idx, done, p.Ops, outsideRefs(idx, p.Outside), c.warnings, current(idx))
 	pv.Writes = lines
 	pv.Commit = sha
-	for _, id := range eventIDs {
-		if e := idx.ByID(id); e != nil {
-			pv.Events = append(pv.Events, idx.Ref(e))
-		}
-	}
 	return pv, nil
 }
 
@@ -518,13 +472,7 @@ func syncDerived(v *vault.Vault, tx guardWriter) error {
 	if err != nil {
 		return err
 	}
-	if _, err := derive.Sync(idx, vault.NewGuard(idx, tx).Write); err != nil {
-		return err
-	}
-	if idx, err = vault.Load(v); err != nil {
-		return err
-	}
-	_, err = thread.Load(idx).SyncWith(vault.NewGuard(idx, tx))
+	_, err = derive.Sync(idx, vault.NewGuard(idx, tx).Write)
 	return err
 }
 
@@ -598,16 +546,14 @@ func (c *check) revalidate(ops []*op) error {
 			continue
 		}
 		o.Path = d.Path
-		if o.Kind != OpPromote {
-			o.Type = d.Type()
-		}
+		o.Type = d.Type()
 		if o.Base != "" && !sameBase(o.Base, d) {
 			conflicts = append(conflicts, d.Path)
 			continue
 		}
 		o.Title = vault.Title(d)
 		switch o.Kind {
-		case OpRename, OpPromote:
+		case OpRename:
 			if o.NewTitle != "" {
 				c.gone[links.Key(o.Title)] = true
 				if links.Key(o.NewTitle) != links.Key(o.Title) {
@@ -641,7 +587,7 @@ func (c *check) revalidate(ops []*op) error {
 	}
 	for _, o := range ops {
 		switch o.Kind {
-		case OpCreate, OpModify, OpPromote:
+		case OpCreate, OpModify:
 			created := ""
 			if cur := c.idx.ByID(o.ID); cur != nil {
 				created = cur.Str("created")
@@ -769,7 +715,7 @@ func writeOps(tx *vault.Tx, idx *vault.Index, p *planned, derived map[string]str
 			if err := tx.Write(o.Path, []byte(o.Content)); err != nil {
 				return err
 			}
-		case OpModify, OpPromote:
+		case OpModify:
 			target := final[o.ID]
 			if target != o.Path {
 				if err := tx.Remove(o.Path); err != nil {

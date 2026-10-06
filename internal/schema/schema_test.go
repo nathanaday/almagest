@@ -18,7 +18,7 @@ func (f fake) TypeOfLink(target string) (string, error) {
 func TestCheck(t *testing.T) {
 	topic := Get("topic")
 	good := Values{"id": "doc-abcdef", "type": "topic", "kind": "concept", "created": "2026-09-27T10:00:00", "updated": "2026-09-27", "description": "x", "status": "draft", "tags": []string{"ml/ssl", "vision"}, "sources": []string{"[[DINOv2]]"}}
-	r := fake{"[[DINOv2]]": "source", "[[T]]": "stub", "[[p3]]": "repository"}
+	r := fake{"[[DINOv2]]": "source", "[[T]]": "topic", "[[p3]]": "repository"}
 	if p := topic.Check(good, r); len(p) != 0 {
 		t.Fatalf("a good topic: %v", p)
 	}
@@ -38,14 +38,14 @@ func TestCheck(t *testing.T) {
 			t.Errorf("lacks %q in\n%s", want, joined)
 		}
 	}
-	tasks := Get("tasks")
-	if p := tasks.Check(Values{"id": "doc-abcdef", "type": "tasks", "description": "x", "created": "2026-09-27", "updated": "2026-09-27", "thread": "[[T]]", "repository": "[[T]]"}, r); len(p) != 1 || !strings.Contains(p[0].Message, "must be a repository") {
-		t.Fatalf("a task list that names a stub as its repository: %v", p)
+	change := Get("change")
+	if p := change.Check(Values{"id": "chg-abcdef", "type": "change", "created": "2026-09-27", "updated": "2026-09-27", "status": "proposed", "session": "[[T]]"}, r); len(p) != 1 || !strings.Contains(p[0].Message, "must be a session") {
+		t.Fatalf("a change that names a topic as its session: %v", p)
 	}
-	if !Get("stub").Owned("status") || Get("stub").Owned("after") || !Get("spec").Owned("thread") || !Get("event").Owned("subject") {
+	if !Get("source").Owned("sha256") || Get("topic").Owned("sources") || !Get("change").Owned("absorbs") || Get("topic").Owned("from") {
 		t.Fatal("owners")
 	}
-	if len(DocumentTypes) != 9 || !IsThread("chord") || IsThread("event") || !IsDocument("event") || IsDocument("session") || Get("topic").SectionsOf("policy")[0] != "Rule" {
+	if len(DocumentTypes) != 3 || IsDocument("stub") || IsDocument("session") || !IsDocument("topic") || len(ArchivedTypes) != 6 || Get("topic").SectionsOf("policy")[0] != "Rule" {
 		t.Fatal("types")
 	}
 }

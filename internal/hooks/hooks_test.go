@@ -13,7 +13,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -68,50 +67,18 @@ func editNew(path, old, new string) map[string]any {
 	return map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": path, "old_string": old, "new_string": new}}
 }
 
-// thread plants a thread with a spec of one requirement and, for each repository, a task
-// list of one task; with no repository it gets one list that names none.
-func (f *fixture) thread(title string, repos ...string) {
-	f.t.Helper()
-	o := thread.Opts{Now: f.tv.Clock}
-	f.ok(thread.Stub(f.tv.V, thread.StubIn{Text: "The idea of " + title + ".", Title: title}, o))
-	f.ok(thread.Spec(f.tv.V, thread.SpecIn{Thread: title, Text: "## Goal\n\nx\n\n## Requirements\n\n- R1: one\n"}, o))
-	if len(repos) == 0 {
-		repos = []string{""}
-	}
-	for _, r := range repos {
-		f.ok(thread.TasksWrite(f.tv.V, thread.TasksIn{Thread: title, Repository: r, Tasks: []thread.TaskIn{{Text: "Do it", Requirements: []string{"R1"}, Details: "In detail."}}}, o))
-	}
-}
-
-const threadTool = "mcp__plugin_atlas-obsidian_atlas__thread"
-
-func (f *fixture) ok(r *thread.Result, err error) *thread.Result {
-	f.t.Helper()
-	if err != nil {
-		f.t.Fatal(err)
-	}
-	return r
-}
-
-// bind runs the touched hook for a thread call, with the tool's result as the host passes
-// it: content blocks that hold the JSON.
-func (f *fixture) bind(action string, r *thread.Result, input map[string]any) {
-	f.t.Helper()
-	data, _ := json.Marshal(r)
-	if input == nil {
-		input = map[string]any{}
-	}
-	input["action"] = action
-	f.run("touched", map[string]any{"tool_name": threadTool, "tool_input": input, "tool_response": []any{map[string]any{"type": "text", "text": string(data)}}})
-}
-
 func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	f := setup(t)
 	f.tv.Write("Atlas.md", f.tv.Read("Atlas.md")+"\nEvery agent reads this.\n")
 	out := f.run("session-start", map[string]any{"source": "startup"})
-	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Threads: none open.", "Inbox: 0 files", "an edit in a repository needs a started thread with an open task", "\"Resume Atlas thread <id>\" is thread-work", "<vault-context>", "Every agent reads this."} {
+	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Inbox: 0 files", "Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.", "<vault-context>", "Every agent reads this."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("context lacks %q:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"Threads:", "Resume Atlas"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("context holds %q:\n%s", gone, out)
 		}
 	}
 	d := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
@@ -121,7 +88,7 @@ func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
 		t.Fatalf("outside a vault a hook says nothing: %q", out)
 	}
-	f.tv.Write("Atlas.md", strings.Replace(f.tv.Read("Atlas.md"), "layout: 4", "layout: 3", 1))
+	f.tv.Write("Atlas.md", strings.Replace(f.tv.Read("Atlas.md"), "layout: 5", "layout: 4", 1))
 	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "vault migrate") {
 		t.Fatalf("a vault of an earlier layout names the migration: %s", out)
 	}
@@ -132,14 +99,10 @@ func TestGuardProtectsTheVault(t *testing.T) {
 	root := f.tv.V.Root
 	f.run("session-start", map[string]any{})
 	f.tv.Doc("topic", "Knowledge", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	f.tv.Doc("source", "Paper", map[string]any{"sha256": "abcdef0123456789", "file": "[[x.pdf]]"}, "")
+	f.tv.Doc("spec", "Old · Spec", map[string]any{"thread": "[[Old]]"}, "## Goal\n\nx\n")
+	f.tv.Write("threads/Plan · Spec.md", "---\nid: doc-pl0001\ntype: spec\n---\n## Goal\n\nx\n")
 	f.tv.Commit()
-	r := f.ok(thread.Stub(f.tv.V, thread.StubIn{Text: "an idea", Title: "Idea"}, thread.Opts{Now: f.tv.Clock}))
-	f.thread("Plan")
-	f.ok(thread.ChordCreate(f.tv.V, thread.ChordIn{Title: "Chord", Text: "A goal.", Threads: []thread.ChordThreadIn{{Thread: "Plan"}}}, thread.Opts{Now: f.tv.Clock}))
-	stub := root + "/" + r.State.Thread.Path
-	spec := root + "/wiki/documents/Plan · Spec.md"
-	tasks := root + "/wiki/documents/Plan · Tasks.md"
-	chord := root + "/wiki/documents/Chord.md"
 	own := root + "/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
 	bin := "atlas-" + "obsidian"
 	f.tv.Write("sessions/2026-09/2026-09-27 1400 ffffff.md", "---\nid: ses-ffffff\ntype: session\nharness_id: other\n---\n## Description\n")
@@ -157,28 +120,15 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
 		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
-		{"a stub's frontmatter", edit(stub, "priority: normal"), true},
-		{"a stub's lead", edit(stub, "> [!thread] Stub"), true},
-		{"a stub's prose", edit(stub, "## Idea\n\nan idea"), false},
-		{"a stub's Thread section", edit(stub, "- Spec: none"), true},
-		{"a stub's hand-off", edit(stub, "Resume Atlas thread"), true},
-		{"a new section in a stub", editNew(stub, "an idea", "an idea\n\n## Progress\n\n- did a thing"), true},
-		{"a long text in a stub", editNew(stub, "an idea", "an idea"+strings.Repeat("\nmore", 45)), true},
-		{"a Write over a stub", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": stub}}, true},
-		{"a spec's Goal", edit(spec, "## Goal\n\nx"), false},
-		{"a new requirement", editNew(spec, "- R1: one", "- R1: one\n- R2: two"), false},
-		{"a check box in a spec", editNew(spec, "- R1: one", "- R1: one\n- [ ] do it"), true},
-		{"a Tasks section in a spec", editNew(spec, "- R1: one", "- R1: one\n\n## Tasks\n\n- do it"), true},
-		{"a subsection in a spec", editNew(spec, "- R1: one", "- R1: one\n\n### Why\n\nBecause."), false},
-		{"a spec's lead", edit(spec, "> [!spec] Not implemented"), true},
-		{"a check mark by Edit", editNew(tasks, "- [ ] T1", "- [x] T1"), true},
-		{"a task's details", edit(tasks, "In detail."), false},
-		{"a chord's Threads", edit(chord, "| 1 | [[Plan]]"), true},
-		{"a chord's Goal", edit(chord, "## Goal\n\nA goal."), false},
-		{"a chord's canvas", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/chords/Chord.canvas"}}, true},
-		{"a codex patch with a new section", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: wiki/documents/Plan · Spec.md\n@@\n+## Findings\n+- found a thing\n*** End Patch"}}, true},
+		{"a Write over a topic", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/wiki/documents/Knowledge.md"}}, true},
+		{"a source", edit(root+"/wiki/documents/Paper.md", "abcdef0123456789"), true},
+		{"a codex patch into a topic", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: wiki/documents/Knowledge.md\n@@\n+## Findings\n+- found a thing\n*** End Patch"}}, true},
+		{"a document of an unknown type", edit(root+"/wiki/documents/Old · Spec.md", "## Goal\n\nx"), false},
+		{"a note in the threads archive", edit(root+"/threads/Plan · Spec.md", "## Goal\n\nx"), false},
+		{"a new note in the threads archive", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/threads/Plan · Notes.md"}}, false},
 		{"another session's document", edit(root+"/sessions/2026-09/2026-09-27 1400 ffffff.md", "## Description"), true},
 		{"its own status", edit(own, "status: running"), true},
+		{"its own lead", edit(own, "> [!session] running"), true},
 		{"its own description", edit(own, "## Description\n"), false},
 		{"its own subagents", edit(own, "## Subagents"), true},
 		{"a note of the user's", edit(root+"/Ideas.md", "x"), false},
@@ -199,7 +149,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a migration after an option", bash(bin + " vault --json migrate"), true},
 		{"a migration after the vault option", bash(bin + " vault --vault W migrate"), true},
 		{"a migration after --", bash(bin + " vault -- migrate"), true},
-		{"a shell thread list", bash(bin + " thread list"), false},
+		{"a shell search", bash(bin + " search x"), false},
 		{"a hook in ANSI-C quotes", bash(bin + ` $'hook' prompt`), true},
 		{"a hook with an escaped letter in ANSI-C quotes", bash(bin + ` $'h\x6fok' prompt`), true},
 		{"the binary in ANSI-C quotes", bash(`$'` + bin + `' hook prompt`), true},
@@ -207,7 +157,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a redirect glued to the binary", bash(bin + `</dev/null hook prompt`), true},
 		{"a backslash-newline before hook", bash(bin + " \\\nhook prompt"), true},
 		{"an apply in ANSI-C quotes", bash(bin + ` change $'apply' X`), true},
-		{"a thread list into a file", bash(bin + " thread list > out.txt"), false},
+		{"a search into a file", bash(bin + " search x > out.txt"), false},
 		{"both outputs redirected before hook", bash(bin + " &>/dev/null hook prompt"), true},
 		{"both outputs appended before hook", bash(bin + " &>>/tmp/log hook prompt"), true},
 		{"a double-quoted target with a space", bash(bin + ` >"/tmp/a b" hook prompt`), true},
@@ -219,7 +169,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"the binary in a unicode escape", bash(`$'\u61tlas-obsidian' hook prompt`), true},
 		{"a named descriptor before hook", bash(bin + ` {fd}>/dev/null hook prompt`), true},
 		{"zsh's =command", bash(`=` + bin + ` hook prompt`), true},
-		{"a here-string into a thread list", bash(bin + ` thread list <<<'x'`), false},
+		{"a here-string into a search", bash(bin + ` search <<<'x'`), false},
 		{"a config set of the terminal command", bash(bin + ` config set terminal_command "kitty sh -lic {command}"`), true},
 		{"a global config set of an agent command", bash(bin + ` config set --global agent_commands.claude "x"`), true},
 		{"a config set of the terminal", bash(bin + ` config set terminal wezterm`), false},
@@ -277,7 +227,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a shell change show", bash(bin + " change show X"), false},
 		{"a shell vault status", bash(bin + " vault status --json"), false},
 		{"make install", bash("make install"), false},
-		{"a stub titled hook", bash(bin + ` thread stub --title "the hook"`), false},
+		{"a search for hook", bash(bin + ` search "the hook"`), false},
 	}
 	for _, c := range cases {
 		if got := denied(f.run("guard", c.event)); got != c.deny {
@@ -286,7 +236,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 	}
 }
 
-func TestTheEditRule(t *testing.T) {
+func TestAnEditInALinkedRepositoryNeedsNoThread(t *testing.T) {
 	f := setup(t)
 	edge := f.tv.Repo("p3-edge", nil)
 	cloud := f.tv.Repo("p3-cloud", nil)
@@ -294,92 +244,31 @@ func TestTheEditRule(t *testing.T) {
 	f.tv.Doc("repository", "p3-cloud", map[string]any{"path": cloud}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
-	write := map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": edge + "/main.go", "old_string": "a"}}
-	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "needs a thread this session started") || !strings.Contains(out, "this session started no thread") {
-		t.Fatalf("no thread: %s", out)
+	own := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	write := edit(edge+"/main.go", "a")
+	if out := f.run("guard", write); denied(out) {
+		t.Fatalf("an edit in a linked repository from a session that started no thread: %s", out)
 	}
-	o := thread.Opts{Now: f.tv.Clock}
-	f.thread("Cloud work", "p3-cloud")
-	f.thread("Edge work", "p3-edge")
-	f.bind("start", f.ok(thread.Start(f.tv.V, "Cloud work", false, o)), map[string]any{"thread": "Cloud work"})
-	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "Cloud work has no task list for p3-edge") {
-		t.Fatalf("a thread with tasks in another repository does not count: %s", out)
+	if out := f.run("guard", map[string]any{"cwd": t.TempDir(), "tool_name": "Edit", "tool_input": map[string]any{"file_path": filepath.Join(cloud, "README.md"), "old_string": "a"}}); denied(out) {
+		t.Fatalf("an edit in a linked repository from a session outside every vault: %s", out)
 	}
-	if out := f.run("guard", map[string]any{"tool_name": threadTool, "tool_input": map[string]any{"action": "start", "thread": "Cloud work"}}); !denied(out) || !strings.Contains(out, "started in this session already") {
-		t.Fatalf("a second start in one session: %s", out)
-	}
-	f.bind("start", f.ok(thread.Start(f.tv.V, "Edge work", false, o)), map[string]any{"thread": "Edge work"})
-	if denied(f.run("guard", write)) {
-		t.Fatal("a started thread with an open task for the repository covers it")
-	}
-	session := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
-	if !strings.Contains(session, `threads: ["[[Cloud work]]", "[[Edge work]]"]`) || !strings.Contains(session, "events: 2") {
-		t.Fatalf("session:\n%s", session)
-	}
-	edgeDoc := f.tv.Read("wiki/documents/Edge work.md")
-	if !strings.Contains(edgeDoc, "active: true") || !strings.Contains(edgeDoc, "active in [[2026-09-27 1432 a1b2c3]]") {
-		t.Fatalf("the thread is active:\n%s", edgeDoc)
+	f.run("touched", write)
+	if !strings.Contains(f.tv.Read(own), "[[p3-edge]]") {
+		t.Fatal("an edit in a repository lands in the session's record")
 	}
 	f.run("touched", map[string]any{"tool_name": "Bash", "cwd": cloud, "tool_input": map[string]any{"command": "git log --oneline"}})
-	if strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-cloud]]") {
+	if strings.Contains(f.tv.Read(own), "[[p3-cloud]]") {
 		t.Fatal("reading a repository is no edit")
 	}
 	f.run("touched", map[string]any{"tool_name": "Bash", "cwd": cloud, "tool_input": map[string]any{"command": "cat >> main.go <<'EOF'\nx\nEOF"}})
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[[p3-cloud]]") {
+	if !strings.Contains(f.tv.Read(own), "[[p3-cloud]]") {
 		t.Fatal("a shell write in a repository lands in the session's record")
-	}
-	// The last task checked ends the edits; a new task opens them again.
-	f.bind("check", f.ok(thread.Check(f.tv.V, thread.CheckIn{Thread: "Edge work", Task: "T1", Commits: []string{"a3f9c21"}}, o)), map[string]any{"thread": "Edge work"})
-	if out := f.run("guard", write); !denied(out) || !strings.Contains(out, "Edge work has no open task for p3-edge") {
-		t.Fatalf("a thread with every task done does not count: %s", out)
-	}
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "checked: 1") {
-		t.Fatal("the session counts the tasks it checked")
-	}
-	f.ok(thread.TasksWrite(f.tv.V, thread.TasksIn{Thread: "Edge work", Repository: "p3-edge", Tasks: []thread.TaskIn{{Text: "Fix the finding", Requirements: []string{"R1"}}}}, o))
-	if denied(f.run("guard", write)) {
-		t.Fatal("a new task opens the repository again")
-	}
-	f.ok(thread.Drop(f.tv.V, "Edge work", "No.", o))
-	if !denied(f.run("guard", write)) {
-		t.Fatal("a dropped thread does not count")
 	}
 }
 
-func TestTouchedBindsThreadsEventsAndChanges(t *testing.T) {
+func TestTouchedBindsChanges(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
-	o := thread.Opts{Now: f.tv.Clock}
-	f.bind("stub", f.ok(thread.Stub(f.tv.V, thread.StubIn{Text: "x", Title: "Idea"}, o)), nil)
-	f.bind("spec", f.ok(thread.Spec(f.tv.V, thread.SpecIn{Thread: "Idea", Text: "## Goal\n\nx\n\n## Requirements\n\n- R1: one\n"}, o)), nil)
-	f.bind("tasks", f.ok(thread.TasksWrite(f.tv.V, thread.TasksIn{Thread: "Idea", Tasks: []thread.TaskIn{{Text: "Do it", Requirements: []string{"R1"}}}}, o)), nil)
-	p := f.ok(thread.Start(f.tv.V, "Idea", false, o))
-	f.bind("start", p, map[string]any{"thread": "Idea"})
-	session := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
-	if !strings.Contains(session, `work: ["[[Idea]]", "[[Idea · Spec]]", "[[Idea · Tasks]]"]`) || !strings.Contains(session, "events: 1") || !strings.Contains(session, "> [!session] running · [[Idea]]") {
-		t.Fatalf("session:\n%s", session)
-	}
-	event := f.tv.Read(p.Events[0].Path)
-	if !strings.Contains(event, `session: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(event, "By the agent in [[2026-09-27 1432 a1b2c3]]") {
-		t.Fatalf("the event names its session:\n%s", event)
-	}
-	if !strings.Contains(f.tv.Read("wiki/documents/Idea.md"), "- Sessions: [[2026-09-27 1432 a1b2c3]]") {
-		t.Fatal("the stub lists its sessions")
-	}
-	f.bind("check", f.ok(thread.Check(f.tv.V, thread.CheckIn{Thread: "Idea", Task: "T1", Note: "did it"}, o)), nil)
-	v := f.ok(thread.Verify(f.tv.V, thread.VerifyIn{Thread: "Idea", Scope: "no repository", Results: []thread.ResultIn{{Requirement: "R1", Result: "pass", Evidence: "seen"}}}, o))
-	f.bind("verify", v, nil)
-	verification := f.tv.Read("wiki/documents/Idea · Verification 1.md")
-	if !strings.Contains(verification, `session: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(verification, "by the agent in [[2026-09-27 1432 a1b2c3]]") {
-		t.Fatalf("the verification names its session:\n%s", verification)
-	}
-	// An edit of a thread document brings its thread's status up to date.
-	spec := f.tv.V.Abs("wiki/documents/Idea · Spec.md")
-	f.tv.Write("wiki/documents/Idea · Spec.md", strings.Replace(f.tv.Read("wiki/documents/Idea · Spec.md"), "- R1: one", "- R1: one, and fast", 1))
-	f.run("touched", editNew(spec, "- R1: one", "- R1: one, and fast"))
-	if stub := f.tv.Read("wiki/documents/Idea.md"); !strings.Contains(stub, "status: unverified") || !strings.Contains(stub, "round 1 is stale") {
-		t.Fatalf("an edited requirement makes the verification stale:\n%s", stub)
-	}
 	pv, err := change.Propose(f.tv.V, change.Plan{Title: "Add A", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "A", Fields: map[string]any{"description": "a"}}}}, f.tv.Tick(time.Minute))
 	if err != nil {
 		t.Fatal(err)
@@ -389,6 +278,9 @@ func TestTouchedBindsThreadsEventsAndChanges(t *testing.T) {
 	f.run("touched", map[string]any{"tool_name": tool, "tool_input": map[string]any{"action": "propose"}, "tool_response": json.RawMessage(data)})
 	if !strings.Contains(f.tv.Read(pv.Ref.Path), `session: "[[2026-09-27 1432 a1b2c3]]"`) {
 		t.Fatal("the change names its session")
+	}
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[["+pv.Ref.Title+"]]") {
+		t.Fatal("the session lists its change")
 	}
 }
 
@@ -452,7 +344,7 @@ func TestTheGate(t *testing.T) {
 		t.Fatal("a change whose proposal time does not parse stays shut")
 	}
 
-	// A change with no writes needs no answer, unless it closes a thread.
+	// A change with no writes needs no answer.
 	f.tv.Doc("source", "Paper", map[string]any{"sha256": "abcdef0123456789", "file": "[[x.pdf]]"}, "")
 	f.tv.Commit()
 	empty := func(title string, absorbs ...string) *change.Preview {
@@ -465,23 +357,6 @@ func TestTheGate(t *testing.T) {
 	}
 	if err := apply(empty("Absorb the paper", "Paper").Ref.ID); err != nil {
 		t.Fatalf("a change that absorbs a source and writes nothing needs no answer: %v", err)
-	}
-	f.thread("Plan")
-	o := thread.Opts{Now: f.tv.Clock}
-	f.ok(thread.Start(f.tv.V, "Plan", false, o))
-	f.ok(thread.Check(f.tv.V, thread.CheckIn{Thread: "Plan", Task: "T1", Note: "done"}, o))
-	f.ok(thread.Verify(f.tv.V, thread.VerifyIn{Thread: "Plan", Scope: "none", Results: []thread.ResultIn{{Requirement: "R1", Result: "pass", Evidence: "seen"}}}, o))
-	closing := empty("Close the plan", "Plan · Spec", "Plan · Verification 1")
-	if err := apply(closing.Ref.ID); err == nil || !strings.Contains(err.Error(), "wait for the user's yes") {
-		t.Fatalf("a change that closes a thread waits for the user, with or without writes: %v", err)
-	}
-	f.tv.Tick(time.Minute)
-	f.run("prompt", map[string]any{"prompt": "yes, close it"})
-	if err := apply(closing.Ref.ID); err != nil {
-		t.Fatalf("the user's yes closes the thread: %v", err)
-	}
-	if !strings.Contains(f.tv.Read("wiki/documents/Plan.md"), "status: closed") {
-		t.Fatal("closed")
 	}
 }
 
@@ -499,23 +374,16 @@ func TestReadOnlyAgents(t *testing.T) {
 	}{
 		{"extract writes", agent("wiki-extract", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "/tmp/x"}}), true},
 		{"draft proposes", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "propose"}}), true},
-		{"draft plants a stub", agent("wiki-draft", map[string]any{"tool_name": threadTool, "tool_input": map[string]any{"action": "stub"}}), true},
-		{"draft makes a chord", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__chord", "tool_input": map[string]any{"action": "create"}}), true},
-		{"audit files its own report", agent("thread-audit", map[string]any{"tool_name": threadTool, "tool_input": map[string]any{"action": "verify"}}), true},
-		{"audit checks a task", agent("thread-audit", map[string]any{"tool_name": threadTool, "tool_input": map[string]any{"action": "check"}}), true},
 		{"draft searches", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__search", "tool_input": map[string]any{"text": "x"}}), false},
-		{"audit loads the thread", agent("thread-audit", map[string]any{"tool_name": threadTool, "tool_input": map[string]any{"action": "load"}}), false},
-		{"draft drops a chord", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__chord", "tool_input": map[string]any{"action": "drop"}}), true},
-		{"draft sets a chord's fields", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__chord", "tool_input": map[string]any{"action": "set"}}), true},
-		{"draft calls an action nobody listed", agent("wiki-draft", map[string]any{"tool_name": threadTool, "tool_input": map[string]any{"action": "rewrite"}}), true},
+		{"draft calls an action nobody listed", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "rewrite"}}), true},
 		{"draft calls a tool nobody listed", agent("wiki-draft", map[string]any{"tool_name": "mcp__atlas__purge", "tool_input": map[string]any{}}), true},
-		{"draft lists the chords", agent("wiki-draft", map[string]any{"tool_name": "mcp__atlas__chord", "tool_input": map[string]any{"action": "list"}}), false},
+		{"draft calls a tool that left", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__thread", "tool_input": map[string]any{"action": "load"}}), true},
+		{"draft reads the vault's status", agent("wiki-draft", map[string]any{"tool_name": "mcp__atlas__vault", "tool_input": map[string]any{"action": "status"}}), false},
+		{"draft shows a change", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "show"}}), false},
 		{"draft reads a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__source", "tool_input": map[string]any{"action": "read"}}), false},
+		{"draft captures a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__source", "tool_input": map[string]any{"action": "capture"}}), true},
 		{"wiki audit runs a shell", agent("wiki-audit", bash("ls")), true},
-		{"audit reads the log", agent("thread-audit", bash("git -C /code/p3 log --oneline -5")), false},
-		{"audit runs the tests", agent("thread-audit", bash("cd /code/p3 && go test ./... 2>&1 | tail -20")), false},
-		{"audit edits a file", agent("thread-audit", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": "/code/p3/main.go"}}), true},
-		{"audit applies a change from the shell", agent("thread-audit", bash("atlas-"+"obsidian change apply X")), true},
+		{"wiki audit edits a file", agent("wiki-audit", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": "/code/p3/main.go"}}), true},
 	}
 	for _, c := range cases {
 		if got := denied(f.run("guard", c.event)); got != c.deny {
@@ -530,9 +398,6 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	f.tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
-	o := thread.Opts{Now: f.tv.Clock}
-	f.thread("Plan", "p3-edge")
-	f.bind("start", f.ok(thread.Start(f.tv.V, "Plan", false, o)), map[string]any{"thread": "Plan"})
 	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
 	f.run("touched", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract", "tool_name": "Read"})
 	f.run("subagent-stop", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
@@ -542,12 +407,16 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	}
 	f.run("subagent-start", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
 	child := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md")
-	if !strings.Contains(child, `parent: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(child, `threads: ["[[Plan]]"]`) {
-		t.Fatalf("a writing subagent inherits the started threads:\n%s", child)
+	if !strings.Contains(child, `parent: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(child, `agent: general-purpose`) {
+		t.Fatalf("a writing subagent gets its own document:\n%s", child)
 	}
 	write := map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose", "tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/main.go", "old_string": "a"}}
 	if denied(f.run("guard", write)) {
-		t.Fatal("the subagent may edit the repository its parent's thread has tasks for")
+		t.Fatal("the subagent may edit a linked repository")
+	}
+	f.run("touched", write)
+	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md"), "[[p3-edge]]") {
+		t.Fatal("the subagent's edit lands in its own record")
 	}
 	f.run("notify", map[string]any{"notification_type": "permission_prompt"})
 	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: waiting") {
@@ -558,9 +427,6 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	if s := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"); !strings.Contains(s, "status: ended") {
 		t.Fatalf("ended:\n%s", s)
 	}
-	if !strings.Contains(f.tv.Read("wiki/documents/Plan.md"), "active: false") {
-		t.Fatal("an ended session lets the thread go")
-	}
 }
 
 func TestStopRemindsOnce(t *testing.T) {
@@ -570,7 +436,7 @@ func TestStopRemindsOnce(t *testing.T) {
 	f.run("session-start", map[string]any{})
 	f.run("touched", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/x.go"}})
 	out := f.run("stop", map[string]any{})
-	if !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "## Description") {
+	if !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "## Description") || strings.Contains(out, "## Progress") {
 		t.Fatalf("stop: %s", out)
 	}
 	if out := f.run("stop", map[string]any{}); out != "" {
@@ -581,27 +447,20 @@ func TestStopRemindsOnce(t *testing.T) {
 	}
 }
 
-func TestStopRemindsOfWorkWithNoRecord(t *testing.T) {
+func TestStopAsksNoRecordOfRepositoryWork(t *testing.T) {
 	f := setup(t)
 	repo := f.tv.Repo("p3-edge", nil)
 	f.tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
 	own := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
-	f.tv.Write(own, strings.Replace(f.tv.Read(own), "## Description\n", "## Description\n\nWork on the plan.\n", 1))
-	f.thread("Plan", "p3-edge")
-	o := thread.Opts{Now: f.tv.Clock}
-	f.bind("start", f.ok(thread.Start(f.tv.V, "Plan", false, o)), map[string]any{"thread": "Plan"})
-	if out := f.run("stop", map[string]any{}); out != "" {
-		t.Fatalf("a session that changed no repository owes nothing: %s", out)
-	}
+	f.tv.Write(own, strings.Replace(f.tv.Read(own), "## Description\n", "## Description\n\nWork on the edge.\n", 1))
 	f.run("touched", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/x.go"}})
-	out := f.run("stop", map[string]any{})
-	if !strings.Contains(out, `"decision":"block"`) || !strings.Contains(out, "thread check") || !strings.Contains(out, "[[Plan]]") {
-		t.Fatalf("stop: %s", out)
+	if !strings.Contains(f.tv.Read(own), "[[p3-edge]]") {
+		t.Fatal("the session records the repository it changed")
 	}
 	if out := f.run("stop", map[string]any{}); out != "" {
-		t.Fatalf("once: %s", out)
+		t.Fatalf("a session that changed a repository with no progress line owes nothing: %s", out)
 	}
 }
 

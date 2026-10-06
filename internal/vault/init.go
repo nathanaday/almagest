@@ -132,7 +132,6 @@ func writeLayout(v *Vault, name, description, tagging, context string, now time.
 		{Key: "created", Value: Stamp(now)},
 		{Key: "updated", Value: Stamp(now)},
 		{Key: "tagging", Value: tagging},
-		{Key: "wikify", Value: DefaultWikify},
 		{Key: "stale_hours", Value: DefaultStaleHours},
 		{Key: "layout", Value: Layout},
 	}, body)

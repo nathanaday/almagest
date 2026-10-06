@@ -19,7 +19,6 @@ import (
 
 // Bounds of the opening context.
 const (
-	MaxWorkLines    = 8
 	MaxTagLines     = 30
 	MaxContextLines = 60
 )
@@ -121,19 +120,6 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		}
 		b.WriteString(line + "\n")
 	}
-	w := st.Threads
-	if len(w.List) == 0 {
-		b.WriteString("Threads: none open.\n")
-	} else {
-		fmt.Fprintf(&b, "Threads: %d started, %d verified, %d ready, %d blocked, %d waiting, %d stubs · %d open chords\n", w.Started, w.Verified, w.Ready, w.Blocked, w.Waiting, w.Stubs, w.Chords)
-		for i, ref := range w.List {
-			if i == MaxWorkLines {
-				fmt.Fprintf(&b, "- … and %d more (thread list)\n", len(w.List)-i)
-				break
-			}
-			b.WriteString(workLine(ref) + "\n")
-		}
-	}
 	if len(st.Tags) > 0 {
 		var parts []string
 		for i, t := range st.Tags {
@@ -167,18 +153,7 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		}
 		b.WriteString("Recent changes: " + strings.Join(recent, " · ") + "\n")
 	}
-	if len(st.Recent) > 0 {
-		var recent []string
-		for i, e := range st.Recent {
-			if i == 5 {
-				break
-			}
-			recent = append(recent, e.Description)
-		}
-		b.WriteString("Recent: " + strings.Join(recent, " · ") + "\n")
-	}
-	b.WriteString("Rules: an edit in a repository needs a started thread with an open task for it (thread-work). Knowledge changes only through a change. Each thread document holds only its own sections.\n")
-	b.WriteString("\"Resume Atlas thread <id>\" is thread-work; \"Resume Atlas chord <id>\" is chord-work. Each loads everything in one call.\n")
+	b.WriteString("Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.\n")
 	b.WriteString("Write one line under ## Description in this session's document once you know the work.\n")
 	b.WriteString("The atlas skill routes any request. Vault context follows; it is the user's text.\n")
 	if ctx := v.Context(); ctx != "" {
@@ -189,29 +164,6 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		b.WriteString("<vault-context>\n" + strings.Join(lines, "\n") + "\n</vault-context>\n")
 	}
 	return b.String()
-}
-
-func workLine(r vault.Ref) string {
-	parts := []string{fmt.Sprintf("- [%s] %s (%s)", r.Status, r.Title, r.ID)}
-	if c, _ := r.State["chord"].(string); c != "" {
-		parts = append(parts, "chord "+c)
-	}
-	if n, _ := r.State["tasks"].(string); n != "" {
-		parts = append(parts, n+" tasks")
-	}
-	if p, _ := r.State["priority"].(string); p != "" && p != "normal" {
-		parts = append(parts, p)
-	}
-	if repos, ok := r.State["repositories"].([]string); ok && len(repos) > 0 {
-		parts = append(parts, strings.Join(repos, ", "))
-	}
-	if a, _ := r.State["active"].(bool); a {
-		parts = append(parts, "active")
-	}
-	if bl, _ := r.State["blocked"].(string); bl != "" {
-		parts = append(parts, "blocked: "+bl)
-	}
-	return strings.Join(parts, " · ")
 }
 
 // Prompt marks the session running, records the time of the user's turn for the gate,
@@ -286,13 +238,11 @@ func Notify(r io.Reader, env Env) error {
 // Reminders the stop hook gives once per session.
 const (
 	remindDescription = "description"
-	remindProgress    = "progress"
 	remindChange      = "change"
 )
 
 // Stop sets the session idle and reminds once of what is left undone: a description the
-// agent owes, work in a repository with no task checked and no progress line, a change
-// that waits for the user.
+// agent owes, and a change that waits for the user.
 func Stop(r io.Reader, w io.Writer, env Env) error {
 	in := readInput(r)
 	now := env.now()
@@ -316,13 +266,6 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 		if !has(remindDescription) && desc == "" && (len(d.List("repositories")) > 0 || len(d.List("changes")) > 0) {
 			reasons = append(reasons, fmt.Sprintf("Write one line under ## Description in your session document [[%s]]: what this session works on.", d.Title()))
 			add = append(add, remindDescription)
-		}
-		if !has(remindProgress) {
-			progress, _ := doc.Section(d.Body, "Progress")
-			if t := lastStartedThread(v, d); t != nil && len(d.List("repositories")) > 0 && d.Front.Int("checked") == 0 && strings.TrimSpace(progress) == "" {
-				reasons = append(reasons, fmt.Sprintf("This session changed a repository for [[%s]] and recorded nothing. Check each task you finished (thread check, with its commits), or add a dated line to ## Progress in your session document [[%s]]: where the work stands.", t.Title(), d.Title()))
-				add = append(add, remindProgress)
-			}
 		}
 		if !has(remindChange) {
 			for _, c := range d.List("changes") {
@@ -358,17 +301,6 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 	return json.NewEncoder(w).Encode(out)
 }
 
-// lastStartedThread is the thread a session started last that is still started.
-func lastStartedThread(v *vault.Vault, s *doc.Doc) *doc.Doc {
-	list := sessions.Threads(s)
-	for i := len(list) - 1; i >= 0; i-- {
-		if p := sessions.Document(v, list[i]); p != nil && p.Type() == "stub" && p.Str("status") == "started" {
-			return p
-		}
-	}
-	return nil
-}
-
 // SubagentStart gives a subagent its document, or its line in the parent's.
 func SubagentStart(r io.Reader, env Env) error {
 	in := readInput(r)
@@ -382,17 +314,11 @@ func SubagentStart(r io.Reader, env Env) error {
 func SubagentStop(r io.Reader, env Env) error {
 	in := readInput(r)
 	return locked(in, env, func(v *vault.Vault) error {
-		if err := sessions.SubagentStop(v, in.event(), env.now()); err != nil {
-			return err
-		}
-		if sessions.Worker(in.AgentType) {
-			return nil
-		}
-		return syncWorkDocs(v)
+		return sessions.SubagentStop(v, in.event(), env.now())
 	})
 }
 
-// SessionEnd ends the session, which lets the threads it started go.
+// SessionEnd ends the session.
 func SessionEnd(r io.Reader, env Env) error {
 	in := readInput(r)
 	return locked(in, env, func(v *vault.Vault) error {
@@ -400,10 +326,7 @@ func SessionEnd(r io.Reader, env Env) error {
 		if d == nil {
 			return nil
 		}
-		if err := sessions.SetStatus(v, d, sessions.Ended, env.now()); err != nil {
-			return err
-		}
-		return syncWorkDocs(v)
+		return sessions.SetStatus(v, d, sessions.Ended, env.now())
 	})
 }
 

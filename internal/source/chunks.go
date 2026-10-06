@@ -99,8 +99,8 @@ func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 }
 
 // Chunks splits a document for reading: a PDF 20 pages at a time, markdown by whole
-// sections joined up to 800 lines, text 800 lines at a time cut at a blank line, and a
-// stub, a spec, an event, or anything shorter than 800 lines whole.
+// sections joined up to 800 lines, text 800 lines at a time cut at a blank line, and
+// anything shorter than 800 lines whole.
 func Chunks(idx *vault.Index, key string) ([]Chunk, error) {
 	d, err := idx.Resolve(key)
 	if err != nil {
@@ -110,7 +110,7 @@ func Chunks(idx *vault.Index, key string) ([]Chunk, error) {
 	if err != nil {
 		return nil, err
 	}
-	spans := split(d, m)
+	spans := split(m)
 	out := make([]Chunk, len(spans))
 	for i, s := range spans {
 		out[i] = Chunk{Doc: d.ID(), Index: i + 1, Count: len(spans), Locator: s.locator, Size: s.to - s.from + 1, From: s.from, To: s.to}
@@ -126,7 +126,7 @@ type span struct {
 	locator  string
 }
 
-func split(d *doc.Doc, m *material) []span {
+func split(m *material) []span {
 	switch m.kind {
 	case "pdf":
 		if m.pages <= 0 {
@@ -145,8 +145,7 @@ func split(d *doc.Doc, m *material) []span {
 		return []span{{locator: "whole"}}
 	}
 	n := len(m.lines)
-	work := schema.IsThread(d.Type()) || d.Type() == "event"
-	if n <= LinesPerChunk || work {
+	if n <= LinesPerChunk {
 		return []span{{1, n, "whole"}}
 	}
 	if m.kind == "markdown" {

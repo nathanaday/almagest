@@ -5,20 +5,17 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 func TestCloseMentionWritesOnlyANoteOfTheVault(t *testing.T) {
 	tv := testvault.New(t)
-	if _, err := thread.Stub(tv.V, thread.StubIn{Text: "x", Title: "Idea"}, thread.Opts{Now: testvault.Now}); err != nil {
-		t.Fatal(err)
-	}
+	tv.Doc("topic", "Idea", map[string]any{"kind": "concept"}, "")
+	tv.Commit()
 	victim := filepath.Join(filepath.Dir(tv.V.Root), "outside", "victim.md")
 	tv.WriteFile(victim, "- [ ] @atlas track this\n")
 	if err := os.Symlink(victim, tv.V.Abs("Linked.md")); err != nil {
@@ -45,30 +42,6 @@ func TestCloseMentionWritesOnlyANoteOfTheVault(t *testing.T) {
 	tv.Write("Ideas.md", "- [ ] @atlas track this\n")
 	if _, err := core.CloseMention(tv.V, "Ideas.md", 1, "Idea"); err != nil {
 		t.Fatalf("a note of the vault: %v", err)
-	}
-}
-
-func TestSyncWritesNoCanvasThroughALinkedChordsFolder(t *testing.T) {
-	tv := testvault.New(t)
-	if _, err := thread.ChordCreate(tv.V, thread.ChordIn{Title: "Plan C", Text: "Ship it.", Threads: []thread.ChordThreadIn{{Title: "First", Text: "Do the first part."}}}, thread.Opts{Now: testvault.Now}); err != nil {
-		t.Fatal(err)
-	}
-	away := filepath.Join(filepath.Dir(tv.V.Root), "away")
-	if err := os.MkdirAll(away, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.RemoveAll(tv.V.Abs("chords")); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.Symlink(away, tv.V.Abs("chords")); err != nil {
-		t.Fatal(err)
-	}
-	_, err := core.Sync(tv.V, testvault.Now.Add(time.Hour), core.SyncOptions{})
-	if err == nil || !strings.Contains(err.Error(), "chords is a link that leads out of the vault; make chords a plain folder") {
-		t.Errorf("sync through a linked chords/: %v", err)
-	}
-	if entries, _ := os.ReadDir(away); len(entries) != 0 {
-		t.Fatalf("sync wrote outside the vault: %v", entries)
 	}
 }
 

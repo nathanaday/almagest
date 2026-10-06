@@ -217,12 +217,12 @@ func TestDoctorNamesTheMigrationOfAnOldLayout(t *testing.T) {
 	r := run{t: t, tv: tv}
 	t.Setenv("PATH", t.TempDir()+":/usr/bin:/bin")
 	atlas := tv.Read("Atlas.md")
-	if !strings.Contains(atlas, "\nlayout: 4\n") {
-		t.Fatalf("Atlas.md holds no layout 4:\n%s", atlas)
+	if !strings.Contains(atlas, "\nlayout: 5\n") {
+		t.Fatalf("Atlas.md holds no layout 5:\n%s", atlas)
 	}
-	tv.Write("Atlas.md", strings.Replace(atlas, "\nlayout: 4\n", "\nlayout: 3\n", 1))
+	tv.Write("Atlas.md", strings.Replace(atlas, "\nlayout: 5\n", "\nlayout: 4\n", 1))
 	_, out, _ := r.atlas("", "doctor")
-	if !strings.Contains(out, vault.ErrLegacy.Error()) || strings.Contains(out, "6.x layout") || !strings.Contains(out, "vault migrate --dry-run --vault ") {
-		t.Fatalf("doctor on a layout-3 vault:\n%s", out)
+	if !strings.Contains(out, vault.ErrLegacy.Error()) || strings.Contains(out, "8.x layout") || !strings.Contains(out, "vault migrate --dry-run --vault ") {
+		t.Fatalf("doctor on a layout-4 vault:\n%s", out)
 	}
 }

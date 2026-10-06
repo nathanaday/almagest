@@ -17,6 +17,7 @@ views:
       - file.name
       - status
       - description
+      - threads
       - repositories
       - updated
     sort:
@@ -33,8 +34,20 @@ views:
       - file.name
       - status
       - description
-      - repositories
+      - threads
       - changes
+    sort:
+      - property: started
+        direction: DESC
+  - type: table
+    name: By thread
+    groupBy:
+      property: threads
+      direction: ASC
+    order:
+      - file.name
+      - status
+      - description
     sort:
       - property: started
         direction: DESC
@@ -47,7 +60,7 @@ views:
       - file.name
       - status
       - description
-      - changes
+      - threads
     sort:
       - property: started
         direction: DESC
@@ -59,5 +72,5 @@ views:
     order:
       - file.name
       - description
-      - repositories
+      - threads
       - updated

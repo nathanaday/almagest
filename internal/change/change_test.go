@@ -11,7 +11,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
@@ -83,10 +82,13 @@ func TestProposeThenApply(t *testing.T) {
 		}
 	}
 	rp := tv.Read("wiki/documents/p3-edge.md")
-	for _, want := range []string{"defines: work/p3/p3-edge", "branch: ", "head: ", "> [!repository] `", "```atlas-repo", "## Threads", "## Knowledge"} {
+	for _, want := range []string{"defines: work/p3/p3-edge", "branch: ", "head: ", "> [!repository] `", "```atlas-repo", "## Knowledge"} {
 		if !strings.Contains(rp, want) {
 			t.Errorf("repository lacks %q:\n%s", want, rp)
 		}
+	}
+	if strings.Contains(rp, "## Threads") {
+		t.Errorf("repository has a Threads section:\n%s", rp)
 	}
 	if log := tv.Log(); log[0] != "change: Link p3-edge" || log[1] != "snapshot: 2 files edited by hand" {
 		t.Fatalf("log %v", log)
@@ -96,13 +98,12 @@ func TestProposeThenApply(t *testing.T) {
 
 func TestRefusals(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Doc("stub", "A thread", nil, "## Idea\n\nx\n")
 	tv.Doc("topic", "CS513", map[string]any{"kind": "overview", "defines": "school/cs513"}, "")
 	tv.Commit()
-	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "stub", Title: "S"}}}, "comes from the thread tool")
+	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "stub", Title: "S"}}}, "a change creates a topic or a repository")
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "source", Title: "S"}}}, "capture")
-	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "modify", ID: "A thread", Body: str("x")}}}, "through the thread tool")
-	refused(t, tv, change.Plan{Title: "x", Absorbs: []string{"A thread"}}, "the wiki does not absorb now")
+	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "promote", ID: "CS513", Kind: "concept", Title: "S"}}}, `op "promote"; it must be create, modify, rename, remove, confirm, or retag`)
+	refused(t, tv, change.Plan{Title: "x", Absorbs: []string{"CS513"}}, "CS513 is a topic; a change absorbs sources")
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "idea", Title: "S"}}}, "a topic is a concept")
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "Tag · x", Fields: map[string]any{"description": "x"}}}}, "view's title")
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "overview", Title: "Another", Fields: map[string]any{"description": "x", "defines": "school/cs513"}}}}, "defines school/cs513 already")
@@ -140,7 +141,7 @@ func TestASyncBetweenProposalAndApplyIsNoConflict(t *testing.T) {
 	// A sync refreshes what code derives: a git fact, the lead callout, a code section.
 	rel := "wiki/documents/p3-edge.md"
 	synced := strings.Replace(strings.Replace(tv.Read(rel), "head: aaaaaaa", "head: bbbbbbb", 1), "> [!repository] old", "> [!repository] new", 1)
-	tv.Write(rel, strings.Replace(synced, "behind: 0", "behind: 3", 1)+"\n## Threads\n\n| a |\n")
+	tv.Write(rel, strings.Replace(synced, "behind: 0", "behind: 3", 1)+"\n## Knowledge\n\n```base\nfilters: x\n```\n")
 	apply(t, tv, pv.Ref.ID)
 	got := tv.Read(rel)
 	for _, want := range []string{"head: bbbbbbb", "behind: 3", "description: The edge.", "## What it is\n\nNew."} {
@@ -161,7 +162,7 @@ func TestRenameRewritesLinksEverywhere(t *testing.T) {
 	tv := testvault.New(t)
 	id := tv.Doc("topic", "Motion scoring", map[string]any{"kind": "concept"}, "")
 	tv.Doc("topic", "Tracking", map[string]any{"kind": "concept"}, "Uses [[Motion scoring|scores]] and [[Motion scoring#Definition]].\n")
-	tv.Doc("spec", "A plan", map[string]any{"kind": "plan", "implements": []string{}}, "## Goal\n\nApply [[Motion scoring]].\n")
+	tv.Write("sessions/2026-09/2026-09-26 0900 aaaaaa.md", "---\nid: ses-aaaaaa\ntype: session\nharness_id: aaaaaa\nstatus: ended\nupdated: 2026-09-26T09:00:00\n---\n\nApply [[Motion scoring]].\n")
 	tv.Write("My note.md", "See [[motion scoring]].\n")
 	tv.Commit()
 	pv := propose(t, tv, change.Plan{Title: "Rename", Writes: []change.Write{{Op: "rename", ID: id, Title: "Motion score"}}})
@@ -173,9 +174,9 @@ func TestRenameRewritesLinksEverywhere(t *testing.T) {
 		t.Fatal("the file moved")
 	}
 	for rel, want := range map[string]string{
-		"wiki/documents/Tracking.md": "Uses [[Motion score|scores]] and [[Motion score#Definition]].",
-		"wiki/documents/A plan.md":   "Apply [[Motion score]].",
-		"My note.md":                 "See [[Motion score]].",
+		"wiki/documents/Tracking.md":                 "Uses [[Motion score|scores]] and [[Motion score#Definition]].",
+		"sessions/2026-09/2026-09-26 0900 aaaaaa.md": "Apply [[Motion score]].",
+		"My note.md": "See [[Motion score]].",
 	} {
 		if !strings.Contains(tv.Read(rel), want) {
 			t.Errorf("%s:\n%s", rel, tv.Read(rel))
@@ -188,11 +189,12 @@ func TestRemoveRepositoryAndUnlink(t *testing.T) {
 	tv := testvault.New(t)
 	repo := tv.Repo("p3-edge", nil)
 	rid := tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
-	tv.Doc("stub", "A thread", nil, "## Idea\n\nx\n")
-	tv.Doc("tasks", "A thread · Tasks (p3-edge)", map[string]any{"thread": "[[A thread]]", "repository": "[[p3-edge]]"}, "## Tasks\n\n- [ ] T1: x (R1)\n")
 	tv.Commit()
-	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "remove", ID: rid}}}, "unlink it instead")
-	pv := propose(t, tv, change.Plan{Title: "Unlink p3-edge", Writes: []change.Write{{Op: "modify", ID: rid, Fields: map[string]any{"unlinked": true}}}})
+	removal := propose(t, tv, change.Plan{Title: "Remove p3-edge", Writes: []change.Write{{Op: "remove", ID: rid}}})
+	if removal.Counts.Remove != 1 {
+		t.Fatalf("a remove of a repository: %+v", removal.Counts)
+	}
+	pv := propose(t, tv, change.Plan{Title: "Unlink p3-edge", Supersedes: removal.Ref.ID, Writes: []change.Write{{Op: "modify", ID: rid, Fields: map[string]any{"unlinked": true}}}})
 	apply(t, tv, pv.Ref.ID)
 	got := tv.Read("wiki/documents/p3-edge.md")
 	if !strings.Contains(got, "unlinked: true") || !strings.Contains(got, `path: ""`) || !strings.Contains(got, "> [!repository-missing] Unlinked") {
@@ -266,30 +268,26 @@ func TestRecoveryAfterACrash(t *testing.T) {
 	}
 }
 
-func TestAbsorbPromoteConfirmRetag(t *testing.T) {
+func TestAbsorbConfirmRetag(t *testing.T) {
 	tv := testvault.New(t)
 	src := tv.Doc("source", "DINOv2", map[string]any{"sha256": "3f9c1e2a7b8d44aa", "file": "[[doc-aaaaaa.pdf]]", "media": "pdf", "origin": "inbox", "tags": []string{"p3", "paper"}}, "")
 	tv.Write("wiki/assets/doc-aaaaaa.pdf", "%PDF")
 	old := tv.Doc("topic", "Old idea", map[string]any{"kind": "concept", "tags": []string{"p3/edge"}}, "## Definition\n\nx\n")
 	tv.Write("My note.md", "- [ ] check #p3/edge later\n")
 	tv.Commit()
-	res, err := thread.Stub(tv.V, thread.StubIn{Text: "Motion helps to score boxes.", Title: "Motion idea", Tags: []string{"p3"}}, thread.Opts{Now: tv.Tick(time.Minute)})
-	if err != nil {
-		t.Fatal(err)
-	}
 	pv := propose(t, tv, change.Plan{Title: "Ingest DINOv2", Absorbs: []string{src}, Writes: []change.Write{
-		{Op: "promote", ID: res.State.Thread.ID, Kind: "concept", Title: "Motion scoring", Fields: map[string]any{"description": "Scoring boxes by motion.", "sources": []any{src}}, Body: str("## Definition\n\nMotion.\n")},
+		{Op: "create", Type: "topic", Kind: "concept", Title: "Motion scoring", Fields: map[string]any{"description": "Scoring boxes by motion.", "sources": []any{src}, "tags": []any{"p3"}}, Body: str("## Definition\n\nMotion.\n")},
 		{Op: "modify", ID: src, Fields: map[string]any{"description": "The DINOv2 paper.", "authority": "primary"}, Body: str("## Summary\n\nSelf-supervised features.\n")},
 		{Op: "confirm", ID: old},
 		{Op: "retag", From: "p3", To: "work/p3"},
 	}})
-	if pv.Counts.Promote != 1 || pv.Counts.Confirm != 1 || pv.Counts.Retag != 1 || pv.Counts.TagRewrites != 1 {
+	if pv.Counts.Create != 1 || pv.Counts.Confirm != 1 || pv.Counts.Retag != 1 || pv.Counts.TagRewrites != 1 {
 		t.Fatalf("counts %+v", pv.Counts)
 	}
 	if idx := tv.Index(); !idx.Pending(idx.ByID(src)) {
 		t.Fatal("pending before apply")
 	}
-	applied := apply(t, tv, pv.Ref.ID)
+	apply(t, tv, pv.Ref.ID)
 	idx := tv.Index()
 	if idx.Pending(idx.ByID(src)) {
 		t.Fatal("the source is absorbed")
@@ -301,15 +299,12 @@ func TestAbsorbPromoteConfirmRetag(t *testing.T) {
 		}
 	}
 	topic := tv.Read("wiki/documents/Motion scoring.md")
-	for _, want := range []string{"id: " + res.State.Thread.ID, "type: topic", "kind: concept", "tags: [work/p3]", "## Origin\n\nMotion helps to score boxes.", "> [!concept]"} {
+	for _, want := range []string{"type: topic", "kind: concept", "tags: [work/p3]", "sources: [\"[[DINOv2]]\"]", "> [!concept]"} {
 		if !strings.Contains(topic, want) {
-			t.Errorf("promoted topic lacks %q:\n%s", want, topic)
+			t.Errorf("created topic lacks %q:\n%s", want, topic)
 		}
 	}
-	if tv.V.Exists("wiki/documents/Motion idea.md") || len(applied.Events) != 1 || !strings.Contains(tv.Read(applied.Events[0].Path), "through [[2026-09-27 Ingest DINOv2]]") {
-		t.Fatalf("promoted event %+v", applied.Events)
-	}
-	if got := tv.Read("wiki/documents/Old idea.md"); !strings.Contains(got, "tags: [work/p3/edge]") || !strings.Contains(got, "refreshed: 2026-09-27T14:35:00") || !strings.Contains(got, "\nx\n") {
+	if got := tv.Read("wiki/documents/Old idea.md"); !strings.Contains(got, "tags: [work/p3/edge]") || !strings.Contains(got, "refreshed: 2026-09-27T14:34:00") || !strings.Contains(got, "\nx\n") {
 		t.Fatalf("confirmed and retagged:\n%s", got)
 	}
 	if got := tv.Read("My note.md"); got != "- [ ] check #work/p3/edge later\n" {

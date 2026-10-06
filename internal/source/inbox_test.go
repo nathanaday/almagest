@@ -9,7 +9,6 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/thread"
 )
 
 // outsideFile makes a folder beside the vault, in the test's temporary folder, holding
@@ -40,9 +39,6 @@ func TestTheInboxTakesOnlyAFileKeptInIt(t *testing.T) {
 		if _, err := source.Capture(tv.V, source.Request{Inbox: []string{name}}, at); err == nil || !strings.Contains(err.Error(), "copy the file there") {
 			t.Errorf("capture %s: %v", name, err)
 		}
-		if _, err := thread.Stub(tv.V, thread.StubIn{Text: "Read the secret.", Inbox: name}, at); err == nil || !strings.Contains(err.Error(), "copy the file there") {
-			t.Errorf("stub %s: %v", name, err)
-		}
 	}
 	if data, err := os.ReadFile(file); err != nil || string(data) != "secret\n" {
 		t.Fatalf("the outside file changed: %q %v", data, err)
@@ -51,11 +47,11 @@ func TestTheInboxTakesOnlyAFileKeptInIt(t *testing.T) {
 		t.Fatalf("a refused capture wrote %v", entries)
 	}
 	tv.Write("inbox/kept.txt", "kept\n")
-	if _, err := thread.Stub(tv.V, thread.StubIn{Text: "Read the kept file.", Inbox: "kept.txt"}, at); err != nil {
+	if _, err := source.Capture(tv.V, source.Request{Inbox: []string{"kept.txt"}}, at); err != nil {
 		t.Fatalf("a file kept in inbox/: %v", err)
 	}
 	if tv.V.Exists("inbox/kept.txt") {
-		t.Fatal("the stub left its inbox file")
+		t.Fatal("the capture left its inbox file")
 	}
 }
 

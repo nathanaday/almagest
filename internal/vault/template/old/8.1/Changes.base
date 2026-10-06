@@ -15,6 +15,7 @@ views:
       - file.name
       - counts
       - absorbs
+      - work
       - session
       - proposed
     sort:
@@ -29,10 +30,24 @@ views:
       - file.name
       - counts
       - absorbs
+      - work
       - applied
     sort:
       - property: applied
         direction: DESC
+  - type: table
+    name: By work
+    filters:
+      and:
+        - 'work && work != ""'
+    groupBy:
+      property: work
+      direction: ASC
+    order:
+      - file.name
+      - status
+      - counts
+      - applied
   - type: table
     name: By session
     filters:
