@@ -1,5 +1,9 @@
 # Almagest
 
+![Ptolemy's geometric model](https://upload.wikimedia.org/wikipedia/commons/7/7b/Bartolomeu_Velho_1568.jpg)
+
+*Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
+
 **Build a wiki with your coding agent, then actually read it, learn from it, and use it.**
 
 Almagest turns an Obsidian vault into a knowledge base that Claude Code or Codex builds
