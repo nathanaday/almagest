@@ -153,7 +153,8 @@ almagest vault migrate --dry-run --vault ~/notes/work   # lists what moves; writ
 almagest vault migrate --vault ~/notes/work
 ```
 
-In a session, type `! almagest vault migrate`. An agent cannot run it. The migration
+In a session, type `! almagest vault migrate`; in Obsidian, press **Migrate the vault** in
+the Almagest palette. An agent cannot run it. The migration
 commits your hand edits first, then moves every file of the three folders into `tool/`
 in one commit, and points the links, Bases, bookmarks, and Obsidian settings that name a
 moved path at its new place. It leaves prose, code, the captured originals, and the
@@ -421,6 +422,13 @@ The vault works without the plugin. With it, Obsidian adds:
 - **The repository panel** in each repository document: the branch, the head, and the
   uncommitted files of the linked repository.
 - Colors and icons for the callouts of Almagest documents.
+- **Folder colors** in the file explorer: what you read (`wiki-view/`) in cyan, what you
+  write and add (`journals/`, `ingest/`) in purple, and what Almagest keeps for itself
+  (`tool/`) dimmed. The setting "Color Almagest's folders" turns them off.
+- **Migrate an 11.0 vault.** In a vault that keeps `sessions/`, `source-core/`, and
+  `trash/` at its root, a notice and the palette offer the migration: the palette shows
+  how many files move and change, and **Migrate the vault** runs `almagest vault migrate`,
+  which moves them into `tool/` in one commit. See [Update](#update).
 - A sync of the views a few seconds after you edit a note.
 
 ## Settings

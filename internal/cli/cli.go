@@ -22,7 +22,7 @@ var Version = "dev"
 // Protocol is the version of what the Obsidian plugin reads: the commands it runs, their
 // flags, and their JSON. It goes up when one of them changes in a way an older plugin
 // would misread, and the plugin names the update that each side needs.
-const Protocol = 1
+const Protocol = 2
 
 // CLI is one run of the command.
 type CLI struct {
