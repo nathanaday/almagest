@@ -2,7 +2,9 @@
 
 <img src="docs/Bartolomeu_Velho_1568.jpg" alt="Geocentric model of the universe" width="480">
 
-*Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
+> *Ptolemy proposed a geometric model of the universe in his 2nd century work **Almagest***
+
+> *Art by Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
 
 **Build a wiki with your coding agent, then actually read it, learn from it, and use it.**
 
