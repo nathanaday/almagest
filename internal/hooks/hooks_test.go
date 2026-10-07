@@ -119,6 +119,8 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a view", edit(root+"/wiki-view/View · Home.md", "x"), true},
 		{"the trash", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/trash/2026-10-06/x.md"}}, true},
 		{"a checkout copy", edit(root+"/checkout/2026-10-06 RL/Q-learning (checkout).md", "x"), true},
+		{"a wikified copy", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/scratchpad/Notes · wikified.md"}}, true},
+		{"a scratchpad note", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/scratchpad/Notes.md"}}, false},
 		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
 		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},

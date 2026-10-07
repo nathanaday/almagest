@@ -92,7 +92,7 @@ PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder
 ## Obsidian end-to-end tests
 
 Date: 2026-10-06. Obsidian 1.14.4 (the app update, over the 1.8.7 installer), macOS
-(Darwin 25.6.0), Go 1.24.2, Node 22.14.0. Atlas 10.3.0: the working tree over `a6bfdbf`.
+(Darwin 25.6.0), Go 1.24.2, Node 22.14.0. Atlas 10.4.0: the working tree over `5f384dc`.
 
 `cd obsidian && npm run test:obsidian` builds the plugin, builds `atlas-obsidian` from
 this checkout into a temporary folder, and runs `test/obsidian/plugin.test.ts`. Each test
@@ -101,11 +101,11 @@ harness copies `obsidian/dist` over the plugin that `vault init` installs, and s
 `binaryPath` to the built binary. Then it starts a separate Obsidian with a temporary
 profile (`--user-data-dir`) and drives it with Playwright over the DevTools protocol. The
 user's Obsidian, `~/.atlas`, and vaults stay as they are. `npm test` does not need
-Obsidian. The suite takes about 60 seconds. It passed three runs in a row.
+Obsidian. The suite takes about 90 seconds. It passed three runs in a row.
 
 | Test | What it proves |
 | ---- | -------------- |
-| Loads in a 10.0 vault | The plugin loads with version 10.3.0 and no console error. A manual sync runs the binary and shows its notice. With every folder open, no element in the file explorer has an `atlas-` class or a `data-atlas` attribute, and no rule of the plugin's `styles.css` matches an element there. |
+| Loads in a 10.0 vault | The plugin loads with version 10.4.0 and no console error. A manual sync runs the binary and shows its notice. With every folder open, no element in the file explorer has an `atlas-` class or a `data-atlas` attribute, and no rule of the plugin's `styles.css` matches an element there. |
 | Reads the layout at Obsidian's start, 10.0 | Obsidian quits and starts again with its metadata index deleted, so the plugin loads at start, as it does for a user. It shows no notice and logs no error. |
 | Reads the layout at Obsidian's start, 9.0 | The same start in a vault whose `Atlas.md` says `layout: 5`. The plugin shows one notice, which names the 9.0 layout. |
 | Approves a change | `change propose` from the CLI writes a change document. In live preview, the widget shows Approve and Cancel. A click on Approve writes the topic file, sets `status: applied`, and commits `change: Add Alpha`. The widget then shows "Applied <time>." with no buttons. |
@@ -122,6 +122,10 @@ Obsidian. The suite takes about 60 seconds. It passed three runs in a row.
 | Publish needs a note | A volume with no note shows "0 notes" and a Publish that is off with "The volume holds no note.". The command "Publish this journal volume" is not available in a note outside `journals/`. |
 | Checkout and Return | Three topics (Alpha links Beta and Gamma), and `checkout make` from the CLI with Beta and Alpha. The Checkouts section shows the request, "2 documents", "<date> · 0 edited", and a Return that is off with "No copy is edited."; the Checkouts row says "0 to return". The request opens `Reading list.md`. In reading view, the reading list and a copy open with the `[!atlas]` callout and the plugin's icon. An edit of the Alpha copy through `app.vault.modify` turns Return on after the palette reads the status again: "1 edited", "1 to return". Return proposes one change, "<date> Return <folder>", opens it, and shows no notice of left-out copies. The checkout then shows "returned <date>", Return is off with "Returned <date>.", the row says "0 to return", and the reading list has `returned`. Approve in the change's widget applies it: Alpha holds the added line, its links name `[[Beta]]` and `[[Gamma]]` with no copy, and the commit is `change: Return <folder>`. |
 | Checkout without Duet | With no checkout, the Checkouts section says "No checkout yet". Checkout opens the modal "Check out material", whose Check out button is off while the request is empty or only spaces. Enter in the request field closes the modal and starts the agent in the terminal stand-in with `/atlas-obsidian:wiki-checkout Check out the material on: reinforcement learning`. The notice says that Duet runs the agents in Obsidian. |
+| Wikify: bubbles, Accept, Ignore | Two topics from the CLI, then `wikify start notes/Lecture.md` and `wikify mark` with a marks file: two link marks and two new marks. A note that is no wikified copy (`scratchpad/Plain.md`) shows a mark's text as text. In live preview the copy shows four bubbles, each with its phrase, the pill (`→ Title` or `+ Title`), and Accept and Ignore, or Create and Ignore; a mark in a code span stays text, and a bubble is no taller than the line. The cursor inside a mark shows the mark's text, and the bubble comes back when the cursor leaves. Accept writes `[[Learning Rate Schedule\|learning rate]]` through the editor, and undo takes it back. Ignore writes the phrase. In reading view the two marks left show as bubbles, the code span stays text, Accept writes `[[Gradient Descent]]` (the phrase is the title in another case) through the vault, and Ignore writes the phrase. The original note stays as it was. |
+| Wikify: accept every link mark | The command "Accept every link mark in this note" is not available in the original note. In the copy, in live preview, it accepts both link marks in one editor transaction, leaves the new marks and the code span, and says "accepted 2 link marks"; one undo takes both back. In reading view it writes the file; a second run says the note holds no link mark. |
+| Wikify: Create and Link | The terminal stand-in of Ingest without Duet. Create on the new mark "Momentum" starts the work document "<date> Draft Momentum" of kind `draft` and sends the wiki-edit draft message, which names `[[Lecture · wikified]]` and the work document. The bubble shows "drafting" and only Ignore, while the other new mark still offers Create. It still shows "drafting" after `change propose --id` into the work document. After `change apply`, the bubble offers Link and Ignore, and Link writes `[[Momentum]]`. |
+| Wikify this note | The terminal stand-in. With `Atlas.md` open, the palette's "Wikify this note" is off with "Wikify takes a note of yours, not Atlas.md.". With `notes/Lecture.md` open, it copies the note to `scratchpad/Lecture · wikified.md` (the original stays), opens the copy, and sends `/atlas-obsidian:wiki-wikify Wikify [[Lecture · wikified]]: mark what the wiki knows and the subjects worth a topic, with wikify mark.`. |
 
 Found with these tests (harness only, not Atlas): Obsidian ignores SIGTERM for about one
 second after it starts, so the harness kills Obsidian when it deletes the profile. It uses
@@ -130,6 +134,10 @@ plugin started can still write in the vault after Obsidian stops, so the harness
 the delete of the test folder. The same sync may commit a snapshot after a trash commit,
 so the safe delete test reads the commit of the moved path, not the last commit. A large vault (6,000 notes still
 in the index queue at load) still gave the right layout notice.
+
+Seen by hand in a scripted Obsidian, not tested: a mark that `wikify mark` places in a
+table cell breaks the table, since the mark's `|` splits the cell. A mark in a callout
+shows its bubble in both views.
 
 ## How to test a setup
 

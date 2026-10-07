@@ -49,6 +49,7 @@ Tools: `vault`, `search`, `context`. References:
 | to fix, rewrite, merge, or retag knowledge, or rename a tag | [wiki-edit](../wiki-edit/SKILL.md) |
 | to organize the knowledge under a tag | [wiki-map](../wiki-map/SKILL.md) |
 | a reading stack: check out the material on a subject, or return a checkout | [wiki-checkout](../wiki-checkout/SKILL.md) |
+| to wikify a note: mark what the wiki knows in it, and the subjects worth a topic | [wiki-wikify](../wiki-wikify/SKILL.md) |
 | a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) |
 
 A question can turn into work. When the user then asks for a change to a repository, do
@@ -56,8 +57,9 @@ the work.
 
 ## Messages from the palette
 
-The Atlas palette in Obsidian starts an agent with one of five messages. Each one names
-its skill, and three name a work document:
+The Atlas palette in Obsidian starts an agent with one of seven messages. Each one names
+its skill, and four name a work document. A work document's kind is `ingest`, `repair`,
+or `draft`:
 
 | The message | Skill |
 |---|---|
@@ -66,6 +68,8 @@ its skill, and three name a work document:
 | `/atlas-obsidian:wiki-sync Absorb the source [[<edition>]] (<id>), the user's journal edition. … Your work document is [[…]] (<id>) …` | [wiki-sync](../wiki-sync/SKILL.md), its journal edition rules |
 | `/atlas-obsidian:wiki-edit Remove [[<title>]] …: point each backlink elsewhere …` | [wiki-edit](../wiki-edit/SKILL.md), its Safe delete path |
 | `/atlas-obsidian:wiki-checkout Check out the material on: <request>` | [wiki-checkout](../wiki-checkout/SKILL.md) |
+| `/atlas-obsidian:wiki-wikify Wikify [[<copy title>]]: mark what the wiki knows …` | [wiki-wikify](../wiki-wikify/SKILL.md) |
+| `/atlas-obsidian:wiki-edit Draft a topic titled <Title> from [[<note>]] … Your work document is [[…]] (<id>) …` with a draft work document | [wiki-edit](../wiki-edit/SKILL.md), its Draft path |
 
 The user decides in the document (Approve or Cancel), so these tasks do not stop for a
 yes before they propose. Ask the user only for a real edge case that the skill names.
@@ -136,6 +140,8 @@ changes to publish.
 - `checkout/` is the user's: the copies the librarian checked out, their reading lists,
   and the ledger. Code writes it; the user reads and edits the copies. Never edit a file
   there; the guard refuses every agent edit under `checkout/`.
+- A wikified copy (`scratchpad/<name> · wikified.md`) is the user's scratch. Only
+  `wikify mark` writes into it; never edit it with Edit or Write.
 - `trash/` holds what the user deleted. Never read or edit it, and never run
   `atlas-obsidian vault trash`: safe delete is the user's action. The guard refuses
   every agent edit under `trash/`.

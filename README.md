@@ -224,7 +224,8 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
 - `Atlas.md`, the vault's own document.
 - `ingest/`: files for the wiki to learn from.
 - `source-core/originals/`: the captured originals and your attachments.
-- `scratchpad/`: your notes, and the ideas you ask an agent to note for later.
+- `scratchpad/`: your notes, the ideas you ask an agent to note for later, and the
+  wikified copies of your notes (see [Wikify a note](#wikify-a-note-experimental)).
 - `journals/`: your own writing, one volume per folder. No agent edits it. See
   [Journals](#journals).
 - `journals/<volume>/Publication history.md`: the editions of a volume, which code
@@ -282,13 +283,16 @@ request.
   documents, the files in `ingest/`, the sources that wait for the wiki, and the
   checkouts with edits to return.
 - The Atlas palette in Obsidian starts an ingest, a wiki lint, a safe delete, a
-  checkout, or the publish of a journal with one button. See [The Obsidian plugin](#the-obsidian-plugin).
+  checkout, the publish of a journal, or a wikify of the open note with one button. See [The Obsidian plugin](#the-obsidian-plugin).
 - "Publish my journal." The agent asks you to press Publish in the palette: only you
   publish a journal. See [Journals](#journals).
 - "What do we know about my cs513 self-driving project?" The agent searches the
   documents that hold both tags.
 - "Check out the material on reinforcement learning." The agent chooses the documents
   that serve the request and copies them into `checkout/`, with a reading list. See [Checkouts](#checkouts).
+- "Wikify this note." (experimental) The agent marks a copy of the note with what the
+  wiki knows and the subjects worth a topic. You accept or ignore each mark. See
+  [Wikify a note](#wikify-a-note-experimental).
 
 A **work document** is a change document that starts before the agent knows its writes.
 Its status is `running`. The agent adds one line under `## Progress` for each step
@@ -311,6 +315,8 @@ atlas-obsidian checkout                   # the checkouts, newest first
 atlas-obsidian checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
 atlas-obsidian checkout make order.json   # copy the documents an order names (request, name, documents, notes)
 atlas-obsidian checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
+atlas-obsidian wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
+atlas-obsidian wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
 atlas-obsidian lint                       # the health check
 atlas-obsidian vault snapshot             # commit your hand edits now
 ```
@@ -385,6 +391,38 @@ reading order, and checks out a copy of each for you to read and mark up.
   whose original changed since the checkout, and names it; its edits stay in the copy.
   Return carries a copy's text, not its frontmatter.
 
+### Wikify a note (experimental)
+
+Wikify shows what the wiki knows in a note of yours, and which of its subjects the wiki
+lacks. It works on a copy, and nothing enters the wiki until you create a topic through
+a change.
+
+- **The copy.** Press Wikify this note in the palette, or ask an agent to wikify a
+  note. `wikify start` copies the note to `scratchpad/<name> · wikified.md` (with
+  " (2)" when that name is taken). The original stays as it is. The copy lies in
+  `scratchpad/`, so a copy of a journal note never joins the volume's edition. Wikify
+  refuses a file that is not markdown, `Atlas.md`, and the folders that code writes:
+  `source-core/`, `changes/`, `sessions/`, `wiki-view/`, `trash/`, and `.obsidian/`.
+- **The marks.** The agent (the `wiki-wikify` skill) matches the note's subjects
+  against the wiki, then calls `wikify mark` once. A mark is inline text:
+  `{{link:<Title>|<phrase>}}` where the phrase names a document of the wiki, and
+  `{{new:<Title>|<phrase>}}` where it names a subject worth a topic. Each mark replaces
+  the first mention of its phrase, as whole words and in any case, outside the
+  frontmatter, headings, code, links, URLs, and other marks. The agent marks a few new
+  subjects at most, and never marks a phrase inside a quote of another person's words.
+  Atlas commits nothing; the next quiet snapshot keeps the copy.
+- **The bubbles.** The plugin shows each mark as a bubble: the phrase, then `→ Title`
+  for a link or `+ Title` for a new subject, and buttons. It does this in live preview
+  and in reading view.
+  - **Accept** (a link) turns the mark into `[[Title|phrase]]`, or `[[Title]]` when the
+    phrase is the title.
+  - **Ignore** turns the mark back into its phrase.
+  - **Create** (a new subject) starts a draft work document and an agent that drafts
+    the topic and proposes it into that document. You approve it as any change.
+  - **Link** appears on a new subject once its topic exists, and turns the mark into a
+    link.
+  - The command "Accept every link mark in this note" accepts every link at once.
+
 ### The Obsidian plugin
 
 The vault works without the plugin. With it, Obsidian adds:
@@ -410,10 +448,14 @@ The vault works without the plugin. With it, Obsidian adds:
   - **Return** next to a checkout runs `atlas-obsidian checkout return` and opens the
     change. It is on when a copy is edited and the checkout is not returned. See
     [Checkouts](#checkouts).
+  - **Wikify this note** (experimental) copies the open note to `scratchpad/`, opens
+    the copy, and starts an agent that marks it. See
+    [Wikify a note](#wikify-a-note-experimental).
 
   The palette starts an agent through the Duet plugin. Without Duet, it starts your
   agent in a terminal (see [Agent preferences](#agent-preferences)) with the same
   message.
+- **Wikify bubbles** in a wikified copy: Accept, Ignore, Create, and Link on each mark.
 - **Approve and Cancel** in each change document. Approve applies the change, as
   `atlas-obsidian change apply` does in a terminal. Cancel asks for an optional reason
   and rejects the change. After the decision, the document shows the result. A running
@@ -447,10 +489,10 @@ its core rules:
 ## Layout
 
 - The binary: `cmd/atlas-obsidian/` and `internal/`, one package per part.
-  `internal/mcpserver` serves the eight tools: `vault`, `search`, `context`, `match`,
-  `source`, `change`, `checkout`, and `lint`. `internal/hooks` serves the nine hooks,
+  `internal/mcpserver` serves the nine tools: `vault`, `search`, `context`, `match`,
+  `source`, `change`, `checkout`, `wikify`, and `lint`. `internal/hooks` serves the nine hooks,
   and `internal/cli` every command.
-- The agent plugin: `skills/` (thirteen skills), `agents/` (three read-only agents),
+- The agent plugin: `skills/` (fourteen skills), `agents/` (three read-only agents),
   `hooks/hooks.json`, `.mcp.json`,
   `.claude-plugin/`, `.codex-plugin/`, and `scripts/atlas-obsidian`, the wrapper that finds
   the binary for the hooks and the MCP server. `.agents/plugins/marketplace.json` is a second

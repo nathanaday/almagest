@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian10 = require("obsidian");
+var import_obsidian11 = require("obsidian");
 
 // src/change.ts
 var import_obsidian = require("obsidian");
@@ -1283,6 +1283,12 @@ function resolveMessage(target, backlinks) {
   if (more > 0) names.push(`${more} more`);
   return `/atlas-obsidian:wiki-edit Remove [[${target.title}]] (${target.path}), which ${names.join(", ")} ${backlinks.length === 1 ? "links" : "link"}: point each backlink elsewhere, or drop it, then propose a remove.`;
 }
+function draftMessage(title, note, doc) {
+  return `/atlas-obsidian:wiki-edit Draft a topic titled ${title} from [[${note}]] and what the wiki holds; give it a why. ${report(doc, "into it")}`;
+}
+function wikifyMessage(copy) {
+  return `/atlas-obsidian:wiki-wikify Wikify [[${copy}]]: mark what the wiki knows and the subjects worth a topic, with wikify mark.`;
+}
 
 // src/checkout.ts
 function startCheckout(plugin, request) {
@@ -1341,6 +1347,107 @@ var CheckoutModal = class extends import_obsidian5.Modal {
     this.contentEl.empty();
   }
 };
+
+// src/marks.ts
+var MARK = /\{\{(link|new):([^{}|\r\n]+)\|([^{}|\r\n]+)\}\}/g;
+var FENCE = /^ {0,3}(`{3,}|~{3,})/;
+var INLINE_CODE = /`+[^`\n]*`+/g;
+var COMMENT = /%%[\s\S]*?%%|<!--[\s\S]*?-->/g;
+var FRONTMATTER = /^---\r?\n(?:[\s\S]*?\r?\n)?---[ \t]*(?:\r?\n|$)/;
+function mask(text) {
+  const lines = text.split(/(?<=\n)/);
+  let fence = "";
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+    const bare = line.replace(/\r?\n$/, "");
+    const open = FENCE.exec(bare);
+    if (open) {
+      const trimmed = bare.trim();
+      if (fence === "") {
+        fence = open[1];
+        lines[i] = blank(line);
+        continue;
+      }
+      if (trimmed.startsWith(fence[0]) && trimmed.length >= fence.length && [...trimmed].every((c) => c === fence[0])) {
+        fence = "";
+        lines[i] = blank(line);
+        continue;
+      }
+    }
+    lines[i] = fence !== "" ? blank(line) : line.replace(INLINE_CODE, blank);
+  }
+  const out = lines.join("").replace(COMMENT, blank);
+  const front = FRONTMATTER.exec(out);
+  return front ? blank(front[0]) + out.slice(front[0].length) : out;
+}
+function blank(s) {
+  return s.replace(/[^\r\n]/g, " ");
+}
+function findMarks(text) {
+  const masked = mask(text);
+  const out = [];
+  for (const m of masked.matchAll(MARK)) {
+    const from = m.index;
+    out.push({ from, to: from + m[0].length, kind: m[1], title: m[2], phrase: m[3], text: m[0] });
+  }
+  return out;
+}
+function linkFor(m) {
+  return m.title === m.phrase ? `[[${m.title}]]` : `[[${m.title}|${m.phrase}]]`;
+}
+function replacement(m, decision2) {
+  return decision2 === "ignore" ? m.phrase : linkFor(m);
+}
+function locate(text, markText, nth = 0, lines) {
+  let marks = findMarks(text).filter((m) => m.text === markText);
+  if (lines) {
+    const lineOf = lineCounter(text);
+    marks = marks.filter((m) => {
+      const line = lineOf(m.from);
+      return line >= lines.start && line <= lines.end;
+    });
+  }
+  return marks[nth] ?? null;
+}
+function lineCounter(text) {
+  const starts = [0];
+  for (let i = text.indexOf("\n"); i >= 0; i = text.indexOf("\n", i + 1)) starts.push(i + 1);
+  return (offset) => {
+    let lo = 0;
+    let hi = starts.length - 1;
+    while (lo < hi) {
+      const mid = lo + hi + 1 >> 1;
+      if (starts[mid] <= offset) lo = mid;
+      else hi = mid - 1;
+    }
+    return lo;
+  };
+}
+function decide(text, m, decision2) {
+  return text.slice(0, m.from) + replacement(m, decision2) + text.slice(m.to);
+}
+function acceptAll(text) {
+  const marks = findMarks(text).filter((m) => m.kind === "link");
+  let out = text;
+  for (const m of [...marks].reverse()) out = decide(out, m, "accept");
+  return { text: out, count: marks.length };
+}
+function isWikified(path) {
+  const name = path.slice(path.lastIndexOf("/") + 1);
+  return /\.md$/i.test(name) && / · wikified(?: \(\d+\))?$/.test(name.slice(0, -3));
+}
+var NOT_YOURS = ["source-core", "changes", "sessions", "wiki-view", "trash", ".obsidian"];
+function wikifyBlocked(path) {
+  if (!/\.md$/i.test(path)) return "Wikify takes a markdown note.";
+  if (path === "Atlas.md") return "Wikify takes a note of yours, not Atlas.md.";
+  const top = path.split("/")[0];
+  if (path.includes("/") && NOT_YOURS.includes(top)) return `Wikify takes a note of yours, not one in ${top}/.`;
+  return "";
+}
+function draftTitle(changeTitle) {
+  const m = /^\d{4}-\d{2}-\d{2} Draft (.+?)(?: \(\d+\))?$/.exec(changeTitle);
+  return m ? m[1] : null;
+}
 
 // src/palettestate.ts
 function paletteState(status2, liveSessions) {
@@ -1710,6 +1817,8 @@ var PaletteView = class extends import_obsidian7.ItemView {
     this.action(el, "lint", "Wiki lint", "", () => this.runLint());
     if (this.lint) this.renderLint(el, this.lint);
     const file = this.app.workspace.getActiveFile();
+    const unwikified = file ? wikifyBlocked(file.path) : "Open a note first.";
+    this.action(el, "wikify", "Wikify this note", unwikified, () => this.plugin.wikify.wikify(file), file?.path ?? "");
     this.action(el, "trash", "Safe delete this file", file ? "" : "Open a file first.", () => this.safeDelete(), file?.path ?? "");
   }
   /** A button of an action. why disables it; a running action disables every one. */
@@ -1967,8 +2076,338 @@ var AtlasSettingTab = class extends import_obsidian8.PluginSettingTab {
   }
 };
 
-// src/tagnav.ts
+// src/wikify.ts
+var import_state = require("@codemirror/state");
+var import_view = require("@codemirror/view");
 var import_obsidian9 = require("obsidian");
+var DRAFTING = ["running", "proposed", "applying"];
+var CHANGED = "Atlas: this mark changed since it showed. Nothing was replaced.";
+var REFRESH_MS2 = 300;
+var Wikify = class {
+  constructor(plugin) {
+    this.plugin = plugin;
+  }
+  plugin;
+  listeners = /* @__PURE__ */ new Set();
+  /** The titles whose Create runs now. */
+  creating = /* @__PURE__ */ new Set();
+  /** The draft work documents this session started, by topic title, until the cache reads them. */
+  started = /* @__PURE__ */ new Map();
+  /** The draft work documents that run or wait for the user, by topic title; built when a bubble asks. */
+  drafts = null;
+  soon = (0, import_obsidian9.debounce)(() => this.refresh(), REFRESH_MS2, true);
+  /** Draws the bubbles again when a note that a title could resolve to, or a draft, changes. */
+  register() {
+    const { plugin } = this;
+    const { vault, metadataCache } = plugin.app;
+    plugin.registerEvent(metadataCache.on("changed", () => this.soon()));
+    plugin.registerEvent(vault.on("create", () => this.soon()));
+    plugin.registerEvent(vault.on("delete", () => this.soon()));
+    plugin.registerEvent(vault.on("rename", () => this.soon()));
+    plugin.register(() => this.soon.cancel());
+  }
+  /** Calls fn when a bubble may offer something else; returns the call that stops it. */
+  listen(fn) {
+    this.listeners.add(fn);
+    return () => this.listeners.delete(fn);
+  }
+  refresh() {
+    this.drafts = null;
+    for (const fn of this.listeners) fn();
+  }
+  state(mark, sourcePath) {
+    if (mark.kind === "link") return { kind: "link" };
+    if (this.plugin.app.metadataCache.getFirstLinkpathDest(mark.title, sourcePath)) return { kind: "ready" };
+    const path = this.draftOf(mark.title);
+    if (path !== null) return { kind: "drafting", path };
+    return { kind: "new" };
+  }
+  /** The draft work document of a title that runs or waits, "" while Create starts it, or null. */
+  draftOf(title) {
+    if (this.creating.has(title)) return "";
+    const { metadataCache, vault } = this.plugin.app;
+    if (!this.drafts) {
+      this.drafts = /* @__PURE__ */ new Map();
+      for (const file of vault.getMarkdownFiles()) {
+        if (!file.path.startsWith("changes/")) continue;
+        const fm = metadataCache.getFileCache(file)?.frontmatter;
+        const t = draftTitle(file.basename);
+        if (t && fm?.kind === "draft" && DRAFTING.includes(fm.status)) this.drafts.set(t, file.path);
+      }
+    }
+    const found = this.drafts.get(title);
+    if (found) return found;
+    const path = this.started.get(title);
+    if (path) {
+      const file = vault.getFileByPath(path);
+      if (!file || !metadataCache.getFileCache(file)?.frontmatter) return path;
+      this.started.delete(title);
+    }
+    return null;
+  }
+  /** Create: a draft work document, then the agent that drafts the topic into it. */
+  async create(title, sourcePath) {
+    if (this.creating.has(title)) return;
+    this.creating.add(title);
+    this.refresh();
+    try {
+      await saveOpen(this.plugin.app, sourcePath);
+      const { ref } = await this.plugin.atlas(["change", "start", "--kind", "draft", "--title", `Draft ${title}`]);
+      this.started.set(title, ref.path);
+      await this.plugin.runAgent(draftMessage(title, noteTitle(sourcePath), ref), `Agent \xB7 ${ref.title}`, "draft");
+    } catch (e) {
+      new import_obsidian9.Notice(`Atlas: ${e.message}`, 1e4);
+    } finally {
+      this.creating.delete(title);
+      this.refresh();
+    }
+  }
+  openDraft(path) {
+    if (path) void this.plugin.openWhenSeen(path, true);
+  }
+  /** Accept on every link mark of a wikified note: through the editor when it shows the note, else on disk. */
+  async acceptAll(file) {
+    const { workspace, vault } = this.plugin.app;
+    let count = 0;
+    const view = workspace.getActiveViewOfType(import_obsidian9.MarkdownView);
+    if (view?.file?.path === file.path && view.getMode() === "source") {
+      const editor = view.editor;
+      const marks = findMarks(editor.getValue()).filter((m) => m.kind === "link");
+      count = marks.length;
+      if (count > 0) editor.transaction({ changes: marks.map((m) => ({ from: editor.offsetToPos(m.from), to: editor.offsetToPos(m.to), text: linkFor(m) })) });
+    } else {
+      await vault.process(file, (text) => {
+        const out = acceptAll(text);
+        count = out.count;
+        return out.text;
+      });
+    }
+    new import_obsidian9.Notice(count > 0 ? `Atlas: accepted ${count === 1 ? "1 link mark" : `${count} link marks`}.` : "Atlas: this note holds no link mark.");
+  }
+  /**
+   * Wikify this note: the binary copies the note into the scratchpad, the copy opens, and
+   * an agent marks it.
+   */
+  async wikify(file) {
+    const why = wikifyBlocked(file.path);
+    if (why) throw new Error(why);
+    await saveOpen(this.plugin.app, file.path);
+    const arg = file.path.startsWith("-") ? `./${file.path}` : file.path;
+    const { copy } = await this.plugin.atlas(["wikify", "start", arg]);
+    await this.plugin.openWhenSeen(copy, true);
+    const title = noteTitle(copy);
+    await this.plugin.runAgent(wikifyMessage(title), `Agent \xB7 ${title}`, "wikify");
+  }
+};
+function drawBubble(el, w, mark, state, decide2, sourcePath) {
+  el.empty();
+  el.className = `atlas-mark atlas-mark-${mark.kind}`;
+  el.dataset.state = state.kind;
+  el.dataset.title = mark.title;
+  el.createSpan({ cls: "atlas-mark-phrase", text: mark.phrase });
+  el.createSpan({ cls: "atlas-mark-pill", text: `${mark.kind === "link" ? "\u2192" : "+"} ${mark.title}` });
+  const button = (text, run, cta = false) => {
+    const b = el.createEl("button", { cls: cta ? "atlas-mark-button mod-cta" : "atlas-mark-button", text });
+    b.dataset.action = text.toLowerCase();
+    b.addEventListener("mousedown", (e) => e.preventDefault());
+    b.addEventListener("click", (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      run();
+    });
+  };
+  switch (state.kind) {
+    case "link":
+      button("Accept", () => decide2("accept"), true);
+      break;
+    case "new":
+      button("Create", () => void w.create(mark.title, sourcePath), true);
+      break;
+    case "drafting": {
+      const label = el.createSpan({ cls: "atlas-mark-drafting", text: "drafting" });
+      if (state.path) {
+        label.setAttr("title", state.path);
+        label.addEventListener("mousedown", (e) => e.preventDefault());
+        label.addEventListener("click", (e) => {
+          e.stopPropagation();
+          w.openDraft(state.path);
+        });
+      }
+      break;
+    }
+    case "ready":
+      button("Link", () => decide2("link"), true);
+      break;
+  }
+  button("Ignore", () => decide2("ignore"));
+}
+var sameState = (a, b) => a.kind === b.kind && (a.kind !== "drafting" || a.path === b.path);
+var refreshMarks = import_state.StateEffect.define();
+var MarkWidget = class extends import_view.WidgetType {
+  constructor(mark, state, w, sourcePath) {
+    super();
+    this.mark = mark;
+    this.state = state;
+    this.w = w;
+    this.sourcePath = sourcePath;
+  }
+  mark;
+  state;
+  w;
+  sourcePath;
+  eq(other) {
+    return other.mark.text === this.mark.text && sameState(other.state, this.state) && other.sourcePath === this.sourcePath;
+  }
+  toDOM(view) {
+    const el = document.createElement("span");
+    drawBubble(el, this.w, this.mark, this.state, (d) => this.decide(view, el, d), this.sourcePath);
+    return el;
+  }
+  /** Replaces the mark the bubble stands for, found again where the bubble is now. */
+  decide(view, el, decision2) {
+    const pos = view.posAtDOM(el);
+    const m = findMarks(view.state.doc.toString()).find((x) => x.from <= pos && pos <= x.to && x.text === this.mark.text);
+    if (!m) {
+      new import_obsidian9.Notice(CHANGED);
+      return;
+    }
+    view.dispatch({ changes: { from: m.from, to: m.to, insert: replacement(m, decision2) }, userEvent: "input" });
+  }
+  /** A click on a button is the bubble's; a click on the phrase puts the cursor in the mark, which shows its text. */
+  ignoreEvent(event) {
+    const target = event.target;
+    return !!target?.closest?.(".atlas-mark-button, .atlas-mark-drafting");
+  }
+};
+function markExtension(w) {
+  return import_view.ViewPlugin.fromClass(
+    class {
+      constructor(view) {
+        this.view = view;
+        this.decorations = this.build();
+        this.stop = w.listen(() => {
+          if (!this.path()) return;
+          window.setTimeout(() => {
+            if (!this.gone) this.view.dispatch({ effects: refreshMarks.of(null) });
+          }, 0);
+        });
+      }
+      view;
+      decorations;
+      doc = null;
+      marks = [];
+      stop;
+      gone = false;
+      update(u) {
+        const toggled = u.startState.field(import_obsidian9.editorLivePreviewField, false) !== u.state.field(import_obsidian9.editorLivePreviewField, false);
+        const refreshed = u.transactions.some((t) => t.effects.some((e) => e.is(refreshMarks)));
+        if (u.docChanged || u.selectionSet || toggled || refreshed) this.decorations = this.build();
+      }
+      destroy() {
+        this.gone = true;
+        this.stop();
+      }
+      /** The wikified note this editor shows in live preview, or "". */
+      path() {
+        const state = this.view.state;
+        const path = state.field(import_obsidian9.editorInfoField, false)?.file?.path ?? "";
+        return isWikified(path) && state.field(import_obsidian9.editorLivePreviewField, false) ? path : "";
+      }
+      build() {
+        const path = this.path();
+        if (!path) return import_view.Decoration.none;
+        const state = this.view.state;
+        if (state.doc !== this.doc) {
+          this.doc = state.doc;
+          this.marks = findMarks(state.doc.toString());
+        }
+        const builder = new import_state.RangeSetBuilder();
+        const ranges = state.selection.ranges;
+        for (const m of this.marks) {
+          if (ranges.some((r) => r.from <= m.to && r.to >= m.from)) continue;
+          builder.add(m.from, m.to, import_view.Decoration.replace({ widget: new MarkWidget(m, w.state(m, path), w, path) }));
+        }
+        return builder.finish();
+      }
+    },
+    { decorations: (v) => v.decorations }
+  );
+}
+var MarkBubbles = class extends import_obsidian9.MarkdownRenderChild {
+  constructor(containerEl, w, plugin, ctx, bubbles) {
+    super(containerEl);
+    this.w = w;
+    this.plugin = plugin;
+    this.ctx = ctx;
+    this.bubbles = bubbles;
+  }
+  w;
+  plugin;
+  ctx;
+  bubbles;
+  onload() {
+    this.register(this.w.listen(() => this.draw()));
+    this.draw();
+  }
+  draw() {
+    for (const b of this.bubbles) {
+      const state = this.w.state(b.mark, this.ctx.sourcePath);
+      if (b.state && sameState(b.state, state)) continue;
+      b.state = state;
+      drawBubble(b.el, this.w, b.mark, state, (d) => void this.decide(b, d), this.ctx.sourcePath);
+    }
+  }
+  /** Replaces the mark in the file, found again by its exact text in the section. */
+  async decide(b, decision2) {
+    const file = this.plugin.app.vault.getFileByPath(this.ctx.sourcePath);
+    const info = this.ctx.getSectionInfo(this.containerEl);
+    const lines = info ? { start: info.lineStart, end: info.lineEnd } : void 0;
+    let done = false;
+    if (file) {
+      await this.plugin.app.vault.process(file, (text) => {
+        const m = locate(text, b.mark.text, lines ? b.nth : 0, lines);
+        if (!m) return text;
+        done = true;
+        return decide(text, m, decision2);
+      });
+    }
+    if (!done) new import_obsidian9.Notice(CHANGED);
+  }
+};
+function markPostProcessor(plugin, w) {
+  return (el, ctx) => {
+    if (!isWikified(ctx.sourcePath)) return;
+    const nodes = [];
+    const walker = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, {
+      acceptNode: (n) => n.parentElement?.closest("code, pre, .atlas-mark") ? NodeFilter.FILTER_REJECT : n.nodeValue?.includes("{{") ? NodeFilter.FILTER_ACCEPT : NodeFilter.FILTER_SKIP
+    });
+    for (let n = walker.nextNode(); n; n = walker.nextNode()) nodes.push(n);
+    const bubbles = [];
+    const seen = /* @__PURE__ */ new Map();
+    for (const node of nodes) {
+      const text = node.nodeValue ?? "";
+      const marks = findMarks(text);
+      if (marks.length === 0) continue;
+      const frag = document.createDocumentFragment();
+      let at = 0;
+      for (const m of marks) {
+        if (m.from > at) frag.append(text.slice(at, m.from));
+        const span = document.createElement("span");
+        frag.append(span);
+        const nth = seen.get(m.text) ?? 0;
+        seen.set(m.text, nth + 1);
+        bubbles.push({ el: span, mark: { kind: m.kind, title: m.title, phrase: m.phrase, text: m.text }, nth });
+        at = m.to;
+      }
+      if (at < text.length) frag.append(text.slice(at));
+      node.replaceWith(frag);
+    }
+    if (bubbles.length > 0) ctx.addChild(new MarkBubbles(el, w, plugin, ctx, bubbles));
+  };
+}
+
+// src/tagnav.ts
+var import_obsidian10 = require("obsidian");
 var TAG_NAV_VIEW = "atlas-tag-navigator";
 var NAV_ICON = "compass";
 var MAX_WITH = 30;
@@ -1992,9 +2431,9 @@ function tagDocs(app) {
   }
   return out;
 }
-var TagNavigator = class extends import_obsidian9.ItemView {
+var TagNavigator = class extends import_obsidian10.ItemView {
   chosen = [];
-  rerender = (0, import_obsidian9.debounce)(() => this.render(), 500, true);
+  rerender = (0, import_obsidian10.debounce)(() => this.render(), 500, true);
   constructor(leaf) {
     super(leaf);
   }
@@ -2077,7 +2516,7 @@ var TagNavigator = class extends import_obsidian9.ItemView {
         row.createSpan({ cls: "atlas-tagnav-doc-meta", text: meta });
         row.onclick = (evt) => {
           const file = this.app.vault.getAbstractFileByPath(d.path);
-          if (file instanceof import_obsidian9.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
+          if (file instanceof import_obsidian10.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
         };
       }
     }
@@ -2097,7 +2536,7 @@ var TagNavigator = class extends import_obsidian9.ItemView {
   }
   async openView(tag) {
     const file = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
-    if (file instanceof import_obsidian9.TFile) await this.app.workspace.getLeaf(false).openFile(file);
+    if (file instanceof import_obsidian10.TFile) await this.app.workspace.getLeaf(false).openFile(file);
   }
 };
 
@@ -2106,7 +2545,7 @@ var SYNC_DELAY = 2e3;
 var LEGACY_KEYS = ["agentCommand", "terminal", "terminalCommand"];
 var ECHO_WINDOW = 5e3;
 var SEE_MS = 1e4;
-var AtlasPlugin = class extends import_obsidian10.Plugin {
+var AtlasPlugin = class extends import_obsidian11.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   /** The agent settings of 8.0.2, kept in data.json until they move to the vault's config file. */
   legacy = null;
@@ -2126,11 +2565,13 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   sessionsRibbon = null;
   /** The journal volume that a publish captures now, or "". */
   publishing = "";
+  /** The bubbles of wikified notes, and Create. */
+  wikify = new Wikify(this);
   /** The agents the palette started through Duet, while their turn runs. */
   conversations = new Conversations(
     () => this.paletteViews().forEach((v) => v.render()),
     (c, turn) => {
-      if (turn.status === "failed") new import_obsidian10.Notice(`Atlas: the ${c.label} agent stopped: ${turn.error ?? "its turn failed"}.`, 1e4);
+      if (turn.status === "failed") new import_obsidian11.Notice(`Atlas: the ${c.label} agent stopped: ${turn.error ?? "its turn failed"}.`, 1e4);
     }
   );
   async onload() {
@@ -2138,6 +2579,19 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     this.addSettingTab(new AtlasSettingTab(this.app, this));
     this.registerMarkdownCodeBlockProcessor("atlas-repo", repoProcessor(this));
     this.registerMarkdownCodeBlockProcessor("atlas-change", changeProcessor(this, new ChangeRunner(this)));
+    this.registerEditorExtension(markExtension(this.wikify));
+    this.registerMarkdownPostProcessor(markPostProcessor(this, this.wikify));
+    this.wikify.register();
+    this.addCommand({
+      id: "accept-link-marks",
+      name: "Accept every link mark in this note",
+      checkCallback: (checking) => {
+        const file = this.app.workspace.getActiveFile();
+        if (!file || !isWikified(file.path)) return false;
+        if (!checking) void this.wikify.acceptAll(file);
+        return true;
+      }
+    });
     this.addRibbonIcon("refresh-cw", "Atlas: sync the vault", () => void this.sync(true));
     this.addCommand({ id: "sync", name: "Sync the vault", callback: () => void this.sync(true) });
     this.registerView(TAG_NAV_VIEW, (leaf) => new TagNavigator(leaf));
@@ -2215,7 +2669,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   /** Runs one atlas command in this vault and returns its JSON; answers are the exit codes that print an answer too. */
   atlas(args, answers = []) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian10.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian11.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args, answers);
@@ -2224,7 +2678,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   /** A manual sync runs every step; an automatic one runs the steps that read no git. */
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian10.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian11.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -2237,11 +2691,11 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
       const out = await this.atlas(args);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian10.Notice(`Atlas: ${syncSummary(out.synced)}`);
-      for (const line of strayNotices(out.synced)) new import_obsidian10.Notice(`Atlas: ${line}`, 0);
+      if (manual) new import_obsidian11.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      for (const line of strayNotices(out.synced)) new import_obsidian11.Notice(`Atlas: ${line}`, 0);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian10.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian11.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -2324,7 +2778,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   }
   checkLayout() {
     if (this.migrated()) return;
-    const notice = new import_obsidian10.Notice("", 0);
+    const notice = new import_obsidian11.Notice("", 0);
     const el = notice.messageEl;
     const layout = this.layout();
     const needs = `Atlas: this vault has the ${layoutName(layout)} layout. This plugin needs the ${layoutName(LAYOUT)} layout.`;
@@ -2345,14 +2799,14 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
       new MigrationModal(this.app, report2, this.layout(), async () => {
         try {
           const done = await this.atlas(["vault", "migrate"]);
-          new import_obsidian10.Notice(`Atlas: ${migrationSummary(done)}`, 1e4);
-          for (const line of strayNotices(done)) new import_obsidian10.Notice(`Atlas: ${line}`, 0);
+          new import_obsidian11.Notice(`Atlas: ${migrationSummary(done)}`, 1e4);
+          for (const line of strayNotices(done)) new import_obsidian11.Notice(`Atlas: ${line}`, 0);
         } catch (e) {
-          new import_obsidian10.Notice(`Atlas: ${e.message}`, 1e4);
+          new import_obsidian11.Notice(`Atlas: ${e.message}`, 1e4);
         }
       }).open();
     } catch (e) {
-      new import_obsidian10.Notice(`Atlas: ${e.message}`, 1e4);
+      new import_obsidian11.Notice(`Atlas: ${e.message}`, 1e4);
     }
   }
   // Views
@@ -2394,8 +2848,8 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
       await new Promise((resolve) => window.setTimeout(resolve, 100));
       file = this.app.vault.getFileByPath(path);
     }
-    if (!(file instanceof import_obsidian10.TFile)) {
-      new import_obsidian10.Notice(`Atlas: Obsidian does not see ${path} yet.`);
+    if (!(file instanceof import_obsidian11.TFile)) {
+      new import_obsidian11.Notice(`Atlas: Obsidian does not see ${path} yet.`);
       return;
     }
     await this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
@@ -2407,7 +2861,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian10.debounce)(
+  refreshSessions = (0, import_obsidian11.debounce)(
     () => {
       void sessionGroups(this.app, this.staleHours()).then(({ groups }) => {
         const waiting = groups.open.filter((s) => s.state === "needs you").length;
@@ -2458,21 +2912,21 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
         await openTerminal(prefs.terminal, command, prefs.terminal_command);
         return;
       } catch (e) {
-        new import_obsidian10.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
+        new import_obsidian11.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
       }
     }
     await navigator.clipboard.writeText(command);
-    new import_obsidian10.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
+    new import_obsidian11.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
   }
   /** Starts the agent in the vault, in a terminal; a prompt is its first message. */
   async startAgent(prompt = "") {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian10.FileSystemAdapter)) return;
+    if (!(adapter instanceof import_obsidian11.FileSystemAdapter)) return;
     let config;
     try {
       config = await this.agentConfig();
     } catch (e) {
-      new import_obsidian10.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
+      new import_obsidian11.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
       return;
     }
     await this.runInTerminal(startCommand(adapter.getBasePath(), config.preferences.agent_command, prompt), "the agent command", config);
@@ -2490,10 +2944,10 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
         this.conversations.follow(api, path, label);
         return;
       } catch (e) {
-        new import_obsidian10.Notice(`Atlas: Duet did not start the agent (${e.message}). Atlas starts it in a terminal.`, 1e4);
+        new import_obsidian11.Notice(`Atlas: Duet did not start the agent (${e.message}). Atlas starts it in a terminal.`, 1e4);
       }
     } else {
-      new import_obsidian10.Notice("Atlas: Duet runs the agents in Obsidian. Duet 0.3.0 or later is not on, so Atlas starts the agent in a terminal.", 1e4);
+      new import_obsidian11.Notice("Atlas: Duet runs the agents in Obsidian. Duet 0.3.0 or later is not on, so Atlas starts the agent in a terminal.", 1e4);
     }
     await this.startAgent(message);
   }
@@ -2513,7 +2967,7 @@ var AtlasPlugin = class extends import_obsidian10.Plugin {
     await workspace.revealLeaf(leaf);
   }
 };
-var MigrationModal = class extends import_obsidian10.Modal {
+var MigrationModal = class extends import_obsidian11.Modal {
   constructor(app, report2, layout, run) {
     super(app);
     this.report = report2;

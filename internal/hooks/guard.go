@@ -14,6 +14,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/wikify"
 )
 
 // deny prints the refusal a PreToolUse hook gives.
@@ -199,6 +200,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " lists the linked repositories; vault sync keeps it"
 	case under(vault.Sessions):
 		return sessionRefusal(v, in, f, rel)
+	case under(vault.Scratchpad) && strings.Contains(path.Base(rel), wikify.Suffix):
+		return rel + " is a wikified copy: its marks come from wikify mark, and the user accepts or ignores each one"
 	case under(vault.Checkout):
 		return rel + " is in checkout/, which the checkout tool writes; the user reads and edits the copies, and Return proposes their edits"
 	case under(vault.Trash):

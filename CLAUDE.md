@@ -33,6 +33,15 @@ documents that serve it, in reading order, and code copies them into
 `checkout/<date> <name>/` with a reading list and the ledger. The user reads and edits
 the copies, and Return proposes the edits as one change of the originals.
 
+10.4.0 added wikify, which is experimental (`internal/wikify`, the MCP tool `wikify`,
+the CLI command `wikify start|mark`, the skill `wiki-wikify`; the "Wikify a document"
+section of the strategy note, which the user's improvements note calls "Review Doc").
+Code copies a note of the user's into `scratchpad/`. The agent matches the copy's
+subjects against the wiki and writes marks into it with one `wikify mark` call. The
+plugin shows each mark as a bubble: Accept and Ignore for a link, Create and Ignore for
+a new subject. Create starts a work document of kind `draft`, in which wiki-edit
+proposes the topic. The copy never enters the wiki by itself.
+
 Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
 editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
 editor and both wrap `Vault.modify`. From 10.1 on, Atlas starts an agent through Duet's
@@ -199,8 +208,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   Approve saves the open note, then runs `change apply`; Cancel runs `change reject`,
   and an empty reason becomes "cancelled in Obsidian". The body stays the record.
 - **A work document is a change that starts before its writes.** `change start` (MCP
-  action `start`) writes a change with status `running`, a `kind` (`ingest` or
-  `repair`), `files` (the names in `ingest/`, each checked by `Vault.IngestFile`), and
+  action `start`) writes a change with status `running`, a `kind` (`ingest`, `repair`,
+  or `draft`), `files` (the names in `ingest/`, each checked by `Vault.IngestFile`), and
   the sections Files, Progress, Notes, Absorbed, and Writes. It commits nothing, and the
   touched hook links it to the session as it does a proposal. `change progress` adds
   `- HH:MM text` under `## Progress`, cut to 200 characters (`MaxProgress`). `propose`
@@ -317,6 +326,39 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Status names the checkouts.** `vault --json` adds `checkouts`, the entries of
   `checkout list`: per checkout `folder`, `request`, `date`, `documents`, `edited` (the
   count of edited copies), and `returned`.
+- **A wikified copy lies in `scratchpad/`, not beside its note.** `wikify.Start` writes
+  `scratchpad/<name> · wikified.md` (`wikify.Suffix`), and `<name> · wikified (2).md`
+  when that name is taken. The strategy note put the copy beside the note, but a copy
+  of a journal note there would join the volume's next edition, since an edition holds
+  every `.md` file under the volume. Start never changes the original. It refuses a
+  file that is not markdown, `Atlas.md`, and a note under `source-core/`, `changes/`,
+  `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`; a note in `journals/` passes.
+- **A mark is inline text**: `{{link:<Title>|<phrase>}}` where the phrase names a
+  document, `{{new:<Title>|<phrase>}}` where it names a subject worth a topic
+  (`wikify.Text`). The plugin parses this syntax; change it in both places.
+- **A mark lands on the first free mention.** `wikify.Place` takes the marks in the
+  order given and replaces, for each, the first occurrence of its phrase as whole words
+  and without regard to case, and keeps the note's own spelling. A mention is not free
+  in the frontmatter, a heading, a table row (a mark's | would split a cell), a code span or fence, a comment, a wikilink or markdown
+  link, a URL, or a mark (`find`), so a later phrase cannot land inside an earlier mark.
+  A phrase is one line with no `|` or braces. Place writes the note once and returns
+  `placed` and `missing`. A bad mark refuses the whole call before it writes.
+- **A new title the wiki holds becomes a link.** `resolve` gives a `link` the title of
+  the document it names (by id, title, or alias) and refuses a link that names none. A
+  `new` title passes `doc.CleanTitle` and `doc.CheckTitle`; when a document holds it,
+  the mark is a link to that document.
+- **`wikify mark` takes only a wikified copy**: a `.md` note directly in `scratchpad/`
+  whose name holds ` · wikified`. It refuses any other note, so the tool cannot write a
+  knowledge document, a journal note, or the original. The guard sees the tool (the
+  PreToolUse matcher names `wikify`), and a read-only agent may call neither action.
+  The guard refuses an agent's edit of a wikified copy (a name with ` · wikified` in
+  `scratchpad/`), so only `wikify mark` writes its marks.
+- **Wikify commits nothing.** The copy is the user's scratch: the next quiet snapshot
+  keeps it, as it keeps any hand edit, and the plugin's Accept and Ignore edit the copy
+  as the user does.
+- **A work document may be a `draft`.** `change start --kind draft` starts the document
+  that wiki-edit fills with the one topic that Create asked for; its default title is
+  "Draft a topic". The schema's change `kind` and the search's kinds list `draft`.
 - **Status shows the work and the trash.** `vault --json` adds `changes.running` (the
   running work documents) and `trash` (the count of files under `trash/`, `.DS_Store`
   aside). Home lists each running work document with what waits.

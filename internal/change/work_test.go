@@ -22,7 +22,7 @@ func TestAWorkDocumentRunsThenTakesTheProposal(t *testing.T) {
 	if _, err := change.Start(tv.V, change.StartIn{Kind: "ingest", Files: []string{"missing.pdf"}}, tv.Clock); err == nil || !strings.Contains(err.Error(), "not a file in ingest/") {
 		t.Fatalf("a file that is not in ingest/: %v", err)
 	}
-	if _, err := change.Start(tv.V, change.StartIn{Kind: "sync"}, tv.Clock); err == nil || !strings.Contains(err.Error(), "ingest or a repair") {
+	if _, err := change.Start(tv.V, change.StartIn{Kind: "sync"}, tv.Clock); err == nil || !strings.Contains(err.Error(), "a repair, or a draft") {
 		t.Fatalf("a kind that is none: %v", err)
 	}
 	pv, err := change.Start(tv.V, change.StartIn{Kind: "ingest", Files: []string{"DINOv2.pdf", "ingest/notes.md"}}, tv.Tick(time.Minute))

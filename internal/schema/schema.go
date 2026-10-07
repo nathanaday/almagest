@@ -220,7 +220,7 @@ var Types = []*Type{
 	), Sections: []string{"Description", "Progress", "Summary", "Subagents"}},
 	{Name: "change", Prefix: "chg", Family: Record, Folder: "changes", Fields: record(
 		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"running", "proposed", "applying", "applied", "rejected", "superseded", "undone"}},
-		Field{Name: "kind", Kind: Enum, Owner: Code, Values: []string{"ingest", "repair"}},
+		Field{Name: "kind", Kind: Enum, Owner: Code, Values: []string{"ingest", "repair", "draft"}},
 		Field{Name: "files", Kind: List, Owner: Code},
 		Field{Name: "absorbs", Kind: Links, Owner: Code},
 		Field{Name: "proposed", Kind: Time, Owner: Code},

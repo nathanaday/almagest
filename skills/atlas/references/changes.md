@@ -106,9 +106,12 @@ agent proposes into it.
 
 1. **Start.** The palette in Obsidian starts the work document, and its message to the
    agent names it: "Your work document is [[…]] (<id>)". Use that id. When no message
-   names one, call `change` with `action: start`, `kind` (`ingest` or `repair`), a
-   `title`, and for an ingest `files` (the names of the files in `ingest/`). Keep the
-   `ref.id` of the result.
+   names one, call `change` with `action: start`, `kind` (`ingest`, `repair`, or
+   `draft`), a `title`, and for an ingest `files` (the names of the files in
+   `ingest/`). Keep the `ref.id` of the result. A `draft` work document holds the
+   drafting of one topic: Create on a new mark of a wikified note starts one, titled
+   "Draft <Title>" ([wiki-edit](../../wiki-edit/SKILL.md), its Draft path). Its
+   default title is "Draft a topic".
 2. **Progress.** After each step, call `change` with `action: progress`, the `id`, and
    `text`: one line that says what was done ("captured 3 sources", "extracted 9 of 12
    chunks"). Code adds the line with the time under `## Progress`. Code cuts a line at

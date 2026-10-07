@@ -28,6 +28,7 @@ const (
 const (
 	KindIngest = "ingest"
 	KindRepair = "repair"
+	KindDraft  = "draft"
 )
 
 // Widget is the block the Obsidian plugin renders as the change's buttons: Approve and

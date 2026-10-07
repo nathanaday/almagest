@@ -23,6 +23,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/wikify"
 )
 
 // Name is the server's name; hosts name its tools mcp__plugin_<plugin>_atlas__<tool>.
@@ -58,7 +59,7 @@ func New(opts Options) *Server {
 
 // ToolNames are the tools, in the order the server lists them.
 func ToolNames() []string {
-	return []string{"vault", "search", "context", "match", "source", "change", "checkout", "lint"}
+	return []string{"vault", "search", "context", "match", "source", "change", "checkout", "wikify", "lint"}
 }
 
 // open resolves the vault a call acts on.
@@ -232,7 +233,7 @@ type ChangeIn struct {
 	Action     string         `json:"action,omitempty" jsonschema:"show (the default), start, progress, propose, apply, reject, or undo"`
 	Vault      string         `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
 	ID         string         `json:"id,omitempty" jsonschema:"show, apply, reject, undo: the change (id or title); progress: the work document; propose: the running work document to fill, if the work started with start"`
-	Kind       string         `json:"kind,omitempty" jsonschema:"start: ingest or repair"`
+	Kind       string         `json:"kind,omitempty" jsonschema:"start: ingest, repair, or draft"`
 	Files      []string       `json:"files,omitempty" jsonschema:"start, kind ingest: the names of the files in ingest/ the work takes"`
 	Text       string         `json:"text,omitempty" jsonschema:"progress: the step just done, in one line"`
 	Reason     string         `json:"reason,omitempty" jsonschema:"reject: why, in one line"`
@@ -328,6 +329,40 @@ func (s *Server) checkoutTool(ctx context.Context, req *mcp.CallToolRequest, in 
 	return nil, CheckoutOut{}, fmt.Errorf("checkout takes action list, candidates, make, or return, not %q", in.Action)
 }
 
+// WikifyIn is the wikify tool's input.
+type WikifyIn struct {
+	Action string        `json:"action,omitempty" jsonschema:"start or mark"`
+	Vault  string        `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Note   string        `json:"note,omitempty" jsonschema:"start: the note to copy; mark: the wikified copy in scratchpad/"`
+	Marks  []wikify.Mark `json:"marks,omitempty" jsonschema:"mark: each phrase with link (a document, by id or title) or new (the title of a topic the subject is worth)"`
+}
+
+// WikifyOut is the wikify tool's output.
+type WikifyOut struct {
+	Copy   string         `json:"copy,omitempty"`
+	Marked *wikify.Marked `json:"marked,omitempty"`
+}
+
+func (s *Server) wikifyTool(ctx context.Context, req *mcp.CallToolRequest, in WikifyIn) (*mcp.CallToolResult, WikifyOut, error) {
+	v, err := s.open(in.Vault)
+	if err != nil {
+		return nil, WikifyOut{}, err
+	}
+	switch in.Action {
+	case "start":
+		cp, err := wikify.Start(v, in.Note)
+		return nil, WikifyOut{Copy: cp}, err
+	case "mark":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return nil, WikifyOut{}, err
+		}
+		m, err := wikify.Place(idx, in.Note, in.Marks)
+		return nil, WikifyOut{Marked: m}, err
+	}
+	return nil, WikifyOut{}, fmt.Errorf("wikify takes action start or mark, not %q", in.Action)
+}
+
 // LintIn is the lint tool's input.
 type LintIn struct {
 	Vault string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
@@ -362,6 +397,8 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "The only way knowledge changes: sources, repositories, and topics. start opens a work document (a running change for an ingest or a repair) that the user watches; progress adds one line of what was done to it; propose validates a Wiki Change Plan (create, modify, rename, remove, confirm, retag) and writes a change document, or fills the running one named by id (no commit), for the user to review; a remove moves the document to trash/; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, safe("change", s.changeTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "checkout",
 		Description: "The librarian's desk. candidates ranks the documents a request may need: the search's best hits and the documents linked to or from them within two steps, each with its score, distance, and the title it was reached from; the librarian chooses. make copies the chosen documents, in reading order with a why each, into a new folder of checkout/ as \"<Title> (checkout)\" notes the user reads and edits, with a reading list and the ledger, in one commit. return proposes the edited copies as one change of their originals (the user decides in the change document). list shows every checkout."}, safe("checkout", s.checkoutTool))
+	mcp.AddTool(server, &mcp.Tool{Name: "wikify",
+		Description: "Wikify a note of the user's: start copies it into scratchpad/ as \"<name> · wikified\" (the original stays); mark writes marks into that copy: {{link:Title|phrase}} where the phrase names a document of the wiki, {{new:Title|phrase}} where it names a subject worth a topic, at each phrase's first free mention (not in headings, code, links, or marks). The Obsidian plugin shows each mark as a bubble, and the user accepts, ignores, or asks to create. The copy never enters the wiki by itself."}, safe("wikify", s.wikifyTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Annotations: readOnly(),
 		Description: "The health check over every typed document, optionally the documents under tags: schema, duplicate titles, dead links, tag pages, repository paths, misplaced, untyped, and archived files; orphans, uncited and stale topics; near-duplicate tags, repositories behind, old pending sources and proposals. Each finding names its fix. Reads only."}, safe("lint", s.lintTool))
 	return server

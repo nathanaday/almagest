@@ -29,6 +29,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/search"
 	"github.com/nathanaday/atlas-obsidian/internal/source"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/atlas-obsidian/internal/wikify"
 )
 
 // Version is the binary's version; the build stamps it.
@@ -72,7 +73,7 @@ A command that acts on a vault takes --vault (a path, or a name from ~/.atlas/co
 else $ATLAS_VAULT, else the vault above the working folder. setup's --vault is the folder
 of a new vault, vault init takes --path, and doctor, version, help, hook, and mcp take no
 --vault.
---json prints JSON from: vault, search, context, source, change, checkout, journal, lint, config.
+--json prints JSON from: vault, search, context, source, change, checkout, wikify, journal, lint, config.
 match always prints JSON.
 No --json: setup, open, doctor, version, help, hook, mcp.
 `
@@ -94,10 +95,12 @@ var commands = []struct{ name, usage string }{
   atlas-obsidian source read DOC CHUNK
 `},
 	{"change", `  atlas-obsidian change propose FILE.json [--id ID] | show ID | apply ID | reject ID --reason R | undo ID
-                        | start --kind ingest|repair [--title T] [--file NAME]... | progress ID TEXT...
+                        | start --kind ingest|repair|draft [--title T] [--file NAME]... | progress ID TEXT...
 `},
 	{"checkout", `  atlas-obsidian checkout [list] | candidates TEXT... [--tag T]... [--type T]... [--limit N]
                           | make FILE.json | return FOLDER
+`},
+	{"wikify", `  atlas-obsidian wikify start PATH | mark PATH FILE.json
 `},
 	{"journal", `  atlas-obsidian journal [list] | publish VOLUME
                                                    a journal volume is a folder directly under journals/
@@ -194,6 +197,8 @@ func (c *CLI) Run(argv []string) int {
 		err = c.journalCmd(rest)
 	case "checkout":
 		err = c.checkoutCmd(rest)
+	case "wikify":
+		err = c.wikifyCmd(rest)
 	case "hook":
 		return c.hookCmd(rest)
 	case "mcp":
@@ -889,6 +894,42 @@ func (c *CLI) checkoutCmd(argv []string) error {
 		})
 	}
 	return fmt.Errorf("checkout takes list, candidates, make, or return, not %q", a.arg(0))
+}
+
+func (c *CLI) wikifyCmd(argv []string) error {
+	a := parse(argv)
+	v, err := c.open(a)
+	if err != nil {
+		return err
+	}
+	switch a.arg(0) {
+	case "start":
+		cp, err := wikify.Start(v, a.arg(1))
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"copy": cp}, func(w io.Writer) { fmt.Fprintf(w, "Copied to %s.\n", cp) })
+	case "mark":
+		var marks []wikify.Mark
+		if err := c.readJSON(a.arg(2), &marks); err != nil {
+			return fmt.Errorf("the marks: %w", err)
+		}
+		idx, err := vault.Load(v)
+		if err != nil {
+			return err
+		}
+		m, err := wikify.Place(idx, a.arg(1), marks)
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"marked": m}, func(w io.Writer) {
+			fmt.Fprintf(w, "Marked %s in %s.\n", count(len(m.Placed), "phrase", "phrases"), m.Note)
+			for _, p := range m.Missing {
+				fmt.Fprintf(w, "  not found: %s\n", p)
+			}
+		})
+	}
+	return fmt.Errorf("wikify takes start or mark, not %q", a.arg(0))
 }
 
 func (c *CLI) journalCmd(argv []string) error {

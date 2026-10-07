@@ -80,13 +80,21 @@ press Approve in the change document and apply it yourself.
   document. Each write of the change carries the original's hash at the checkout as its
   base: `return` leaves out a copy whose original changed since, and apply refuses a
   write whose original changed after the proposal.
+- The `wikify` tool changes no knowledge document. `start` copies a note into
+  `scratchpad/` as `<name> · wikified.md` and never changes the original. It refuses a
+  file that is not markdown, `Atlas.md`, and a note under `source-core/`, `changes/`,
+  `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`. `mark` writes only a wikified
+  copy: a note directly in `scratchpad/` whose name holds ` · wikified` and ends in
+  `.md`. It refuses any other note. Neither commits. A topic for a new subject enters
+  the wiki only through a change, and the gate above holds for it. The guard refuses
+  an agent's edit of a wikified copy, so only `wikify mark` writes its marks.
 
 ### An agent edits files that code owns
 
 The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
 `apply_patch`, and Bash call, and before each call of the atlas tools that can write:
-`change`, `source`, `vault`, and `checkout`. The other four, `search`, `context`, `match`, and
-`lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
+`change`, `source`, `vault`, `checkout`, and `wikify`. The other four, `search`,
+`context`, `match`, and `lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
 edit of:
 
 - `source-core/documents/`: a new document, which the change and source tools make; and

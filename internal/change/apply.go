@@ -131,7 +131,7 @@ func running(idx *vault.Index, key string) (*doc.Doc, error) {
 // StartIn is what a work document starts with.
 type StartIn struct {
 	Title string   `json:"title,omitempty" jsonschema:"the work's short name; the file name of its document"`
-	Kind  string   `json:"kind,omitempty" jsonschema:"ingest or repair"`
+	Kind  string   `json:"kind,omitempty" jsonschema:"ingest, repair, or draft"`
 	Files []string `json:"files,omitempty" jsonschema:"ingest: the names of the files in ingest/ the work takes"`
 }
 
@@ -143,8 +143,8 @@ func Start(v *vault.Vault, in StartIn, now time.Time) (*Preview, error) {
 	}
 	now = now.Truncate(time.Second)
 	kind := strings.ToLower(strings.TrimSpace(in.Kind))
-	if kind != KindIngest && kind != KindRepair {
-		return nil, fmt.Errorf("kind %q: a work document is an %s or a %s", in.Kind, KindIngest, KindRepair)
+	if kind != KindIngest && kind != KindRepair && kind != KindDraft {
+		return nil, fmt.Errorf("kind %q: a work document is an %s, a %s, or a %s", in.Kind, KindIngest, KindRepair, KindDraft)
 	}
 	var files []string
 	for _, f := range in.Files {
@@ -159,6 +159,8 @@ func Start(v *vault.Vault, in StartIn, now time.Time) (*Preview, error) {
 		switch {
 		case kind == KindRepair:
 			title = "Repair the wiki"
+		case kind == KindDraft:
+			title = "Draft a topic"
 		case len(files) == 1:
 			title = "Ingest " + doc.CleanTitle(doc.TitleOf(files[0]))
 		default:
