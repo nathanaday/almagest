@@ -102,7 +102,7 @@ goes in `ingest/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
 history, `Journal · <folder>.md`, which code writes.
 
 - **"Publish my journal."** Publish is the user's act. Tell the user to press Publish
-  next to the volume in the Journals section of the Almagest palette, or to type
+  next to the volume on the Journals page of the Almagest palette, or to type
   `! almagest journal publish <volume>` in the session. Never run that command
   yourself: the guard refuses it from your shell. Publish captures the volume as one
   source, an edition. The palette then starts wiki-sync on the edition, with a work

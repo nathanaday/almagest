@@ -37,10 +37,10 @@ Almagest is about the human side: understanding and working with what you built.
 
 ### The tool palette
 
-One pane in Obsidian for everything Almagest does: Ingest, Wiki lint, Checkout, Publish,
-Wikify, and Safe delete. It also shows what waits for you: the changes to approve, the
-files to ingest, the journals with unpublished writing, and the checkouts with edits to
-return.
+One pane in Obsidian that leads to everything Almagest does. Its home lists the areas
+(Changes, Ingest, Wiki health, Journals, Library, Agents, and This note), each with one
+line on where it stands and a count when something waits for you. Select one to open its
+page, with its numbers, its actions, and its lists.
 
 ### Ingest: a stable, accurate wiki
 

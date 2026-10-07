@@ -254,9 +254,9 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   are sections. The volume's notes are every `.md` file under the folder, except its
   publication history. The folder name gives the volume's name: `cs566-notes` reads
   "CS566 Notes".
-- **Publish.** Press Publish next to a volume in the palette, or run
-  `almagest journal publish <volume>`. Almagest copies the volume into one source,
-  an edition, in one commit. The palette then starts a work document and an agent that
+- **Publish.** Press Publish next to the volume on the palette's Journals page, or run
+  `almagest journal publish <volume>`. Almagest copies the volume into one source, an
+  edition, in one commit. The palette then starts a work document and an agent that
   absorbs the edition into the wiki; you approve its change as usual. Publish refuses a
   volume with no note, and a volume with no change since its latest edition. An agent
   cannot publish: the guard refuses the command from its shell.
@@ -304,12 +304,12 @@ reading order, and checks out a copy of each for you to read and mark up.
   request, the count of documents, the count of edited copies, and the date of its
   return. Code writes it again at each checkout and each return, so an edit there is
   lost.
-- **Return.** Press Return next to the checkout in the palette, or run `almagest
-  checkout return <folder>`. Almagest proposes one change, "Return <folder>", with a modify
-  of each original whose copy you edited. The links to copies point at the originals
-  again. You decide in the change document, as for every change. Return skips a copy
-  whose original changed since the checkout, and names it; its edits stay in the copy.
-  Return carries a copy's text, not its frontmatter.
+- **Return.** Press Return next to the checkout on the palette's Library page, or run
+  `almagest checkout return <folder>`. Almagest proposes one change, "Return <folder>",
+  with a modify of each original whose copy you edited. The links to copies point at the
+  originals again. You decide in the change document, as for every change. Return skips a
+  copy whose original changed since the checkout, and names it; its edits stay in the
+  copy. Return carries a copy's text, not its frontmatter.
 
 ## Wikify a note (experimental)
 
@@ -317,8 +317,8 @@ Wikify shows what the wiki knows in a note of yours, and which of its subjects t
 lacks. It works on a copy, and nothing enters the wiki until you create a topic through
 a change.
 
-- **The copy.** Press Wikify this note in the palette, or ask an agent to wikify a
-  note. `wikify start` copies the note to `scratchpad/<name> · wikified.md` (with
+- **The copy.** Press Wikify this note on the palette's This note page, or ask an agent to
+  wikify a note. `wikify start` copies the note to `scratchpad/<name> · wikified.md` (with
   " (2)" when that name is taken). The original stays as it is. The copy lies in
   `scratchpad/`, so a copy of a journal note never joins the volume's edition. Wikify
   refuses a file that is not markdown, `Almagest.md`, and the folders that code writes:
@@ -351,36 +351,38 @@ a change.
 The vault works without the plugin. With it, Obsidian adds:
 
 - **The Almagest palette** in the right sidebar (the Almagest ribbon button, or the command
-  "Open the tool palette"). It shows the proposed changes, the running work documents,
-  the files in `ingest/`, the pending sources, the live sessions, the files in `trash/`,
-  the journal volumes, the checkouts, and the lint problems. Its actions:
-  - **Ingest** starts a work document for the files in `ingest/`, opens it, and starts
-    an agent that reports into it.
-  - **Wiki lint** runs `lint` and lists the first findings. **Repair with an agent**
-    starts a repair work document and an agent that proposes the repairs into it.
-  - **Safe delete this file** runs `almagest vault trash` on the open file. When
-    no file links it, the file moves to `trash/`; a topic, a source, or a repository
-    leaves through a change that applies at once, so `change undo` in a terminal brings
-    it back; an agent cannot undo it. When files link it, nothing moves, and a list
-    names the links. For a knowledge document that documents link, the list offers
-    **Resolve with an agent**: the agent points each link in a document elsewhere and
-    proposes the remove. A link in your own notes (the scratchpad, `journals/`,
-    `checkout/`, and the like) is yours to fix; while one stays, the agent
-    proposes no remove, and you run Safe delete again after you fix it.
-  - **Publish** next to a journal volume (marked when the volume has changes) runs
-    `almagest journal publish`, then starts a work document and an agent that
-    absorbs the edition. See [Journals](#journals).
-  - **Checkout** asks for your request and starts an agent that checks out the
-    material on it.
-  - **Return** next to a checkout runs `almagest checkout return` and opens the
-    change. It is on when a copy is edited and the checkout is not returned. See
+  "Open the tool palette"). Its home lists the areas of Almagest, each with one line on
+  where it stands and a count when something waits for you. Select an area to open its
+  page: what it is, its numbers, its actions, and its lists.
+  - **Changes**: the changes to review, and the running work documents with their last
+    step.
+  - **Ingest**: the files in `ingest/`. **Ingest** starts a work document for them, opens
+    it, and starts an agent that reports into it.
+  - **Wiki health**: **Run wiki lint** lists the first findings, and **Repair with an
+    agent** starts a repair work document and an agent that proposes the repairs into it.
+  - **Journals**: each volume, marked "changed" when it has writing to publish.
+    **Publish** runs `almagest journal publish`, then starts a work document and an agent
+    that absorbs the edition. See [Journals](#journals).
+  - **Library**: **Check out material** asks for your request and starts the librarian.
+    **Return** next to a checkout runs `almagest checkout return` and opens the change;
+    it is on when a copy is edited and the checkout is not returned. See
     [Checkouts](#checkouts).
-  - **Wikify this note** (experimental) copies the open note to `scratchpad/`, opens
-    the copy, and starts an agent that marks it. See
-    [Wikify a note](#wikify-a-note-experimental).
+  - **Agents**: the agents Almagest started and still work, **Start an agent**, and the
+    sessions pane.
+  - **This note**: **Wikify this note** (experimental) copies the open note to
+    `scratchpad/`, opens the copy, and starts an agent that marks it (see
+    [Wikify a note](#wikify-a-note-experimental)). **Safe delete this note**
+    runs `almagest vault trash` on it. When nothing links it, it moves to `trash/`; a
+    topic, a source, or a repository leaves through a change that applies at once, so
+    `change undo` in a terminal brings it back, and no agent can undo it. When files link
+    it, nothing moves, and a list names the links. For a knowledge document that
+    documents link, the list offers **Resolve with an agent**: the agent points each link
+    in a document elsewhere and proposes the remove. A link in your own notes (the
+    scratchpad, `journals/`, `checkout/`, and the like) is yours to fix; while one stays,
+    the agent proposes no remove, and you run Safe delete again after you fix it.
 
   The palette starts an agent through the Duet plugin. Without Duet, it starts your
-  agent in a terminal (see [Agent preferences](#agent-preferences)) with the same
+  agent in a terminal (the agent and terminal settings of Almagest) with the same
   message.
 - **Wikify bubbles** in a wikified copy: Accept, Ignore, Create, and Link on each mark.
 - **Approve and Cancel** in each change document. Approve applies the change, as
