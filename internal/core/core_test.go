@@ -5,6 +5,7 @@ import (
 	"errors"
 	"os"
 	"os/exec"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -13,6 +14,7 @@ import (
 	"github.com/nathanaday/almagest/internal/change"
 	"github.com/nathanaday/almagest/internal/core"
 	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/lint"
 	"github.com/nathanaday/almagest/internal/testvault"
 	"github.com/nathanaday/almagest/internal/vault"
 )
@@ -158,5 +160,49 @@ func TestSyncEndsASessionWhoseAgentIsGone(t *testing.T) {
 	}
 	if got := tv.Read(quiet); !strings.Contains(got, "status: idle") || len(synced.Lost) != 2 {
 		t.Fatalf("a recent session with no process id stays: %v\n%s", synced.Lost, got)
+	}
+}
+
+// A session that runs in a Duet conversation links the conversation's note, found by the
+// session id that Duet writes in it; the quick sync of the views follows it too.
+func TestSyncLinksASessionToItsDuetConversation(t *testing.T) {
+	tv := testvault.New(t)
+	now := testvault.Now
+	rel := "tool/sessions/2026-09/2026-09-27 1400 6473b5.md"
+	tv.Write(rel, "---\nid: ses-6473b5\ntype: session\ncreated: "+vault.Stamp(now)+"\nharness: claude\nharness_id: 6473b5e1-719a\nstatus: ended\nupdated: "+vault.Stamp(now)+"\n---\n\n## Description\n\nWork.\n")
+	tv.Write("Conversations/Agent · Ingest.md", "---\nduet: conversation\nagent: claude\nsession: 6473b5e1-719a\n---\n\n> [!user]\n> Ingest.\n")
+	tv.Write("Conversations/Another.md", "---\nduet: conversation\nsession: ffffff\n---\n")
+	tv.Commit()
+
+	synced, err := core.Sync(tv.V, now, core.SyncOptions{Views: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := tv.Read(rel)
+	if !strings.Contains(got, `conversation: "[[Agent · Ingest]]"`) || !strings.Contains(got, "> Duet conversation: [[Agent · Ingest]]") || !slices.Contains(synced.Sessions, rel) {
+		t.Fatalf("the linked session:\n%s\nsynced %v", got, synced.Sessions)
+	}
+	if f, err := lint.Run(tv.Index(), lint.Options{Quick: true, Now: now}); err != nil || f.Counts[lint.Error] != 0 {
+		t.Fatalf("lint after the link: %+v %v", f.Findings, err)
+	}
+
+	// A second note of the same title: the link names the path.
+	tv.Write("scratchpad/Agent · Ingest.md", "Mine.\n")
+	if _, err := core.Sync(tv.V, now, core.SyncOptions{Views: true}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tv.Read(rel); !strings.Contains(got, `conversation: "[[Conversations/Agent · Ingest|Agent · Ingest]]"`) {
+		t.Fatalf("the link of a shared title:\n%s", got)
+	}
+
+	// The conversation's note gone: the link goes too.
+	if err := os.Remove(tv.V.Abs("Conversations/Agent · Ingest.md")); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := core.Sync(tv.V, now, core.SyncOptions{}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tv.Read(rel); strings.Contains(got, "conversation") {
+		t.Fatalf("a link to a note that is gone:\n%s", got)
 	}
 }

@@ -62,6 +62,13 @@ The design pages are the spec. When the code departs from them, the reason is be
   and the palette shows a session as open only while its process runs. Resume
   reads the conversation's first `cwd` and its config folder from the transcript, and
   finds the transcript of an older session by its id under `~/.claude*/projects/`.
+- **A session links its Duet conversation.** Duet writes the Claude Code session's id in
+  its conversation note (`duet: conversation`, `session: <id>`), and the hooks keep the
+  same id in `harness_id`. Each sync, the quick one too, sets the code-owned
+  `conversation` link of every session whose id a note names, and drops one whose note
+  is gone (`sessions.LinkConversations`); the lead callout shows it. Duet writes the id
+  after the session starts, so the first sync after that links it. The Obsidian plugin
+  opens the conversation from a session's thread when the link resolves.
 - **Resume names a config folder only when it is not `~/.claude`.** Claude Code keys its
   login to the folder it was told: `CLAUDE_CONFIG_DIR=~/.claude claude` reports "Not
   logged in" on a machine logged in through the default. Verified 2026-10-01 on 2.1.286.

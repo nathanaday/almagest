@@ -401,14 +401,17 @@ func All(v *vault.Vault) []*doc.Doc {
 	return out
 }
 
-// Lead is a session's lead callout: its status, the repository it edited last, and its
-// last progress line or its description.
+// Lead is a session's lead callout: its status, the repository it edited last, the Duet
+// conversation it runs in, and its last progress line or its description.
 func Lead(d *doc.Doc) string {
 	parts := []string{d.Str("status")}
 	if repos := d.List("repositories"); len(repos) > 0 {
 		parts = append(parts, repos[len(repos)-1])
 	}
 	var lines []string
+	if c := d.Str("conversation"); c != "" {
+		lines = append(lines, "Duet conversation: "+c)
+	}
 	progress, _ := doc.Section(d.Body, "Progress")
 	if quote := doc.LastLine(progress); quote != "" {
 		lines = append(lines, doc.OneLine(quote, 160))
@@ -442,4 +445,50 @@ func DescriptionLine(body string) string {
 func escapeGlob(s string) string {
 	r := strings.NewReplacer("*", `\*`, "?", `\?`, "[", `\[`, "]", `\]`)
 	return r.Replace(s)
+}
+
+// LinkConversations points each session at the Duet conversation it runs in: the note
+// whose properties say `duet: conversation` and name the session's id in `session`. Duet
+// writes that id after the session starts, so each sync looks again; a session whose
+// conversation note is gone loses the link. It returns the paths it wrote; the caller
+// holds the lock.
+func LinkConversations(idx *vault.Index) ([]string, error) {
+	notes := map[string]*doc.Doc{}
+	for _, n := range idx.Notes {
+		if n.Front != nil && n.Str("duet") == "conversation" && n.Str("session") != "" {
+			notes[n.Str("session")] = n
+		}
+	}
+	var wrote []string
+	for _, d := range idx.Docs {
+		if d.Type() != "session" {
+			continue
+		}
+		want := ""
+		if n := notes[d.Str("harness_id")]; n != nil {
+			want = conversationLink(idx, n.Path)
+		}
+		if d.Str("conversation") == want {
+			continue
+		}
+		content := doc.SetField(d.Content, "conversation", want)
+		if want == "" {
+			content = doc.RemoveField(d.Content, "conversation")
+		}
+		if err := write(idx.V, d.Path, content); err != nil {
+			return wrote, err
+		}
+		wrote = append(wrote, d.Path)
+	}
+	return wrote, nil
+}
+
+// conversationLink links a note by its title, or by its path when another file has the
+// same title.
+func conversationLink(idx *vault.Index, rel string) string {
+	title := vault.NoteTitle(rel)
+	if len(idx.LinkPaths(title)) == 1 {
+		return "[[" + title + "]]"
+	}
+	return "[[" + strings.TrimSuffix(rel, ".md") + "|" + title + "]]"
 }

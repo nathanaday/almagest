@@ -244,7 +244,9 @@ which you need not open. Almagest writes these files and folders:
 - `journals/<volume>/Journal · <volume>.md`: the publication history of a volume, which
   code writes at each publish.
 - `changes/`: the change documents, which you read and approve.
-- `tool/sessions/`: one document per agent session.
+- `tool/sessions/`: one document per agent session. A session that runs in a Duet
+  conversation links the conversation's note, in its `conversation` property and its lead
+  callout.
 - `checkout/`: the librarian's checkouts, one folder each, and the ledger,
   `checkout/Checkout · Ledger.md`.
   Code writes it, and you read and edit the copies. No agent edits it. See
@@ -393,9 +395,10 @@ The vault works without the plugin. With it, Obsidian adds:
     it is on when a copy is edited and the checkout is not returned. See
     [Checkouts](#checkouts).
   - **Agents**: **Start an agent**, the agents Almagest started that still work, and the
-    agent sessions of the vault: the open ones, each with its state and its last progress
-    line, then the ones that closed in the last two hours, with **Resume**. A session
-    that needs you counts on the home row.
+    agent sessions of the vault as message threads: the open ones, each with its state
+    and its last progress line, then the ones that closed in the last two hours, folded
+    away, with **Resume**. A thread opens the session's Duet conversation when it runs in
+    one, else the session's document. A session that needs you counts on the home row.
   - **This note**: **Wikify this note** (experimental) copies the open note to
     `scratchpad/`, opens the copy, and starts an agent that marks it (see
     [Wikify a note](#wikify-a-note-experimental)). **Safe delete this note**

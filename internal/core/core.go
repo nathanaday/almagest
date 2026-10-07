@@ -290,6 +290,11 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 		return out, err
 	}
 	out.Knowledge = append(out.Knowledge, knowledge...)
+	linked, err := sessions.LinkConversations(idx)
+	if err != nil {
+		return out, err
+	}
+	out.Sessions = append(out.Sessions, linked...)
 	if !o.Views {
 		for _, s := range sessions.All(v) {
 			if !sessions.Live(s.Str("status")) {

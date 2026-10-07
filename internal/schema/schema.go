@@ -216,6 +216,7 @@ var Types = []*Type{
 		Field{Name: "reminded", Kind: List, Owner: Code},
 		Field{Name: "pid", Kind: Int, Owner: Code},
 		Field{Name: "transcript", Kind: Text, Owner: Code},
+		Field{Name: "conversation", Kind: Link, Owner: Code},
 	), Sections: []string{"Description", "Progress", "Summary", "Subagents"}},
 	{Name: "change", Prefix: "chg", Family: Record, Folder: "changes", Fields: record(
 		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"running", "proposed", "applying", "applied", "rejected", "superseded", "undone"}},
