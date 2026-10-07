@@ -123,8 +123,8 @@ proposed changes and the sessions that wait. Then the running work documents
 (`changes.running`), the files in `ingest/`, the sources
 pending for the wiki, the journal volumes with changes to publish (`journals` entries
 with `changed: true`; the user publishes them), the checkouts with edited copies that
-are not returned (`checkouts` entries with `edited` above 0 and `returned` empty; Return
-proposes their edits), and the lint problems, each with the
+are out (`checkouts` entries with `status: out` and `edited` above 0; Return proposes
+their edits), and the lint problems, each with the
 skill that handles it. The opening context names each repository that is behind its
 description ([repo-ingest](../repo-ingest/SKILL.md)), and each journal volume with
 changes to publish.
@@ -136,9 +136,10 @@ changes to publish.
 - `journals/` holds the user's own writing. Read it when the request needs it; never
   edit a file there, and never run `almagest journal publish`. The guard refuses
   every agent edit under `journals/`, and the publish command from your shell.
-- `checkout/` is the user's: the copies the librarian checked out, their reading lists,
-  and the ledger. Code writes it; the user reads and edits the copies. Never edit a file
-  there; the guard refuses every agent edit under `checkout/`.
+- `checkout/` is the user's: the copies the librarian checked out, each checkout's
+  `_index.md`, and the ledger. A returned checkout moves to `tool/returned/`, as the user
+  left it. Code writes them; the user reads and edits the copies. Never edit a file
+  there; the guard refuses every agent edit under `checkout/` and `tool/returned/`.
 - A wikified copy (`scratchpad/<name> · wikified.md`) is the user's scratch. Only
   `wikify mark` writes into it; never edit it with Edit or Write.
 - `tool/trash/` holds what the user deleted. Never read or edit it, and never run

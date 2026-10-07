@@ -10,6 +10,8 @@ import (
 	"time"
 
 	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/checkout"
+	"github.com/nathanaday/almagest/internal/doc"
 	"github.com/nathanaday/almagest/internal/lint"
 	"github.com/nathanaday/almagest/internal/migrate"
 	"github.com/nathanaday/almagest/internal/testvault"
@@ -211,5 +213,50 @@ func TestTheUsersFilesInToolStay(t *testing.T) {
 	}
 	if tv.Read("tool/Mine.md") != "My own tool notes.\n" || !slices.ContainsFunc(r.Warnings, func(w string) bool { return strings.Contains(w, "1 file of yours") }) {
 		t.Fatalf("warnings %v", r.Warnings)
+	}
+}
+
+// The checkouts of 11.0: each reading list becomes the checkout's index, a returned
+// checkout moves to tool/returned/ with the links that name it, and the ledger becomes
+// its Base.
+func TestMigrateBringsTheCheckouts(t *testing.T) {
+	tv, _ := seven(t)
+	reading := func(name, returned string) string {
+		return "---\nrequest: \"Check out " + name + "\"\nchecked_out: 2026-09-20T10:00:00\ndocuments: 2\nreturned: " + returned + "\n---\n\n> [!almagest] Checked out 2026-09-20\n\n## Reading order\n\n1. [[checkout/2026-09-20 " + name + "/Alpha (checkout)|Alpha]]\n"
+	}
+	tv.Write("checkout/2026-09-20 Out/Checkout · 2026-09-20 Out.md", reading("Out", `""`))
+	tv.Write("checkout/2026-09-20 Out/Alpha (checkout).md", "---\ncheckout_id: doc-a\n---\n\nAlpha.\n")
+	tv.Write("checkout/2026-09-20 Back/Checkout · 2026-09-20 Back.md", reading("Back", "2026-09-21T10:00:00"))
+	tv.Write("checkout/2026-09-20 Back/Alpha (checkout).md", "---\ncheckout_id: doc-a\n---\n\nAlpha, with [[checkout/2026-09-20 Back/Beta (checkout)|Beta]] and my edit.\n")
+	tv.Write("checkout/2026-09-20 Back/Beta (checkout).md", "Beta.\n")
+	tv.Write("checkout/Checkout · Ledger.md", "| Checked out | Request |\n|---|---|\n| 2026-09-20 | [[checkout/2026-09-20 Back/Checkout · 2026-09-20 Back\\|Back]] |\n")
+	tv.Write("scratchpad/Reading.md", "Back is in [[checkout/2026-09-20 Back/Checkout · 2026-09-20 Back|the reading list]].\n")
+	tv.Commit()
+	if _, err := migrate.Run(tv.V, tv.Tick(time.Minute)); err != nil {
+		t.Fatal(err)
+	}
+	tv.Clean()
+	out := tv.Read("checkout/2026-09-20 Out/_index.md")
+	if fm := doc.Parse("", []byte(out)); fm.Str("name") != "Out" || fm.Str("status") != "out" || !strings.Contains(out, "1. [[checkout/2026-09-20 Out/Alpha (checkout)|Alpha]]") {
+		t.Fatalf("the index of a checkout that is out:\n%s", out)
+	}
+	if tv.V.Exists("checkout/2026-09-20 Back") || tv.V.Exists("checkout/2026-09-20 Out/Checkout · 2026-09-20 Out.md") {
+		t.Fatal("a reading list or a returned checkout stays")
+	}
+	back := tv.Read("tool/returned/2026-09-20 Back/_index.md")
+	if fm := doc.Parse("", []byte(back)); fm.Str("name") != "Back" || fm.Str("status") != "returned" || !strings.Contains(back, "1. [[tool/returned/2026-09-20 Back/Alpha (checkout)|Alpha]]") {
+		t.Fatalf("the index of a returned checkout:\n%s", back)
+	}
+	if got := tv.Read("tool/returned/2026-09-20 Back/Alpha (checkout).md"); !strings.Contains(got, "[[tool/returned/2026-09-20 Back/Beta (checkout)|Beta]] and my edit.") {
+		t.Fatalf("a returned copy:\n%s", got)
+	}
+	if got := tv.Read("scratchpad/Reading.md"); got != "Back is in [[tool/returned/2026-09-20 Back/_index|the reading list]].\n" {
+		t.Fatalf("a note's link to the reading list:\n%s", got)
+	}
+	if tv.Read("checkout/Checkout · Ledger.md") != checkout.LedgerNote {
+		t.Fatalf("the ledger:\n%s", tv.Read("checkout/Checkout · Ledger.md"))
+	}
+	if l := checkout.List(tv.V); len(l) != 2 || l[0].Status == l[1].Status {
+		t.Fatalf("the checkouts after the migration: %+v", l)
 	}
 }

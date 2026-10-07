@@ -209,6 +209,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " is a wikified copy: its marks come from wikify mark, and the user accepts or ignores each one"
 	case under(vault.Checkout):
 		return rel + " is in checkout/, which the checkout tool writes; the user reads and edits the copies, and Return proposes their edits"
+	case under(vault.Returned):
+		return rel + " is a returned checkout, kept as the user left it; check the documents out again to work on them"
 	case under(vault.Trash):
 		return rel + " is in the trash, which holds what the user deleted; the user empties it"
 	case under(vault.Journals):

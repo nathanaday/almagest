@@ -18,6 +18,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nathanaday/almagest/internal/checkout"
 	"github.com/nathanaday/almagest/internal/derive"
 	"github.com/nathanaday/almagest/internal/doc"
 	"github.com/nathanaday/almagest/internal/lint"
@@ -168,9 +169,10 @@ func newReport(v *vault.Vault) *Report {
 }
 
 // build computes the migration: every file of sessions/, source-core/, and trash/ moves
-// into tool/; the links and Base filters that name a moved path follow; Obsidian's
-// attachment folder, excluded files, and bookmarks follow; and Almagest.md takes the
-// current layout.
+// into tool/; each checkout takes its index, and a returned one moves to tool/returned/;
+// the links and Base filters that name a moved path follow; Obsidian's attachment folder,
+// excluded files, and bookmarks follow; the ledger becomes its Base; and Almagest.md takes
+// the current layout.
 func build(v *vault.Vault, r *Report) (*plan, error) {
 	p := &plan{edits: map[string][]byte{}}
 	for _, dir := range sortedKeys(moved) {
@@ -181,6 +183,10 @@ func build(v *vault.Vault, r *Report) (*plan, error) {
 		if err != nil {
 			return nil, err
 		}
+	}
+	shelf, err := checkouts(v, p)
+	if err != nil {
+		return nil, err
 	}
 	sort.Slice(p.moves, func(i, j int) bool { return p.moves[i].From < p.moves[j].From })
 	if err := claim(v, p.moves); err != nil {
@@ -201,7 +207,7 @@ func build(v *vault.Vault, r *Report) (*plan, error) {
 		p.edits[at] = after
 		r.Edited = append(r.Edited, at)
 	}
-	err := filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {
+	err = filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {
 		if err != nil {
 			return nil
 		}
@@ -223,6 +229,9 @@ func build(v *vault.Vault, r *Report) (*plan, error) {
 			return err
 		}
 		after := rewriteRefs(ext, string(data))
+		if ext == ".md" {
+			after = shelf.relink(rel, after)
+		}
 		if vault.IsMarker(rel) {
 			after = doc.SetField(after, "layout", vault.Layout)
 		}
@@ -231,6 +240,10 @@ func build(v *vault.Vault, r *Report) (*plan, error) {
 	})
 	if err != nil {
 		return nil, err
+	}
+	if ledger := path.Join(vault.Checkout, checkout.Ledger+".md"); v.Exists(ledger) {
+		data, _ := v.Read(ledger)
+		edit(ledger, data, []byte(checkout.LedgerNote))
 	}
 	if data, err := v.Read(bookmarks); err == nil {
 		edit(bookmarks, data, []byte(rewritePaths(string(data), true)))
@@ -243,7 +256,82 @@ func build(v *vault.Vault, r *Report) (*plan, error) {
 		edit(vault.AppJSON, data, after)
 	}
 	sort.Strings(r.Edited)
+	r.Edited = slices.Compact(r.Edited)
 	return p, nil
+}
+
+// shelf is how the checkouts of 11.0 change: each folder's place after the migration, and
+// each reading list's index.
+type shelf struct {
+	folders map[string]string // checkout folder → its folder now
+	indexes map[string]string // reading list → the checkout's index
+}
+
+// checkouts plans each checkout of 11.0: its reading list, "Checkout · <folder>.md",
+// becomes _index.md with the checkout's name and status, and a returned checkout moves,
+// every file of it, to tool/returned/. A folder with no reading list stays as it is.
+func checkouts(v *vault.Vault, p *plan) (*shelf, error) {
+	s := &shelf{folders: map[string]string{}, indexes: map[string]string{}}
+	entries, _ := os.ReadDir(v.Abs(vault.Checkout))
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
+		}
+		folder := path.Join(vault.Checkout, e.Name())
+		list := path.Join(folder, "Checkout · "+e.Name()+".md")
+		data, err := v.Read(list)
+		if err != nil {
+			continue
+		}
+		dest := folder
+		if doc.Parse(list, data).Str("returned") != "" {
+			dest = path.Join(vault.Returned, e.Name())
+		}
+		s.folders[folder] = dest
+		s.indexes[list] = checkout.IndexPath(dest)
+		err = walkFiles(v, folder, func(rel string) error {
+			to := dest + strings.TrimPrefix(rel, folder)
+			if rel == list {
+				to = checkout.IndexPath(dest)
+			}
+			if to != rel {
+				p.moves = append(p.moves, Move{From: rel, To: to})
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+// relink points the links of a note at the checkouts' places now, and gives a reading
+// list the fields of an index.
+func (s *shelf) relink(rel, text string) string {
+	for list, index := range s.indexes {
+		text = checkout.MoveLinks(text, strings.TrimSuffix(list, ".md"), strings.TrimSuffix(index, ".md"))
+		if rel == list {
+			folder := path.Dir(rel)
+			status := checkout.StatusOut
+			if s.folders[folder] != folder {
+				status = checkout.StatusReturned
+			}
+			text = doc.SetFields(text, []doc.Field{{Key: "name", Value: checkoutName(path.Base(folder))}, {Key: "status", Value: status}})
+		}
+	}
+	for from, to := range s.folders {
+		text = checkout.MoveLinks(text, from, to)
+	}
+	return text
+}
+
+// checkoutName is a checkout's name: its folder's, without the date.
+func checkoutName(base string) string {
+	if len(base) > 11 && base[4] == '-' && base[7] == '-' && base[10] == ' ' {
+		return base[11:]
+	}
+	return base
 }
 
 // pathRef matches a folder that tool/ takes where a path stands as a path: right after

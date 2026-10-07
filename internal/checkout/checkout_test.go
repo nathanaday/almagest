@@ -1,6 +1,7 @@
 package checkout_test
 
 import (
+	"path"
 	"strings"
 	"testing"
 	"time"
@@ -77,11 +78,14 @@ func TestMakeAndReturn(t *testing.T) {
 	if q := tv.Read(folder + "/Q-learning (checkout).md"); !strings.Contains(q, "It builds on [[Bellman equation]].") {
 		t.Fatalf("a link out of the checkout keeps naming the wiki:\n%s", q)
 	}
-	list := tv.Read(m.ReadingList)
-	if !strings.Contains(list, "1. [["+folder+"/Reinforcement learning (checkout)|Reinforcement learning]] · the map\n2. ") {
-		t.Fatalf("the reading list:\n%s", list)
+	index := tv.Read(m.Index)
+	if m.Index != folder+"/_index.md" || !strings.Contains(index, "1. [["+folder+"/Reinforcement learning (checkout)|Reinforcement learning]] · the map\n2. ") || !strings.Contains(index, "\n# RL\n") {
+		t.Fatalf("the index:\n%s", index)
 	}
-	if ledger := tv.Read("checkout/Checkout · Ledger.md"); !strings.Contains(ledger, "| 3 | 0 | no |") {
+	if fm := doc.Parse("", []byte(index)); fm.Str("name") != "RL" || fm.Str("status") != "out" || fm.Str("documents") != "3" {
+		t.Fatalf("the index's fields:\n%s", index)
+	}
+	if ledger := tv.Read("checkout/Checkout · Ledger.md"); ledger != checkout.LedgerNote || !strings.Contains(ledger, `file.inFolder("tool/returned")`) {
 		t.Fatalf("the ledger:\n%s", ledger)
 	}
 	if _, err := checkout.Make(tv.V, checkout.Order{Request: "x", Name: "Y", Documents: []checkout.Pick{{ID: "Q-learning"}, {ID: "Q learning"}}}, now); err == nil {
@@ -97,9 +101,6 @@ func TestMakeAndReturn(t *testing.T) {
 		}
 	}
 
-	if _, err := checkout.Return(tv.V, folder, now); err == nil || !strings.Contains(err.Error(), "nothing to return") {
-		t.Fatalf("a return with no edit: %v", err)
-	}
 	pgPath := folder + "/Policy gradient (checkout).md"
 	tv.Write(pgPath, strings.Replace(pg, "on the policy, unlike", "on the policy itself, unlike", 1))
 	qPath := folder + "/Q-learning (checkout).md"
@@ -120,6 +121,35 @@ func TestMakeAndReturn(t *testing.T) {
 	if len(r.Skipped) != 1 || !strings.Contains(r.Skipped[0], "Q-learning changed since the checkout") || r.Change.Counts.Modify != 1 {
 		t.Fatalf("the return: %+v", r)
 	}
+	// The checkout moves to tool/returned/, every file of it, with its links and its index marked.
+	returned := "tool/returned/" + vault.Date(now) + " RL"
+	if r.Folder != returned || r.Index != returned+"/_index.md" || tv.V.Exists(folder) {
+		t.Fatalf("the return's place: %+v", r)
+	}
+	index = tv.Read(r.Index)
+	if fm := doc.Parse("", []byte(index)); fm.Str("status") != "returned" || fm.Str("returned") == "" || fm.Str("return_change") != r.Change.Ref.ID {
+		t.Fatalf("the returned index:\n%s", index)
+	}
+	if !strings.Contains(index, "1. [["+returned+"/Reinforcement learning (checkout)|Reinforcement learning]]") || strings.Contains(index, "[["+folder+"/") {
+		t.Fatalf("the returned index's links:\n%s", index)
+	}
+	// A copy keeps the user's edits, and its links follow it.
+	if got := tv.Read(returned + "/Policy gradient (checkout).md"); !strings.Contains(got, "on the policy itself") || !strings.Contains(got, "[["+returned+"/Q-learning (checkout)|Q learning]]") {
+		t.Fatalf("the returned copy:\n%s", got)
+	}
+	if !strings.Contains(tv.Read(returned+"/Q-learning (checkout).md"), "My note on Q-learning.") {
+		t.Fatal("the left-out copy lost its edit")
+	}
+	if l := checkout.List(tv.V); len(l) != 1 || l[0].Status != "returned" || l[0].Folder != returned || l[0].Name != "RL" {
+		t.Fatalf("the list after the return: %+v", l)
+	}
+	if !strings.Contains(tv.Read(r.Change.Ref.Path), "[["+returned+"/_index|") {
+		t.Fatalf("the change's link to the checkout:\n%s", tv.Read(r.Change.Ref.Path))
+	}
+	tv.Clean()
+	if f, err := lint.Run(tv.Index(), lint.Options{Now: now}); err != nil || f.Counts[lint.Error] != 0 {
+		t.Fatalf("lint after a return: %+v %v", f, err)
+	}
 	if _, err := change.Apply(tv.V, r.Change.Ref.ID, tv.Tick(time.Minute), nil); err != nil {
 		t.Fatal(err)
 	}
@@ -127,10 +157,7 @@ func TestMakeAndReturn(t *testing.T) {
 	if !strings.Contains(got, "on the policy itself (see [[Reinforcement learning|RL]]), unlike [[Q-learning|Q learning]].") || strings.Contains(got, "checkout") {
 		t.Fatalf("the returned topic:\n%s", got)
 	}
-	if rl := doc.Parse("", []byte(tv.Read(m.ReadingList))); rl.Str("returned") == "" {
-		t.Fatal("the reading list does not record the return")
-	}
-	if _, err := checkout.Return(tv.V, folder, tv.Clock); err == nil || !strings.Contains(err.Error(), "was returned") {
+	if _, err := checkout.Return(tv.V, folder, tv.Clock); err == nil || !strings.Contains(err.Error(), "was returned already") {
 		t.Fatalf("a second return: %v", err)
 	}
 	if !strings.HasSuffix(r.Change.Ref.Title, " Return RL") {
@@ -139,31 +166,43 @@ func TestMakeAndReturn(t *testing.T) {
 	tv.Clean()
 }
 
-// Cancel of a return's change frees the checkout to return again.
-func TestACancelledReturnFreesTheCheckout(t *testing.T) {
+// A checkout with no edit returns too: nothing to propose, and the checkout moves; a
+// second one of the same folder name takes a number.
+func TestAReturnWithNoEditMovesTheCheckout(t *testing.T) {
 	tv := library(t)
 	now := tv.Tick(time.Hour)
-	m, err := checkout.Make(tv.V, checkout.Order{Request: "Bellman", Name: "Values", Documents: []checkout.Pick{{ID: "Bellman equation"}}}, now)
+	order := checkout.Order{Request: "Bellman", Name: "Values", Documents: []checkout.Pick{{ID: "Bellman equation"}}}
+	m, err := checkout.Make(tv.V, order, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	cp := m.Copies[0]
-	tv.Write(cp, tv.Read(cp)+"\nA note.\n")
+	// A file of the user's in the checkout goes with it.
+	tv.Write(m.Folder+"/My notes.md", "Mine.\n")
 	tv.Commit()
 	r, err := checkout.Return(tv.V, m.Folder, tv.Tick(time.Minute))
+	if err != nil || r.Change != nil || r.Warning != "" {
+		t.Fatalf("a return with no edit: %+v %v", r, err)
+	}
+	if tv.Read(r.Folder+"/My notes.md") != "Mine.\n" || tv.V.Exists(m.Folder) {
+		t.Fatalf("the returned checkout: %+v", r)
+	}
+	if fm := doc.Parse("", []byte(tv.Read(r.Index))); fm.Str("status") != "returned" || fm.Str("return_change") != "" {
+		t.Fatalf("the index:\n%s", tv.Read(r.Index))
+	}
+	if log := tv.Log(); log[0] != "checkout: return "+path.Base(m.Folder) {
+		t.Fatalf("the log: %v", log)
+	}
+	tv.Clean()
+
+	m2, err := checkout.Make(tv.V, order, now)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if e := checkout.List(tv.V)[0]; e.Returned == "" {
-		t.Fatalf("a return with its change proposed: %+v", e)
+	r2, err := checkout.Return(tv.V, m2.Folder, tv.Tick(time.Minute))
+	if err != nil || r2.Folder != r.Folder+" (2)" {
+		t.Fatalf("a second return of the same name: %+v %v", r2, err)
 	}
-	if _, err := change.Reject(tv.V, r.Change.Ref.ID, "not yet", tv.Tick(time.Minute)); err != nil {
-		t.Fatal(err)
-	}
-	if e := checkout.List(tv.V)[0]; e.Returned != "" {
-		t.Fatalf("a return whose change was cancelled: %+v", e)
-	}
-	if _, err := checkout.Return(tv.V, m.Folder, tv.Tick(time.Minute)); err != nil {
-		t.Fatalf("the second return: %v", err)
+	if l := checkout.List(tv.V); len(l) != 2 || l[0].Status != "returned" || l[1].Status != "returned" {
+		t.Fatalf("the list: %+v", l)
 	}
 }

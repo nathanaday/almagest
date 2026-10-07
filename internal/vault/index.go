@@ -141,9 +141,9 @@ func Load(v *Vault) (*Index, error) {
 }
 
 // Unread reports whether a path lies in a folder whose markdown files the index keeps as
-// link targets only: the scratchpad, the journals, and the checkouts.
+// link targets only: the scratchpad, the journals, the checkouts, and the returned ones.
 func Unread(rel string) bool {
-	for _, dir := range []string{Scratchpad, Journals, Checkout} {
+	for _, dir := range []string{Scratchpad, Journals, Checkout, Returned} {
 		if rel == dir || strings.HasPrefix(rel, dir+"/") {
 			return true
 		}

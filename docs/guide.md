@@ -75,7 +75,7 @@ almagest journal publish cs566-notes   # publish a volume as a new edition
 almagest checkout                   # the checkouts, newest first
 almagest checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
 almagest checkout make order.json   # copy the documents an order names (request, name, documents, notes)
-almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
+almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits, keep the checkout in tool/returned/
 almagest wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
 almagest wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
 almagest lint                       # the health check
@@ -247,8 +247,9 @@ which you need not open. Almagest writes these files and folders:
 - `tool/sessions/`: one document per agent session. A session that runs in a Duet
   conversation links the conversation's note, in its `conversation` property and its lead
   callout.
-- `checkout/`: the librarian's checkouts, one folder each, and the ledger,
+- `checkout/`: the librarian's checkouts that are out, one folder each, and the ledger,
   `checkout/Checkout · Ledger.md`.
+- `tool/returned/`: the checkouts you returned, as you left them.
   Code writes it, and you read and edit the copies. No agent edits it. See
   [Checkouts](#checkouts).
 - `tool/trash/`: what safe delete and a change's remove took out, under
@@ -314,26 +315,28 @@ reading order, and checks out a copy of each for you to read and mark up.
   stops following a branch where its documents stop serving it. It aims for a sitting
   or a week of reading, at most about 30 documents. When more serve, it asks you once
   to narrow the request. A checkout holds at most 60 documents.
-- **The folder.** `checkout/<date> <name>/` holds the copies and a reading list. Code
-  writes it in one commit. A second checkout with the same date and name ends in
+- **The folder.** `checkout/<date> <name>/` holds the copies and the checkout's index.
+  Code writes it in one commit. A second checkout with the same date and name ends in
   " (2)".
 - **The copies.** A copy is `<Title> (checkout).md`: the original's text below a callout
   that names the original. The copy takes its own name so that a `[[Title]]` link in the
   wiki still names one file, the original. A link to another document of the checkout
   points at that document's copy; every other link points at the wiki. Edit the copies
   as you like. No agent edits `checkout/`.
-- **The reading list.** `Checkout · <folder>.md` holds your request, the documents in reading
-  order with one line each on why they are there, and the agent's notes on what it left
-  out.
-- **The ledger.** `checkout/Checkout · Ledger.md` lists every checkout, newest first: the date, the
-  request, the count of documents, the count of edited copies, and the date of its
-  return. Code writes it again at each checkout and each return, so an edit there is
-  lost.
+- **The index.** `_index.md` in the folder holds the checkout's name, your request, when
+  you checked it out, its status (out or returned), the documents in reading order with
+  one line each on why they are there, and the agent's notes on what it left out.
+- **The ledger.** `checkout/Checkout · Ledger.md` is a Base of every checkout's index, out
+  and returned, newest first: the name, the date, the count of documents, the status,
+  and the date of its return. A row opens the checkout.
 - **Return.** Press Return next to the checkout on the palette's Library page, or run
-  `almagest checkout return <folder>`. Almagest proposes one change, "Return <folder>",
-  with a modify of each original whose copy you edited. The links to copies point at the
-  originals again. You decide in the change document, as for every change. Return skips a
-  copy whose original changed since the checkout, and names it; its edits stay in the
+  `almagest checkout return <folder>`. When you edited copies, Almagest proposes one
+  change, "Return <name>", with a modify of each original whose copy you edited, and the
+  links to copies point at the originals again; you decide in the change document, as
+  for every change. Then the checkout moves, every file of it, to
+  `tool/returned/<folder>/`, so `checkout/` holds only what is out, and nothing you
+  wrote there is lost. A checkout with no edit just moves. Return skips a copy whose
+  original changed since the checkout, and names it; its edits stay in the returned
   copy. Return carries a copy's text, not its frontmatter.
 
 ## Wikify a note (experimental)
@@ -391,8 +394,10 @@ The vault works without the plugin. With it, Obsidian adds:
     **Publish** runs `almagest journal publish`, then starts a work document and an agent
     that absorbs the edition. See [Journals](#journals).
   - **Library**: **Check out material** asks for your request and starts the librarian.
-    **Return** next to a checkout runs `almagest checkout return` and opens the change;
-    it is on when a copy is edited and the checkout is not returned. See
+    It lists the checkouts that are out. **Return** next to one returns it in one click:
+    it proposes the edits of the copies as one change, when there are any, and moves the
+    checkout to `tool/returned/`, and a notice says how it went. The ledger lists every
+    checkout. See
     [Checkouts](#checkouts).
   - **Agents**: **Start an agent**, the agents Almagest started that still work, and the
     agent sessions of the vault as message threads: the open ones, each with its state

@@ -53,39 +53,41 @@ Tools: `checkout` (candidates, make, list, return), and Read. References:
      you stopped, and a gap the wiki has.
 
    Code writes `checkout/<date> <name>/` in one commit: a copy of each document as
-   `<Title> (checkout).md`, the reading list `Checkout · <folder>.md`, and the ledger
-   `checkout/Checkout · Ledger.md`. A link between two documents of the checkout points
-   at the copy; every other link points at the wiki.
+   `<Title> (checkout).md`, and the checkout's index `_index.md` (its name, request,
+   status, and reading order). The ledger `checkout/Checkout · Ledger.md` is a Base of
+   every checkout's index. A link between two documents of the checkout points at the
+   copy; every other link points at the wiki.
 
 ## Return
 
 When the user asks to return a checkout:
 
 1. Find its folder. When the user does not name it, call `checkout` (`action: list`)
-   and take the checkout whose request matches, with `edited` above 0 and `returned`
-   empty. When two match, ask which, and name both.
+   and take the checkout with `status: out` whose request matches. When two match, ask
+   which, and name both.
 2. Call `checkout` with `action: return` and `folder`. Code makes one `modify` write for
    each edited copy, with the copy's text and its links pointed back at the originals,
-   and proposes the change "Return <folder>". Return carries a copy's body only; an edit
-   of a copy's frontmatter does not return.
-3. Show the result in one or two lines: the change document as a link, and each copy in
-   `skipped` with its reason. A copy is skipped when its original is gone or changed
-   since the checkout; its edits stay in the copy.
-4. When the tool says that no copy was edited, say so. Nothing changed.
-5. A checkout returns once while its change waits or stands. When the tool says it was
-   returned, tell the user to check the documents out again to edit them further; a
-   cancelled return frees the checkout to return again.
+   and proposes the change "Return <name>". Then it moves the checkout, every file of
+   it, to `tool/returned/<folder>/`, marks its index returned, and keeps it there as
+   the user left it. Return carries a copy's body only; an edit of a copy's frontmatter
+   does not return.
+3. Show the result in one or two lines: the change document as a link, when there is
+   one, the checkout's place now, and each copy in `skipped` with its reason. A copy is
+   skipped when its original is gone or changed since the checkout; its edits stay in
+   the returned copy. With no edited copy, there is no change: the checkout just moves.
+4. A checkout returns once. When the tool says it was returned already, tell the user to
+   check the documents out again to work on them further.
 
 ## Gate
 
 None for `make`: a checkout changes no knowledge, and the copies are the user's. Never
-edit a file in `checkout/`; the guard refuses it. Return proposes a change, and the user
+edit a file in `checkout/` or `tool/returned/`; the guard refuses it. Return proposes a change, and the user
 decides in the change document (Approve or Cancel). Never apply it: the change names no
 session, so the `change` tool refuses your apply.
 
-End with one or two lines that name the reading list as a link
-(`[[checkout/<folder>/Checkout · <folder>]]`, as `make` returns it in `reading_list`)
-and the count of documents.
+End with one or two lines that name the checkout's index as a link
+(`[[checkout/<folder>/_index|<name>]]`, as `make` returns it in `index`) and the count of
+documents.
 
 ## Hand off
 

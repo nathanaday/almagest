@@ -26,7 +26,7 @@ func (c *CLI) checkoutCmd(argv []string) error {
 				fmt.Fprintln(w, "No checkout yet.")
 			}
 			for _, e := range list {
-				fmt.Fprintf(w, "%s · %s · %s · %d edited · returned %s\n", e.Folder, e.Request, count(e.Documents, "document", "documents"), e.Edited, orDash(e.Returned))
+				fmt.Fprintf(w, "%s · %s · %s · %s · %d edited\n", e.Folder, e.Status, e.Request, count(e.Documents, "document", "documents"), e.Edited)
 			}
 		})
 	case "candidates":
@@ -58,7 +58,7 @@ func (c *CLI) checkoutCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"made": m}, func(w io.Writer) {
-			fmt.Fprintf(w, "Checked out %s into %s; the reading list is %s.\n", count(len(m.Copies), "document", "documents"), m.Folder, m.ReadingList)
+			fmt.Fprintf(w, "Checked out %s into %s; its index is %s.\n", count(len(m.Copies), "document", "documents"), m.Folder, m.Index)
 		})
 	case "return":
 		r, err := checkout.Return(v, a.arg(1), now)
@@ -67,7 +67,12 @@ func (c *CLI) checkoutCmd(argv []string) error {
 		}
 		c.views(v, now)
 		return c.emit(a, map[string]any{"returned": r}, func(w io.Writer) {
-			printPreview(w, r.Change)
+			fmt.Fprintf(w, "Returned the checkout to %s.\n", r.Folder)
+			if r.Change != nil {
+				printPreview(w, r.Change)
+			} else {
+				fmt.Fprintln(w, "No copy was edited, so it proposes no change.")
+			}
 			for _, s := range r.Skipped {
 				fmt.Fprintf(w, "  left out: %s\n", s)
 			}

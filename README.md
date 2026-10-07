@@ -60,8 +60,9 @@ vault, and each volume keeps a publication history.
 
 Ask to "check out all the material on reinforcement learning". The librarian finds the
 relevant pages, follows their links only as far as they stay relevant, and puts copies
-of them in `checkout/` with a reading list. Read and mark up the copies. Return proposes
-your edits to the originals as one change, and a ledger lists every checkout.
+of them in `checkout/` with an index in reading order. Read and mark up the copies.
+Return proposes your edits to the originals as one change, and keeps the checkout in
+`tool/returned/` as you left it. A ledger lists every checkout.
 
 ### Wikify a note (experimental)
 

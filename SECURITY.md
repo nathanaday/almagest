@@ -76,8 +76,9 @@ press Approve in the change document and apply it yourself.
   volume it writes only the publication history, and changes no note. The agent then absorbs the edition through a change, and the
   gate above holds for it. The `source` tool cannot write `origin: journal`.
 - The `checkout` tool changes no knowledge document. `make` writes only under
-  `checkout/`: the copies, the reading list, and the ledger. `return` proposes a change
-  of the originals and never applies it. That change names no session, so the `change`
+  `checkout/`: the copies, the checkout's index, and the ledger. `return` proposes a
+  change of the originals and never applies it, then moves the checkout, as it is, to
+  `tool/returned/`. That change names no session, so the `change`
   tool refuses the agent's apply, and you decide with Approve or Cancel in the change
   document. Each write of the change carries the original's hash at the checkout as its
   base: `return` leaves out a copy whose original changed since, and apply refuses a
@@ -106,8 +107,9 @@ edit of:
 - `journals/`: your own writing, since 10.0. No agent edits a file there, the
   publication history that code writes included.
 - `tool/trash/`: what safe delete and a change's remove took out. You empty it.
-- `checkout/`: the copies, reading lists, and ledger that the `checkout` tool writes.
+- `checkout/`: the copies, indexes, and ledger that the `checkout` tool writes.
   You read and edit the copies; `return` proposes your edits as a change.
+- `tool/returned/`: the checkouts you returned, as you left them.
 - `Almagest.md`, a `.base` file, and `.claude/settings.local.json`.
 - `tool/sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.

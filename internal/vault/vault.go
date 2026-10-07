@@ -28,7 +28,7 @@ const (
 	Scratchpad = "scratchpad"
 	Changes    = "changes"
 	// Tool holds what Almagest keeps for itself, which the user need not open: the store
-	// of the wiki, the session records, and the trash.
+	// of the wiki, the session records, the trash, and the returned checkouts.
 	Tool     = "tool"
 	Sessions = "tool/sessions"
 	// Core is the store of the wiki: the documents, and the originals they describe.
@@ -42,7 +42,9 @@ const (
 	// Checkout holds the librarian's copies of documents, and its ledger.
 	Checkout = "checkout"
 	// Trash holds what safe delete removed; the user empties it.
-	Trash     = "tool/trash"
+	Trash = "tool/trash"
+	// Returned holds the checkouts the user returned, as they were, with what the user wrote in them.
+	Returned  = "tool/returned"
 	Settings  = ".claude/settings.local.json"
 	Obsidian  = ".obsidian"
 	PluginDir = ".obsidian/plugins/almagest"

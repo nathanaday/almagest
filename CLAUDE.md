@@ -222,8 +222,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   takes a title with a prefix of `vault.ReservedPrefixes` (`Tag · `, `View · `,
   `Checkout · `, `Journal · `), which no document takes (proposals, captures, and lint
   refuse it). So a link to the note names one file: the ledger is
-  `checkout/Checkout · Ledger.md`, a reading list `Checkout · <folder name>.md`, and a
-  volume's history `Journal · <folder>.md`.
+  `checkout/Checkout · Ledger.md`, and a volume's history `Journal · <folder>.md`. A
+  checkout's index is `_index.md` in its folder, which a link names by its path.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
   reach the wiki, and an inline Base of the sources with that `volume` (the folder name
@@ -272,25 +272,32 @@ The design pages are the spec. When the code departs from them, the reason is be
   `checkout_base`, why "edited in the checkout <name>". It leaves out a copy whose
   original is gone or whose `BaseHash` differs from `checkout_base`, and names it in
   `skipped`. It proposes one change, "Return <folder>", with no `session`, so only the
-  user applies it (Approve, or `change apply` in a terminal). It sets `returned` in the
-  reading list and writes the ledger in a commit of its own. When that commit fails
-  after the change is proposed, Return returns the change with a `warning`, not an
-  error, so the user sees the change; the palette shows the warning. A checkout is returned
-  while its return change (`return_change`) is proposed or applied, and a second return
-  is refused then; a rejected, superseded, or undone return change frees it. The
-  change's title is "Return <name>" (the folder without its date). With no edited copy it
-  changes nothing and returns an error that says so. Return carries the body only; an
-  edit of a copy's frontmatter does not return.
-- **The reading list and the ledger are code's.** `make` writes the reading list,
-  `Checkout · <folder name>.md` (`request`, `checked_out`, `documents`, `returned`; a
-  callout, `## Request`, `## Reading order`, `## Notes`), and the ledger,
-  `checkout/Checkout · Ledger.md`, a table of every checkout,
-  newest first, written again at each make and return from the reading lists
-  (`checkout.List`). The guard refuses agent edits under `checkout/`; a read-only agent
-  may call `checkout` `candidates` and `list`.
+  user applies it (Approve, or `change apply` in a terminal).
+- **Return moves the checkout out of `checkout/`, and loses nothing.** After the
+  proposal (or with no edited copy, at once), `moveReturned` moves every file of the
+  folder, the user's own files too, to `tool/returned/<folder>/` (" (2)" when taken),
+  points the links that name the folder at the new place (`MoveLinks`), sets `status:
+  returned`, `returned`, and `return_change` in the index, and writes the ledger, in one
+  commit. `checkout/` then holds only what is out, and the palette counts only that. A
+  checkout returns once; a returned one is checked out again to work on further, and
+  cancelling its change leaves it returned, with the edits in its copies. When the move
+  fails after the change is proposed, Return returns the change with a `warning`, not an
+  error, so the user sees the change. A skipped copy no longer stops a return: its edits
+  stay in the returned copy. The change's title is "Return <name>" (the folder without
+  its date). Return carries the body only; an edit of a copy's frontmatter does not
+  return. `tool/returned/` is unread like `checkout/` (`vault.Unread`), and the guard
+  refuses agent edits there.
+- **The index and the ledger are code's.** `make` writes the index, `_index.md` (`name`,
+  `request`, `checked_out`, `documents`, `status`, `returned`, `return_change`; a `#
+  <name>` heading, a callout, `## Request`, `## Reading order`, `## Notes`). The ledger,
+  `checkout/Checkout · Ledger.md`, is a Base of every `_index` in `checkout/` and
+  `tool/returned/` (`checkout.LedgerNote`); code writes it when it is missing or
+  another. The 11.0 migration turns each reading list, `Checkout · <folder>.md`, into
+  the index and moves a returned checkout. The guard refuses agent edits under
+  `checkout/`; a read-only agent may call `checkout` `candidates` and `list`.
 - **Status names the checkouts.** `vault --json` adds `checkouts`, the entries of
-  `checkout list`: per checkout `folder`, `request`, `date`, `documents`, `edited` (the
-  count of edited copies), and `returned`.
+  `checkout list`, out and returned: per checkout `folder`, `name`, `request`, `date`,
+  `documents`, `edited` (the count of edited copies), `status`, and `returned`.
 - **A wikified copy lies in `scratchpad/`, not beside its note.** `wikify.Start` writes
   `scratchpad/<name> · wikified.md` (`wikify.Suffix`), and `<name> · wikified (2).md`
   when that name is taken. The strategy note put the copy beside the note, but a copy
