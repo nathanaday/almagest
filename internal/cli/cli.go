@@ -1,5 +1,5 @@
 // Package cli is the almagest command: one subcommand per tool action, the hooks, the MCP
-// server, and the commands no tool needs (setup, doctor, version, open, vault migrate).
+// server, and the commands no tool needs (setup, doctor, version, open).
 // Every command reaches the same function its tool does.
 package cli
 
@@ -10,7 +10,6 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path"
 	"sort"
 	"strconv"
 	"strings"
@@ -25,7 +24,6 @@ import (
 	"github.com/nathanaday/almagest/internal/lint"
 	"github.com/nathanaday/almagest/internal/match"
 	"github.com/nathanaday/almagest/internal/mcpserver"
-	"github.com/nathanaday/almagest/internal/migrate"
 	"github.com/nathanaday/almagest/internal/search"
 	"github.com/nathanaday/almagest/internal/source"
 	"github.com/nathanaday/almagest/internal/vault"
@@ -85,7 +83,7 @@ No --json: setup, open, doctor, version, help, hook, mcp.
 
 // commands are the usage of each command, in the order help lists them.
 var commands = []struct{ name, usage string }{
-	{"vault", `  almagest vault [status] | sync [--views] | snapshot | trash PATH | migrate [--dry-run]
+	{"vault", `  almagest vault [status] | sync [--views] | snapshot | trash PATH
                        | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
 `},
 	{"search", `  almagest search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
@@ -253,15 +251,6 @@ type args struct {
 	flags map[string][]string
 }
 
-// removed refuses an option a command no longer takes. The command lists it among
-// parse's booleans, so it never takes the next word as its value.
-func (a args) removed(name, why string) error {
-	if a.has(name) {
-		return fmt.Errorf("--%s is gone: %s", name, why)
-	}
-	return nil
-}
-
 // parse reads --name value, --name=value, and the boolean flags named in bools.
 func parse(argv []string, bools ...string) args {
 	a := args{flags: map[string][]string{}}
@@ -380,7 +369,7 @@ func (c *CLI) readText(file string) (string, error) {
 
 // user is how the CLI acts: as the user, now.
 func (c *CLI) vaultCmd(argv []string) error {
-	a := parse(argv, "views", "dry-run")
+	a := parse(argv, "views")
 	now := c.Now()
 	switch a.arg(0) {
 	case "", "status":
@@ -463,25 +452,8 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return exitError{code: 2, err: fmt.Errorf("%s stays: %s; point them elsewhere first", res.Path, count(len(res.Backlinks), "document links it", "documents link it"))}
 		}
 		return nil
-	case "migrate":
-		v, err := c.open(a)
-		if err != nil {
-			return err
-		}
-		if a.has("dry-run") {
-			r, err := migrate.Plan(v)
-			if err != nil {
-				return err
-			}
-			return c.emit(a, r, func(w io.Writer) { printMigration(w, r, false) })
-		}
-		r, err := migrate.Run(v, now)
-		if err != nil {
-			return err
-		}
-		return c.emit(a, r, func(w io.Writer) { printMigration(w, r, true) })
 	}
-	return fmt.Errorf("vault takes status, init, sync, snapshot, trash, or migrate, not %q", a.arg(0))
+	return fmt.Errorf("vault takes status, init, sync, snapshot, or trash, not %q", a.arg(0))
 }
 
 func printTrash(w io.Writer, r *core.Trashed) {
@@ -505,43 +477,6 @@ type exitError struct {
 }
 
 func (e exitError) Error() string { return e.err.Error() }
-
-func printMigration(w io.Writer, r *migrate.Report, done bool) {
-	if done {
-		fmt.Fprintf(w, "Migrated %s from the %s layout to 10.0 in one commit, %s.\n", r.Vault, r.From, short(r.Commit))
-	} else {
-		fmt.Fprintf(w, "The migration of %s from the %s layout to 10.0 would make these moves; run it without --dry-run to write them, or add --json to list every file.\n", r.Vault, r.From)
-	}
-	// The moves, counted by the folders they leave and reach.
-	type pair struct{ from, to string }
-	counts := map[pair]int{}
-	var order []pair
-	for _, m := range r.Moved {
-		k := pair{path.Dir(m.From), path.Dir(m.To)}
-		if counts[k] == 0 {
-			order = append(order, k)
-		}
-		counts[k]++
-	}
-	for _, k := range order {
-		fmt.Fprintf(w, "  move  %s/ → %s/: %s\n", k.from, k.to, count(counts[k], "file", "files"))
-	}
-	if n := len(r.Edited); n > 0 {
-		fmt.Fprintf(w, "  edit  %s: the fields and sections of the threads, or the paths they name\n", count(n, "file", "files"))
-	}
-	if n := len(r.Removed); n > 0 {
-		fmt.Fprintf(w, "  remove  %s that code writes again in %s/\n", count(n, "view", "views"), vault.WikiView)
-	}
-	for _, x := range r.Warnings {
-		fmt.Fprintf(w, "  warning: %s\n", x)
-	}
-	for _, m := range r.Strays {
-		fmt.Fprintln(w, core.StrayLine(m))
-	}
-	if done && r.Problems > 0 {
-		fmt.Fprintf(w, "Lint finds %d errors after the move: almagest lint lists them.\n", r.Problems)
-	}
-}
 
 func short(sha string) string { return sha[:min(10, len(sha))] }
 
@@ -689,12 +624,6 @@ func (c *CLI) sourceCmd(argv []string) error {
 	a := parse(argv, "new-tags")
 	switch a.arg(0) {
 	case "capture":
-		if err := a.removed("resolves", "a stub no longer exists since 9.0; capture the source without --resolves"); err != nil {
-			return err
-		}
-		if err := a.removed("inbox", "the inbox is ingest/ since Almagest 10.0; name the files with --ingest"); err != nil {
-			return err
-		}
 		v, err := c.open(a)
 		if err != nil {
 			return err

@@ -55,10 +55,8 @@ func Init(opts InitOptions, h Home, now time.Time) (*Vault, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
-	for _, m := range []string{Marker, LegacyMarker} {
-		if _, err := os.Stat(filepath.Join(root, m)); err == nil {
-			return nil, fmt.Errorf("%s already holds an %s; it is a vault", root, m)
-		}
+	if _, err := os.Stat(filepath.Join(root, Marker)); err == nil {
+		return nil, fmt.Errorf("%s already holds an %s; it is a vault", root, Marker)
 	}
 	if top := gitx.Top(root); top != "" && !gitx.IsRoot(root) {
 		return nil, fmt.Errorf("%s is inside the repository at %s; a vault must be the root of its own repository, so choose a folder outside it", root, top)
@@ -176,6 +174,3 @@ func manifestVersion(data []byte) string {
 	}
 	return ""
 }
-
-// Template is the content of one template file, for tests.
-func Template(name string) ([]byte, error) { return templates.ReadFile("template/" + name) }

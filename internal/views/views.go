@@ -41,14 +41,6 @@ const (
 // Notice opens every view.
 const Notice = "> [!view] Written by Almagest from the documents. Edits here are lost at the next sync."
 
-// legacyNotice opened the notes of the releases before 11.0.
-const legacyNotice = "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync."
-
-// Written reports whether a note is one the views wrote, in this release or an earlier one.
-func Written(data []byte) bool {
-	return strings.Contains(string(data), Notice) || strings.Contains(string(data), legacyNotice)
-}
-
 // TagTitle is the title of a tag's view: Tag · school › cs513.
 func TagTitle(t string) string {
 	return "Tag · " + strings.ReplaceAll(t, "/", " › ")
@@ -91,7 +83,7 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 		if err != nil {
 			continue
 		}
-		if Written(data) {
+		if strings.Contains(string(data), Notice) {
 			if err := v.Remove(rel); err == nil {
 				written = append(written, rel)
 			}

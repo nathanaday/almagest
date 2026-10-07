@@ -282,8 +282,6 @@ func (r *run) placement() {
 	for _, d := range r.idx.Notes {
 		switch {
 		case path.Dir(d.Path) != vault.Documents:
-		case slices.Contains(schema.ArchivedTypes, d.Type()):
-			r.add("archived", Error, d, "move it into "+vault.Threads+"/", "a %s of Almagest 8.x in "+vault.Documents+"; Almagest keeps thread documents in %s/ and reads none of them", d.Type(), vault.Threads)
 		case !r.opts.Quick:
 			r.add("untyped", Warning, d, "wiki-ingest: capture it, or move it out of "+vault.Documents, "a note with no type in "+vault.Documents)
 		}

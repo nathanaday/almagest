@@ -430,7 +430,7 @@ func Show(idx *vault.Index, key string) (*Preview, error) {
 	prior := current(idx)
 	sha := ""
 	if s := d.Str("status"); s == Applied || s == Undone {
-		sha, _ = vault.ChangeCommit(idx.V.Git(), d.ID())
+		sha, _ = idx.V.Git().FindTrailer(Trailer, d.ID())
 		if sha != "" {
 			prior = atParent(idx, sha)
 		}
@@ -994,7 +994,7 @@ func Undo(v *vault.Vault, key string, now time.Time) (_ *Preview, err error) {
 		return nil, fmt.Errorf("%s is %s; only an applied change can be undone", vault.Title(d), s)
 	}
 	g := v.Git()
-	sha, err := vault.ChangeCommit(g, d.ID())
+	sha, err := g.FindTrailer(Trailer, d.ID())
 	if err != nil {
 		return nil, err
 	}

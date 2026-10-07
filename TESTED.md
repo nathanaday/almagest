@@ -19,8 +19,6 @@ row or change a level each time you test a setup.
 
 | Date       | OS                     | Obsidian | Claude Code | Codex   | Almagest |
 | ---------- | ---------------------- | -------- | ----------- | ------- | ----- |
-| 2026-10-01 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1 | 8.1.1 |
-| 2026-10-04 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1, 0.160.0 | 8.1.1 at `a623068` |
 | 2026-10-07 | macOS (Darwin 25.6.0)  | 1.14.4   | —           | —       | 11.0.0 (Go suite, launcher, release build) |
 
 ## Agent preferences
@@ -32,34 +30,24 @@ row or change a level each time you test a setup.
 | A missing key falls back to the global file, then the default | Unit, Live  |
 | An unknown key or a bad value is an error with the allowed values | Unit, Live (CLI) |
 | The settings tab shows both files and writes either one      | Live        |
-| The 8.0.2 plugin settings move into the vault file once      | Unit, Live  |
 | `agent: codex` from the config starts Codex from Start agent | Unit        |
 
-## Codex plugin (2026-10-04)
+## Codex plugin
 
-Codex 0.155.1 and 0.160.0, with the plugin installed from a `git archive` of `a623068`
-into a scratch `CODEX_HOME` per version, and a scratch `HOME` whose `~/.almagest/bin` held the built binary.
-No Codex session ran: the checks used `codex mcp list --json`, `codex app-server`, and
-`almagest doctor`.
+Not yet run with the launcher in the Codex server entry. Each case below is to repeat.
 
-| Case                                                                   | Level            | Result |
-| ---------------------------------------------------------------------- | ---------------- | ------ |
-| `codex mcp list --json` lists the almagest entry with no `${` and no `cwd` | Live (Codex CLI) | `/bin/sh -c …` with 0 `${` on both versions, `env_vars` `ALMAGEST_BIN`, `ALMAGEST_HOME`, `ALMAGEST_VAULT`. At `84f33f3` the script still held `${ALMAGEST_BIN:-}` and `${ALMAGEST_HOME:-…}` (round 1, fixed in `63f61e6`) |
-| That command, in a vault with only `HOME` and `PATH`, serves the tools | Live (Codex CLI) | `initialize` 8.1.1, 9 tools, `vault status` answered for that vault |
-| `doctor` on the 8.1.1 plugin (`3639ae5`)                                | Live (Codex CLI) | `FAIL codex server`: the `${CLAUDE_PLUGIN_ROOT}` placeholder |
-| `doctor` on this plugin, fresh install                                 | Live (Codex CLI) | `ok codex server` (9 tools), `FAIL codex hooks` (8 untrusted), on both versions |
-| The Codex update hint for a Git and for a local marketplace           | Live (Codex CLI) | Git: upgrade, remove, add; local: remove and add ran (upgrade fails there) |
-| `doctor` after the 8 hooks are trusted                                 | Live (Codex CLI) | `ok codex hooks`, exit 0 |
-| `doctor` after one cached hook changes                                 | Live (Codex CLI) | `FAIL codex hooks` (1 modified) |
-| `setup --agent codex` on an installed plugin                           | Live (Codex CLI) | prints the `hooks` line |
-| Trust through `/hooks` in the Codex TUI                                | None             | the scratch home's `config.toml` got `[hooks.state."<key>"] trusted_hash` entries from `hooks/list` instead |
-| A Codex session calls an almagest tool                                    | None             | |
+| Case | Level |
+| ---- | ----- |
+| `codex mcp list --json` lists the almagest entry: `/bin/sh -c <the launcher>`, no `${`, no `cwd` | None |
+| That command, in a vault with only `HOME` and `PATH`, installs the binary and serves the tools | None |
+| `doctor`: `ok codex server` on a fresh install, and the hooks' trust before and after `/hooks` | None |
+| A Codex session calls an almagest tool | None |
 
-To repeat it: `make build`; extract `git archive HEAD` into a folder and commit it there;
-then, with `CODEX_HOME` set to an empty folder, run `codex plugin marketplace add <folder>`
-and `codex plugin add almagest@nathanaday-almagest`. Copy the binary to
-`<scratch home>/.almagest/bin/`, and run `doctor` with `env -i HOME=<scratch home>
-PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder>`.
+To run them: with `CODEX_HOME` set to an empty folder, run `codex plugin marketplace add
+<a clone of this repository>` and `codex plugin add almagest@nathanaday-almagest`, then
+run `doctor` with `env -i HOME=<scratch home> PATH=/usr/local/bin:/usr/bin:/bin
+CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder>`. Set `ALMAGEST_BIN` to `build/almagest`
+to test a build that has no release.
 
 ## The launcher and the release (2026-10-07)
 
@@ -75,7 +63,7 @@ PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder
 | A hook with no binary | Unit | `session-start` says why and passes; other hooks pass quietly |
 | The pinned 11.0.0 launcher installs the real 11.0.0 binary from the release folder `make pin` built (`file://`) | Live (macOS arm64) | sha256 matches, `version --json` prints 11.0.0 and protocol 1, the second run uses the installed copy |
 | `make release` twice, and from a copy in another folder with another module cache | Live (macOS arm64) | the same checksums |
-| The release workflow's build on Linux matches the checksums of a macOS `make pin` | None | the first tag shows it |
+| The release workflow's build on Linux matches the checksums of a macOS `make pin` | Live (GitHub Actions) | the 11.0.0 release, and every release run on `main` since |
 
 ## The Obsidian plugin
 

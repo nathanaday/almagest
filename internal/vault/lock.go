@@ -65,16 +65,6 @@ func (v *Vault) LockWithin(wait time.Duration) (func(), error) {
 	}, nil
 }
 
-// LockLegacy takes .git/atlas.lock, the lock of the binary before 11.0, which may still be
-// installed and read the vault. The migration holds it with Lock, so that binary waits.
-func (v *Vault) LockLegacy() (func(), error) {
-	dir := v.Git().GitDir()
-	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
-		return func() {}, nil
-	}
-	return flock(filepath.Join(dir, "atlas.lock"), time.Now().Add(LockWait))
-}
-
 // flock takes an exclusive lock on file, waiting until deadline.
 func flock(file string, deadline time.Time) (func(), error) {
 	f, err := os.OpenFile(file, os.O_CREATE|os.O_RDWR, 0o644)
@@ -114,9 +104,6 @@ type Tx struct {
 	rolledBack bool
 	// added is set once the commit staged the paths, so rollback knows to unstage them.
 	added bool
-	// all makes the commit stage the whole tree, for a write that changes too many paths
-	// to mark (the migration).
-	all bool
 	// saved are the paths rollback left as saved, because they changed after the write.
 	saved []string
 	// staged are contents the commit records in place of what the disk holds.
@@ -134,20 +121,10 @@ type found struct {
 	link   string
 }
 
-// Begin takes the lock, runs recover (the repair of a write a crash left half done),
-// commits a dirty tree as a snapshot, and commits a Base upgrade on its own, so the
-// write's own commit holds only its paths and an undo never takes back a hand edit.
+// Begin takes the lock, runs recover (the repair of a write a crash left half done), and
+// commits a dirty tree as a snapshot, so the write's own commit holds only its paths and
+// an undo never takes back a hand edit.
 func Begin(v *Vault, recover func() error) (*Tx, error) {
-	tx, err := BeginAsIs(v, recover)
-	if err == nil {
-		upgradeBases(v)
-	}
-	return tx, err
-}
-
-// BeginAsIs is Begin without the Base upgrade, for the migration, whose own commit
-// upgrades the Bases (UpgradeBases), so a failed migration leaves no commit behind.
-func BeginAsIs(v *Vault, recover func() error) (*Tx, error) {
 	unlock, err := v.Lock()
 	if err != nil {
 		return nil, err
@@ -258,12 +235,7 @@ func (tx *Tx) rollback() []string {
 		}
 	}
 	tx.V.Prune(paths...)
-	if tx.added && tx.all {
-		// The write began from a clean index, so the whole index goes back to HEAD.
-		if err := tx.V.Git().Unstage("."); err != nil {
-			failed = append(failed, fmt.Sprintf("the index (%v)", firstLine(err)))
-		}
-	} else if tx.added {
+	if tx.added {
 		if err := tx.V.Git().Unstage(paths...); err != nil {
 			failed = append(failed, fmt.Sprintf("the index entries of %s (%v)", strings.Join(paths, ", "), firstLine(err)))
 		}
@@ -435,9 +407,8 @@ func (tx *Tx) Move(from, to string) error {
 	return nil
 }
 
-// Settle records what another function left at paths (a git checkout, a migration's own
-// writes) as this write's own bytes, so rollback can tell a save that lands later from
-// them, as it does for Write.
+// Settle records what another function left at paths (a git checkout) as this write's
+// own bytes, so rollback can tell a save that lands later from them, as it does for Write.
 func (tx *Tx) Settle(paths ...string) {
 	for _, rel := range paths {
 		data, err := os.ReadFile(tx.V.Abs(rel))
@@ -481,13 +452,6 @@ func (tx *Tx) Paths() []string {
 	return out
 }
 
-// CommitAll is Commit for a write that stages the whole tree: every path it changed must
-// have been kept with Keep, so a failed commit can put them back.
-func (tx *Tx) CommitAll(message string) (string, error) {
-	tx.all = true
-	return tx.Commit(message)
-}
-
 // Commit stages the marked paths and commits them with the subject and trailers
 // ("Key: value"). It returns "" when nothing changed.
 func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
@@ -501,11 +465,7 @@ func (tx *Tx) Commit(subject string, trailers ...string) (string, error) {
 
 func (tx *Tx) commit(subject string, trailers []string) (string, error) {
 	g := tx.V.Git()
-	stage := func() error { return g.Add(tx.Paths()...) }
-	if tx.all {
-		stage = g.AddAll
-	}
-	if err := stage(); err != nil {
+	if err := g.Add(tx.Paths()...); err != nil {
 		return "", err
 	}
 	tx.added = true

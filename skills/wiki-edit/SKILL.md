@@ -51,12 +51,12 @@ them: "[[<note>]] is the user's to fix, so leave it and propose no remove".
    the title and grep the vault for `[[<title>`.
 2. Build one plan:
    - when another document covers its subject, a `remove` with `redirect` set to it;
-     code points the links there, but not in `scratchpad/`, `threads/`, `journals/`,
+     code points the links there, but not in `scratchpad/`, `journals/`,
      or `checkout/`;
    - otherwise, a `modify` of each linking knowledge document that points the link to
      another document or drops it, then a `remove`.
 3. A link outside the knowledge documents is the user's: in `scratchpad/`,
-   `threads/`, `journals/`, `checkout/`, or any other note. Do not edit it. When the
+   `journals/`, `checkout/`, or any other note. Do not edit it. When the
    message names such a file, or you find one, propose the `modify` writes only, with
    no `remove`, and tell the user which files to fix before Safe delete runs again. A
    checked-out copy links its original in `checkout_of`.

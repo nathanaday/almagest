@@ -110,11 +110,10 @@ func TestMakeAndReturn(t *testing.T) {
 	if e := checkout.List(tv.V)[0]; e.Edited != 2 {
 		t.Fatalf("the edited count: %+v", e)
 	}
-	r, err := checkout.Return(tv.V, "RL", tv.Tick(time.Minute))
-	if err == nil {
+	if _, err := checkout.Return(tv.V, "RL", tv.Tick(time.Minute)); err == nil {
 		t.Fatal("a checkout's folder named without its date")
 	}
-	r, err = checkout.Return(tv.V, folder, tv.Tick(time.Minute))
+	r, err := checkout.Return(tv.V, folder, tv.Tick(time.Minute))
 	if err != nil {
 		t.Fatal(err)
 	}

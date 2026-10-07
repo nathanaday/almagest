@@ -10,10 +10,6 @@ of request, finds the repository or the tags that the request names, and hands o
 request to change code in a linked repository goes to no other skill: this skill finds
 the repository and does the work.
 
-Threads and chords left Almagest in 9.0. They live in the standalone project
-obsidian-threads. The 9.0 migration moved the old thread documents to `threads/`, which
-Almagest does not read.
-
 Tools: `vault`, `search`, `context`. References:
 [conventions.md](references/conventions.md).
 

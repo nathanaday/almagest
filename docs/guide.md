@@ -467,5 +467,4 @@ These rules hold everywhere in Almagest:
   `internal/release` (the launcher's template and `make pin`), and
   `.github/workflows/release.yml`.
 - The Obsidian plugin is in its own repository, `obsidian-almagest`.
-- `v7-design/`: the design pages of 7.0, kept for reference.
 - Notes for agents that work on this code: [CLAUDE.md](../CLAUDE.md).

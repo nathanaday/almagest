@@ -15,7 +15,7 @@ import (
 // once: setup copies the binary, vault init makes a vault, hook reads stdin.
 func TestHelpRunsNothing(t *testing.T) {
 	calls := [][]string{
-		{"vault", "init"}, {"vault", "sync"}, {"vault", "migrate"}, {"vault", "snapshot"}, {"search", "x"},
+		{"vault", "init"}, {"vault", "sync"}, {"vault", "snapshot"}, {"search", "x"},
 		{"context"}, {"match"}, {"source", "capture"}, {"change", "apply", "x"}, {"lint"}, {"hook", "session-start"},
 		{"mcp"}, {"config", "set", "agent", "codex"}, {"setup"}, {"doctor"}, {"version"}, {"open"}, {"help"},
 	}

@@ -408,24 +408,3 @@ func (in Input) oldStrings() []string {
 	}
 	return out
 }
-
-// added are the lines an edit puts into a file, and removed the lines it takes out.
-func (in Input) added(f patchFile) (added, removed []string) {
-	if in.ToolName == "apply_patch" {
-		return f.Added, f.Removed
-	}
-	t := in.tool()
-	pairs := [][2]string{{t.OldString, t.NewString}}
-	for _, e := range t.Edits {
-		pairs = append(pairs, [2]string{e.OldString, e.NewString})
-	}
-	for _, p := range pairs {
-		if p[0] != "" {
-			removed = append(removed, strings.Split(p[0], "\n")...)
-		}
-		if p[1] != "" {
-			added = append(added, strings.Split(p[1], "\n")...)
-		}
-	}
-	return added, removed
-}

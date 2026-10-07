@@ -63,7 +63,7 @@ writes:
 - Name a document that exists by its id. Give `base` only when you read the document's
   hash; code records it otherwise, and apply refuses when the file changed since.
 - Use rename, never a remove and a create: code rewrites every link to the old title in
-  the same commit. It rewrites no note in `scratchpad/`, `threads/`, `journals/`, or
+  the same commit. It rewrites no note in `scratchpad/`, `journals/`, or
   `checkout/`.
 - Use retag to rename a tag: code rewrites it in `tags` and `defines` of every typed
   document, and every inline `#tag` in every note outside those four folders. A retag

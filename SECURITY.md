@@ -115,8 +115,7 @@ edit of:
   `config.json` in `~/.almagest` (or `$ALMAGEST_HOME`). These files decide what Almagest runs; see
   [A shared vault changes what runs](#a-shared-vault-changes-what-runs).
 
-The guard does not refuse an edit inside a linked repository, or in `threads/`, the
-archive that the 9.0 migration writes.
+The guard does not refuse an edit inside a linked repository.
 
 The guard judges a path as the disk names it. It follows links, and it matches each folder
 name without regard to case, so another spelling of a path meets the rule of the real file.
@@ -137,13 +136,11 @@ call that this list does not name as a write.
 
 The guard reads a Bash command as bash and zsh read it: quotes, escapes, separators, brace
 lists, redirects, process substitutions, and a quoted string that a shell or `eval` runs.
-It refuses a command that runs one of these, as `almagest` or under a name the binary had
-before 11.0 (`atlas-obsidian`, `atlas`), since an older install may still run in the vault:
+It refuses a command that runs `almagest` with one of these:
 
 - `change … apply`, which applies a change without the gate;
 - `change … undo`, which takes back a change, your own act among them;
 - `hook`, which sends the binary a fake hook event, for example a fake prompt from you;
-- `vault … migrate`, which rewrites the whole vault;
 - `vault … trash`, your safe delete, which applies a remove without the gate;
 - `journal … publish`, which copies a journal volume into the wiki's sources; only you
   decide when a journal is published;

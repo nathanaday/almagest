@@ -14,21 +14,7 @@ import (
 const Applying = "applying"
 
 // ChangeTrailer is the trailer of an apply's commit, which names the change's id.
-// LegacyChangeTrailer is its name before 11.0, which the commits of that time keep.
-const (
-	ChangeTrailer       = "Almagest-Change"
-	LegacyChangeTrailer = "Atlas-Change"
-)
-
-// ChangeCommit is the commit that applied a change, under its trailer of this release or
-// of one before 11.0, or "".
-func ChangeCommit(g gitx.Repo, id string) (string, error) {
-	sha, err := g.FindTrailer(ChangeTrailer, id)
-	if err != nil || sha != "" {
-		return sha, err
-	}
-	return g.FindTrailer(LegacyChangeTrailer, id)
-}
+const ChangeTrailer = "Almagest-Change"
 
 // Recover finds each change a crash left in flight: a change document that still holds
 // paths. When the apply's commit exists, the apply landed and only the document's last
@@ -48,7 +34,7 @@ func Recover(v *Vault) error {
 		if !d.Front.Has("paths") || d.ID() == "" {
 			continue
 		}
-		if sha, err := ChangeCommit(g, d.ID()); err == nil && sha != "" && g.Has(sha+":"+d.Path) {
+		if sha, err := g.FindTrailer(ChangeTrailer, d.ID()); err == nil && sha != "" && g.Has(sha+":"+d.Path) {
 			// The apply landed: its commit holds the document as applied. The file differs
 			// from it by paths alone, unless someone edited it after the crash; such an
 			// edit goes into git first. The document comes from the apply's own commit, so

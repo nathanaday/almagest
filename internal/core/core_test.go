@@ -2,6 +2,7 @@ package core_test
 
 import (
 	"encoding/json"
+	"errors"
 	"os"
 	"os/exec"
 	"strconv"
@@ -63,11 +64,11 @@ func TestSyncRewrites(t *testing.T) {
 	if !tv.V.Exists("wiki-view/View · Home.md") {
 		t.Fatal("sync writes the views")
 	}
-	// A vault of an earlier layout refuses a sync.
-	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
+	// A vault of another layout refuses a sync.
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "layout: 7", "layout: 8", 1))
 	v, _ := vault.Open(tv.V.Root)
-	if _, err := core.Sync(v, testvault.Now, core.SyncOptions{}); err == nil || !strings.Contains(err.Error(), "vault migrate") {
-		t.Fatalf("legacy: %v", err)
+	if _, err := core.Sync(v, testvault.Now, core.SyncOptions{}); !errors.Is(err, vault.ErrLayout) {
+		t.Fatalf("another layout: %v", err)
 	}
 }
 

@@ -121,21 +121,6 @@ func TestPendingAndStale(t *testing.T) {
 	}
 }
 
-func TestArchivedTypeInDocuments(t *testing.T) {
-	tv := testvault.New(t)
-	tv.Doc("spec", "Score boxes · Spec", map[string]any{"thread": "[[Score boxes]]"}, "## Goal\n\nx\n")
-	f := run(t, tv, lint.Options{})
-	var got []lint.Finding
-	for _, x := range f.Findings {
-		if x.Doc.Title == "Score boxes · Spec" {
-			got = append(got, x)
-		}
-	}
-	if len(got) != 1 || got[0].Check != "archived" || got[0].Severity != lint.Error {
-		t.Fatalf("a spec in source-core/documents gives one archived error: %+v", got)
-	}
-}
-
 func TestThreadsArchiveResolvesLinks(t *testing.T) {
 	tv := testvault.New(t)
 	tv.Write("threads/Fix alarms.md", "---\nid: doc-aaaaaa\ntype: stub\ndescription: x\n---\n\n## Idea\n\n[[Nowhere]]\n")

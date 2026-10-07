@@ -121,7 +121,7 @@ func trashRefusal(rel string) string {
 	switch {
 	case vault.IsMarker(rel):
 		return "is the vault's own document"
-	case is(vault.Obsidian, ".claude", ".almagest", ".atlas"):
+	case is(vault.Obsidian, ".claude", ".almagest"):
 		return "is a setting of the vault, not a note"
 	case is(vault.Changes, vault.Sessions):
 		return "is a record that code keeps"

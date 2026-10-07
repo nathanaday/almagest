@@ -113,8 +113,7 @@ func (t *Type) Document() bool {
 	return t.Family == Knowledge
 }
 
-// The prefix of every new document of source-core/documents. A document from a 6.x vault keeps
-// its old prefix, since an id never changes.
+// The prefix of the id of every document of source-core/documents.
 const DocPrefix = "doc"
 
 // Kinds of the types that have one.
@@ -247,10 +246,6 @@ func Get(name string) *Type { return byName[name] }
 
 // DocumentTypes are the three types of source-core/documents.
 var DocumentTypes = []string{"source", "repository", "topic"}
-
-// ArchivedTypes are the types of the thread documents that 8.x kept in source-core/documents and
-// the 9.0 migration moved to threads/.
-var ArchivedTypes = []string{"stub", "spec", "tasks", "verification", "chord", "event"}
 
 // Is reports whether name is a document type.
 func Is(name string) bool { return byName[name] != nil }

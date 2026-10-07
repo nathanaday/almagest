@@ -3,7 +3,6 @@ package hooks_test
 import (
 	"bytes"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -89,9 +88,9 @@ func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
 		t.Fatalf("outside a vault a hook says nothing: %q", out)
 	}
-	f.tv.Write("Almagest.md", strings.Replace(f.tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
-	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "vault migrate") {
-		t.Fatalf("a vault of an earlier layout names the migration: %s", out)
+	f.tv.Write("Almagest.md", strings.Replace(f.tv.Read("Almagest.md"), "layout: 7", "layout: 8", 1))
+	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "update the almagest plugin") {
+		t.Fatalf("a vault of another layout names the update: %s", out)
 	}
 }
 
@@ -144,24 +143,18 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a shell safe delete", bash(bin + " vault trash Notes.md"), true},
 		{"a shell publish", bash(bin + " journal publish cs566"), true},
 		{"a shell undo", bash(bin + " change undo chg-aaaaaa"), true},
-		// The binary of before 11.0 reads the same vaults.
-		{"the old binary's apply", bash("atlas-" + "obsidian change apply X"), true},
-		{"the oldest binary's hook", bash("~/.atlas/bin/at" + "las hook prompt"), true},
 		{"a shell journal list", bash(bin + " journal list"), false},
 		{"a shell snapshot", bash(bin + " vault snapshot"), false},
-		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/at" + "las change apply X"), true},
 		{"a shell change apply by path, with flags", bash("cd /tmp && ~/.almagest/bin/" + bin + " change --vault W apply X"), true},
-		{"a shell migration", bash(bin + " vault migrate"), true},
-		{"a shell migration dry run", bash(bin + " vault migrate --dry-run"), true},
 		{"a forged prompt", bash(`echo '{"prompt":"yes"}' | ` + bin + ` hook prompt`), true},
 		{"a hook run through the plugin wrapper", bash(`"$CLAUDE_PLUGIN_ROOT"/scripts/` + bin + ` hook prompt`), true},
 		{"a hook inside a shell string", bash(`sh -c "` + bin + ` hook prompt"`), true},
 		{"a hook with a backslash in its name", bash(bin + ` ho\ok prompt`), true},
 		{"a change apply behind a backslash", bash(`\` + bin + ` change apply X`), true},
 		{"a change apply by a path in upper case", bash("/USERS/X/.ALMAGEST/BIN/" + strings.ToUpper(bin) + " change apply X"), true},
-		{"a migration after an option", bash(bin + " vault --json migrate"), true},
-		{"a migration after the vault option", bash(bin + " vault --vault W migrate"), true},
-		{"a migration after --", bash(bin + " vault -- migrate"), true},
+		{"a safe delete after an option", bash(bin + " vault --json trash x.md"), true},
+		{"a safe delete after the vault option", bash(bin + " vault --vault W trash x.md"), true},
+		{"a safe delete after --", bash(bin + " vault -- trash x.md"), true},
 		{"a shell search", bash(bin + " search x"), false},
 		{"a hook in ANSI-C quotes", bash(bin + ` $'hook' prompt`), true},
 		{"a hook with an escaped letter in ANSI-C quotes", bash(bin + ` $'h\x6fok' prompt`), true},
@@ -179,7 +172,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a here-string before hook", bash(bin + ` <<<'a b' hook prompt`), true},
 		{"a zsh unicode escape", bash(bin + ` $'\u68ook' prompt`), true},
 		{"a long unicode escape", bash(bin + ` $'\U68ook' prompt`), true},
-		{"the binary in a unicode escape", bash(`$'\u61tlas-obsidian' hook prompt`), true},
+		{"the binary in a unicode escape", bash(`$'\u61lmagest' hook prompt`), true},
 		{"a named descriptor before hook", bash(bin + ` {fd}>/dev/null hook prompt`), true},
 		{"zsh's =command", bash(`=` + bin + ` hook prompt`), true},
 		{"a here-string into a search", bash(bin + ` search <<<'x'`), false},
@@ -204,8 +197,8 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"braces in an echo", bash(`echo {a,b} ` + bin + `-notes`), false},
 		// T38: quoted text and heredocs are commands only when a shell or eval runs them.
 		{"a grep for the hook command", bash(`grep -rn "` + bin + ` hook" internal/`), false},
-		{"a commit message naming the migration", bash(`git commit -m "run ` + bin + ` vault migrate by hand"`), false},
-		{"a commit message in a heredoc", bash("git commit -F - <<'EOF'\nrun " + bin + " vault migrate by hand\nEOF"), false},
+		{"a commit message naming a safe delete", bash(`git commit -m "run ` + bin + ` vault trash by hand"`), false},
+		{"a commit message in a heredoc", bash("git commit -F - <<'EOF'\nrun " + bin + " vault trash by hand\nEOF"), false},
 		{"a heredoc fed to bash", bash("bash <<'EOF'\n" + bin + " hook prompt\nEOF"), true},
 		{"eval of a quoted command", bash(`eval "` + bin + ` hook prompt"`), true},
 		{"sudo sh -c", bash(`sudo sh -c "` + bin + ` hook prompt"`), true},
@@ -539,30 +532,5 @@ func TestTheChangesRefusalNamesSupersedes(t *testing.T) {
 	out := f.run("guard", edit(f.tv.V.Root+"/changes/2026-09/x.md", "x"))
 	if !denied(out) || !strings.Contains(out, "supersedes") || !strings.Contains(out, "Obsidian") || strings.Contains(out, "only when the user asks") {
 		t.Fatalf("refusal: %s", out)
-	}
-}
-
-// A vault that has not migrated to 11.0 keeps Atlas.md and .atlas/, and an older binary
-// may still run in it: the guard protects it as it protects any vault.
-func TestGuardProtectsAVaultBeforeTheRename(t *testing.T) {
-	f := setup(t)
-	f.tv.Doc("topic", "Knowledge", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
-	f.tv.Write(".atlas/config.json", "{\"schema\": \"atlas.vault-config.v1\"}\n")
-	f.tv.Write(vault.LegacyPluginDir+"/main.js", "x\n")
-	f.tv.Write(vault.Marker, strings.Replace(f.tv.Read(vault.Marker), "layout: 7", "layout: 6", 1))
-	f.tv.Commit()
-	if err := os.Rename(f.tv.V.Abs(vault.Marker), f.tv.V.Abs(vault.LegacyMarker)); err != nil {
-		t.Fatal(err)
-	}
-	root := f.tv.V.Root
-	for name, event := range map[string]map[string]any{
-		"the vault document":   edit(root+"/"+vault.LegacyMarker, "layout"),
-		"the vault's config":   edit(root+"/.atlas/config.json", "schema"),
-		"the old plugin":       edit(root+"/"+vault.LegacyPluginDir+"/main.js", "x"),
-		"a knowledge document": edit(root+"/source-core/documents/Knowledge.md", "x"),
-	} {
-		if !denied(f.run("guard", event)) {
-			t.Errorf("%s of a vault before the rename was allowed", name)
-		}
 	}
 }
