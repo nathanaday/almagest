@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
+	"github.com/nathanaday/atlas-obsidian/internal/journal"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
@@ -76,7 +77,9 @@ type Status struct {
 	Pending   []vault.Ref    `json:"pending"`
 	Changes   ChangeLists    `json:"changes"`
 	// Trash counts the files in trash/.
-	Trash    int               `json:"trash"`
+	Trash int `json:"trash"`
+	// Journals are the journal volumes, each with its latest edition.
+	Journals []journal.Volume  `json:"journals"`
 	Problems int               `json:"problems"`
 	Versions map[string]string `json:"versions,omitempty"`
 }
@@ -97,6 +100,7 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 		Pending:   idx.Refs(idx.PendingDocs()),
 		Changes:   ChangeLists{Proposed: []vault.Ref{}, Running: []vault.Ref{}, Recent: []vault.Ref{}},
 		Trash:     countFiles(v.Abs(vault.Trash)),
+		Journals:  journal.Volumes(idx),
 	}
 	for _, t := range schema.DocumentTypes {
 		st.Documents[t] = 0
@@ -299,6 +303,11 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 	}
 	if idx, err = vault.Load(v); err != nil {
 		return nil, err
+	}
+	if !o.Views {
+		if _, err := journal.WriteMissingHistories(idx); err != nil {
+			return out, err
+		}
 	}
 	written, strays, err := views.Write(idx, now)
 	out.Strays = append(out.Strays, strays...)

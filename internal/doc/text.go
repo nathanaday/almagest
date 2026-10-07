@@ -1,6 +1,10 @@
 package doc
 
-import "strings"
+import (
+	"strings"
+	"unicode"
+	"unicode/utf8"
+)
 
 // NonNil is list, or an empty list for nil, so JSON writes [] and not null.
 func NonNil(list []string) []string {
@@ -32,7 +36,8 @@ func Capital(s string) string {
 	if s == "" {
 		return s
 	}
-	return strings.ToUpper(s[:1]) + s[1:]
+	r, n := utf8.DecodeRuneInString(s)
+	return string(unicode.ToUpper(r)) + s[n:]
 }
 
 // LineCount is the number of lines in s, not counting trailing newlines.

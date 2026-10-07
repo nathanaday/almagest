@@ -135,6 +135,15 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 	counts = append(counts, fmt.Sprintf("Ingest: %d file%s", len(st.Ingest), doc.Plural(len(st.Ingest), "", "s")))
 	counts = append(counts, fmt.Sprintf("Pending for the wiki: %d document%s", len(st.Pending), doc.Plural(len(st.Pending), "", "s")))
 	counts = append(counts, fmt.Sprintf("Proposed changes: %d", len(st.Changes.Proposed)))
+	var changed []string
+	for _, vol := range st.Journals {
+		if vol.Changed {
+			changed = append(changed, vol.Volume)
+		}
+	}
+	if len(changed) > 0 {
+		counts = append(counts, "Journals to publish: "+strings.Join(changed, ", "))
+	}
 	if st.Problems > 0 {
 		counts = append(counts, fmt.Sprintf("Problems: %d (lint)", st.Problems))
 	}

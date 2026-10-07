@@ -20,6 +20,7 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
+	"github.com/nathanaday/atlas-obsidian/internal/journal"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/match"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
@@ -70,7 +71,7 @@ A command that acts on a vault takes --vault (a path, or a name from ~/.atlas/co
 else $ATLAS_VAULT, else the vault above the working folder. setup's --vault is the folder
 of a new vault, vault init takes --path, and doctor, version, help, hook, and mcp take no
 --vault.
---json prints JSON from: vault, search, context, source, change, lint, config.
+--json prints JSON from: vault, search, context, source, change, journal, lint, config.
 match always prints JSON.
 No --json: setup, open, doctor, version, help, hook, mcp.
 `
@@ -93,6 +94,9 @@ var commands = []struct{ name, usage string }{
 `},
 	{"change", `  atlas-obsidian change propose FILE.json [--id ID] | show ID | apply ID | reject ID --reason R | undo ID
                         | start --kind ingest|repair [--title T] [--file NAME]... | progress ID TEXT...
+`},
+	{"journal", `  atlas-obsidian journal [list] | publish VOLUME
+                                                   a journal volume is a folder directly under journals/
 `},
 	{"lint", `  atlas-obsidian lint [--tag T]...
 `},
@@ -182,6 +186,8 @@ func (c *CLI) Run(argv []string) int {
 		err = c.changeCmd(rest)
 	case "lint":
 		err = c.lintCmd(rest)
+	case "journal":
+		err = c.journalCmd(rest)
 	case "hook":
 		return c.hookCmd(rest)
 	case "mcp":
@@ -812,6 +818,48 @@ func printPreview(w io.Writer, pv *change.Preview) {
 	if pv.Commit != "" {
 		fmt.Fprintf(w, "  commit %s\n", short(pv.Commit))
 	}
+}
+
+func (c *CLI) journalCmd(argv []string) error {
+	a := parse(argv)
+	v, err := c.open(a)
+	if err != nil {
+		return err
+	}
+	switch a.arg(0) {
+	case "", "list":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return err
+		}
+		vols := journal.Volumes(idx)
+		return c.emit(a, map[string]any{"journals": vols}, func(w io.Writer) {
+			if len(vols) == 0 {
+				fmt.Fprintf(w, "No journal yet: a volume is a folder directly under %s/.\n", vault.Journals)
+			}
+			for _, vol := range vols {
+				line := fmt.Sprintf("%s (%s) · %s", vol.Name, vol.Volume, count(vol.Notes, "note", "notes"))
+				if vol.Edition != "" {
+					line += " · latest: " + vol.Edition
+				}
+				if vol.Changed {
+					line += " · changed since"
+				}
+				fmt.Fprintln(w, line)
+			}
+		})
+	case "publish":
+		now := c.Now()
+		p, err := journal.Publish(v, a.arg(1), now)
+		if err != nil {
+			return err
+		}
+		c.views(v, now)
+		return c.emit(a, map[string]any{"published": p}, func(w io.Writer) {
+			fmt.Fprintf(w, "Published %s (%s), %s. It waits for the wiki as a pending source.\n", p.Source.Title, p.Source.ID, short(p.Commit))
+		})
+	}
+	return fmt.Errorf("journal takes list or publish, not %q", a.arg(0))
 }
 
 func (c *CLI) lintCmd(argv []string) error {

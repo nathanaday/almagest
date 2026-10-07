@@ -23,7 +23,7 @@ __export(main_exports, {
   default: () => AtlasPlugin
 });
 module.exports = __toCommonJS(main_exports);
-var import_obsidian8 = require("obsidian");
+var import_obsidian9 = require("obsidian");
 
 // src/change.ts
 var import_obsidian = require("obsidian");
@@ -1164,8 +1164,49 @@ function status(api, path) {
   }
 }
 
+// src/journalstate.ts
+var JOURNALS = "journals";
+var MONTHS = ["January", "February", "March", "April", "May", "June", "July", "August", "September", "October", "November", "December"];
+var SEPARATORS = /[-_\t\n\v\f\r\u0085\p{Zs}\u2028\u2029]+/u;
+function journalName(folder) {
+  return folder.split(SEPARATORS).filter((w) => w !== "").map((w) => /\p{L}/u.test(w) && /\p{Nd}/u.test(w) ? w.toUpperCase() : capital2(w)).join(" ");
+}
+function capital2(word) {
+  const first = word.codePointAt(0);
+  if (first === void 0) return word;
+  const head = String.fromCodePoint(first);
+  return head.toUpperCase() + word.slice(head.length);
+}
+function editionTitle(folder, day) {
+  return `User Journal ${journalName(folder)} - ${day.getDate()} ${MONTHS[day.getMonth()]} ${day.getFullYear()} Edition`;
+}
+function journalVolumes(list) {
+  return (list ?? []).filter((v) => typeof v.volume === "string" && v.volume !== "").map((v) => ({
+    volume: v.volume,
+    name: v.name || journalName(v.volume),
+    notes: v.notes ?? 0,
+    edition: v.edition ?? "",
+    changed: v.changed === true
+  }));
+}
+function toPublish(volumes) {
+  return volumes.filter((v) => v.changed).length;
+}
+function publishBlocked(v) {
+  if (v.notes === 0) return "The volume holds no note.";
+  if (!v.changed) return v.edition ? `No change since ${v.edition}.` : "No change to publish.";
+  return "";
+}
+function volumeOf(path) {
+  const parts = path.split("/");
+  return parts.length >= 3 && parts[0] === JOURNALS && parts[1] !== "" && !parts[1].startsWith(".") ? parts[1] : "";
+}
+function numbered(latest, title) {
+  return latest === title || latest.startsWith(`${title} (`) && latest.endsWith(")");
+}
+
 // src/palette.ts
-var import_obsidian5 = require("obsidian");
+var import_obsidian6 = require("obsidian");
 
 // src/messages.ts
 var MAX_NAMED = 10;
@@ -1178,6 +1219,9 @@ function ingestMessage(doc) {
 function repairMessage(doc) {
   return `/atlas-obsidian:wiki-review Repair the lint findings that a change repairs. ${report(doc, "the repairs into it")}`;
 }
+function publishMessage(edition, doc) {
+  return `/atlas-obsidian:wiki-sync Absorb the source [[${edition.title}]] (${edition.id}), the user's journal edition. Cite it where its ideas land. ${report(doc, "into it")}`;
+}
 function resolveMessage(target, backlinks) {
   const names = backlinks.slice(0, MAX_NAMED).map((b) => `[[${b.title}]]`);
   const more = backlinks.length - names.length;
@@ -1188,6 +1232,7 @@ function resolveMessage(target, backlinks) {
 // src/palettestate.ts
 function paletteState(status2, liveSessions) {
   const byTitle = (a, b) => a.title.localeCompare(b.title);
+  const journals = journalVolumes(status2.journals);
   return {
     proposed: [...status2.changes?.proposed ?? []].sort(byTitle),
     running: [...status2.changes?.running ?? []].sort(byTitle),
@@ -1195,6 +1240,8 @@ function paletteState(status2, liveSessions) {
     pending: status2.pending?.length ?? 0,
     sessions: liveSessions,
     trash: status2.trash ?? 0,
+    journals,
+    toPublish: toPublish(journals),
     problems: status2.problems ?? 0
   };
 }
@@ -1231,13 +1278,90 @@ function trashOutcome(r) {
   return { kind: "moved", line: `Moved ${r.path} to ${r.moved}.${through}` };
 }
 
+// src/publish.ts
+var import_obsidian5 = require("obsidian");
+function confirmPublish(plugin, vol) {
+  const title = editionTitle(vol.volume, /* @__PURE__ */ new Date());
+  new PublishModal(plugin.app, vol, title, numbered(vol.edition, title), () => void publish(plugin, vol.volume)).open();
+}
+async function confirmPublishOf(plugin, volume) {
+  try {
+    const { journals } = await plugin.atlas(["journal", "list"]);
+    const vol = journalVolumes(journals).find((v) => v.volume === volume);
+    if (!vol) {
+      new import_obsidian5.Notice(`Atlas: ${JOURNALS}/${volume} is not a journal volume.`);
+      return;
+    }
+    const why = publishBlocked(vol);
+    if (why) new import_obsidian5.Notice(`Atlas: ${vol.name}: ${why}`, 8e3);
+    else confirmPublish(plugin, vol);
+  } catch (e) {
+    new import_obsidian5.Notice(`Atlas: ${e.message}`, 1e4);
+  }
+}
+async function publish(plugin, volume) {
+  if (plugin.publishing) return;
+  plugin.setPublishing(volume);
+  let edition;
+  try {
+    const { published } = await plugin.atlas(["journal", "publish", `${JOURNALS}/${volume}`]);
+    edition = published.source;
+    new import_obsidian5.Notice(`Atlas: published ${edition.title}.`);
+    const { ref: doc } = await plugin.atlas(["change", "start", "--kind", "ingest", "--title", `Ingest ${edition.title}`]);
+    await plugin.openWhenSeen(doc.path, true);
+    await plugin.runAgent(publishMessage(edition, doc), `Agent \xB7 ${doc.title}`, "publish");
+  } catch (e) {
+    const message = e.message;
+    new import_obsidian5.Notice(
+      edition ? `Atlas: the agent for ${edition.title} did not start: ${message}. The edition waits as a pending source; wiki-sync absorbs it.` : `Atlas: ${message}`,
+      1e4
+    );
+  } finally {
+    plugin.setPublishing("");
+  }
+}
+var PublishModal = class extends import_obsidian5.Modal {
+  constructor(app, vol, title, numbered2, publish2) {
+    super(app);
+    this.vol = vol;
+    this.title = title;
+    this.numbered = numbered2;
+    this.publish = publish2;
+  }
+  vol;
+  title;
+  numbered;
+  publish;
+  onOpen() {
+    const { vol } = this;
+    this.setTitle(`Publish ${vol.name}`);
+    const el = this.contentEl;
+    el.addClass("atlas-publish");
+    el.createEl("p", { text: `Publish captures the ${plural2(vol.notes, "note", "notes")} of ${JOURNALS}/${vol.volume}/ as one source:` });
+    el.createDiv({ cls: "atlas-publish-title", text: this.title });
+    if (this.numbered) el.createEl("p", { cls: "atlas-publish-quiet", text: "An edition of this day exists, so this one takes a number." });
+    el.createEl("p", {
+      text: "Then a work document opens, and an agent absorbs the edition into the wiki and cites it. You approve its changes. No agent edits the volume."
+    });
+    const buttons = el.createDiv({ cls: "atlas-publish-buttons" });
+    buttons.createEl("button", { text: "Cancel" }).onclick = () => this.close();
+    const go = buttons.createEl("button", { cls: "mod-cta", text: "Publish" });
+    go.onclick = () => {
+      this.close();
+      this.publish();
+    };
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+
 // src/palette.ts
 var PALETTE_VIEW = "atlas-palette";
 var PALETTE_ICON = "map";
 var REFRESH_MS = 3e4;
 var EVENT_DELAY = 1500;
-var SEE_MS = 1e4;
-var PaletteView = class extends import_obsidian5.ItemView {
+var PaletteView = class extends import_obsidian6.ItemView {
   constructor(leaf, plugin) {
     super(leaf);
     this.plugin = plugin;
@@ -1251,7 +1375,7 @@ var PaletteView = class extends import_obsidian5.ItemView {
   busy = null;
   loading = false;
   again = false;
-  soon = (0, import_obsidian5.debounce)(() => void this.refresh(), EVENT_DELAY, true);
+  soon = (0, import_obsidian6.debounce)(() => void this.refresh(), EVENT_DELAY, true);
   getViewType() {
     return PALETTE_VIEW;
   }
@@ -1318,6 +1442,7 @@ var PaletteView = class extends import_obsidian5.ItemView {
     root.addClass("atlas-palette");
     this.renderStatus(root);
     this.renderRunning(root);
+    this.renderJournals(root);
     this.renderActions(root);
   }
   section(root, name) {
@@ -1373,6 +1498,7 @@ var PaletteView = class extends import_obsidian5.ItemView {
     const open = sessions.createEl("button", { cls: "atlas-palette-small", text: "Open sessions" });
     open.onclick = () => void this.plugin.openSessions();
     this.row(el, "trash", "Trash", plural2(s.trash, "file", "files"));
+    this.row(el, "journals", "Journals", `${s.toPublish} to publish`);
     this.row(el, "problems", "Lint problems", plural2(s.problems, "error", "errors"));
   }
   renderRunning(root) {
@@ -1385,6 +1511,43 @@ var PaletteView = class extends import_obsidian5.ItemView {
       li.createSpan({ cls: "atlas-palette-badge", text: c.label });
       this.link(li, c.path.slice(c.path.lastIndexOf("/") + 1).replace(/\.md$/, ""), c.path);
     }
+  }
+  renderJournals(root) {
+    const s = this.state;
+    if (!s) return;
+    const el = this.section(root, "Journals");
+    if (s.journals.length === 0) {
+      el.createDiv({ cls: "atlas-palette-quiet", text: `No journal yet: a volume is a folder directly under ${JOURNALS}/.` });
+      return;
+    }
+    for (const vol of s.journals) this.renderVolume(el, vol);
+  }
+  renderVolume(parent, vol) {
+    const el = parent.createDiv({ cls: "atlas-palette-volume" });
+    el.dataset.volume = vol.volume;
+    el.dataset.changed = String(vol.changed);
+    const head = el.createDiv({ cls: "atlas-palette-row" });
+    head.createSpan({ cls: "atlas-palette-name atlas-palette-volume-name", text: vol.name }).setAttr("title", `${JOURNALS}/${vol.volume}/`);
+    if (vol.changed) head.createSpan({ cls: "atlas-palette-badge atlas-palette-changed", text: "changed" });
+    head.createSpan({ cls: "atlas-palette-value", text: plural2(vol.notes, "note", "notes") });
+    const edition = el.createDiv({ cls: "atlas-palette-progress atlas-palette-edition" });
+    if (vol.edition) {
+      const file = this.app.metadataCache.getFirstLinkpathDest(vol.edition, "");
+      if (file) this.link(edition, vol.edition, file.path);
+      else edition.setText(vol.edition);
+    } else {
+      edition.setText("never published");
+    }
+    const why = publishBlocked(vol);
+    const publishing = this.plugin.publishing === vol.volume;
+    const button = el.createEl("button", { cls: "atlas-palette-small atlas-palette-publish", text: publishing ? "Publish\u2026" : "Publish" });
+    if (why || this.busy || this.plugin.publishing) {
+      button.disabled = true;
+      button.setAttr("title", why || "Another action runs.");
+    } else {
+      button.addClass("mod-cta");
+    }
+    button.onclick = () => confirmPublish(this.plugin, vol);
   }
   renderActions(root) {
     const el = this.section(root, "Actions");
@@ -1400,7 +1563,7 @@ var PaletteView = class extends import_obsidian5.ItemView {
     const wrap = parent.createDiv({ cls: "atlas-palette-action" });
     wrap.dataset.action = name;
     const button = wrap.createEl("button", { text: this.busy === name ? `${text}\u2026` : text });
-    if (why || this.busy) {
+    if (why || this.busy || this.plugin.publishing) {
       button.disabled = true;
       button.setAttr("title", why || "Another action runs.");
     }
@@ -1409,13 +1572,13 @@ var PaletteView = class extends import_obsidian5.ItemView {
     else if (note) wrap.createDiv({ cls: "atlas-palette-quiet atlas-palette-path", text: note });
   }
   async act(name, run) {
-    if (this.busy) return;
+    if (this.busy || this.plugin.publishing) return;
     this.busy = name;
     this.render();
     try {
       await run();
     } catch (e) {
-      new import_obsidian5.Notice(`Atlas: ${e.message}`, 1e4);
+      new import_obsidian6.Notice(`Atlas: ${e.message}`, 1e4);
     } finally {
       this.busy = null;
       this.render();
@@ -1470,7 +1633,7 @@ var PaletteView = class extends import_obsidian5.ItemView {
       ).open();
       return;
     }
-    new import_obsidian5.Notice(`Atlas: ${outcome.line}`, outcome.kind === "error" ? 1e4 : 6e3);
+    new import_obsidian6.Notice(`Atlas: ${outcome.line}`, outcome.kind === "error" ? 1e4 : 6e3);
   }
   /** Starts a work document and opens it. */
   async start(args) {
@@ -1478,22 +1641,11 @@ var PaletteView = class extends import_obsidian5.ItemView {
     await this.openPath(ref.path, true);
     return ref;
   }
-  /** Opens a file once Obsidian sees it; a document the binary just wrote takes a moment. */
-  async openPath(path, newTab) {
-    const deadline = Date.now() + SEE_MS;
-    let file = this.app.vault.getFileByPath(path);
-    while (!file && Date.now() < deadline) {
-      await new Promise((resolve) => window.setTimeout(resolve, 100));
-      file = this.app.vault.getFileByPath(path);
-    }
-    if (!(file instanceof import_obsidian5.TFile)) {
-      new import_obsidian5.Notice(`Atlas: Obsidian does not see ${path} yet.`);
-      return;
-    }
-    await this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+  openPath(path, newTab) {
+    return this.plugin.openWhenSeen(path, newTab);
   }
 };
-var BacklinksModal = class extends import_obsidian5.Modal {
+var BacklinksModal = class extends import_obsidian6.Modal {
   constructor(app, outcome, show, resolve) {
     super(app);
     this.outcome = outcome;
@@ -1537,7 +1689,7 @@ var BacklinksModal = class extends import_obsidian5.Modal {
 };
 
 // src/settings.ts
-var import_obsidian6 = require("obsidian");
+var import_obsidian7 = require("obsidian");
 var import_os4 = require("os");
 var shortHome = (p) => p.startsWith((0, import_os4.homedir)() + "/") ? "~" + p.slice((0, import_os4.homedir)().length) : p;
 var DEFAULT_SETTINGS = {
@@ -1545,7 +1697,7 @@ var DEFAULT_SETTINGS = {
   syncOnChange: true,
   snapshotQuietSeconds: SNAPSHOT_QUIET_DEFAULT
 };
-var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
+var AtlasSettingTab = class extends import_obsidian7.PluginSettingTab {
   constructor(app, plugin) {
     super(app, plugin);
     this.plugin = plugin;
@@ -1555,7 +1707,7 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
     const { containerEl } = this;
     containerEl.empty();
     const found = findBinary("");
-    const binary = new import_obsidian6.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
+    const binary = new import_obsidian7.Setting(containerEl).setName("Path to the atlas-obsidian binary").setDesc("Leave empty to use the binary Atlas finds.").addText(
       (text) => text.setPlaceholder(found ?? "Not found").setValue(this.plugin.settings.binaryPath).onChange(async (value) => {
         this.plugin.settings.binaryPath = value.trim();
         await this.plugin.saveSettings();
@@ -1576,13 +1728,13 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
       }
     };
     void showVersion();
-    new import_obsidian6.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
+    new import_obsidian7.Setting(containerEl).setName("Keep the views fresh").setDesc("Runs atlas-obsidian vault sync --views two seconds after a note changes, so the views, the statuses, and the callouts follow your edits.").addToggle(
       (toggle) => toggle.setValue(this.plugin.settings.syncOnChange).onChange(async (value) => {
         this.plugin.settings.syncOnChange = value;
         await this.plugin.saveSettings();
       })
     );
-    new import_obsidian6.Setting(containerEl).setName("Snapshot after a quiet period").setDesc("Seconds with no file change before Atlas commits your edits to the vault's history. 0 turns it off.").addText((text) => {
+    new import_obsidian7.Setting(containerEl).setName("Snapshot after a quiet period").setDesc("Seconds with no file change before Atlas commits your edits to the vault's history. 0 turns it off.").addText((text) => {
       text.inputEl.type = "number";
       text.inputEl.min = "0";
       text.setPlaceholder(String(DEFAULT_SETTINGS.snapshotQuietSeconds)).setValue(String(this.plugin.settings.snapshotQuietSeconds));
@@ -1592,7 +1744,7 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
         await this.plugin.setSnapshotQuiet(seconds);
       });
     });
-    new import_obsidian6.Setting(containerEl).setName("Agents").setHeading();
+    new import_obsidian7.Setting(containerEl).setName("Agents").setHeading();
     const agents = containerEl.createDiv();
     void this.agents(agents);
   }
@@ -1616,34 +1768,34 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
       try {
         await this.plugin.setPreference(key, value, global);
       } catch (e) {
-        new import_obsidian6.Notice(`Atlas: ${e.message}`, 8e3);
+        new import_obsidian7.Notice(`Atlas: ${e.message}`, 8e3);
       }
       void this.agents(el);
     };
     const group = (name, global) => {
-      new import_obsidian6.Setting(el).setName(name).setHeading();
+      new import_obsidian7.Setting(el).setName(name).setHeading();
       const own = global ? config.global : config.vault;
       const same = (key, label) => global ? "" : `Same as all vaults (${label || inherited(config, key)})`;
-      new import_obsidian6.Setting(el).setName("Agent").addDropdown((d) => {
+      new import_obsidian7.Setting(el).setName("Agent").addDropdown((d) => {
         if (!global) d.addOption("", same("agent", AGENT_NAMES[inherited(config, "agent")]));
         for (const a of AGENTS) d.addOption(a, AGENT_NAMES[a]);
         d.setValue(preference(own, "agent") || (global ? "claude" : "")).onChange((v) => void set("agent", v, global));
       });
       for (const a of AGENTS) {
         const key = `agent_commands.${a}`;
-        new import_obsidian6.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
+        new import_obsidian7.Setting(el).setName(`${AGENT_NAMES[a]} command`).setDesc(global ? `As typed in a shell: ${a}, or a shell function that picks an account.` : "Empty takes the value for all vaults.").addText((t) => {
           t.setPlaceholder(global ? a : inherited(config, key)).setValue(preference(own, key));
           t.inputEl.addEventListener("change", () => void set(key, t.getValue(), global));
         });
       }
-      new import_obsidian6.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
+      new import_obsidian7.Setting(el).setName("Terminal").setDesc(global ? "Runs the command in your login shell, so your PATH and shell functions apply." : "").addDropdown((d) => {
         if (!global) d.addOption("", same("terminal", TERMINAL_NAMES[inherited(config, "terminal")]));
         for (const t of TERMINALS) d.addOption(t, TERMINAL_NAMES[t]);
         d.setValue(preference(own, "terminal") || (global ? "terminal" : "")).onChange((v) => void set("terminal", v, global));
       });
       const terminal = preference(own, "terminal") || inherited(config, "terminal");
       if (terminal === "custom") {
-        new import_obsidian6.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
+        new import_obsidian7.Setting(el).setName("Custom terminal command").setDesc("Runs with /bin/sh. {command} stands for the agent's command, quoted. Example: kitty sh -lic {command}").addText((t) => {
           t.setPlaceholder(global ? "" : inherited(config, "terminal_command")).setValue(preference(own, "terminal_command"));
           t.inputEl.addEventListener("change", () => void set("terminal_command", t.getValue(), global));
         });
@@ -1655,7 +1807,7 @@ var AtlasSettingTab = class extends import_obsidian6.PluginSettingTab {
 };
 
 // src/tagnav.ts
-var import_obsidian7 = require("obsidian");
+var import_obsidian8 = require("obsidian");
 var TAG_NAV_VIEW = "atlas-tag-navigator";
 var NAV_ICON = "compass";
 var MAX_WITH = 30;
@@ -1679,9 +1831,9 @@ function tagDocs(app) {
   }
   return out;
 }
-var TagNavigator = class extends import_obsidian7.ItemView {
+var TagNavigator = class extends import_obsidian8.ItemView {
   chosen = [];
-  rerender = (0, import_obsidian7.debounce)(() => this.render(), 500, true);
+  rerender = (0, import_obsidian8.debounce)(() => this.render(), 500, true);
   constructor(leaf) {
     super(leaf);
   }
@@ -1764,7 +1916,7 @@ var TagNavigator = class extends import_obsidian7.ItemView {
         row.createSpan({ cls: "atlas-tagnav-doc-meta", text: meta });
         row.onclick = (evt) => {
           const file = this.app.vault.getAbstractFileByPath(d.path);
-          if (file instanceof import_obsidian7.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
+          if (file instanceof import_obsidian8.TFile) void this.app.workspace.getLeaf(evt.metaKey || evt.ctrlKey).openFile(file);
         };
       }
     }
@@ -1784,7 +1936,7 @@ var TagNavigator = class extends import_obsidian7.ItemView {
   }
   async openView(tag) {
     const file = this.app.vault.getAbstractFileByPath(tagViewPath(tag));
-    if (file instanceof import_obsidian7.TFile) await this.app.workspace.getLeaf(false).openFile(file);
+    if (file instanceof import_obsidian8.TFile) await this.app.workspace.getLeaf(false).openFile(file);
   }
 };
 
@@ -1792,7 +1944,8 @@ var TagNavigator = class extends import_obsidian7.ItemView {
 var SYNC_DELAY = 2e3;
 var LEGACY_KEYS = ["agentCommand", "terminal", "terminalCommand"];
 var ECHO_WINDOW = 5e3;
-var AtlasPlugin = class extends import_obsidian8.Plugin {
+var SEE_MS = 1e4;
+var AtlasPlugin = class extends import_obsidian9.Plugin {
   settings = { ...DEFAULT_SETTINGS };
   /** The agent settings of 8.0.2, kept in data.json until they move to the vault's config file. */
   legacy = null;
@@ -1810,11 +1963,13 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
   );
   lastSnapshotError = "";
   sessionsRibbon = null;
+  /** The journal volume that a publish captures now, or "". */
+  publishing = "";
   /** The agents the palette started through Duet, while their turn runs. */
   conversations = new Conversations(
     () => this.paletteViews().forEach((v) => v.render()),
     (c, turn) => {
-      if (turn.status === "failed") new import_obsidian8.Notice(`Atlas: the ${c.label} agent stopped: ${turn.error ?? "its turn failed"}.`, 1e4);
+      if (turn.status === "failed") new import_obsidian9.Notice(`Atlas: the ${c.label} agent stopped: ${turn.error ?? "its turn failed"}.`, 1e4);
     }
   );
   async onload() {
@@ -1831,6 +1986,16 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
     this.addRibbonIcon(PALETTE_ICON, "Atlas", () => void this.openPalette());
     this.addCommand({ id: "open-palette", name: "Open the Atlas palette", callback: () => void this.openPalette() });
     this.addCommand({ id: "start-agent", name: "Start agent", callback: () => void this.startAgent() });
+    this.addCommand({
+      id: "publish-journal",
+      name: "Publish this journal volume",
+      checkCallback: (checking) => {
+        const volume = volumeOf(this.app.workspace.getActiveFile()?.path ?? "");
+        if (!volume) return false;
+        if (!checking) void confirmPublishOf(this, volume);
+        return true;
+      }
+    });
     this.registerView(SESSIONS_VIEW, (leaf) => new SessionsView(leaf, this));
     this.sessionsRibbon = this.addRibbonIcon("bot", "Atlas: open the sessions", () => void this.openSessions());
     this.sessionsRibbon.addClass("atlas-sessions-ribbon");
@@ -1889,7 +2054,7 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
   /** Runs one atlas command in this vault and returns its JSON; answers are the exit codes that print an answer too. */
   atlas(args, answers = []) {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian8.FileSystemAdapter)) {
+    if (!(adapter instanceof import_obsidian9.FileSystemAdapter)) {
       return Promise.reject(new AtlasError("this vault is not a folder on disk"));
     }
     return runAtlas(findBinary(this.settings.binaryPath), adapter.getBasePath(), args, answers);
@@ -1898,7 +2063,7 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
   /** A manual sync runs every step; an automatic one runs the steps that read no git. */
   async sync(manual) {
     if (this.syncing) {
-      if (manual) new import_obsidian8.Notice("Atlas: a sync is running.");
+      if (manual) new import_obsidian9.Notice("Atlas: a sync is running.");
       return;
     }
     if (this.syncTimer !== null) window.clearTimeout(this.syncTimer);
@@ -1911,11 +2076,11 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
       const out = await this.atlas(args);
       wrote = syncedPaths(out.synced);
       this.lastAutoError = "";
-      if (manual) new import_obsidian8.Notice(`Atlas: ${syncSummary(out.synced)}`);
-      for (const line of strayNotices(out.synced)) new import_obsidian8.Notice(`Atlas: ${line}`, 0);
+      if (manual) new import_obsidian9.Notice(`Atlas: ${syncSummary(out.synced)}`);
+      for (const line of strayNotices(out.synced)) new import_obsidian9.Notice(`Atlas: ${line}`, 0);
     } catch (e) {
       const message = e.message;
-      if (manual || message !== this.lastAutoError) new import_obsidian8.Notice(`Atlas: ${message}`);
+      if (manual || message !== this.lastAutoError) new import_obsidian9.Notice(`Atlas: ${message}`);
       if (!manual) this.lastAutoError = message;
     } finally {
       this.syncing = false;
@@ -1998,7 +2163,7 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
   }
   checkLayout() {
     if (this.migrated()) return;
-    const notice = new import_obsidian8.Notice("", 0);
+    const notice = new import_obsidian9.Notice("", 0);
     const el = notice.messageEl;
     const layout = this.layout();
     const needs = `Atlas: this vault has the ${layoutName(layout)} layout. This plugin needs the ${layoutName(LAYOUT)} layout.`;
@@ -2019,14 +2184,14 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
       new MigrationModal(this.app, report2, this.layout(), async () => {
         try {
           const done = await this.atlas(["vault", "migrate"]);
-          new import_obsidian8.Notice(`Atlas: ${migrationSummary(done)}`, 1e4);
-          for (const line of strayNotices(done)) new import_obsidian8.Notice(`Atlas: ${line}`, 0);
+          new import_obsidian9.Notice(`Atlas: ${migrationSummary(done)}`, 1e4);
+          for (const line of strayNotices(done)) new import_obsidian9.Notice(`Atlas: ${line}`, 0);
         } catch (e) {
-          new import_obsidian8.Notice(`Atlas: ${e.message}`, 1e4);
+          new import_obsidian9.Notice(`Atlas: ${e.message}`, 1e4);
         }
       }).open();
     } catch (e) {
-      new import_obsidian8.Notice(`Atlas: ${e.message}`, 1e4);
+      new import_obsidian9.Notice(`Atlas: ${e.message}`, 1e4);
     }
   }
   // Views
@@ -2052,6 +2217,28 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
     }
     await workspace.revealLeaf(leaf);
   }
+  /** Marks the volume a publish captures, "" when it ends, in every palette. */
+  setPublishing(volume) {
+    this.publishing = volume;
+    for (const view of this.paletteViews()) {
+      view.render();
+      if (!volume) void view.refresh();
+    }
+  }
+  /** Opens a file once Obsidian sees it; a document the binary just wrote takes a moment. */
+  async openWhenSeen(path, newTab) {
+    const deadline = Date.now() + SEE_MS;
+    let file = this.app.vault.getFileByPath(path);
+    while (!file && Date.now() < deadline) {
+      await new Promise((resolve) => window.setTimeout(resolve, 100));
+      file = this.app.vault.getFileByPath(path);
+    }
+    if (!(file instanceof import_obsidian9.TFile)) {
+      new import_obsidian9.Notice(`Atlas: Obsidian does not see ${path} yet.`);
+      return;
+    }
+    await this.app.workspace.getLeaf(newTab ? "tab" : false).openFile(file);
+  }
   paletteViews() {
     return this.app.workspace.getLeavesOfType(PALETTE_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof PaletteView);
   }
@@ -2059,7 +2246,7 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
   sessionViews() {
     return this.app.workspace.getLeavesOfType(SESSIONS_VIEW).map((leaf) => leaf.view).filter((v) => v instanceof SessionsView);
   }
-  refreshSessions = (0, import_obsidian8.debounce)(
+  refreshSessions = (0, import_obsidian9.debounce)(
     () => {
       void sessionGroups(this.app, this.staleHours()).then(({ groups }) => {
         const waiting = groups.open.filter((s) => s.state === "needs you").length;
@@ -2110,21 +2297,21 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
         await openTerminal(prefs.terminal, command, prefs.terminal_command);
         return;
       } catch (e) {
-        new import_obsidian8.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
+        new import_obsidian9.Notice(`Atlas: cannot open the terminal (${e.message}). The Atlas settings choose it.`, 8e3);
       }
     }
     await navigator.clipboard.writeText(command);
-    new import_obsidian8.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
+    new import_obsidian9.Notice(`Atlas: copied ${what}. Run it in a terminal.`);
   }
   /** Starts the agent in the vault, in a terminal; a prompt is its first message. */
   async startAgent(prompt = "") {
     const adapter = this.app.vault.adapter;
-    if (!(adapter instanceof import_obsidian8.FileSystemAdapter)) return;
+    if (!(adapter instanceof import_obsidian9.FileSystemAdapter)) return;
     let config;
     try {
       config = await this.agentConfig();
     } catch (e) {
-      new import_obsidian8.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
+      new import_obsidian9.Notice(`Atlas: cannot read the agent preferences: ${e.message}`, 8e3);
       return;
     }
     await this.runInTerminal(startCommand(adapter.getBasePath(), config.preferences.agent_command, prompt), "the agent command", config);
@@ -2142,10 +2329,10 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
         this.conversations.follow(api, path, label);
         return;
       } catch (e) {
-        new import_obsidian8.Notice(`Atlas: Duet did not start the agent (${e.message}). Atlas starts it in a terminal.`, 1e4);
+        new import_obsidian9.Notice(`Atlas: Duet did not start the agent (${e.message}). Atlas starts it in a terminal.`, 1e4);
       }
     } else {
-      new import_obsidian8.Notice("Atlas: Duet runs the agents in Obsidian. Duet 0.3.0 or later is not on, so Atlas starts the agent in a terminal.", 1e4);
+      new import_obsidian9.Notice("Atlas: Duet runs the agents in Obsidian. Duet 0.3.0 or later is not on, so Atlas starts the agent in a terminal.", 1e4);
     }
     await this.startAgent(message);
   }
@@ -2165,7 +2352,7 @@ var AtlasPlugin = class extends import_obsidian8.Plugin {
     await workspace.revealLeaf(leaf);
   }
 };
-var MigrationModal = class extends import_obsidian8.Modal {
+var MigrationModal = class extends import_obsidian9.Modal {
   constructor(app, report2, layout, run) {
     super(app);
     this.report = report2;

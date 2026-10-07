@@ -17,7 +17,7 @@ func TestTextHelpers(t *testing.T) {
 	if Plural(1, "file", "files") != "file" || Plural(0, "file", "files") != "files" || Plural(2, "file", "files") != "files" {
 		t.Fatal("Plural")
 	}
-	if Capital("started") != "Started" || Capital("") != "" {
+	if Capital("started") != "Started" || Capital("") != "" || Capital("école") != "École" {
 		t.Fatal("Capital")
 	}
 	if LineCount("") != 0 || LineCount("a") != 1 || LineCount("a\nb\n\n") != 2 {

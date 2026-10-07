@@ -113,6 +113,8 @@ func SourceLead(idx *vault.Index, d *doc.Doc) string {
 	switch origin, loc := d.Str("origin"), d.Str("locator"); {
 	case origin == "url" && loc != "":
 		where += " from " + loc
+	case origin == "journal":
+		where += " from the journal `" + d.Str("volume") + "`"
 	case loc != "":
 		where += " from `" + loc + "` (" + origin + ")"
 	case origin != "":

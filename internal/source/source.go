@@ -32,6 +32,17 @@ type Request struct {
 	Repository string   `json:"repository,omitempty" jsonschema:"a repository document (id or title): capture a snapshot of it at its head"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"the categories of the sources"`
 	NewTags    bool     `json:"new_tags,omitempty" jsonschema:"allow a tag no document holds, in tagging: known; set it only after the user agreed"`
+	// Journal makes captured text an edition of a journal volume: code's, never a tool's.
+	Journal *Edition `json:"-"`
+}
+
+// Edition is what a published journal edition records, and the notes its commit writes
+// with it.
+type Edition struct {
+	Volume string
+	Date   string
+	Hash   string
+	Also   map[string]string
 }
 
 // Captured is one source capture made or found.
@@ -59,6 +70,7 @@ type item struct {
 	locator string
 	ingest  string
 	tags    []string
+	journal *Edition
 }
 
 // Media is what a file is, by its extension.
@@ -154,7 +166,10 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		if strings.HasPrefix(req.Locator, "http://") || strings.HasPrefix(req.Locator, "https://") {
 			origin = "url"
 		}
-		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: origin, locator: req.Locator, tags: tagList})
+		if req.Journal != nil {
+			origin = "journal"
+		}
+		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: origin, locator: req.Locator, tags: tagList, journal: req.Journal})
 	default:
 		repo, err := idx.ResolveType(req.Repository, "repository")
 		if err != nil {
@@ -234,6 +249,19 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 			{Key: "locator", Value: it.locator},
 			{Key: "measure", Value: m.String()},
 			{Key: "captured", Value: stamp},
+		}
+		if j := it.journal; j != nil {
+			for i := range fields {
+				if fields[i].Key == "authority" {
+					fields[i].Value = "primary"
+				}
+			}
+			fields = append(fields, doc.Field{Key: "volume", Value: j.Volume}, doc.Field{Key: "edition", Value: j.Date}, doc.Field{Key: "journal_hash", Value: j.Hash})
+			for rel, content := range j.Also {
+				if err := tx.Write(rel, []byte(content)); err != nil {
+					return nil, err
+				}
+			}
 		}
 		rel := vault.DocPath(title)
 		if err := tx.Write(rel, []byte(doc.Render(fields, ""))); err != nil {

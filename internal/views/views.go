@@ -19,6 +19,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/atlas-obsidian/internal/journal"
 	"github.com/nathanaday/atlas-obsidian/internal/schema"
 	"github.com/nathanaday/atlas-obsidian/internal/tags"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
@@ -216,6 +217,11 @@ func (r *renderer) home() string {
 	}
 	for _, c := range running {
 		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · "+cmp.Or(c.Str("kind"), "work")+" running")
+	}
+	for _, vol := range journal.Volumes(idx) {
+		if vol.Changed {
+			wait = append(wait, "- the journal "+vol.Name+" ("+vault.Journals+"/"+vol.Volume+") has changes to publish")
+		}
 	}
 	for _, s := range waiting {
 		wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))

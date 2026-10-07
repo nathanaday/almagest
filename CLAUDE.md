@@ -20,6 +20,12 @@ plan is `scratchpad/Atlas 10 Strategy.md` in the SoftwareProjects vault.
 the change Summary, and safe delete with `trash/`. The contract is the phase 1 section
 of the same strategy note.
 
+10.2.0 added journal publishing (`internal/journal`, the "Journals" section of the
+strategy note). A journal is where the user's own thoughts and writing live, safe from
+any change an ingest makes. Agents read it and never edit it (the guard, since 10.0).
+The user's Publish copies one volume into one source, an edition, and the normal sync
+absorbs that source: topics cite the edition, never the notes.
+
 Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
 editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
 editor and both wrap `Vault.modify`. From 10.1 on, Atlas starts an agent through Duet's
@@ -220,6 +226,38 @@ The design pages are the spec. When the code departs from them, the reason is be
   `trash: <path>`. It refuses `Atlas.md`, `.obsidian/`, `.claude/`, `.atlas/`,
   `changes/`, `sessions/`, `wiki-view/`, `trash/`, a shipped Base, a folder, and a path
   outside the vault. The index skips `trash/`, and the guard refuses agent edits in it.
+- **A journal volume is a folder directly under `journals/`** (`journal.Volumes`). Its
+  notes are every `.md` file under it, in path order, except its `Publication
+  history.md`; dot files, dot folders, and symbolic links are skipped. `journal.Name`
+  turns the folder name into the volume's name: `-` and `_` become spaces, a word of
+  letters and digits is upper case, any other word starts with a capital (`cs566-notes`
+  → `CS566 Notes`).
+- **An edition is one markdown text.** `# <title>`, then for each note `## <its path in
+  the volume, without .md>` and its body, frontmatter dropped. `journal_hash` is the
+  sha256 of the notes alone (each path and trimmed body), so neither the date, the
+  title, nor a note's frontmatter changes it. Publish refuses a volume that does not
+  exist, holds no note, or has the hash of its latest edition ("<volume> has no change
+  since <title>"). The latest edition is the source with that `volume` and the latest
+  `captured`.
+- **Publish captures through `source.Capture`.** `Request.Journal` (`json:"-"`, so no
+  tool call sets it) makes the text an edition: `origin: journal`, `authority: primary`,
+  `locator: journals/<volume>`, and the code fields `volume`, `edition` (the date), and
+  `journal_hash`. The title is `User Journal <Name> - <D Month YYYY> Edition`; capture
+  numbers a second edition of one day (" (2)"). The tags of the latest edition carry
+  forward, with `NewTags` set. One commit holds the source, its original in
+  `source-core/originals/`, and the publication history. The lead callout says
+  "Captured <date> from the journal `<volume>`".
+- **The publication history is code's.** `journal.HistoryNote` opens with its own
+  notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
+  reach the wiki, and an inline Base of the sources with that `volume` (file.name,
+  edition, measure, status). Publish writes it in its commit. A full `vault sync` (not
+  the views-only sync) writes it for a volume that has an edition and lacks the note
+  (`WriteMissingHistories`), and commits nothing; the next snapshot keeps it.
+- **Status names the volumes to publish.** `vault --json` adds `journals`: per volume
+  `volume`, `name`, `notes`, `edition` (the latest edition's title, or ""), and
+  `changed` (the hash differs from the latest edition's, or the volume has notes and no
+  edition). Home lists each changed volume under what waits, and the opening context
+  adds "Journals to publish: <volumes>". `journal list` prints the same.
 - **Status shows the work and the trash.** `vault --json` adds `changes.running` (the
   running work documents) and `trash` (the count of files under `trash/`, `.DS_Store`
   aside). Home lists each running work document with what waits.
@@ -257,8 +295,10 @@ The design pages are the spec. When the code departs from them, the reason is be
   command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or names
   it. The skills tell the agent to change files with Edit and Write.
 - **The shell runs neither the apply command of `change`, `vault migrate`, `vault
-  trash`, nor `atlas-obsidian hook`.** The guard refuses them, in every folder: three
-  skip the gate, the other forges a user's turn. It is no sandbox; a shell can still write any file. To
+  trash`, `journal publish`, nor `atlas-obsidian hook`.** The guard refuses them, in
+  every folder: three skip the gate, `journal publish` is the user's decision (CLI only,
+  no MCP action; the plugin's Publish runs it), and `hook` forges a user's turn.
+  `journal list` passes. It is no sandbox; a shell can still write any file. To
   try one by hand from a session, type the command with `!`. `shellCommands`
   (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes
   (`\x{…}` too), backslashes and backslash-newlines, brace lists and ranges,

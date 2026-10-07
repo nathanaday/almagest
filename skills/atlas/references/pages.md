@@ -65,8 +65,8 @@ in `defines` (`defines: school/cs513`).
 ## Source
 
 Capture writes a source with the fields code owns: `status` (pending, absorbed),
-`file`, `media`, `sha256`, `origin` (ingest, pasted, url, repository), `locator`,
-`measure`, `captured`. The ingest change sets the rest:
+`file`, `media`, `sha256`, `origin` (ingest, pasted, url, repository, journal),
+`locator`, `measure`, `captured`. The ingest change sets the rest:
 
 | Field | Value |
 |---|---|
@@ -79,6 +79,22 @@ Body: the embed or link of the original (code's), `## Summary` (what the documen
 in a paragraph or two), `## Structure` (one short line per part, each linking the
 documents that grew from it), `## Notes` (the user's). A repository snapshot is a source
 titled `<repository> @ <commit>`.
+
+A journal edition is a source that the user's Publish captures from one volume of
+`journals/`: `origin: journal`, `locator: journals/<volume>`, and `authority: primary`.
+Its title is `User Journal <Name> - <D Month YYYY> Edition`; a second edition of one day
+ends in ` (2)`. It carries forward the tags of the volume's latest edition. Code owns
+three more fields:
+
+| Field | Value |
+|---|---|
+| `volume` | the volume's folder name under `journals/` |
+| `edition` | the date of the publish, `YYYY-MM-DD` |
+| `journal_hash` | the sha256 of the volume's notes (paths and text, frontmatter dropped); publish refuses a volume whose hash equals its latest edition's |
+
+The edition's text holds one section per note, headed by the note's path in the volume
+(`## labs/Lab 1`). It is the user's own words: cite it with the section as the locator,
+keep `authority: primary`, and never change the journal or the edition.
 
 ## Repository
 
@@ -137,7 +153,8 @@ Every kind then has `## Sources` (each cited document, one line on what it gives
 ## Claims and citations
 
 - Cite the document for every material claim, with a locator when one exists:
-  `[[DINOv2]], p. 4`, or `[[p3-edge @ 4ac19e2]], internal/score/box.go:40`. A citation
+  `[[DINOv2]], p. 4`, `[[p3-edge @ 4ac19e2]], internal/score/box.go:40`, or
+  `[[User Journal CS566 Notes - 6 October 2026 Edition]], labs/Lab 1`. A citation
   may name any document: a source, a topic, a repository, a session. List each in
   `sources`.
 - Keep a source's statements apart from your synthesis.

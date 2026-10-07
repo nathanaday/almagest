@@ -54,6 +54,9 @@ matters here).
      when it gives one (`strength`: must, should, or may).
 4. For each subject, write its claims: one statement each, in your words or quoted, with
    the locator (page, section, or `path:line`).
+   A journal edition (`origin: journal`) holds the user's own notes. A heading names
+   each section with the note's path in the volume (`## labs/Lab 1`): that path is the
+   locator. Quote the user's wording, and never make a claim the note does not make.
 5. Give each subject the name the document uses, and its aliases (abbreviations, other
    spellings).
 6. Suggest `tags` for each subject from the vocabulary: the ones that fit. Suggest only

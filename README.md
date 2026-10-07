@@ -225,7 +225,10 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
 - `ingest/`: files for the wiki to learn from.
 - `source-core/originals/`: the captured originals and your attachments.
 - `scratchpad/`: your notes, and the ideas you ask an agent to note for later.
-- `journals/`: your own writing. No agent edits it.
+- `journals/`: your own writing, one volume per folder. No agent edits it. See
+  [Journals](#journals).
+- `journals/<volume>/Publication history.md`: the editions of a volume, which code
+  writes at each publish.
 - `sessions/` and `changes/`: the session and change documents.
 - `trash/`: what safe delete and a change's remove took out, under
   `trash/<date>/<old path>`. Git keeps it. Empty it yourself.
@@ -275,8 +278,10 @@ request.
   same document. You decide once, at the end.
 - "What waits for me?" The agent lists the proposed changes, the running work
   documents, the files in `ingest/`, and the sources that wait for the wiki.
-- The Atlas palette in Obsidian starts an ingest, a wiki lint, or a safe delete with one
-  button. See [The Obsidian plugin](#the-obsidian-plugin).
+- The Atlas palette in Obsidian starts an ingest, a wiki lint, a safe delete, or the
+  publish of a journal with one button. See [The Obsidian plugin](#the-obsidian-plugin).
+- "Publish my journal." The agent asks you to press Publish in the palette: only you
+  publish a journal. See [Journals](#journals).
 - "What do we know about my cs513 self-driving project?" The agent searches the
   documents that hold both tags.
 
@@ -295,6 +300,8 @@ atlas-obsidian change show chg-r8m3tb     # a proposed change
 atlas-obsidian change start --kind ingest --file paper.pdf   # a work document for an ingest
 atlas-obsidian change progress chg-r8m3tb "captured 1 source"  # a step, in one line
 atlas-obsidian vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
+atlas-obsidian journal list               # the journal volumes, each with its latest edition
+atlas-obsidian journal publish cs566-notes   # publish a volume as a new edition
 atlas-obsidian lint                       # the health check
 atlas-obsidian vault snapshot             # commit your hand edits now
 ```
@@ -304,6 +311,36 @@ Repositories, one timeline per month under `wiki-view/timeline/`, and one view p
 under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
 `changes/Changes.base` lists the changes that wait for you.
 
+### Journals
+
+A journal holds your own thoughts and writing. Agents read it and never change it, and
+an ingest never rewrites it. You decide when the wiki learns from it.
+
+- **Volumes.** Each folder directly under `journals/` is a volume, and its subfolders
+  are sections. The volume's notes are every `.md` file under the folder, except its
+  publication history. The folder name gives the volume's name: `cs566-notes` reads
+  "CS566 Notes".
+- **Publish.** Press Publish next to a volume in the palette, or run
+  `atlas-obsidian journal publish <volume>`. Atlas copies the volume into one source,
+  an edition, in one commit. The palette then starts a work document and an agent that
+  absorbs the edition into the wiki; you approve its change as usual. Publish refuses a
+  volume with no note, and a volume with no change since its latest edition. An agent
+  cannot publish: the guard refuses the command from its shell.
+- **Editions.** An edition's title is `User Journal <Name> - <D Month YYYY> Edition`,
+  such as "User Journal CS566 Notes - 6 October 2026 Edition". A second edition on one
+  day ends in " (2)". The edition holds each note under a heading with its path in the
+  volume, without its frontmatter. Its fields are `origin: journal`, `authority:
+  primary`, `volume`, `edition` (the date), and `journal_hash`. It keeps the tags of the
+  volume's latest edition. Every edition stays in `source-core/originals/`, and topics
+  cite the edition, not the notes.
+- **Publication history.** Each publish writes `Publication history.md` at the volume's
+  root: a table of the volume's editions. Code owns the note; an edit there is lost at
+  the next publish.
+- **Changes to publish.** A volume has changes when its notes differ from its latest
+  edition, or when it has notes and no edition. The date alone does not count as a
+  change. Home, the palette, `journal list`, and the agent's opening context name such
+  volumes.
+
 ### The Obsidian plugin
 
 The vault works without the plugin. With it, Obsidian adds:
@@ -311,7 +348,7 @@ The vault works without the plugin. With it, Obsidian adds:
 - **The Atlas palette** in the right sidebar (the Atlas ribbon button, or the command
   "Open the Atlas palette"). It shows the proposed changes, the running work documents,
   the files in `ingest/`, the pending sources, the live sessions, the files in `trash/`,
-  and the lint problems. Its actions:
+  the journal volumes, and the lint problems. Its actions:
   - **Ingest** starts a work document for the files in `ingest/`, opens it, and starts
     an agent that reports into it.
   - **Wiki lint** runs `lint` and lists the first findings. **Repair with an agent**
@@ -321,6 +358,9 @@ The vault works without the plugin. With it, Obsidian adds:
     leaves through a change that applies at once, so `change undo` brings it back. When files
     link it, nothing moves, and a list of the links offers **Resolve with an agent**:
     the agent points each link elsewhere and proposes the remove.
+  - **Publish** next to a journal volume (marked when the volume has changes) runs
+    `atlas-obsidian journal publish`, then starts a work document and an agent that
+    absorbs the edition. See [Journals](#journals).
 
   The palette starts an agent through the Duet plugin. Without Duet, it starts your
   agent in a terminal (see [Agent preferences](#agent-preferences)) with the same

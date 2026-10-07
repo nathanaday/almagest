@@ -63,6 +63,10 @@ subject is lost without a reason.
 - Cite every claim with its document and locator: `[[DINOv2]], p. 4`. Keep the
   source's statements apart from your synthesis. Never invent a quotation, a page
   number, or a date.
+- A journal edition (`origin: journal`) holds the user's own words. Cite it on every
+  claim it supports, with the section (the note's path in the volume) as the locator:
+  `[[User Journal CS566 Notes - 6 October 2026 Edition]], labs/Lab 1`. Quote its
+  wording where the topic quotes the user, and never write a claim it does not make.
 - Pick the tags from the vocabulary you were given: the absorbed document's tags that
   fit the subject, and the tags the extractor suggested. Use a tag no document holds
   only when none fits, and list it in `new_tags`; in `tagging: known` the skill asks the

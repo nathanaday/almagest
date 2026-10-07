@@ -1,6 +1,6 @@
 ---
 name: wiki-sync
-description: "Absorb sources into the wiki through one pipeline: chunk, extract, match, draft, change. It serves every way knowledge enters: a captured file, a repository snapshot, a saved passage. Use for sync the wiki, absorb the pending sources, update the wiki from this source, what does the wiki still need to learn. Capturing files is wiki-ingest; changing topics that exist is wiki-edit."
+description: "Absorb sources into the wiki through one pipeline: chunk, extract, match, draft, change. It serves every way knowledge enters: a captured file, a repository snapshot, a saved passage, a published journal edition. Use for sync the wiki, absorb the pending sources, update the wiki from this source, what does the wiki still need to learn. Capturing files is wiki-ingest; changing topics that exist is wiki-edit."
 ---
 
 # wiki-sync
@@ -18,7 +18,11 @@ References: [changes.md](../atlas/references/changes.md),
 
 ## Procedure
 
-1. **Sources.** Take the ids given, or the `pending` list from `vault`. One change holds
+1. **Sources.** Take the ids given, or the `pending` list from `vault`. The palette's
+   Publish message names one journal edition and a work document: "Absorb the source
+   [[…]] (<id>), the user's journal edition. … Your work document is [[…]] (<id>)". Use
+   that work document, as wiki-ingest does, and follow
+   [A journal edition](#a-journal-edition). One change holds
    at most about ten sources or forty chunks; more is several changes, one after another.
    From the same `vault` call, keep the tag list (every tag with its count), the
    `tagging` mode, and the vault's description. With a work document id, report each
@@ -43,7 +47,7 @@ References: [changes.md](../atlas/references/changes.md),
    - every drafted write;
    - for each source: a modify of the source, with its `description`, `tags`,
      `authority`, `## Summary`, and `## Structure` (from the chunk summaries; keep the
-     embed line at the top of the body);
+     embed line at the top of the body; a journal edition keeps `authority: primary`);
    - `absorbs`: the source ids;
    - `new_tags: true` when a write adds a tag that no document holds, and the user
      agreed to it in `tagging: known` mode;
@@ -59,6 +63,24 @@ References: [changes.md](../atlas/references/changes.md),
 
 When `progress` or `propose` refuses with "the user cancelled …; stop the work", stop at
 once: send no more workers, and say in one line that the user cancelled the work.
+
+## A journal edition
+
+A source with `origin: journal` is an edition of a journal volume: a copy of the user's
+own notes, captured when the user pressed Publish. Its title is "User Journal <volume
+name> - <D Month YYYY> Edition". Each section of its text is one note, headed by the
+note's path in the volume (`## labs/Lab 1`). The edition holds the user's words, so
+these rules apply to it in addition to the procedure:
+
+- Cite the edition on every claim it supports, with the section as the locator:
+  `[[User Journal CS566 Notes - 6 October 2026 Edition]], labs/Lab 1`.
+- Where a topic quotes the user, quote the edition's wording exactly.
+- Never paraphrase the edition into a claim it does not make. Keep the user's opinion
+  an opinion, and the user's question a question.
+- Never change a note in `journals/` or the edition's text in `source-core/originals/`.
+  The source's modify in step 8 sets only `description`, `tags`, `## Summary`, and
+  `## Structure` (one line per section), and keeps `authority: primary`.
+- Tell each extractor and each drafter that the source is a journal edition.
 
 ## Gate
 

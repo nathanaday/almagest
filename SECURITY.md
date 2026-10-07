@@ -69,6 +69,10 @@ press Approve in the change document and apply it yourself.
   repository leaves through a change that the command applies at once as your own
   action, so the change records it and `change undo` brings it back. Any other file
   moves to `trash/` in a commit of its own.
+- `atlas-obsidian journal publish` is your act too; the Obsidian plugin's Publish runs
+  it as you. It captures a journal volume as a pending source, an edition. In the
+  volume it writes only the publication history, and changes no note. The agent then absorbs the edition through a change, and the
+  gate above holds for it. The `source` tool cannot write `origin: journal`.
 
 ### An agent edits files that code owns
 
@@ -82,7 +86,8 @@ edit of:
   a topic, a source, or a repository, which change only through a change.
 - `source-core/originals/`, and any other folder under `source-core/`.
 - `changes/` and `wiki-view/`, which code writes.
-- `journals/`: your own writing. No agent edits a file there.
+- `journals/`: your own writing, since 10.0. No agent edits a file there, the
+  publication history that code writes included.
 - `trash/`: what safe delete and a change's remove took out. You empty it.
 - `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
 - `sessions/`, except the Description, Progress, and Summary sections of the agent's own
@@ -119,6 +124,8 @@ It refuses a command that runs one of these, as `atlas-obsidian` or under the ol
 - `hook`, which sends the binary a fake hook event, for example a fake prompt from you;
 - `vault … migrate`, which rewrites the whole vault;
 - `vault … trash`, your safe delete, which applies a remove without the gate;
+- `journal … publish`, which copies a journal volume into the wiki's sources; only you
+  decide when a journal is published;
 - `config set` or `config unset` of `terminal_command` or `agent_commands`, the commands
   that Atlas runs.
 

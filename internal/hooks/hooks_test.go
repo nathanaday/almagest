@@ -138,6 +138,8 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a change document from a session outside the vault", map[string]any{"cwd": "/", "tool_name": "Edit", "tool_input": map[string]any{"file_path": root + "/changes/2026-09/x.md", "old_string": "x"}}, true},
 		{"a shell change apply", bash(bin + " change apply X"), true},
 		{"a shell safe delete", bash(bin + " vault trash Notes.md"), true},
+		{"a shell publish", bash(bin + " journal publish cs566"), true},
+		{"a shell journal list", bash(bin + " journal list"), false},
 		{"a shell snapshot", bash(bin + " vault snapshot"), false},
 		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/atlas change apply X"), true},
 		{"a shell change apply by path, with flags", bash("cd /tmp && ~/.atlas/bin/" + bin + " change --vault W apply X"), true},
