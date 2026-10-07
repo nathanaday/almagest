@@ -48,6 +48,7 @@ Tools: `vault`, `search`, `context`. References:
 | to check the wiki | [wiki-review](../wiki-review/SKILL.md) |
 | to fix, rewrite, merge, or retag knowledge, or rename a tag | [wiki-edit](../wiki-edit/SKILL.md) |
 | to organize the knowledge under a tag | [wiki-map](../wiki-map/SKILL.md) |
+| a reading stack: check out the material on a subject, or return a checkout | [wiki-checkout](../wiki-checkout/SKILL.md) |
 | a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) |
 
 A question can turn into work. When the user then asks for a change to a repository, do
@@ -55,7 +56,7 @@ the work.
 
 ## Messages from the palette
 
-The Atlas palette in Obsidian starts an agent with one of four messages. Each one names
+The Atlas palette in Obsidian starts an agent with one of five messages. Each one names
 its skill, and three name a work document:
 
 | The message | Skill |
@@ -64,6 +65,7 @@ its skill, and three name a work document:
 | `/atlas-obsidian:wiki-review …` with a repair work document | [wiki-review](../wiki-review/SKILL.md), its Repair path |
 | `/atlas-obsidian:wiki-sync Absorb the source [[<edition>]] (<id>), the user's journal edition. … Your work document is [[…]] (<id>) …` | [wiki-sync](../wiki-sync/SKILL.md), its journal edition rules |
 | `/atlas-obsidian:wiki-edit Remove [[<title>]] …: point each backlink elsewhere …` | [wiki-edit](../wiki-edit/SKILL.md), its Safe delete path |
+| `/atlas-obsidian:wiki-checkout Check out the material on: <request>` | [wiki-checkout](../wiki-checkout/SKILL.md) |
 
 The user decides in the document (Approve or Cancel), so these tasks do not stop for a
 yes before they propose. Ask the user only for a real edge case that the skill names.
@@ -117,7 +119,9 @@ history.md`, which code writes.
 proposed changes and the sessions that wait. Then the running work documents
 (`changes.running`), the files in `ingest/`, the sources
 pending for the wiki, the journal volumes with changes to publish (`journals` entries
-with `changed: true`; the user publishes them), and the lint problems, each with the
+with `changed: true`; the user publishes them), the checkouts with edited copies that
+are not returned (`checkouts` entries with `edited` above 0 and `returned` empty; Return
+proposes their edits), and the lint problems, each with the
 skill that handles it. The opening context names each repository that is behind its
 description ([repo-ingest](../repo-ingest/SKILL.md)), and each journal volume with
 changes to publish.
@@ -129,6 +133,9 @@ changes to publish.
 - `journals/` holds the user's own writing. Read it when the request needs it; never
   edit a file there, and never run `atlas-obsidian journal publish`. The guard refuses
   every agent edit under `journals/`, and the publish command from your shell.
+- `checkout/` is the user's: the copies the librarian checked out, their reading lists,
+  and the ledger. Code writes it; the user reads and edits the copies. Never edit a file
+  there; the guard refuses every agent edit under `checkout/`.
 - `trash/` holds what the user deleted. Never read or edit it, and never run
   `atlas-obsidian vault trash`: safe delete is the user's action. The guard refuses
   every agent edit under `trash/`.

@@ -118,6 +118,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"another folder of the wiki", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/notes/x.md"}}, true},
 		{"a view", edit(root+"/wiki-view/View · Home.md", "x"), true},
 		{"the trash", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/trash/2026-10-06/x.md"}}, true},
+		{"a checkout copy", edit(root+"/checkout/2026-10-06 RL/Q-learning (checkout).md", "x"), true},
 		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
 		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
@@ -387,6 +388,8 @@ func TestReadOnlyAgents(t *testing.T) {
 		{"draft shows a change", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "show"}}), false},
 		{"draft reads a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__source", "tool_input": map[string]any{"action": "read"}}), false},
 		{"draft captures a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__source", "tool_input": map[string]any{"action": "capture"}}), true},
+		{"audit ranks a checkout", agent("wiki-audit", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__checkout", "tool_input": map[string]any{"action": "candidates"}}), false},
+		{"audit makes a checkout", agent("wiki-audit", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__checkout", "tool_input": map[string]any{"action": "make"}}), true},
 		{"wiki audit runs a shell", agent("wiki-audit", bash("ls")), true},
 		{"wiki audit edits a file", agent("wiki-audit", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": "/code/p3/main.go"}}), true},
 	}

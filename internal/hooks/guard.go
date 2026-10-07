@@ -29,13 +29,14 @@ func deny(w io.Writer, reason string) error {
 // only reads. A read-only agent makes no other call: an action or a tool this list does
 // not know is a write until someone lists it here.
 var readActions = map[string]map[string]bool{
-	"search":  nil,
-	"context": nil,
-	"match":   nil,
-	"lint":    nil,
-	"vault":   {"": true, "status": true},
-	"change":  {"": true, "show": true},
-	"source":  {"chunks": true, "read": true},
+	"search":   nil,
+	"context":  nil,
+	"match":    nil,
+	"lint":     nil,
+	"checkout": {"": true, "list": true, "candidates": true},
+	"vault":    {"": true, "status": true},
+	"change":   {"": true, "show": true},
+	"source":   {"chunks": true, "read": true},
 }
 
 // readsOnly reports whether a call of an atlas tool only reads.
@@ -198,6 +199,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " lists the linked repositories; vault sync keeps it"
 	case under(vault.Sessions):
 		return sessionRefusal(v, in, f, rel)
+	case under(vault.Checkout):
+		return rel + " is in checkout/, which the checkout tool writes; the user reads and edits the copies, and Return proposes their edits"
 	case under(vault.Trash):
 		return rel + " is in the trash, which holds what the user deleted; the user empties it"
 	case under(vault.Journals):

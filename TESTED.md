@@ -92,7 +92,7 @@ PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder
 ## Obsidian end-to-end tests
 
 Date: 2026-10-06. Obsidian 1.14.4 (the app update, over the 1.8.7 installer), macOS
-(Darwin 25.6.0), Go 1.24.2, Node 22.14.0. Atlas 10.2.0: the working tree over `929bf46`.
+(Darwin 25.6.0), Go 1.24.2, Node 22.14.0. Atlas 10.3.0: the working tree over `a6bfdbf`.
 
 `cd obsidian && npm run test:obsidian` builds the plugin, builds `atlas-obsidian` from
 this checkout into a temporary folder, and runs `test/obsidian/plugin.test.ts`. Each test
@@ -101,11 +101,11 @@ harness copies `obsidian/dist` over the plugin that `vault init` installs, and s
 `binaryPath` to the built binary. Then it starts a separate Obsidian with a temporary
 profile (`--user-data-dir`) and drives it with Playwright over the DevTools protocol. The
 user's Obsidian, `~/.atlas`, and vaults stay as they are. `npm test` does not need
-Obsidian. The suite takes 49 to 52 seconds. It passed three runs in a row.
+Obsidian. The suite takes about 60 seconds. It passed three runs in a row.
 
 | Test | What it proves |
 | ---- | -------------- |
-| Loads in a 10.0 vault | The plugin loads with version 10.2.0 and no console error. A manual sync runs the binary and shows its notice. With every folder open, no element in the file explorer has an `atlas-` class or a `data-atlas` attribute, and no rule of the plugin's `styles.css` matches an element there. |
+| Loads in a 10.0 vault | The plugin loads with version 10.3.0 and no console error. A manual sync runs the binary and shows its notice. With every folder open, no element in the file explorer has an `atlas-` class or a `data-atlas` attribute, and no rule of the plugin's `styles.css` matches an element there. |
 | Reads the layout at Obsidian's start, 10.0 | Obsidian quits and starts again with its metadata index deleted, so the plugin loads at start, as it does for a user. It shows no notice and logs no error. |
 | Reads the layout at Obsidian's start, 9.0 | The same start in a vault whose `Atlas.md` says `layout: 5`. The plugin shows one notice, which names the 9.0 layout. |
 | Approves a change | `change propose` from the CLI writes a change document. In live preview, the widget shows Approve and Cancel. A click on Approve writes the topic file, sets `status: applied`, and commits `change: Add Alpha`. The widget then shows "Applied <time>." with no buttons. |
@@ -120,6 +120,8 @@ Obsidian. The suite takes 49 to 52 seconds. It passed three runs in a row.
 | Safe delete, backlinks | A topic that another topic links stays where it is, and no `trash/` folder appears. The modal "Beta stays" lists the backlinks. "Resolve with an agent" (Duet absent) starts the agent in the terminal stand-in with the wiki-edit message, which names the topic, its path, and `[[Alpha]]`. |
 | Publish a journal volume | The terminal stand-in of Ingest without Duet. With `journals/cs566-notes/Week 1.md`, the Journals section shows "CS566 Notes", "1 note", "never published", the mark "changed", and an enabled Publish; the Journals row says "1 to publish". Publish opens a modal that names "User Journal CS566 Notes - <today> Edition". Its Publish writes that source in `source-core/documents/` (`origin: journal`, `volume`, `locator`, `status: pending`) in the commit `capture: <title>`, and `Publication history.md`, which opens with the `[!atlas]` callout. It starts the work document "<date> Ingest <title>" of kind `ingest`, opens it, and sends the wiki-sync message that names the edition and the work document. The volume then shows its edition, Publish is off with "No change since <title>.", and the row says "0 to publish". In reading view the history's callout has the plugin's icon. A change to the note turns Publish on again. The command "Publish this journal volume" in that note opens the modal, which says the edition takes a number, and publishes "<title> (2)" with its own work document and message. |
 | Publish needs a note | A volume with no note shows "0 notes" and a Publish that is off with "The volume holds no note.". The command "Publish this journal volume" is not available in a note outside `journals/`. |
+| Checkout and Return | Three topics (Alpha links Beta and Gamma), and `checkout make` from the CLI with Beta and Alpha. The Checkouts section shows the request, "2 documents", "<date> · 0 edited", and a Return that is off with "No copy is edited."; the Checkouts row says "0 to return". The request opens `Reading list.md`. In reading view, the reading list and a copy open with the `[!atlas]` callout and the plugin's icon. An edit of the Alpha copy through `app.vault.modify` turns Return on after the palette reads the status again: "1 edited", "1 to return". Return proposes one change, "<date> Return <folder>", opens it, and shows no notice of left-out copies. The checkout then shows "returned <date>", Return is off with "Returned <date>.", the row says "0 to return", and the reading list has `returned`. Approve in the change's widget applies it: Alpha holds the added line, its links name `[[Beta]]` and `[[Gamma]]` with no copy, and the commit is `change: Return <folder>`. |
+| Checkout without Duet | With no checkout, the Checkouts section says "No checkout yet". Checkout opens the modal "Check out material", whose Check out button is off while the request is empty or only spaces. Enter in the request field closes the modal and starts the agent in the terminal stand-in with `/atlas-obsidian:wiki-checkout Check out the material on: reinforcement learning`. The notice says that Duet runs the agents in Obsidian. |
 
 Found with these tests (harness only, not Atlas): Obsidian ignores SIGTERM for about one
 second after it starts, so the harness kills Obsidian when it deletes the profile. It uses

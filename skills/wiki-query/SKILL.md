@@ -1,6 +1,6 @@
 ---
 name: wiki-query
-description: "Answer a question from the wiki, with citations, and say what the wiki does not cover. Reads only. Use for what does the wiki say, explain from my notes, find in the wiki, what do we know about X, which repositories use Y. Keeping the answer is wiki-save."
+description: "Answer a question from the wiki, with citations, and say what the wiki does not cover. Reads only. Use for what does the wiki say, explain from my notes, find in the wiki, what do we know about X, which repositories use Y. Keeping the answer is wiki-save; a reading list of the documents on a subject is wiki-checkout."
 ---
 
 # wiki-query
@@ -41,4 +41,6 @@ None. The skill writes nothing.
 ## Hand off
 
 [wiki-save](../wiki-save/SKILL.md) when the answer is new synthesis the user wants kept.
+[wiki-checkout](../wiki-checkout/SKILL.md) when the user wants to read the material
+itself: a reading list and copies to mark up.
 [atlas](../atlas/SKILL.md) when the question turns into work in a repository.

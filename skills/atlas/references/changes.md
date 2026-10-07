@@ -63,9 +63,10 @@ writes:
 - Name a document that exists by its id. Give `base` only when you read the document's
   hash; code records it otherwise, and apply refuses when the file changed since.
 - Use rename, never a remove and a create: code rewrites every link to the old title in
-  the same commit. It rewrites no note in `scratchpad/`, `threads/`, or `journals/`.
+  the same commit. It rewrites no note in `scratchpad/`, `threads/`, `journals/`, or
+  `checkout/`.
 - Use retag to rename a tag: code rewrites it in `tags` and `defines` of every typed
-  document, and every inline `#tag` in every note outside those three folders. A retag
+  document, and every inline `#tag` in every note outside those four folders. A retag
   to a tag that exists merges the two.
 - A source comes only from `source` capture. A change modifies it; it never creates one.
 - A repository is unlinked with a modify `{fields: {unlinked: true}}`; code empties its

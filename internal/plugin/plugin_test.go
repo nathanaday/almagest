@@ -27,7 +27,7 @@ const root = "../.."
 var Skills = map[string][]string{
 	"atlas": {"atlas", "atlas-onboard"},
 	"repo":  {"repo-link", "repo-unlink", "repo-ingest"},
-	"wiki":  {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review"},
+	"wiki":  {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review", "wiki-checkout"},
 }
 
 func allSkills() []string {

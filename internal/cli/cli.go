@@ -18,6 +18,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/brief"
 	"github.com/nathanaday/atlas-obsidian/internal/change"
+	"github.com/nathanaday/atlas-obsidian/internal/checkout"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
 	"github.com/nathanaday/atlas-obsidian/internal/journal"
@@ -71,7 +72,7 @@ A command that acts on a vault takes --vault (a path, or a name from ~/.atlas/co
 else $ATLAS_VAULT, else the vault above the working folder. setup's --vault is the folder
 of a new vault, vault init takes --path, and doctor, version, help, hook, and mcp take no
 --vault.
---json prints JSON from: vault, search, context, source, change, journal, lint, config.
+--json prints JSON from: vault, search, context, source, change, checkout, journal, lint, config.
 match always prints JSON.
 No --json: setup, open, doctor, version, help, hook, mcp.
 `
@@ -94,6 +95,9 @@ var commands = []struct{ name, usage string }{
 `},
 	{"change", `  atlas-obsidian change propose FILE.json [--id ID] | show ID | apply ID | reject ID --reason R | undo ID
                         | start --kind ingest|repair [--title T] [--file NAME]... | progress ID TEXT...
+`},
+	{"checkout", `  atlas-obsidian checkout [list] | candidates TEXT... [--tag T]... [--type T]... [--limit N]
+                          | make FILE.json | return FOLDER
 `},
 	{"journal", `  atlas-obsidian journal [list] | publish VOLUME
                                                    a journal volume is a folder directly under journals/
@@ -188,6 +192,8 @@ func (c *CLI) Run(argv []string) int {
 		err = c.lintCmd(rest)
 	case "journal":
 		err = c.journalCmd(rest)
+	case "checkout":
+		err = c.checkoutCmd(rest)
 	case "hook":
 		return c.hookCmd(rest)
 	case "mcp":
@@ -818,6 +824,71 @@ func printPreview(w io.Writer, pv *change.Preview) {
 	if pv.Commit != "" {
 		fmt.Fprintf(w, "  commit %s\n", short(pv.Commit))
 	}
+}
+
+func (c *CLI) checkoutCmd(argv []string) error {
+	a := parse(argv)
+	v, err := c.open(a)
+	if err != nil {
+		return err
+	}
+	now := c.Now()
+	switch a.arg(0) {
+	case "", "list":
+		list := checkout.List(v)
+		return c.emit(a, map[string]any{"checkouts": list}, func(w io.Writer) {
+			if len(list) == 0 {
+				fmt.Fprintln(w, "No checkout yet.")
+			}
+			for _, e := range list {
+				fmt.Fprintf(w, "%s · %s · %s · %d edited · returned %s\n", e.Folder, e.Request, count(e.Documents, "document", "documents"), e.Edited, orDash(e.Returned))
+			}
+		})
+	case "candidates":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return err
+		}
+		limit, _ := strconv.Atoi(a.get("limit"))
+		cands, err := checkout.Candidates(idx, strings.Join(a.pos[1:], " "), a.list("tag"), a.list("type"), limit)
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"candidates": cands}, func(w io.Writer) {
+			for _, cd := range cands {
+				via := ""
+				if cd.Via != "" {
+					via = " · via " + cd.Via
+				}
+				fmt.Fprintf(w, "%6.2f  %d  %s (%s)%s\n", cd.Score, cd.Distance, cd.Ref.Title, cd.Ref.ID, via)
+			}
+		})
+	case "make":
+		var o checkout.Order
+		if err := c.readJSON(a.arg(1), &o); err != nil {
+			return fmt.Errorf("the order: %w", err)
+		}
+		m, err := checkout.Make(v, o, now)
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"made": m}, func(w io.Writer) {
+			fmt.Fprintf(w, "Checked out %s into %s; the reading list is %s.\n", count(len(m.Copies), "document", "documents"), m.Folder, m.ReadingList)
+		})
+	case "return":
+		r, err := checkout.Return(v, a.arg(1), now)
+		if err != nil {
+			return err
+		}
+		c.views(v, now)
+		return c.emit(a, map[string]any{"returned": r}, func(w io.Writer) {
+			printPreview(w, r.Change)
+			for _, s := range r.Skipped {
+				fmt.Fprintf(w, "  left out: %s\n", s)
+			}
+		})
+	}
+	return fmt.Errorf("checkout takes list, candidates, make, or return, not %q", a.arg(0))
 }
 
 func (c *CLI) journalCmd(argv []string) error {

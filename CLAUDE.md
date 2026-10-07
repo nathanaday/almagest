@@ -9,7 +9,7 @@ say.
 `source-core/documents/`, `wiki/assets/` became `source-core/originals/`, `inbox/` became
 `ingest/`, and `views/` became `wiki-view/` (tag views in `wiki-view/nav/`). It added
 `journals/`, the user's own writing, and reserved `checkout/` and `trash/` for later
-releases (10.1 uses `trash/`). It removed `@atlas` mentions and every patch the Obsidian plugin made on
+releases (10.1 uses `trash/`, 10.3 `checkout/`). It removed `@atlas` mentions and every patch the Obsidian plugin made on
 Obsidian's own interface: file explorer badges, graph colors, view folders, the change
 bar, and mention marks. A widget inside the change document replaced the change bar. The
 plan is `scratchpad/Atlas 10 Strategy.md` in the SoftwareProjects vault.
@@ -25,6 +25,13 @@ strategy note). A journal is where the user's own thoughts and writing live, saf
 any change an ingest makes. Agents read it and never edit it (the guard, since 10.0).
 The user's Publish copies one volume into one source, an edition, and the normal sync
 absorbs that source: topics cite the edition, never the notes.
+
+10.3.0 added the librarian checkout (`internal/checkout`, the MCP tool and CLI command
+`checkout`, the skill `wiki-checkout`; the "Librarian checkout" section of the strategy
+note). Code ranks a bounded list of candidates for a request. The agent chooses the
+documents that serve it, in reading order, and code copies them into
+`checkout/<date> <name>/` with a reading list and the ledger. The user reads and edits
+the copies, and Return proposes the edits as one change of the originals.
 
 Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
 editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
@@ -258,6 +265,58 @@ The design pages are the spec. When the code departs from them, the reason is be
   `changed` (the hash differs from the latest edition's, or the volume has notes and no
   edition). Home lists each changed volume under what waits, and the opening context
   adds "Journals to publish: <volumes>". `journal list` prints the same.
+- **A copy takes the name `<Title> (checkout)`.** A copy with its original's name would
+  make `[[Title]]` name two files. `Index.Linked` returns nil for a target with two
+  paths, so every frontmatter link to the original would stop resolving, and Obsidian
+  could open the copy from a link in the wiki. The index keeps `checkout/` as link
+  targets only (`vault.Unread`), so search, lint, a rename's link rewrite, and a retag
+  skip it. `Index.Backlinks` counts its links, so a copy's `checkout_of` keeps safe
+  delete from moving the original.
+- **Code ranks the candidates; the librarian chooses.** `checkout.Candidates` runs the
+  search (BM25F, with the request's tags and types; topics and repositories by default),
+  takes the 12 best hits as seeds at distance 0, and walks links out and in, frontmatter
+  and body (`neighbors`), to distance 2 (`MaxDistance`). A document it reaches scores
+  the larger of its own search score and 0.6 (`decay`) × the score of the document it
+  was reached from, which `via` names. The list is sorted by score and cut to `limit`
+  (default 40). Code does not judge relevance: the skill reads the descriptions, reads
+  a document when its description does not settle it, and stops a branch where its
+  documents stop serving. `make` takes at most 60 documents (`MaxDocuments`); the skill
+  aims for about 30.
+- **A copy records its original's state.** Its frontmatter holds `checkout_of` (a link to
+  the original), `checkout_id`, `checkout_base` (`change.BaseHash` of the original, the
+  base a change write takes), `checkout_hash` (`doc.ContentHash` of the copy's body as
+  written), `checked_out`, and `description`. The body is a code callout, then the
+  original's body without its lead. A copy is edited when the hash of its body, callout
+  removed, differs from `checkout_hash`; a reflow is not an edit (`ContentHash` folds
+  whitespace).
+- **Links follow the copies, and go back on return.** `toCopies` points each body link
+  to a document of the checkout, by title or alias, at its copy
+  (`[[checkout/<folder>/<Title> (checkout)|<text>]]`, the old text kept as the alias).
+  Every other link keeps naming the wiki, and so does a link that holds a path.
+  `toWiki` reverses it on return: a link whose text is the original's title goes back
+  bare (`[[Title]]`); any other text stays as the alias. Frontmatter links are not
+  rewritten.
+- **Return proposes, and skips what changed.** `checkout.Return` makes one `modify`
+  write per edited copy: the copy's body with `toWiki` applied, `base` =
+  `checkout_base`, why "edited in the checkout <name>". It leaves out a copy whose
+  original is gone or whose `BaseHash` differs from `checkout_base`, and names it in
+  `skipped`. It proposes one change, "Return <folder>", with no `session`, so only the
+  user applies it (Approve, or `change apply` in a terminal). It sets `returned` in the
+  reading list and writes the ledger in a commit of its own. A checkout is returned
+  while its return change (`return_change`) is proposed or applied, and a second return
+  is refused then; a rejected, superseded, or undone return change frees it. The
+  change's title is "Return <name>" (the folder without its date). With no edited copy it
+  changes nothing and returns an error that says so. Return carries the body only; an
+  edit of a copy's frontmatter does not return.
+- **The reading list and the ledger are code's.** `make` writes `Reading list.md`
+  (`request`, `checked_out`, `documents`, `returned`; a callout, `## Request`,
+  `## Reading order`, `## Notes`) and `checkout/Ledger.md`, a table of every checkout,
+  newest first, written again at each make and return from the reading lists
+  (`checkout.List`). The guard refuses agent edits under `checkout/`; a read-only agent
+  may call `checkout` `candidates` and `list`.
+- **Status names the checkouts.** `vault --json` adds `checkouts`, the entries of
+  `checkout list`: per checkout `folder`, `request`, `date`, `documents`, `edited` (the
+  count of edited copies), and `returned`.
 - **Status shows the work and the trash.** `vault --json` adds `changes.running` (the
   running work documents) and `trash` (the count of files under `trash/`, `.DS_Store`
   aside). Home lists each running work document with what waits.

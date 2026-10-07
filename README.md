@@ -127,8 +127,8 @@ Some parts of Atlas do not work on Codex yet:
 
 The Atlas design vault tracks these limits.
 
-To try a checkout without installing the plugin, start Claude Code with
-`claude --plugin-dir /path/to/atlas-obsidian`.
+To try the plugin from a clone of this repository without installing it, start Claude
+Code with `claude --plugin-dir /path/to/atlas-obsidian`.
 
 ### Make a vault
 
@@ -230,6 +230,9 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
 - `journals/<volume>/Publication history.md`: the editions of a volume, which code
   writes at each publish.
 - `sessions/` and `changes/`: the session and change documents.
+- `checkout/`: the librarian's checkouts, one folder each, and `checkout/Ledger.md`.
+  Code writes it, and you read and edit the copies. No agent edits it. See
+  [Checkouts](#checkouts).
 - `trash/`: what safe delete and a change's remove took out, under
   `trash/<date>/<old path>`. Git keeps it. Empty it yourself.
 - `wiki-view/`: the notes that code writes for reading. Each sync writes them again.
@@ -246,9 +249,8 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
 - `.atlas/config.json`: the vault's agent preferences. Git commits it, so a shared vault
   shares it; see [SECURITY.md](SECURITY.md).
 
-Search and lint skip `scratchpad/`, `journals/`, and `threads/`, but a link to a note
-there still resolves. Atlas skips `trash/` entirely, and reserves `checkout/` for a later
-release.
+Search and lint skip `scratchpad/`, `journals/`, `threads/`, and `checkout/`, but a link
+to a note there still resolves. Atlas skips `trash/` entirely.
 
 ## Usage
 
@@ -277,13 +279,16 @@ request.
   writes each step in one work document in `changes/`, then proposes the pages into the
   same document. You decide once, at the end.
 - "What waits for me?" The agent lists the proposed changes, the running work
-  documents, the files in `ingest/`, and the sources that wait for the wiki.
-- The Atlas palette in Obsidian starts an ingest, a wiki lint, a safe delete, or the
-  publish of a journal with one button. See [The Obsidian plugin](#the-obsidian-plugin).
+  documents, the files in `ingest/`, the sources that wait for the wiki, and the
+  checkouts with edits to return.
+- The Atlas palette in Obsidian starts an ingest, a wiki lint, a safe delete, a
+  checkout, or the publish of a journal with one button. See [The Obsidian plugin](#the-obsidian-plugin).
 - "Publish my journal." The agent asks you to press Publish in the palette: only you
   publish a journal. See [Journals](#journals).
 - "What do we know about my cs513 self-driving project?" The agent searches the
   documents that hold both tags.
+- "Check out the material on reinforcement learning." The agent chooses the documents
+  that serve the request and copies them into `checkout/`, with a reading list. See [Checkouts](#checkouts).
 
 A **work document** is a change document that starts before the agent knows its writes.
 Its status is `running`. The agent adds one line under `## Progress` for each step
@@ -302,6 +307,10 @@ atlas-obsidian change progress chg-r8m3tb "captured 1 source"  # a step, in one 
 atlas-obsidian vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
 atlas-obsidian journal list               # the journal volumes, each with its latest edition
 atlas-obsidian journal publish cs566-notes   # publish a volume as a new edition
+atlas-obsidian checkout                   # the checkouts, newest first
+atlas-obsidian checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
+atlas-obsidian checkout make order.json   # copy the documents an order names (request, name, documents, notes)
+atlas-obsidian checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
 atlas-obsidian lint                       # the health check
 atlas-obsidian vault snapshot             # commit your hand edits now
 ```
@@ -341,6 +350,41 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   change. Home, the palette, `journal list`, and the agent's opening context name such
   volumes.
 
+### Checkouts
+
+Ask an agent for the material on a subject, and it acts as a librarian (the
+`wiki-checkout` skill): it chooses the documents that serve your request, puts them in
+reading order, and checks out a copy of each for you to read and mark up.
+
+- **The choice.** `checkout candidates` ranks the documents with the search, takes the
+  best hits, and adds the documents linked to or from them, up to two links away. The
+  agent reads each candidate's description, and the document itself when the
+  description does not settle it. It keeps the documents that serve the request, and
+  stops following a branch where its documents stop serving it. It aims for a sitting
+  or a week of reading, at most about 30 documents. When more serve, it asks you once
+  to narrow the request. A checkout holds at most 60 documents.
+- **The folder.** `checkout/<date> <name>/` holds the copies and a reading list. Code
+  writes it in one commit. A second checkout with the same date and name ends in
+  " (2)".
+- **The copies.** A copy is `<Title> (checkout).md`: the original's text below a callout
+  that names the original. The copy takes its own name so that a `[[Title]]` link in the
+  wiki still names one file, the original. A link to another document of the checkout
+  points at that document's copy; every other link points at the wiki. Edit the copies
+  as you like. No agent edits `checkout/`.
+- **The reading list.** `Reading list.md` holds your request, the documents in reading
+  order with one line each on why they are there, and the agent's notes on what it left
+  out.
+- **The ledger.** `checkout/Ledger.md` lists every checkout, newest first: the date, the
+  request, the count of documents, the count of edited copies, and the date of its
+  return. Code writes it again at each checkout and each return, so an edit there is
+  lost.
+- **Return.** Press Return next to the checkout in the palette, or run `atlas-obsidian
+  checkout return <folder>`. Atlas proposes one change, "Return <folder>", with a modify
+  of each original whose copy you edited. The links to copies point at the originals
+  again. You decide in the change document, as for every change. Return skips a copy
+  whose original changed since the checkout, and names it; its edits stay in the copy.
+  Return carries a copy's text, not its frontmatter.
+
 ### The Obsidian plugin
 
 The vault works without the plugin. With it, Obsidian adds:
@@ -348,7 +392,7 @@ The vault works without the plugin. With it, Obsidian adds:
 - **The Atlas palette** in the right sidebar (the Atlas ribbon button, or the command
   "Open the Atlas palette"). It shows the proposed changes, the running work documents,
   the files in `ingest/`, the pending sources, the live sessions, the files in `trash/`,
-  the journal volumes, and the lint problems. Its actions:
+  the journal volumes, the checkouts, and the lint problems. Its actions:
   - **Ingest** starts a work document for the files in `ingest/`, opens it, and starts
     an agent that reports into it.
   - **Wiki lint** runs `lint` and lists the first findings. **Repair with an agent**
@@ -361,6 +405,11 @@ The vault works without the plugin. With it, Obsidian adds:
   - **Publish** next to a journal volume (marked when the volume has changes) runs
     `atlas-obsidian journal publish`, then starts a work document and an agent that
     absorbs the edition. See [Journals](#journals).
+  - **Checkout** asks for your request and starts an agent that checks out the
+    material on it.
+  - **Return** next to a checkout runs `atlas-obsidian checkout return` and opens the
+    change. It is on when a copy is edited and the checkout is not returned. See
+    [Checkouts](#checkouts).
 
   The palette starts an agent through the Duet plugin. Without Duet, it starts your
   agent in a terminal (see [Agent preferences](#agent-preferences)) with the same
@@ -397,10 +446,12 @@ its core rules:
 
 ## Layout
 
-- The binary: `cmd/atlas-obsidian/`, `internal/` (one package per part;
-  `internal/mcpserver` serves the seven tools, `internal/hooks` the nine hooks,
-  `internal/cli` every command).
-- The agent plugin: `skills/`, `agents/`, `hooks/hooks.json`, `.mcp.json`,
+- The binary: `cmd/atlas-obsidian/` and `internal/`, one package per part.
+  `internal/mcpserver` serves the eight tools: `vault`, `search`, `context`, `match`,
+  `source`, `change`, `checkout`, and `lint`. `internal/hooks` serves the nine hooks,
+  and `internal/cli` every command.
+- The agent plugin: `skills/` (thirteen skills), `agents/` (three read-only agents),
+  `hooks/hooks.json`, `.mcp.json`,
   `.claude-plugin/`, `.codex-plugin/`, and `scripts/atlas-obsidian`, the wrapper that finds
   the binary for the hooks and the MCP server. `.agents/plugins/marketplace.json` is a second
   marketplace entry, added with Codex support.

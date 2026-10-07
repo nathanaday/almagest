@@ -100,7 +100,7 @@ func TestEveryToolAndAction(t *testing.T) {
 		names = append(names, tool.Name)
 	}
 	want := mcpserver.ToolNames()
-	if strings.Join(want, ",") != "vault,search,context,match,source,change,lint" {
+	if strings.Join(want, ",") != "vault,search,context,match,source,change,checkout,lint" {
 		t.Fatalf("ToolNames %v", want)
 	}
 	want = slices.Clone(want)
@@ -109,6 +109,13 @@ func TestEveryToolAndAction(t *testing.T) {
 	if strings.Join(names, ",") != strings.Join(want, ",") {
 		t.Fatalf("tools %v", names)
 	}
+	if list, _ := c.call("checkout", map[string]any{}, false); dig(list, "checkouts") != nil {
+		t.Fatalf("checkout list in an empty vault: %v", list)
+	}
+	cands, _ := c.call("checkout", map[string]any{"action": "candidates", "text": "anything"}, false)
+	_ = cands
+	c.call("checkout", map[string]any{"action": "make"}, true)
+	c.call("checkout", map[string]any{"action": "lend"}, true)
 	for _, gone := range []string{"thread", "chord"} {
 		if _, err := c.sess.CallTool(context.Background(), &mcp.CallToolParams{Name: gone, Arguments: map[string]any{}}); err == nil || !strings.Contains(err.Error(), "unknown tool") {
 			t.Fatalf("%s: %v", gone, err)

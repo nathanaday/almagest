@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/nathanaday/atlas-obsidian/internal/checkout"
 	"github.com/nathanaday/atlas-obsidian/internal/derive"
 	"github.com/nathanaday/atlas-obsidian/internal/journal"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
@@ -79,9 +80,11 @@ type Status struct {
 	// Trash counts the files in trash/.
 	Trash int `json:"trash"`
 	// Journals are the journal volumes, each with its latest edition.
-	Journals []journal.Volume  `json:"journals"`
-	Problems int               `json:"problems"`
-	Versions map[string]string `json:"versions,omitempty"`
+	Journals []journal.Volume `json:"journals"`
+	// Checkouts are the librarian's checkouts, newest first.
+	Checkouts []checkout.Entry  `json:"checkouts"`
+	Problems  int               `json:"problems"`
+	Versions  map[string]string `json:"versions,omitempty"`
 }
 
 // Recent is how many applied changes the status lists.
@@ -101,6 +104,7 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 		Changes:   ChangeLists{Proposed: []vault.Ref{}, Running: []vault.Ref{}, Recent: []vault.Ref{}},
 		Trash:     countFiles(v.Abs(vault.Trash)),
 		Journals:  journal.Volumes(idx),
+		Checkouts: checkout.List(v),
 	}
 	for _, t := range schema.DocumentTypes {
 		st.Documents[t] = 0

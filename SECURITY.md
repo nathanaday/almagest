@@ -73,12 +73,19 @@ press Approve in the change document and apply it yourself.
   it as you. It captures a journal volume as a pending source, an edition. In the
   volume it writes only the publication history, and changes no note. The agent then absorbs the edition through a change, and the
   gate above holds for it. The `source` tool cannot write `origin: journal`.
+- The `checkout` tool changes no knowledge document. `make` writes only under
+  `checkout/`: the copies, the reading list, and the ledger. `return` proposes a change
+  of the originals and never applies it. That change names no session, so the `change`
+  tool refuses the agent's apply, and you decide with Approve or Cancel in the change
+  document. Each write of the change carries the original's hash at the checkout as its
+  base: `return` leaves out a copy whose original changed since, and apply refuses a
+  write whose original changed after the proposal.
 
 ### An agent edits files that code owns
 
 The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
 `apply_patch`, and Bash call, and before each call of the atlas tools that can write:
-`change`, `source`, and `vault`. The other four, `search`, `context`, `match`, and
+`change`, `source`, `vault`, and `checkout`. The other four, `search`, `context`, `match`, and
 `lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
 edit of:
 
@@ -89,6 +96,8 @@ edit of:
 - `journals/`: your own writing, since 10.0. No agent edits a file there, the
   publication history that code writes included.
 - `trash/`: what safe delete and a change's remove took out. You empty it.
+- `checkout/`: the copies, reading lists, and ledger that the `checkout` tool writes.
+  You read and edit the copies; `return` proposes your edits as a change.
 - `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
 - `sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.
@@ -110,7 +119,8 @@ the rule on the machine's `config.json`.
 The plugin's three read-only agents are `wiki-audit`, `wiki-draft`, and `wiki-extract`.
 For each of them, the guard refuses the edit tools, every shell command, and every atlas
 call except the calls that only read: `search`, `context`, `match`, and `lint`;
-`vault status`; `change show`; and `source` with `chunks` or `read`. The guard counts a
+`vault status`; `change show`; `source` with `chunks` or `read`; and `checkout` with
+`list` or `candidates`. The guard counts a
 call that this list does not name as a write.
 
 ### An agent uses the shell to skip the gate or to change what runs

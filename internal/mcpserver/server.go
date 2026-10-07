@@ -15,6 +15,7 @@ import (
 
 	"github.com/nathanaday/atlas-obsidian/internal/brief"
 	"github.com/nathanaday/atlas-obsidian/internal/change"
+	"github.com/nathanaday/atlas-obsidian/internal/checkout"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/lint"
 	"github.com/nathanaday/atlas-obsidian/internal/match"
@@ -57,7 +58,7 @@ func New(opts Options) *Server {
 
 // ToolNames are the tools, in the order the server lists them.
 func ToolNames() []string {
-	return []string{"vault", "search", "context", "match", "source", "change", "lint"}
+	return []string{"vault", "search", "context", "match", "source", "change", "checkout", "lint"}
 }
 
 // open resolves the vault a call acts on.
@@ -279,6 +280,54 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 	return nil, nil, fmt.Errorf("change takes action show, start, progress, propose, apply, reject, or undo, not %q", in.Action)
 }
 
+// CheckoutIn is the checkout tool's input.
+type CheckoutIn struct {
+	Action string   `json:"action,omitempty" jsonschema:"list (the default), candidates, make, or return"`
+	Vault  string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Text   string   `json:"text,omitempty" jsonschema:"candidates: the request"`
+	Tags   []string `json:"tags,omitempty" jsonschema:"candidates: only documents that hold every one of these tags"`
+	Types  []string `json:"types,omitempty" jsonschema:"candidates: the types to rank; topic and repository when empty; add source to include sources"`
+	Limit  int      `json:"limit,omitempty" jsonschema:"candidates: at most this many; 40 when 0"`
+	checkout.Order
+	Folder string `json:"folder,omitempty" jsonschema:"return: the checkout, by its folder's name"`
+}
+
+// CheckoutOut is the checkout tool's output.
+type CheckoutOut struct {
+	Checkouts  []checkout.Entry     `json:"checkouts,omitempty"`
+	Candidates []checkout.Candidate `json:"candidates,omitempty"`
+	Made       *checkout.Made       `json:"made,omitempty"`
+	Returned   *checkout.Returned   `json:"returned,omitempty"`
+}
+
+func (s *Server) checkoutTool(ctx context.Context, req *mcp.CallToolRequest, in CheckoutIn) (*mcp.CallToolResult, CheckoutOut, error) {
+	v, err := s.open(in.Vault)
+	if err != nil {
+		return nil, CheckoutOut{}, err
+	}
+	switch in.Action {
+	case "", "list":
+		return nil, CheckoutOut{Checkouts: checkout.List(v)}, nil
+	case "candidates":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return nil, CheckoutOut{}, err
+		}
+		c, err := checkout.Candidates(idx, in.Text, in.Tags, in.Types, in.Limit)
+		return nil, CheckoutOut{Candidates: c}, err
+	case "make":
+		m, err := checkout.Make(v, in.Order, s.opts.Now())
+		return nil, CheckoutOut{Made: m}, err
+	case "return":
+		r, err := checkout.Return(v, in.Folder, s.opts.Now())
+		if err != nil {
+			return nil, CheckoutOut{}, err
+		}
+		return nil, CheckoutOut{Returned: r}, nil
+	}
+	return nil, CheckoutOut{}, fmt.Errorf("checkout takes action list, candidates, make, or return, not %q", in.Action)
+}
+
 // LintIn is the lint tool's input.
 type LintIn struct {
 	Vault string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
@@ -311,6 +360,8 @@ func (s *Server) MCP() *mcp.Server {
 		Description: "capture brings files from ingest/, pasted text, or a snapshot of a linked repository into source-core/documents as sources, with the originals in source-core/originals, as one commit (a source is pending until a change absorbs it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, safe("source", s.sourceTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "change",
 		Description: "The only way knowledge changes: sources, repositories, and topics. start opens a work document (a running change for an ingest or a repair) that the user watches; progress adds one line of what was done to it; propose validates a Wiki Change Plan (create, modify, rename, remove, confirm, retag) and writes a change document, or fills the running one named by id (no commit), for the user to review; a remove moves the document to trash/; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, safe("change", s.changeTool))
+	mcp.AddTool(server, &mcp.Tool{Name: "checkout",
+		Description: "The librarian's desk. candidates ranks the documents a request may need: the search's best hits and the documents linked to or from them within two steps, each with its score, distance, and the title it was reached from; the librarian chooses. make copies the chosen documents, in reading order with a why each, into a new folder of checkout/ as \"<Title> (checkout)\" notes the user reads and edits, with a reading list and the ledger, in one commit. return proposes the edited copies as one change of their originals (the user decides in the change document). list shows every checkout."}, safe("checkout", s.checkoutTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Annotations: readOnly(),
 		Description: "The health check over every typed document, optionally the documents under tags: schema, duplicate titles, dead links, tag pages, repository paths, misplaced, untyped, and archived files; orphans, uncited and stale topics; near-duplicate tags, repositories behind, old pending sources and proposals. Each finding names its fix. Reads only."}, safe("lint", s.lintTool))
 	return server

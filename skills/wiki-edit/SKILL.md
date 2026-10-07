@@ -48,11 +48,12 @@ or drop it, then propose a remove".
    the title and grep the vault for `[[<title>`.
 2. For a knowledge document, build one plan:
    - when another document covers its subject, a `remove` with `redirect` set to it;
-     code points the links there, but not in `scratchpad/`, `threads/`, or
-     `journals/`;
+     code points the links there, but not in `scratchpad/`, `threads/`, `journals/`,
+     or `checkout/`;
    - otherwise, a `modify` of each linking knowledge document that points the link to
      another document or drops it, then a `remove`.
-3. A link in `journals/` is the user's: name the file, and ask the user to change it.
+3. A link in `journals/` or `checkout/` is the user's: name the file, and ask the user
+   to change it. A checked-out copy links its original in `checkout_of`.
 4. For a file that is not a knowledge document (a note, an original), no change removes
    it. Point the links of knowledge documents elsewhere in a change, then tell the user
    to run Safe delete again. A source's original in `source-core/originals/` leaves only
