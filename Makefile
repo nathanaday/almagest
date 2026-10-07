@@ -9,7 +9,7 @@ RELEASE_FLAGS := -trimpath -buildvcs=false -ldflags "-s -w -X github.com/nathana
 PLATFORMS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: build install test vet release pin version
+.PHONY: build install test vet release pin version preview preview-off
 
 build:
 	go build $(LDFLAGS) -o build/$(BIN) ./cmd/$(BIN)
@@ -48,3 +48,14 @@ version:
 	@test -n "$(V)" || (echo "Usage: make version V=<major.minor.patch>" && exit 1)
 	go run ./internal/release/pin -set $(V)
 	$(MAKE) pin
+
+# preview installs this checkout on this machine, to try it before a release: the binary,
+# the agent plugin in place of the release one (Claude Code's account: CLAUDE_CONFIG_DIR),
+# and, with VAULT (or ALMAGEST_PREVIEW_VAULT), Almagest for Obsidian from ../obsidian-almagest
+# in that vault. preview-off goes back to the release plugin. See scripts/preview.sh.
+VAULT ?= $(ALMAGEST_PREVIEW_VAULT)
+preview:
+	VAULT="$(VAULT)" sh scripts/preview.sh on
+
+preview-off:
+	sh scripts/preview.sh off

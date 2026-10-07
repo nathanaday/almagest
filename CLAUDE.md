@@ -543,7 +543,18 @@ make install      # ~/.almagest/bin/<version>/almagest and the link, as the laun
 make test
 make release      # build/release: each platform's binary and checksums.txt
 make pin          # make release, then release/checksums.txt and the launcher
+make preview VAULT=~/Vaults/SoftwareProjects   # this checkout on this machine, to try it
+make preview-off  # back to the release plugin and its binary
 ```
+
+`make preview` (`scripts/preview.sh`) installs the working tree as it would ship, as
+version `<plugin version>-preview.<commit>` (`.dirty` with uncommitted edits): the binary
+under `~/.almagest/bin/`, with the link; the agent plugin, from a copy of the checkout in
+a local marketplace, `almagest-preview`, with the release plugin turned off (two plugins
+named almagest would serve the tools and run the hooks twice); and, with `VAULT` or
+`ALMAGEST_PREVIEW_VAULT`, Almagest for Obsidian built from `../obsidian-almagest` (or
+`OBSIDIAN_SRC`) in that vault. `CLAUDE_CONFIG_DIR` picks the Claude Code account. Then
+start a new session, and in Obsidian run "Reload app without saving".
 
 The binary, both plugin manifests, the marketplace entry and its `ref`, and the
 launcher share one version; the `internal/plugin` tests fail when they drift. `make test`
