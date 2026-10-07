@@ -1,4 +1,4 @@
-// Package cli is the atlas-obsidian command: one subcommand per tool action, the hooks, the MCP
+// Package cli is the almagest command: one subcommand per tool action, the hooks, the MCP
 // server, and the commands no tool needs (setup, doctor, version, open, vault migrate).
 // Every command reaches the same function its tool does.
 package cli
@@ -16,20 +16,20 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/brief"
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/checkout"
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/hooks"
-	"github.com/nathanaday/atlas-obsidian/internal/journal"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/match"
-	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
-	"github.com/nathanaday/atlas-obsidian/internal/migrate"
-	"github.com/nathanaday/atlas-obsidian/internal/search"
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/wikify"
+	"github.com/nathanaday/almagest/internal/brief"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/checkout"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/hooks"
+	"github.com/nathanaday/almagest/internal/journal"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/match"
+	"github.com/nathanaday/almagest/internal/mcpserver"
+	"github.com/nathanaday/almagest/internal/migrate"
+	"github.com/nathanaday/almagest/internal/search"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/wikify"
 )
 
 // Version is the binary's version; the build stamps it.
@@ -63,14 +63,14 @@ func New() *CLI {
 	return &CLI{In: os.Stdin, Out: os.Stdout, Err: os.Stderr, Getenv: os.Getenv, Now: time.Now, Dir: dir}
 }
 
-const usageHead = `atlas-obsidian: one vault for what you know, and what your agents did.
+const usageHead = `almagest: one vault for what you know, and what your agents did.
 
 Usage:
 `
 
 const usageTail = `
-A command that acts on a vault takes --vault (a path, or a name from ~/.atlas/config.json),
-else $ATLAS_VAULT, else the vault above the working folder. setup's --vault is the folder
+A command that acts on a vault takes --vault (a path, or a name from ~/.almagest/config.json),
+else $ALMAGEST_VAULT, else the vault above the working folder. setup's --vault is the folder
 of a new vault, vault init takes --path, and doctor, version, help, hook, and mcp take no
 --vault.
 --json prints JSON from: vault, search, context, source, change, checkout, wikify, journal, lint, config.
@@ -80,51 +80,51 @@ No --json: setup, open, doctor, version, help, hook, mcp.
 
 // commands are the usage of each command, in the order help lists them.
 var commands = []struct{ name, usage string }{
-	{"vault", `  atlas-obsidian vault [status] | sync [--views] | snapshot | trash PATH | migrate [--dry-run]
+	{"vault", `  almagest vault [status] | sync [--views] | snapshot | trash PATH | migrate [--dry-run]
                        | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
 `},
-	{"search", `  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
+	{"search", `  almagest search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
 `},
-	{"context", `  atlas-obsidian context [REPOSITORY] [--tag T]... [--path P]
+	{"context", `  almagest context [REPOSITORY] [--tag T]... [--path P]
 `},
-	{"match", `  atlas-obsidian match --items FILE.json | --docs ID... [--tag T]... [--across]
+	{"match", `  almagest match --items FILE.json | --docs ID... [--tag T]... [--across]
 `},
-	{"source", `  atlas-obsidian source capture [--ingest NAME]... | [--text FILE --title T [--locator URL]] | [--repository R]
+	{"source", `  almagest source capture [--ingest NAME]... | [--text FILE --title T [--locator URL]] | [--repository R]
                                 [--tag T]... [--new-tags]
-  atlas-obsidian source chunks DOC
-  atlas-obsidian source read DOC CHUNK
+  almagest source chunks DOC
+  almagest source read DOC CHUNK
 `},
-	{"change", `  atlas-obsidian change propose FILE.json [--id ID] | show ID | apply ID | reject ID --reason R | undo ID
+	{"change", `  almagest change propose FILE.json [--id ID] | show ID | apply ID | reject ID --reason R | undo ID
                         | start --kind ingest|repair|draft [--title T] [--file NAME]... | progress ID TEXT...
 `},
-	{"checkout", `  atlas-obsidian checkout [list] | candidates TEXT... [--tag T]... [--type T]... [--limit N]
+	{"checkout", `  almagest checkout [list] | candidates TEXT... [--tag T]... [--type T]... [--limit N]
                           | make FILE.json | return FOLDER
 `},
-	{"wikify", `  atlas-obsidian wikify start PATH | mark PATH FILE.json
+	{"wikify", `  almagest wikify start PATH | mark PATH FILE.json
 `},
-	{"journal", `  atlas-obsidian journal [list] | publish VOLUME
+	{"journal", `  almagest journal [list] | publish VOLUME
                                                    a journal volume is a folder directly under journals/
 `},
-	{"lint", `  atlas-obsidian lint [--tag T]...
+	{"lint", `  almagest lint [--tag T]...
 `},
-	{"hook", `  atlas-obsidian hook EVENT                        a hook; reads the event JSON on stdin
+	{"hook", `  almagest hook EVENT                        a hook; reads the event JSON on stdin
 `},
-	{"mcp", `  atlas-obsidian mcp                               the MCP server, over stdio
+	{"mcp", `  almagest mcp                               the MCP server, over stdio
 `},
-	{"config", `  atlas-obsidian config [show] | set KEY VALUE [--global] | unset KEY [--global]
-                                                   agent preferences: the vault's file wins over ~/.atlas/config.json
+	{"config", `  almagest config [show] | set KEY VALUE [--global] | unset KEY [--global]
+                                                   agent preferences: the vault's file wins over ~/.almagest/config.json
 `},
-	{"setup", `  atlas-obsidian setup [--agent claude|codex] [--no-plugin] [--plugin-source SOURCE]
+	{"setup", `  almagest setup [--agent claude|codex] [--no-plugin] [--plugin-source SOURCE]
                        [--vault FOLDER --name N [--description D] [--tagging open|known] [--allow-vault]]
                                                    installs the binary and the agent plugin, and makes a first vault
 `},
-	{"doctor", `  atlas-obsidian doctor                            checks the binary, each agent's plugin and server, and every vault
+	{"doctor", `  almagest doctor                            checks the binary, each agent's plugin and server, and every vault
 `},
-	{"version", `  atlas-obsidian version
+	{"version", `  almagest version
 `},
-	{"open", `  atlas-obsidian open [DOC] [--register]
+	{"open", `  almagest open [DOC] [--register]
 `},
-	{"help", `  atlas-obsidian help | COMMAND --help
+	{"help", `  almagest help | COMMAND --help
 `},
 }
 
@@ -210,7 +210,7 @@ func (c *CLI) Run(argv []string) int {
 	case "doctor":
 		return c.doctorCmd(rest)
 	case "version", "--version", "-v":
-		fmt.Fprintln(c.Out, "atlas-obsidian "+Version)
+		fmt.Fprintln(c.Out, "almagest "+Version)
 	case "open":
 		err = c.openCmd(rest)
 	case "help", "--help", "-h":
@@ -220,10 +220,10 @@ func (c *CLI) Run(argv []string) int {
 		}
 		fmt.Fprint(c.Out, usage())
 	default:
-		err = fmt.Errorf("no command %q; atlas-obsidian help lists them", cmd)
+		err = fmt.Errorf("no command %q; almagest help lists them", cmd)
 	}
 	if err != nil {
-		fmt.Fprintln(c.Err, "atlas: "+err.Error())
+		fmt.Fprintln(c.Err, "almagest: "+err.Error())
 		var coded exitError
 		if errors.As(err, &coded) {
 			return coded.code
@@ -397,7 +397,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"status": st}, func(w io.Writer) {
-			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas-obsidian open --register --vault %s). For the palette and the widgets, install Atlas from Obsidian's community plugins: %s\n", st.Vault.Name, st.Vault.Path, shellArg(st.Vault.Path), vault.PluginLink)
+			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (almagest open --register --vault %s). For the palette and the widgets, install Almagest from Obsidian's community plugins: %s\n", st.Vault.Name, st.Vault.Path, shellArg(st.Vault.Path), vault.PluginLink)
 		})
 	case "sync":
 		v, err := c.open(a)
@@ -532,7 +532,7 @@ func printMigration(w io.Writer, r *migrate.Report, done bool) {
 		fmt.Fprintln(w, core.StrayLine(m))
 	}
 	if done && r.Problems > 0 {
-		fmt.Fprintf(w, "Lint finds %d errors after the move: atlas-obsidian lint lists them.\n", r.Problems)
+		fmt.Fprintf(w, "Lint finds %d errors after the move: almagest lint lists them.\n", r.Problems)
 	}
 }
 
@@ -682,10 +682,10 @@ func (c *CLI) sourceCmd(argv []string) error {
 	a := parse(argv, "new-tags")
 	switch a.arg(0) {
 	case "capture":
-		if err := a.removed("resolves", "a stub no longer exists in Atlas 9.0; capture the source without --resolves"); err != nil {
+		if err := a.removed("resolves", "a stub no longer exists since 9.0; capture the source without --resolves"); err != nil {
 			return err
 		}
-		if err := a.removed("inbox", "the inbox is ingest/ since Atlas 10.0; name the files with --ingest"); err != nil {
+		if err := a.removed("inbox", "the inbox is ingest/ since Almagest 10.0; name the files with --ingest"); err != nil {
 			return err
 		}
 		v, err := c.open(a)
@@ -1016,12 +1016,12 @@ func (c *CLI) hookCmd(argv []string) int {
 			names = append(names, n)
 		}
 		sort.Strings(names)
-		fmt.Fprintln(c.Err, "atlas-obsidian hook takes one of: "+strings.Join(names, ", "))
+		fmt.Fprintln(c.Err, "almagest hook takes one of: "+strings.Join(names, ", "))
 		return 1
 	}
 	env := hooks.Env{Getenv: c.Getenv, Now: c.Now}
 	if err := hooks.Run(argv[0], c.In, c.Out, env); err != nil {
-		fmt.Fprintln(c.Err, "atlas-obsidian hook "+argv[0]+": "+err.Error())
+		fmt.Fprintln(c.Err, "almagest hook "+argv[0]+": "+err.Error())
 		return 1
 	}
 	return 0

@@ -6,8 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/host"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/host"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestSetupDoesNotReinstallWhenTheInstallCannotBeRead(t *testing.T) {
@@ -94,16 +94,16 @@ func TestTheHintsAfterANewVaultNameIt(t *testing.T) {
 	t.Setenv("PATH", t.TempDir()+":/usr/bin:/bin")
 	folder := filepath.Join(t.TempDir(), "my notes")
 	out := r.ok("", "vault", "init", "--path", folder, "--name", "Notes")
-	if !strings.Contains(out, "atlas-obsidian open --register --vault '") || !strings.Contains(out, "my notes'") {
+	if !strings.Contains(out, "almagest open --register --vault '") || !strings.Contains(out, "my notes'") {
 		t.Fatalf("vault init's hint:\n%s", out)
 	}
 	other := filepath.Join(t.TempDir(), "second")
 	out = r.ok("", "setup", "--no-plugin", "--vault", other, "--name", "Second")
-	if !strings.Contains(out, "atlas-obsidian open --register --vault ") || !strings.Contains(out, "second") {
+	if !strings.Contains(out, "almagest open --register --vault ") || !strings.Contains(out, "second") {
 		t.Fatalf("setup's Next line:\n%s", out)
 	}
 	out = r.ok("", "setup", "--no-plugin")
-	if !strings.Contains(out, "then: atlas-obsidian open --register --vault ~/notes/work") {
+	if !strings.Contains(out, "then: almagest open --register --vault ~/notes/work") {
 		t.Fatalf("setup's Next lines with no vault:\n%s", out)
 	}
 }

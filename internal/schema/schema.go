@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/almagest/internal/tags"
 )
 
 // Owner says who may write a field.
@@ -57,7 +57,7 @@ type Field struct {
 type Family string
 
 const (
-	// Root is the vault document, Atlas.md.
+	// Root is the vault document, Almagest.md.
 	Root Family = "root"
 	// Knowledge is what the vault knows: only a change writes it.
 	Knowledge Family = "knowledge"

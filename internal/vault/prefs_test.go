@@ -59,11 +59,11 @@ func TestVaultConfigFile(t *testing.T) {
 	if c, err = v.LoadConfig(); err != nil || c.Preferences.Agent != "codex" {
 		t.Fatalf("round trip: %v %+v", err, c)
 	}
-	os.WriteFile(v.ConfigPath(), []byte(`{"schema": "atlas.vault-config.v1", "preferences": {"agent_command": "claude-work"}}`), 0o644)
+	os.WriteFile(v.ConfigPath(), []byte(`{"schema": "almagest.vault-config.v1", "preferences": {"agent_command": "claude-work"}}`), 0o644)
 	if _, err := v.LoadConfig(); err == nil || !strings.Contains(err.Error(), "agent_command") {
 		t.Fatalf("an unknown key is an error: %v", err)
 	}
-	os.WriteFile(v.ConfigPath(), []byte(`{"schema": "atlas.vault-config.v1", "preferences": {"terminal": "kitty"}}`), 0o644)
+	os.WriteFile(v.ConfigPath(), []byte(`{"schema": "almagest.vault-config.v1", "preferences": {"terminal": "kitty"}}`), 0o644)
 	if _, err := v.LoadConfig(); err == nil || !strings.Contains(err.Error(), "kitty") {
 		t.Fatalf("a bad value is an error: %v", err)
 	}
@@ -71,7 +71,7 @@ func TestVaultConfigFile(t *testing.T) {
 
 func TestMachineFileKeepsPreferences(t *testing.T) {
 	h := Home{Root: t.TempDir()}
-	os.WriteFile(h.ConfigPath(), []byte(`{"schema": "atlas.config.v1", "vaults": ["~/a"]}`), 0o644)
+	os.WriteFile(h.ConfigPath(), []byte(`{"schema": "almagest.config.v1", "vaults": ["~/a"]}`), 0o644)
 	c, err := h.Load()
 	if err != nil {
 		t.Fatalf("a file without preferences loads: %v", err)

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestARemovedOptionIsRefused(t *testing.T) {
@@ -20,7 +20,7 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 		{[]string{"setup", "--yes", "--no-plugin"}, "--yes is gone: setup asks nothing"},
 		{[]string{"setup", "--yes=1", "--no-plugin"}, "--yes is gone"},
 	} {
-		code, _, errOut := r.atlas("", c.args...)
+		code, _, errOut := r.almagest("", c.args...)
 		if code == 0 || !strings.Contains(errOut, c.want) {
 			t.Fatalf("%v: exit %d: %s", c.args, code, errOut)
 		}
@@ -36,7 +36,7 @@ func TestARemovedOptionIsRefused(t *testing.T) {
 	for _, args := range [][]string{
 		{"setup", "--name", "--yes", "--no-plugin"},
 	} {
-		if code, _, errOut := r.atlas("", args...); code != 0 {
+		if code, _, errOut := r.almagest("", args...); code != 0 {
 			t.Fatalf("%v: exit %d: %s", args, code, errOut)
 		}
 	}

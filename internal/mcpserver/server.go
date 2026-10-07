@@ -13,21 +13,21 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nathanaday/atlas-obsidian/internal/brief"
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/checkout"
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/match"
-	"github.com/nathanaday/atlas-obsidian/internal/search"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/wikify"
+	"github.com/nathanaday/almagest/internal/brief"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/checkout"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/match"
+	"github.com/nathanaday/almagest/internal/search"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/wikify"
 )
 
-// Name is the server's name; hosts name its tools mcp__plugin_<plugin>_atlas__<tool>.
-const Name = "atlas"
+// Name is the server's name; hosts name its tools mcp__plugin_<plugin>_almagest__<tool>.
+const Name = "almagest"
 
 // Options configure a server.
 type Options struct {
@@ -86,11 +86,11 @@ func (s *Server) views(v *vault.Vault) []vault.Moved {
 // VaultIn is the vault tool's input.
 type VaultIn struct {
 	Action      string `json:"action,omitempty" jsonschema:"status (the default), init, or sync"`
-	Vault       string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault       string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	Name        string `json:"name,omitempty" jsonschema:"init: the vault's name"`
 	Path        string `json:"path,omitempty" jsonschema:"init: the folder that becomes the vault"`
 	Tagging     string `json:"tagging,omitempty" jsonschema:"init: open (the default; the agent adds tags freely) or known (only tags that exist, unless the user agrees)"`
-	Description string `json:"description,omitempty" jsonschema:"init: one or two sentences on what the vault is for; the body of Atlas.md"`
+	Description string `json:"description,omitempty" jsonschema:"init: one or two sentences on what the vault is for; the body of Almagest.md"`
 	Views       bool   `json:"views,omitempty" jsonschema:"sync: the statuses, callouts, and views only, with no git"`
 }
 
@@ -137,7 +137,7 @@ func (s *Server) vaultTool(ctx context.Context, req *mcp.CallToolRequest, in Vau
 
 // SearchIn is the search tool's input.
 type SearchIn struct {
-	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	search.Query
 }
 
@@ -152,7 +152,7 @@ func (s *Server) searchTool(ctx context.Context, req *mcp.CallToolRequest, in Se
 
 // ContextIn is the context tool's input.
 type ContextIn struct {
-	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	brief.Input
 }
 
@@ -167,7 +167,7 @@ func (s *Server) contextTool(ctx context.Context, req *mcp.CallToolRequest, in C
 
 // MatchIn is the match tool's input.
 type MatchIn struct {
-	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	match.Input
 }
 
@@ -183,7 +183,7 @@ func (s *Server) matchTool(ctx context.Context, req *mcp.CallToolRequest, in Mat
 // SourceIn is the source tool's input.
 type SourceIn struct {
 	Action string `json:"action,omitempty" jsonschema:"capture, chunks, or read"`
-	Vault  string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault  string `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	source.Request
 	Doc   string `json:"doc,omitempty" jsonschema:"chunks, read: the document (id or title); any document, not only a source"`
 	Chunk int    `json:"chunk,omitempty" jsonschema:"read: the chunk's index, from 1"`
@@ -231,7 +231,7 @@ func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in So
 // ChangeIn is the change tool's input.
 type ChangeIn struct {
 	Action     string         `json:"action,omitempty" jsonschema:"show (the default), start, progress, propose, apply, reject, or undo"`
-	Vault      string         `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault      string         `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	ID         string         `json:"id,omitempty" jsonschema:"show, apply, reject, undo: the change (id or title); progress: the work document; propose: the running work document to fill, if the work started with start"`
 	Kind       string         `json:"kind,omitempty" jsonschema:"start: ingest, repair, or draft"`
 	Files      []string       `json:"files,omitempty" jsonschema:"start, kind ingest: the names of the files in ingest/ the work takes"`
@@ -281,7 +281,7 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 			return nil, nil, err
 		}
 		if d, err := idx.ResolveType(in.ID, "change"); err == nil && d.Str("session") == "" {
-			return nil, nil, fmt.Errorf("%s was the user's own act (safe delete, Return, or a change from a terminal), so only the user undoes it: with atlas-obsidian change undo in a terminal", vault.Title(d))
+			return nil, nil, fmt.Errorf("%s was the user's own act (safe delete, Return, or a change from a terminal), so only the user undoes it: with almagest change undo in a terminal", vault.Title(d))
 		}
 		return done(change.Undo(v, in.ID, now))
 	}
@@ -291,7 +291,7 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 // CheckoutIn is the checkout tool's input.
 type CheckoutIn struct {
 	Action string   `json:"action,omitempty" jsonschema:"list (the default), candidates, make, or return"`
-	Vault  string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault  string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	Text   string   `json:"text,omitempty" jsonschema:"candidates: the request"`
 	Tags   []string `json:"tags,omitempty" jsonschema:"candidates: only documents that hold every one of these tags"`
 	Types  []string `json:"types,omitempty" jsonschema:"candidates: the types to rank; topic and repository when empty; add source to include sources"`
@@ -339,7 +339,7 @@ func (s *Server) checkoutTool(ctx context.Context, req *mcp.CallToolRequest, in 
 // WikifyIn is the wikify tool's input.
 type WikifyIn struct {
 	Action string        `json:"action,omitempty" jsonschema:"start or mark"`
-	Vault  string        `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault  string        `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	Note   string        `json:"note,omitempty" jsonschema:"start: the note to copy; mark: the wikified copy in scratchpad/"`
 	Marks  []wikify.Mark `json:"marks,omitempty" jsonschema:"mark: each phrase with link (a document, by id or title) or new (the title of a topic the subject is worth)"`
 }
@@ -372,7 +372,7 @@ func (s *Server) wikifyTool(ctx context.Context, req *mcp.CallToolRequest, in Wi
 
 // LintIn is the lint tool's input.
 type LintIn struct {
-	Vault string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
+	Vault string   `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.almagest/config.json; the session's vault when empty"`
 	Tags  []string `json:"tags,omitempty" jsonschema:"check only the documents that hold every one of these tags"`
 }
 
@@ -389,7 +389,7 @@ func readOnly() *mcp.ToolAnnotations { return &mcp.ToolAnnotations{ReadOnlyHint:
 
 // MCP builds the protocol server with every tool.
 func (s *Server) MCP() *mcp.Server {
-	server := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Atlas", Version: s.opts.Version}, nil)
+	server := mcp.NewServer(&mcp.Implementation{Name: Name, Title: "Almagest", Version: s.opts.Version}, nil)
 	mcp.AddTool(server, &mcp.Tool{Name: "vault",
 		Description: "The state of the vault in one read (status: documents by type, tags with counts, live sessions, the files in ingest/, pending sources, proposed and recent changes, problems); init makes a vault; sync rewrites the derived fields that are out of date and writes the views."}, safe("vault", s.vaultTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "search", Annotations: readOnly(),
@@ -427,7 +427,7 @@ func safe[In, Out any](tool string, h mcp.ToolHandlerFor[In, Out]) mcp.ToolHandl
 		defer func() {
 			if p := recover(); p != nil {
 				var zero Out
-				res, out, err = nil, zero, fmt.Errorf("%s failed inside atlas-obsidian: %v; the server keeps running, and this is a bug to report", tool, p)
+				res, out, err = nil, zero, fmt.Errorf("%s failed inside almagest: %v; the server keeps running, and this is a bug to report", tool, p)
 			}
 		}()
 		return h(ctx, req, in)

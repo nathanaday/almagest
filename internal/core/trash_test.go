@@ -5,10 +5,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func TestSafeDelete(t *testing.T) {
@@ -20,7 +20,7 @@ func TestSafeDelete(t *testing.T) {
 	tv.Commit()
 	now := testvault.Now.Add(time.Hour)
 
-	if tv.V.Exists("ATLAS.md") { // a disk that folds case
+	if tv.V.Exists("ALMAGEST.md") { // a disk that folds case
 		if res, err := core.Trash(tv.V, "source-core/documents/linked.md", now); err != nil || res.Moved != "" || len(res.Backlinks) != 1 {
 			t.Fatalf("a linked topic in another case: %+v %v", res, err)
 		}
@@ -52,7 +52,7 @@ func TestSafeDelete(t *testing.T) {
 	}
 	tv.Clean()
 
-	for _, rel := range []string{"Atlas.md", "atlas.md", "Changes/Changes.base", "sessions/Sessions.base", "changes/Changes.base", res.Moved, "wiki-view/View · Home.md", "../outside.md", "nowhere.md"} {
+	for _, rel := range []string{"Almagest.md", "almagest.md", "Changes/Changes.base", "sessions/Sessions.base", "changes/Changes.base", res.Moved, "wiki-view/View · Home.md", "../outside.md", "nowhere.md"} {
 		if _, err := core.Trash(tv.V, rel, now); err == nil {
 			t.Errorf("%s was taken", rel)
 		}

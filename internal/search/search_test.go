@@ -6,10 +6,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/almagest/internal/schema"
 
-	"github.com/nathanaday/atlas-obsidian/internal/search"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/search"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestRankingFiltersAndFacets(t *testing.T) {

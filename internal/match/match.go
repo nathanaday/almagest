@@ -12,10 +12,10 @@ import (
 	"strings"
 	"unicode"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/search"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/search"
+	"github.com/nathanaday/almagest/internal/tags"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Threshold is the normalized score above which a page is near a subject.

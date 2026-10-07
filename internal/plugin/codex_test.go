@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// codexServer is the atlas entry of the Codex manifest.
+// codexServer is the almagest entry of the Codex manifest.
 type codexServer struct {
 	Command string            `json:"command"`
 	Args    []string          `json:"args"`
@@ -28,9 +28,9 @@ func readCodexServer(t *testing.T) codexServer {
 	if err := json.Unmarshal([]byte(read(t, ".codex-plugin/plugin.json")), &m); err != nil {
 		t.Fatalf(".codex-plugin/plugin.json must hold its mcpServers inline, since Codex expands no placeholder in a file it points to: %v", err)
 	}
-	s, ok := m.MCPServers["atlas"]
+	s, ok := m.MCPServers["almagest"]
 	if !ok {
-		t.Fatal(".codex-plugin/plugin.json has no atlas server")
+		t.Fatal(".codex-plugin/plugin.json has no almagest server")
 	}
 	return s
 }
@@ -48,7 +48,7 @@ func TestTheCodexServerEntryNeedsNoPlaceholder(t *testing.T) {
 	if !filepath.IsAbs(s.Command) {
 		t.Errorf("the Codex entry's command %q is not absolute, so it depends on PATH", s.Command)
 	}
-	for _, v := range []string{"ATLAS_BIN", "ATLAS_HOME", "ATLAS_VAULT"} {
+	for _, v := range []string{"ALMAGEST_BIN", "ALMAGEST_HOME", "ALMAGEST_VAULT"} {
 		found := false
 		for _, x := range s.EnvVars {
 			found = found || x == v
@@ -59,11 +59,11 @@ func TestTheCodexServerEntryNeedsNoPlaceholder(t *testing.T) {
 	}
 }
 
-// The Codex entry and scripts/atlas-obsidian find the same binary in every case, and
+// The Codex entry and scripts/almagest find the same binary in every case, and
 // neither looks on PATH.
 func TestTheCodexEntryFindsTheBinaryAsTheWrapperDoes(t *testing.T) {
 	s := readCodexServer(t)
-	wrapper, err := filepath.Abs(filepath.Join(root, "scripts/atlas-obsidian"))
+	wrapper, err := filepath.Abs(filepath.Join(root, "scripts/almagest"))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -85,32 +85,32 @@ func TestTheCodexEntryFindsTheBinaryAsTheWrapperDoes(t *testing.T) {
 		setup func(t *testing.T, home, other string) []string
 		want  string
 	}{
-		{"ATLAS_BIN first", func(t *testing.T, home, other string) []string {
-			fake(t, filepath.Join(other, "bin"), "atlas-bin", true)
-			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
-			return []string{"ATLAS_BIN=" + filepath.Join(other, "bin")}
-		}, "atlas-bin mcp"},
-		{"ATLAS_BIN not executable", func(t *testing.T, home, other string) []string {
-			fake(t, filepath.Join(other, "bin"), "atlas-bin", false)
-			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
-			return []string{"ATLAS_BIN=" + filepath.Join(other, "bin")}
-		}, "atlas-home mcp"},
-		{"ATLAS_HOME", func(t *testing.T, home, other string) []string {
-			fake(t, filepath.Join(other, "bin/atlas-obsidian"), "atlas-home-env", true)
-			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
-			return []string{"ATLAS_HOME=" + other}
-		}, "atlas-home-env mcp"},
-		{"ATLAS_HOME empty", func(t *testing.T, home, other string) []string {
-			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
-			return []string{"ATLAS_HOME=", "ATLAS_BIN="}
-		}, "atlas-home mcp"},
-		{"~/.atlas before ~/go", func(t *testing.T, home, other string) []string {
-			fake(t, filepath.Join(home, ".atlas/bin/atlas-obsidian"), "atlas-home", true)
-			fake(t, filepath.Join(home, "go/bin/atlas-obsidian"), "go-bin", true)
+		{"ALMAGEST_BIN first", func(t *testing.T, home, other string) []string {
+			fake(t, filepath.Join(other, "bin"), "almagest-bin", true)
+			fake(t, filepath.Join(home, ".almagest/bin/almagest"), "almagest-home", true)
+			return []string{"ALMAGEST_BIN=" + filepath.Join(other, "bin")}
+		}, "almagest-bin mcp"},
+		{"ALMAGEST_BIN not executable", func(t *testing.T, home, other string) []string {
+			fake(t, filepath.Join(other, "bin"), "almagest-bin", false)
+			fake(t, filepath.Join(home, ".almagest/bin/almagest"), "almagest-home", true)
+			return []string{"ALMAGEST_BIN=" + filepath.Join(other, "bin")}
+		}, "almagest-home mcp"},
+		{"ALMAGEST_HOME", func(t *testing.T, home, other string) []string {
+			fake(t, filepath.Join(other, "bin/almagest"), "almagest-home-env", true)
+			fake(t, filepath.Join(home, ".almagest/bin/almagest"), "almagest-home", true)
+			return []string{"ALMAGEST_HOME=" + other}
+		}, "almagest-home-env mcp"},
+		{"ALMAGEST_HOME empty", func(t *testing.T, home, other string) []string {
+			fake(t, filepath.Join(home, ".almagest/bin/almagest"), "almagest-home", true)
+			return []string{"ALMAGEST_HOME=", "ALMAGEST_BIN="}
+		}, "almagest-home mcp"},
+		{"~/.almagest before ~/go", func(t *testing.T, home, other string) []string {
+			fake(t, filepath.Join(home, ".almagest/bin/almagest"), "almagest-home", true)
+			fake(t, filepath.Join(home, "go/bin/almagest"), "go-bin", true)
 			return nil
-		}, "atlas-home mcp"},
+		}, "almagest-home mcp"},
 		{"~/go alone", func(t *testing.T, home, other string) []string {
-			fake(t, filepath.Join(home, "go/bin/atlas-obsidian"), "go-bin", true)
+			fake(t, filepath.Join(home, "go/bin/almagest"), "go-bin", true)
 			return nil
 		}, "go-bin mcp"},
 		{"none", func(t *testing.T, home, other string) []string { return nil }, ""},
@@ -139,7 +139,7 @@ func TestTheCodexEntryFindsTheBinaryAsTheWrapperDoes(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			home, other, decoy := t.TempDir(), t.TempDir(), t.TempDir()
-			fake(t, filepath.Join(decoy, "atlas-obsidian"), "decoy", true)
+			fake(t, filepath.Join(decoy, "almagest"), "decoy", true)
 			env := append([]string{"HOME=" + home, "PATH=" + decoy + ":/usr/bin:/bin"}, c.setup(t, home, other)...)
 			w := runIt(t, env, wrapper, "mcp")
 			e := runIt(t, env, s.Command, s.Args...)

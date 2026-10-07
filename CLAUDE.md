@@ -1,9 +1,26 @@
-# atlas-obsidian
+# almagest
 
-Atlas: the Go module `github.com/nathanaday/atlas-obsidian` (binary `atlas-obsidian`), the agent
-plugin `atlas-obsidian` in the repository's own marketplace, and the Obsidian plugin in
-`obsidian/`. Read `README.md` first. This file holds what the code and the README do not
-say.
+Almagest: the Go module `github.com/nathanaday/almagest` (binary `almagest`) and the
+agent plugin `almagest` in the repository's own marketplace. The Obsidian plugin lives in
+its own repository, `obsidian-almagest` (`~/projects/software/obsidian-almagest`), and
+reaches users only through Obsidian's community plugins. Read `README.md` first. This
+file holds what the code and the README do not say.
+
+11.0.0 (layout 7) renamed the project from Atlas (`atlas-obsidian`) to Almagest, and split
+the Obsidian plugin into its own repository. "Atlas" had hundreds of namesakes among
+Obsidian plugins, LLM tools, and knowledge bases. The plan is `scratchpad/Distribution
+and Rename Plan.md` in the SoftwareProjects vault. No tool writes the Obsidian plugin into
+a vault any more: the community directory forbids a plugin that installs or updates
+itself. The step from 10.0 (`internal/migrate/v11.go`) renames what code owns in a vault:
+`Atlas.md` becomes `Almagest.md`, the `atlas-change` and `atlas-repo` blocks, the
+`atlas-change` cssclass, and the `[!atlas]` callouts of checkouts and publication
+histories take the new name, and `.atlas/` becomes `.almagest/`. The user's own prose,
+code examples, and callouts stay as written. The binary still reads what history and the
+machine hold from before: a vault whose document is `Atlas.md` (`vault.LegacyMarker`;
+the guard protects it, and only the migration writes it), the `Atlas-Change` trailers of
+old commits (`vault.ChangeCommit`, for undo and recovery), `~/.atlas/config.json` (the
+first `Home.Load` copies it), and the old binary names, which the guard's shell rule
+refuses. The migration also holds `.git/atlas.lock`, the older binary's lock.
 
 10.0.0 (layout 6) renamed the vault's folders: `wiki/documents/` became
 `source-core/documents/`, `wiki/assets/` became `source-core/originals/`, `inbox/` became
@@ -12,8 +29,8 @@ say.
 releases (10.1 uses `trash/`, 10.3 `checkout/`). It removed `@atlas` mentions and every patch the Obsidian plugin made on
 Obsidian's own interface: file explorer badges, graph colors, view folders, the change
 bar, and mention marks. A widget inside the change document replaced the change bar. The
-plan is `scratchpad/Atlas 10 Strategy.md` in the SoftwareProjects vault.
-`atlas-obsidian vault migrate` takes a 9.0 or 8.x vault to 10.0 in one commit
+plan is `scratchpad/Almagest 10 Strategy.md` in the SoftwareProjects vault.
+`almagest vault migrate` takes a 9.0 or 8.x vault to 10.0 in one commit
 (`internal/migrate`: `v9.go` is the step from 8.x, `v10.go` the step from 9.0).
 
 10.1.0 added the tool palette (a custom view in the right sidebar), the work document,
@@ -49,15 +66,15 @@ the file on disk, and the migration covers more link forms, bookmarks, and folde
 exist before it.
 
 Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
-editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
-editor and both wrap `Vault.modify`. From 10.1 on, Atlas starts an agent through Duet's
+editor, and Almagest does not copy its code. Two copies would bind two Yjs hubs to one
+editor and both wrap `Vault.modify`. From 10.1 on, Almagest starts an agent through Duet's
 API for other plugins (Duet 0.3.0: `app.plugins.getPlugin("duet")?.api`, with
-`newConversation`, `conversationStatus`, and `onTurnEnd`). Atlas 10.0 does not call it
+`newConversation`, `conversationStatus`, and `onTurnEnd`). Almagest 10.0 does not call it
 yet. Duet's mentions replace the `@atlas` mentions.
 
 9.0.0 removed threads and chords, which 8.0.0 had put in place of the plans of 7.x. They
 are a standalone reference project now, obsidian-threads (`~/projects/software/obsidian-threads`),
-and the tag `threads-final` is the last commit that has them. Atlas keeps the knowledge
+and the tag `threads-final` is the last commit that has them. Almagest keeps the knowledge
 base: sources, repositories, topics, tags, views, sessions, and changes. The 8.x step of
 the migration moves the thread documents and the chord canvases to `threads/`
 unchanged, and the documents that stay lose the fields and sections that served threads.
@@ -73,8 +90,8 @@ branch and the `v1-final` tag.
 
 | Thing | Location |
 |---|---|
-| The design: rules, document types, tools, hooks, skills | the SoftwareProjects vault (`~/Vaults/SoftwareProjects`), tag `tools/atlas-obsidian`: the design pages are sources there (start with `Atlas 7`), absorbed into topics |
-| Each skill's contract | `skills/<name>/SKILL.md`, `skills/atlas/references/` |
+| The design: rules, document types, tools, hooks, skills | the SoftwareProjects vault (`~/Vaults/SoftwareProjects`), tag `tools/almagest`: the design pages are sources there (start with `Almagest 7`), absorbed into topics |
+| Each skill's contract | `skills/<name>/SKILL.md`, `skills/almagest/references/` |
 | Each read-only agent | `agents/<name>.md` |
 | The schemas of the six types | `internal/schema/schema.go` |
 
@@ -82,7 +99,7 @@ The design pages are the spec. When the code departs from them, the reason is be
 
 ## Where the build departs from the design, and why
 
-- **The setting is `tagging`, not `tags`.** `Atlas.md` holds `tagging: open | known`,
+- **The setting is `tagging`, not `tags`.** `Almagest.md` holds `tagging: open | known`,
   and `vault init` takes `tagging`. `tags` is Obsidian's own property.
 - **A change's base ignores what code derives** (`change.BaseHash`): code-owned fields,
   the lead callout, the code sections. A sync between a proposal and its apply refreshes
@@ -97,14 +114,14 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Resume names a config folder only when it is not `~/.claude`.** Claude Code keys its
   login to the folder it was told: `CLAUDE_CONFIG_DIR=~/.claude claude` reports "Not
   logged in" on a machine logged in through the default. Verified 2026-10-01 on 2.1.286.
-- **Agent preferences live in two files, and the binary merges them.** `~/.atlas/config.json`
-  (`preferences`) and `<vault>/.atlas/config.json` (`atlas.vault-config.v1`); the vault
+- **Agent preferences live in two files, and the binary merges them.** `~/.almagest/config.json`
+  (`preferences`) and `<vault>/.almagest/config.json` (`almagest.vault-config.v1`); the vault
   wins per key (`vault.Merge`). Both decode strictly, so a typo is an error. The plugin
-  reads and writes them only through `atlas-obsidian config --json`, never the files.
+  reads and writes them only through `almagest config --json`, never the files.
   The plugin settings of 8.0.2 (`agentCommand`, `terminal`, `terminalCommand`)
   move into the vault file once, and stay in `data.json` until the move succeeds.
 - **A terminal launch fails where no one sees it** (osascript and `open` exit after the
-  spawn), so `openTerminal` checks for the app first. `obsidian/scripts/probe-launch.mjs`
+  spawn), so `openTerminal` checks for the app first. `scripts/probe-launch.mjs` of `obsidian-almagest`
   opens a real terminal with a probe; record each result in TESTED.md.
 - **A tag page that does not hold its tag's parent is a warning.** No document is lost
   by it; lint names the fix.
@@ -127,7 +144,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   key `ingest`, `source capture --ingest` (`--inbox` is refused with a message), the
   source tool's `ingest` input, and `origin: ingest`. The JSON key `moved_from_views`
   became `moved_from_wiki_view`.
-- **`threads/` is an archive Atlas does not read.** The index keeps its files as link
+- **`threads/` is an archive Almagest does not read.** The index keeps its files as link
   targets, as it does the scratchpad's (`vault.Unread`), so a topic's link to an archived
   spec is no dead link. A rename does not rewrite the links inside it, as it does not in
   the scratchpad. The guard does not judge edits there, and lint does not lint it. A
@@ -141,17 +158,17 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **`vault migrate` refuses a vault that has the 10.0 layout already**, and the guard
   refuses it from an agent's shell. `Run` checks the vault before the write starts, so a
   refused migration makes no 10.0 folder. A `journals/`, `checkout/`, or `trash/` that
-  exists before the migration gets a warning: from 10.0 Atlas gives it a meaning. The
+  exists before the migration gets a warning: from 10.0 Almagest gives it a meaning. The
   exclude line `/views/` goes after the commit, so a failed migration keeps it.
 - **Packages:** the design's context package is `internal/brief`, since `context` is a
   standard Go package. `internal/derive` writes the code-owned parts of sources,
-  repositories, and topics (lead callouts, the `atlas-repo` block, git facts).
+  repositories, and topics (lead callouts, the `almagest-repo` block, git facts).
 - **Recovery needs the paths.** A change document gets a code-owned `paths` field while
   its apply is in flight: every path the apply may write. The field, not the status, is
   the mark: the file says `applied` for the derive step and keeps `paths` until the
   commit lands, and the commit records the final document, without `paths`, from the
   index (`Tx.Stage`). The derive step adds each path to `paths` before it writes it
-  (`inFlight`). When the `Atlas-Change` commit exists, recovery takes the document from
+  (`inFlight`). When the `Almagest-Change` commit exists, recovery takes the document from
   that commit, after it commits an edit made to the document since. Otherwise it records
   its base revision (HEAD as the crash left it) in a `recovering` field before anything
   else, commits the listed paths that differ from `HEAD` as `recovery: N files as found
@@ -214,7 +231,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   so: the user presses Approve in the change document, or the agent proposes again with
   `supersedes`. A live session without a prompt gets the plain "wait for the yes".
 - **The change widget holds no data.** Every change document that code writes holds an
-  empty `atlas-change` block right after its lead callout (`change.Widget`). The plugin
+  empty `almagest-change` block right after its lead callout (`change.Widget`). The plugin
   draws it from the note's frontmatter: the kind, the last progress line, and Cancel
   while `running`; Approve and Cancel while `proposed`; a line for `applying`, and the result for `applied`, `rejected`, `superseded`, and `undone`.
   Approve saves the open note, then runs `change apply`; Cancel runs `change reject`,
@@ -236,7 +253,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   160 characters). It links only the documents the change leaves in place: a removed
   title and the old title of a rename are plain text. Lint skips dead links in a change
   that is neither `proposed` nor `running`, since such a record may name a document a
-  later change removed. Every change document carries `cssclasses: [atlas-change]`
+  later change removed. Every change document carries `cssclasses: [almagest-change]`
   (`change.CSSClass`), and the lead callout comes from the frontmatter (`leadFor`).
 - **A remove moves the document to `trash/`.** Apply picks the place with
   `vault.TrashPath` (`trash/<date>/<vault path>`, with " (2)" before the extension when
@@ -255,7 +272,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   A path in another case meets the rules of the file on disk (`Vault.Spelled`). The
   palette offers "Resolve with an agent" only for a knowledge document that knowledge
   documents link; a link in any other file is the user's to fix, and the agent's
-  message then says to propose no remove. It refuses `Atlas.md`, `.obsidian/`, `.claude/`, `.atlas/`,
+  message then says to propose no remove. It refuses `Almagest.md`, `.obsidian/`, `.claude/`, `.almagest/`,
   `changes/`, `sessions/`, `wiki-view/`, `trash/`, a shipped Base, a folder, and a path
   outside the vault. The index skips `trash/`, and the guard refuses agent edits in it.
 - **A journal volume is a folder directly under `journals/`** (`journal.Volumes`). Its
@@ -358,7 +375,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   when that name is taken. The strategy note put the copy beside the note, but a copy
   of a journal note there would join the volume's next edition, since an edition holds
   every `.md` file under the volume. Start never changes the original. It refuses a
-  file that is not markdown, `Atlas.md`, and a note under `source-core/`, `changes/`,
+  file that is not markdown, `Almagest.md`, and a note under `source-core/`, `changes/`,
   `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`; a note in `journals/` passes.
 - **A mark is inline text**: `{{link:<Title>|<phrase>}}` where the phrase names a
   document, `{{new:<Title>|<phrase>}}` where it names a subject worth a topic
@@ -403,12 +420,10 @@ The design pages are the spec. When the code departs from them, the reason is be
   `vault.Recover` first, so an apply that a crash stopped is put back, not committed as
   a hand edit. Every write still commits a snapshot first. The skills tell agents never to report the vault's git
   state.
-- **The Obsidian plugin touches only what it owns.** It adds custom views, ribbon
-  buttons, commands, in-document widgets (code block processors), and CSS for its own
-  callouts and widgets. It patches no pane of Obsidian's own and styles none. 10.1
-  removed its last two exceptions, the status bar item and the `#tag` click listener;
-  the palette shows what the status bar showed. A change note's `cssclasses` value
-  (`atlas-change`) styles the note itself, so the widget's class is `atlas-change-card`.
+- **The Obsidian plugin reads the JSON of the CLI.** `obsidian-almagest` runs the binary
+  for every read and write: `vault --json`, `change apply`, `vault trash`, `journal
+  publish`, `checkout return`, `wikify start`, `vault snapshot`. A change to that JSON or
+  to a command's flags is a change of the plugin's contract.
 - **Times carry seconds.** `proposed` and `last_prompt` are `2006-01-02T15:04:05`. With
   minutes, a yes typed in the minute of the proposal would not open the gate.
 - **The gate counts only the user's turns.** A host sends a subagent's hand-back and a
@@ -428,7 +443,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or names
   it. The skills tell the agent to change files with Edit and Write.
 - **The shell runs neither the apply nor the undo command of `change`, `vault
-  migrate`, `vault trash`, `journal publish`, nor `atlas-obsidian hook`.** The guard
+  migrate`, `vault trash`, `journal publish`, nor `almagest hook`.** The guard
   refuses them, in every folder: four skip the gate or undo the user's act, `journal
   publish` is the user's decision (CLI only, no MCP action; the plugin's Publish runs
   it), and `hook` forges a user's turn. The `change` tool's `undo` refuses a change with
@@ -455,7 +470,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   so a session outside the vault gets the same refusals. A file in no vault meets only
   the rule on the home's `config.json`.
 - **The guard judges the path the disk names.** `canonical` resolves links on the part
-  that exists and spells each part as its folder entry, so `ATLAS.md`,
+  that exists and spells each part as its folder entry, so `ALMAGEST.md`,
   `Source-Core/documents/…`, a repository in another case, or a link into the vault meet
   the rule of the real file.
   A session document's code sections come from `doc.SectionOffsets`, which skips fenced
@@ -469,13 +484,13 @@ The design pages are the spec. When the code departs from them, the reason is be
   matches nowhere is refused and the refusal says so. A move is judged as a delete of
   its source and a new file at its target.
 - **The files that decide what runs are the user's.** The guard refuses an edit of the
-  home's `config.json` and the vault's `.atlas/config.json` (`terminal_command`,
-  `agent_commands`), and of anything under `.obsidian/plugins/atlas/`; fixed names
+  home's `config.json` and the vault's `.almagest/config.json` (`terminal_command`,
+  `agent_commands`), and of anything under `.obsidian/plugins/almagest/`; fixed names
   compare without case, so a folder that does not exist yet cannot carry another case.
 - **A read-only agent makes only the calls that read.** `readActions` lists them per
   tool; any other action, or a tool the list does not know, is a write.
-- **The PreToolUse matcher anchors itself** (`^(…)$`) and names the atlas server of both
-  hosts (`mcp__plugin_atlas-obsidian_atlas__…`, Codex's `mcp__atlas__…`): hosts test it
+- **The PreToolUse matcher anchors itself** (`^(…)$`) and names the almagest server of both
+  hosts (`mcp__plugin_almagest_almagest__…`, Codex's `mcp__almagest__…`): hosts test it
   unanchored.
 - **Every hook waits for the lock half its timeout at most** (`hooks.Deadlines`,
   `Vault.LockWithin`, which bounds the in-process mutex too), then exits 1 with the held
@@ -492,7 +507,7 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Machine files stay out of git** through `.git/info/exclude` (`vault.Excluded`:
   `wiki-view/`, `.claude/settings.local.json`, `.obsidian/workspace.json`,
   `.obsidian/workspace-mobile.json`, `.obsidian/graph.json`, `.DS_Store`, and the
-  temporary `.atlas-*` files), so
+  temporary `.almagest-*` files), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
   and untracks an excluded file that an older vault tracked, in a commit of its own.
 - **A Base that equals a shipped copy upgrades in a commit of its own.** `Begin` writes
@@ -513,27 +528,27 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Match merges the hits of one kind on one document** (`mergeHits`), so one drafter
   writes that document. A near or a new subject is never merged, and neither are two
   subjects of different kinds that hit one document.
-- **The binary is `atlas-obsidian`, not `atlas`.** Other programs install a binary named
-  `atlas`, so that name could run the wrong program. 6.0 to 6.2 shipped `atlas`; the
-  guard's shell rule still refuses both names.
+- **The guard refuses the old binary names too.** 6.0 to 6.2 shipped the binary as
+  `atlas`, and 6.3 to 10.4 as `atlas-obsidian`. An older install may still hold one, and
+  it reads the same vaults, so the guard's shell rule refuses all three names.
 - **The wrapper, the Codex entry, and the Obsidian plugin never search PATH or the system
   folders** for the binary, so another tool's binary never runs in its place. The wrapper
-  and the Codex entry run the first executable of `$ATLAS_BIN`,
-  `${ATLAS_HOME:-~/.atlas}/bin/atlas-obsidian`, and `~/go/bin/atlas-obsidian`. The plugin
+  and the Codex entry run the first executable of `$ALMAGEST_BIN`,
+  `${ALMAGEST_HOME:-~/.almagest}/bin/almagest`, and `~/go/bin/almagest`. The plugin
   runs its `binaryPath` setting as given when it is set (`helpers.ts`), else the first of
-  `~/.atlas/bin/atlas-obsidian` and `~/go/bin/atlas-obsidian` that exists; it reads
-  neither `ATLAS_BIN` nor `ATLAS_HOME`.
+  `~/.almagest/bin/almagest` and `~/go/bin/almagest` that exists; it reads
+  neither `ALMAGEST_BIN` nor `ALMAGEST_HOME`.
 - **One rule chooses the vault** (`vault.Select`): the vault a call names (`--vault`, or
-  a tool's `vault` input), else `$ATLAS_VAULT` (a path or a machine-file name), else the
+  a tool's `vault` input), else `$ALMAGEST_VAULT` (a path or a machine-file name), else the
   vault above the working folder. The CLI, the MCP server, and the hooks call it; a bad
-  `ATLAS_VAULT` is an error in the first two, and a hook falls back to the folder.
+  `ALMAGEST_VAULT` is an error in the first two, and a hook falls back to the folder.
 - **`--help` and `-h` run nothing.** `Run` answers them from the command's usage entry
   before dispatch, since `parse` would read `--help` as an option and `setup`, `vault
   init`, `hook`, and `mcp` act at once. A test (`usage_test.go`) holds every option a
   command reads to its usage entry.
 - **Codex runs its own copy of the wrapper's lookup.** `.codex-plugin/plugin.json` holds
-  the atlas server inline: `/bin/sh -c` with the same three candidates, no `cwd`, and
-  `env_vars` for `ATLAS_BIN`, `ATLAS_HOME`, and `ATLAS_VAULT`. Codex 0.155.1 expands no
+  the almagest server inline: `/bin/sh -c` with the same three candidates, no `cwd`, and
+  `env_vars` for `ALMAGEST_BIN`, `ALMAGEST_HOME`, and `ALMAGEST_VAULT`. Codex 0.155.1 expands no
   placeholder in a plugin's MCP config, ignores a root `plugin.json`, and resolves a
   `cwd` against the plugin's cache folder, where the server would find no vault.
   `internal/plugin/codex_test.go` runs the entry and the wrapper side by side and
@@ -553,14 +568,14 @@ The design pages are the spec. When the code departs from them, the reason is be
   `permission_mode`. SessionStart has `source`; SessionEnd has `reason`; Stop has
   `stop_hook_active` and `last_assistant_message`.
 - A subagent's SubagentStart, SubagentStop, and tool events carry `agent_id` and
-  `agent_type` (`atlas-obsidian:wiki-audit`), and the parent's `session_id`.
+  `agent_type` (`almagest:wiki-audit`), and the parent's `session_id`.
 - PostToolUse gives `tool_response` for every tool. For an MCP tool it is a JSON string
   that holds the result's JSON; `hooks.decodeAll` reads both.
 - `cwd` follows the agent's `cd`: after `cd repo && …`, later events carry the
   repository's folder.
-- Plugin tools are `mcp__plugin_atlas-obsidian_atlas__<tool>`; skills are
-  `atlas-obsidian:<skill>`.
-- `ATLAS_HOOK_LOG=<file>` appends every hook event the binary receives, one JSON line
+- Plugin tools are `mcp__plugin_almagest_almagest__<tool>`; skills are
+  `almagest:<skill>`.
+- `ALMAGEST_HOOK_LOG=<file>` appends every hook event the binary receives, one JSON line
   each. Use it to check a host's events.
 
 Obsidian 1.13.7, verified live (2026-10-01): in a Base filter, an expression on a
@@ -585,16 +600,12 @@ entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.
 Verified live in Obsidian (TESTED.md): Start agent, Resume from the sessions pane, and the
 settings tab.
 
-Verified by script in a separate Obsidian (`npm run test:obsidian` in `obsidian/`,
-`obsidian/test/obsidian/`, adapted from Duet's harness; TESTED.md): the plugin loads in a
-10.0 vault and adds nothing to the file explorer; it loads at Obsidian's start; the
-change widget's Approve and Cancel; quiet snapshots; and the 10.0 migration from the
-plugin's notice. Each test builds the binary from the checkout and runs a temporary
-profile and vault, so it never touches the user's Obsidian or `~/.atlas`.
+Verified by script in a separate Obsidian: `obsidian-almagest`'s end-to-end suite builds
+this binary from a checkout beside it and drives the plugin against it (its TESTED.md).
 
 Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
-the rest is untested on Codex), an atlas tool called from a Codex session, the
-Notification types in a live session, and, inside Obsidian, the Atlas navigator and the
+the rest is untested on Codex), an almagest tool called from a Codex session, the
+Notification types in a live session, and, inside Obsidian, the Almagest navigator and the
 repository panel.
 
 ## Constraints
@@ -603,38 +614,36 @@ repository panel.
   need Go 1.25). Nothing else in Go.
 - The SDK validates tool output against the schema it infers: a field without
   `omitempty` is required, so an optional pointer or a union needs `omitempty`.
-- Every write takes `.git/atlas.lock`. The lock is not re-entrant: a write takes it once
+- Every write takes `.git/almagest.lock`. The lock is not re-entrant: a write takes it once
   (`vault.Begin`, `vault.BeginWrite`, or `v.Lock()`), and inner functions assume it held.
 - A document is found by id or title, never by a path a tool was given.
-- Tests never touch a real `~/.atlas`: `testvault.New` sets `ATLAS_HOME`. They skip
+- Tests never touch a real `~/.almagest`: `testvault.New` sets `ALMAGEST_HOME`. They skip
   without git.
 - Prose in skills, docs, and messages follows the user's global writing guide.
 
 To try the migration on a copy of a real vault, copy the vault, then run
-`ATLAS_MIGRATE_COPY=<copy> go test ./internal/migrate/ -run TestMigrateACopy -v`. It
+`ALMAGEST_MIGRATE_COPY=<copy> go test ./internal/migrate/ -run TestMigrateACopy -v`. It
 prints the report and every lint finding.
 
 ## Build, test, and try
 
 ```bash
-make build        # build/atlas-obsidian
-make install      # ~/.atlas/bin/atlas-obsidian, with the version of .claude-plugin/plugin.json
+make build        # build/almagest
+make install      # ~/.almagest/bin/almagest, with the version of .claude-plugin/plugin.json
 make test
-make obsidian     # build the Obsidian plugin and copy it into the binary's template
 ```
 
-The binary, both plugin manifests, the marketplace entry, and the Obsidian plugin share
-one version; the `internal/plugin` tests fail when they drift, or when the binary carries
-an older Obsidian plugin than `obsidian/dist`. `make test` runs them; `make build` and
+The binary, both plugin manifests, and the marketplace entry share one version; the
+`internal/plugin` tests fail when they drift. `make test` runs them; `make build` and
 `make install` do not.
 
 End to end in a scratch vault, without touching the real machine folder:
 
 ```bash
-export ATLAS_HOME=/tmp/atlas-home ATLAS_BIN=$PWD/build/atlas-obsidian ATLAS_HOOK_LOG=/tmp/hooks.log
-atlas-obsidian vault init --path /tmp/work --name Work
-cd /tmp/work && claude -p "…" --plugin-dir /path/to/atlas-obsidian \
-  --allowedTools "mcp__plugin_atlas-obsidian_atlas__*,Read,Grep,Glob,Skill,Edit,Agent"
+export ALMAGEST_HOME=/tmp/almagest-home ALMAGEST_BIN=$PWD/build/almagest ALMAGEST_HOOK_LOG=/tmp/hooks.log
+almagest vault init --path /tmp/work --name Work
+cd /tmp/work && claude -p "…" --plugin-dir /path/to/almagest \
+  --allowedTools "mcp__plugin_almagest_almagest__*,Read,Grep,Glob,Skill,Edit,Agent"
 claude -p --continue "yes" --plugin-dir …     # the user's answer at a gate
 ```
 
@@ -646,13 +655,13 @@ The installed plugin is a git clone of this repository's `main` at a commit.
 fetches from GitHub, so push `main` first:
 
 ```bash
-claude plugin marketplace update nathanaday-atlas-obsidian
-claude plugin update atlas-obsidian@nathanaday-atlas-obsidian
+claude plugin marketplace update nathanaday-almagest
+claude plugin update almagest@nathanaday-almagest
 make install
 ```
 
 A session started inside this checkout may report that the project MCP server
-`${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian` failed to start. Claude Code reads the
+`${CLAUDE_PLUGIN_ROOT}/scripts/almagest` failed to start. Claude Code reads the
 checkout's own `.mcp.json` as a project server, and that variable is set only for plugins.
 It starts that server only when the checkout's untracked `.claude/settings.local.json`
 enables it (`enabledMcpjsonServers` or `enableAllProjectMcpServers`). The plugin's own
@@ -660,7 +669,7 @@ server still runs; remove the project server from that file to silence the error
 
 ## Not built yet
 
-- The npm package that `npx atlas-obsidian setup` installs from (the Stack page). Setup
+- The npm package that `npx almagest setup` installs from (the Stack page). Setup
   runs from the binary for now.
 - Fetching a page from a URL. `source capture --text FILE --locator URL` already records
   `origin: url`; nothing fetches the page.

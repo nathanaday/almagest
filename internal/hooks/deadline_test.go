@@ -10,7 +10,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/hooks"
+	"github.com/nathanaday/almagest/internal/hooks"
 )
 
 // A hook whose lock another write holds gives up within its deadline, with an error that
@@ -40,7 +40,7 @@ func TestAHookGivesUpOnAHeldLockWithinItsDeadline(t *testing.T) {
 
 	// Another process holds the file lock: a second open file takes flock as another
 	// holder would.
-	lock, err := os.OpenFile(filepath.Join(f.tv.V.Root, ".git", "atlas.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	lock, err := os.OpenFile(filepath.Join(f.tv.V.Root, ".git", "almagest.lock"), os.O_CREATE|os.O_RDWR, 0o644)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -50,7 +50,7 @@ func TestAHookGivesUpOnAHeldLockWithinItsDeadline(t *testing.T) {
 	}
 	took, err = prompt()
 	syscall.Flock(int(lock.Fd()), syscall.LOCK_UN)
-	if err == nil || !strings.Contains(err.Error(), "atlas.lock") || took > 2*time.Second {
+	if err == nil || !strings.Contains(err.Error(), "almagest.lock") || took > 2*time.Second {
 		t.Fatalf("with the file lock held: took %s, err %v", took, err)
 	}
 

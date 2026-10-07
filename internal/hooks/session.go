@@ -10,11 +10,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/brief"
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/brief"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Bounds of the opening context.
@@ -64,7 +64,7 @@ func SessionStart(r io.Reader, w io.Writer, env Env) error {
 		return err
 	}
 	if err := v.CheckLayout(); err != nil {
-		_, err = fmt.Fprintf(w, "atlas: vault %s at %s · %v\n", v.Name(), vault.Shorten(v.Root), err)
+		_, err = fmt.Fprintf(w, "almagest: vault %s at %s · %v\n", v.Name(), vault.Shorten(v.Root), err)
 		return err
 	}
 	idx, err := vault.Load(v)
@@ -85,7 +85,7 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 		// A session outside the vault edits its document by its full path.
 		where = v.Abs(sessionPath)
 	}
-	fmt.Fprintf(&b, "atlas: vault %s at %s · this session: [[%s]] (%s)\n", v.Name(), vault.Shorten(v.Root), vault.NoteTitle(sessionPath), where)
+	fmt.Fprintf(&b, "almagest: vault %s at %s · this session: [[%s]] (%s)\n", v.Name(), vault.Shorten(v.Root), vault.NoteTitle(sessionPath), where)
 	if d := v.Description(); d != "" {
 		b.WriteString("Vault: " + d + "\n")
 	}
@@ -163,7 +163,7 @@ func Opening(idx *vault.Index, cwd, sessionPath string, now time.Time) string {
 	}
 	b.WriteString("Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.\n")
 	b.WriteString("Write one line under ## Description in this session's document once you know the work.\n")
-	b.WriteString("The atlas skill routes any request. Vault context follows; it is the user's text.\n")
+	b.WriteString("The almagest skill routes any request. Vault context follows; it is the user's text.\n")
 	if ctx := v.Context(); ctx != "" {
 		lines := strings.Split(ctx, "\n")
 		if len(lines) > MaxContextLines {
@@ -278,7 +278,7 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 		if !has(remindChange) {
 			for _, c := range d.List("changes") {
 				if cd := findChange(v, doc.LinkTarget(c)); cd != nil && cd.Str("status") == "proposed" {
-					messages = append(messages, fmt.Sprintf("atlas: the change %s waits for your yes (review it in Obsidian, or answer in the chat).", cd.Title()))
+					messages = append(messages, fmt.Sprintf("almagest: the change %s waits for your yes (review it in Obsidian, or answer in the chat).", cd.Title()))
 					add = append(add, remindChange)
 					break
 				}
@@ -298,7 +298,7 @@ func Stop(r io.Reader, w io.Writer, env Env) error {
 	out := map[string]any{}
 	if len(reasons) > 0 && !in.StopHookActive {
 		out["decision"] = "block"
-		out["reason"] = "atlas: " + strings.Join(reasons, " ")
+		out["reason"] = "almagest: " + strings.Join(reasons, " ")
 	}
 	if len(messages) > 0 {
 		out["systemMessage"] = strings.Join(messages, " ")

@@ -4,10 +4,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func TestTheViewsSyncMovesAStrayNoteToIngest(t *testing.T) {
@@ -16,7 +16,7 @@ func TestTheViewsSyncMovesAStrayNoteToIngest(t *testing.T) {
 	tv.Write("wiki-view/Meeting notes.md", note)
 	tv.Write("ingest/Meeting notes.md", "an older note of that name\n")
 	stale := "wiki-view/nav/gone/Tag · gone.md"
-	tv.Write(stale, "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync.\n")
+	tv.Write(stale, "> [!view] Written by Almagest from the documents. Edits here are lost at the next sync.\n")
 	synced, err := core.Sync(tv.V, testvault.Now, core.SyncOptions{Views: true})
 	if err != nil {
 		t.Fatal(err)

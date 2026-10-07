@@ -9,15 +9,21 @@ import (
 	"syscall"
 )
 
-// EnvHome overrides the machine folder, ~/.atlas. Tests always set it.
-const EnvHome = "ATLAS_HOME"
+// EnvHome overrides the machine folder, ~/.almagest. Tests always set it.
+const EnvHome = "ALMAGEST_HOME"
 
 // ConfigSchema is the schema of the machine file.
-const ConfigSchema = "atlas.config.v1"
+const ConfigSchema = "almagest.config.v1"
 
-// Home is the machine folder: the config file, and the binary setup installs.
+// legacyConfigSchema is the schema of the machine file before 11.0, in ~/.atlas.
+const legacyConfigSchema = "atlas.config.v1"
+
+// Home is the machine folder: the config file, and the binary setup installs. Legacy is
+// the folder of the releases before 11.0 (~/.atlas), whose config the first Load copies;
+// it is empty when the environment names the folder.
 type Home struct {
-	Root string
+	Root   string
+	Legacy string
 }
 
 // HomeFrom resolves the machine folder from the environment.
@@ -30,16 +36,19 @@ func HomeFrom(env func(string) string) Home {
 	}
 	user, err := os.UserHomeDir()
 	if err != nil {
-		return Home{Root: ".atlas"}
+		return Home{Root: ".almagest"}
 	}
-	return Home{Root: filepath.Join(user, ".atlas")}
+	return Home{Root: filepath.Join(user, ".almagest"), Legacy: filepath.Join(user, ".atlas")}
 }
+
+// LegacyConfigPath is the machine file before 11.0.
+func (h Home) LegacyConfigPath() string { return filepath.Join(h.Legacy, "config.json") }
 
 // ConfigPath is the machine file.
 func (h Home) ConfigPath() string { return filepath.Join(h.Root, "config.json") }
 
 // BinPath is where setup installs the binary.
-func (h Home) BinPath() string { return filepath.Join(h.Root, "bin", "atlas-obsidian") }
+func (h Home) BinPath() string { return filepath.Join(h.Root, "bin", "almagest") }
 
 // Config is the machine file: the paths of this machine's vaults, and the preferences
 // of every vault.
@@ -53,7 +62,7 @@ type Config struct {
 func (h Home) Load() (*Config, error) {
 	data, err := os.ReadFile(h.ConfigPath())
 	if errors.Is(err, os.ErrNotExist) {
-		return &Config{Schema: ConfigSchema}, nil
+		return h.importLegacy()
 	}
 	if err != nil {
 		return nil, err
@@ -67,6 +76,28 @@ func (h Home) Load() (*Config, error) {
 	}
 	if err := c.Preferences.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", h.ConfigPath(), err)
+	}
+	return &c, nil
+}
+
+// importLegacy copies the machine file of a release before 11.0 into the new folder, so
+// the vaults and preferences carry over. The old file stays for the older binary.
+func (h Home) importLegacy() (*Config, error) {
+	empty := &Config{Schema: ConfigSchema}
+	if h.Legacy == "" {
+		return empty, nil
+	}
+	data, err := os.ReadFile(h.LegacyConfigPath())
+	if err != nil {
+		return empty, nil
+	}
+	var c Config
+	if err := decodeStrict(data, &c); err != nil || c.Schema != legacyConfigSchema || c.Preferences.check() != nil {
+		return empty, nil
+	}
+	c.Schema = ConfigSchema
+	if err := h.Save(&c); err != nil {
+		return nil, err
 	}
 	return &c, nil
 }
@@ -195,7 +226,7 @@ func writeAtomicIf(file string, data []byte, check func() bool) (bool, error) {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return false, err
 	}
-	tmp, err := os.CreateTemp(dir, ".atlas-*")
+	tmp, err := os.CreateTemp(dir, ".almagest-*")
 	if err != nil {
 		return false, err
 	}

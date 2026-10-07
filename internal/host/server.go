@@ -16,7 +16,7 @@ import (
 )
 
 // ServerName is the plugin's MCP server, as both manifests name it.
-const ServerName = "atlas"
+const ServerName = "almagest"
 
 // Server is the command a host runs for the plugin's MCP server, after the host's own
 // substitutions.
@@ -57,7 +57,7 @@ func Entry(host string) (*Server, error) {
 // Claude Code does, which also exports the variable to the server.
 func claudeEntry(installPath string) (*Server, error) {
 	if installPath == "" {
-		return nil, errors.New("Claude Code records no installPath for the plugin; reinstall it with atlas-obsidian setup")
+		return nil, errors.New("Claude Code records no installPath for the plugin; reinstall it with almagest setup")
 	}
 	file := filepath.Join(installPath, ".mcp.json")
 	data, err := os.ReadFile(file)
@@ -131,7 +131,7 @@ func Probe(ctx context.Context, s *Server, dir string) ([]string, error) {
 	cmd.Env = probeEnv(s)
 	stderr := &limitedBuffer{max: 4096}
 	cmd.Stderr = stderr
-	client := mcp.NewClient(&mcp.Implementation{Name: "atlas-obsidian doctor", Version: "1"}, nil)
+	client := mcp.NewClient(&mcp.Implementation{Name: "almagest doctor", Version: "1"}, nil)
 	fail := func(err error) error {
 		timedOut := ctx.Err() == context.DeadlineExceeded
 		// Wait copies the rest of stderr, which holds the reason.

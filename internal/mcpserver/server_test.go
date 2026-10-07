@@ -11,11 +11,11 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/mcpserver"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 type client struct {
@@ -245,7 +245,7 @@ func TestStatusAndInitFromTheServer(t *testing.T) {
 	}
 }
 
-func TestTheServerTakesTheVaultFromAtlasVault(t *testing.T) {
+func TestTheServerTakesTheVaultFromAlmagestVault(t *testing.T) {
 	one, two := testvault.New(t), testvault.New(t)
 	two.Doc("topic", "Only in the second vault", map[string]any{"kind": "overview"}, "")
 	two.Commit()
@@ -272,10 +272,10 @@ func TestTheServerTakesTheVaultFromAtlasVault(t *testing.T) {
 	}
 	out, _ := connectWith(two.V.Root).call("search", map[string]any{"text": "second vault"}, false)
 	if data, _ := json.Marshal(out); !strings.Contains(string(data), "Only in the second vault") {
-		t.Fatalf("ATLAS_VAULT did not choose the second vault: %s", data)
+		t.Fatalf("ALMAGEST_VAULT did not choose the second vault: %s", data)
 	}
-	if _, msg := connectWith("/no/such/vault").call("search", map[string]any{"text": "second vault"}, true); !strings.Contains(msg, "ATLAS_VAULT=/no/such/vault") {
-		t.Fatalf("a bad ATLAS_VAULT: %s", msg)
+	if _, msg := connectWith("/no/such/vault").call("search", map[string]any{"text": "second vault"}, true); !strings.Contains(msg, "ALMAGEST_VAULT=/no/such/vault") {
+		t.Fatalf("a bad ALMAGEST_VAULT: %s", msg)
 	}
 }
 

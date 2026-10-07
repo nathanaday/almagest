@@ -24,7 +24,7 @@ func (v *Vault) SyncSettings(drop []string) (bool, error) {
 			return wrote, err
 		}
 	}
-	return false, errors.New(Settings + " kept changing while Atlas merged it; sync again")
+	return false, errors.New(Settings + " kept changing while Almagest merged it; sync again")
 }
 
 func (v *Vault) syncSettings(drop []string) (wrote, raced bool, err error) {

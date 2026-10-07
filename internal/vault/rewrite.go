@@ -6,10 +6,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/tags"
 )
 
 // Retitle is one title that goes away: a rename, or a remove with a redirect.

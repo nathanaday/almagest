@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/views"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/views"
 )
 
 func TestViews(t *testing.T) {
@@ -29,9 +29,9 @@ func TestViews(t *testing.T) {
 		t.Fatal("a view that stands for nothing goes, with its folder")
 	}
 	checks := map[string][]string{
-		"wiki-view/View · Home.md":                           {views.Notice, "> [!atlas] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Tags", "[[Tag · school|#school]] · 4", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
+		"wiki-view/View · Home.md":                           {views.Notice, "> [!almagest] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Tags", "[[Tag · school|#school]] · 4", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
 		"wiki-view/View · Timeline.md":                       {"### 2026-09-27", "15:32 · change applied · [[2026-09-27 Add lidar]]"},
-		"wiki-view/View · Repositories.md":                   {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]] · Under: [[Tag · school › cs513|#school/cs513]] · Also: [[Tag · simulation|#simulation]]\n\n```atlas-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
+		"wiki-view/View · Repositories.md":                   {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]] · Under: [[Tag · school › cs513|#school/cs513]] · Also: [[Tag · simulation|#simulation]]\n\n```almagest-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
 		"wiki-view/View · Home.md#":                          {"[[View · Repositories]]"},
 		"wiki-view/View · Library.md":                        {"## Topics", "## Needs care"},
 		"wiki-view/nav/school/cs513/Tag · school › cs513.md": {"> [!tag] #school/cs513 · 4 documents", "Page: [[CS513]]", "Under: [[Tag · school|#school]]", "## Narrow", "[self-driving (2)](obsidian://search?vault=work&query=tag:%23school%2Fcs513%20tag:%23self-driving)", "## Topics", "## Repositories", `file.hasTag("school/cs513", "school/cs513/grid-sim")`},

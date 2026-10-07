@@ -11,15 +11,20 @@ import (
 )
 
 // VaultConfigSchema is the schema of a vault's own config file.
-const VaultConfigSchema = "atlas.vault-config.v1"
+const VaultConfigSchema = "almagest.vault-config.v1"
 
 // VaultConfigFile is a vault's own config file, relative to its root.
-const VaultConfigFile = ".atlas/config.json"
+const VaultConfigFile = ".almagest/config.json"
 
-// Agents are the harnesses Atlas starts.
+// LegacyVaultConfigFile is the vault's config before 11.0. The migration to layout 7
+// moves it to VaultConfigFile; until then the guard protects it, as an older binary
+// still runs what it names.
+const LegacyVaultConfigFile = ".atlas/config.json"
+
+// Agents are the harnesses Almagest starts.
 var Agents = []string{"claude", "codex"}
 
-// Terminals are the terminals Atlas opens a command in.
+// Terminals are the terminals Almagest opens a command in.
 var Terminals = []string{"terminal", "iterm", "wezterm", "ghostty", "custom"}
 
 // Preferences are how the user starts agents. The machine file holds them for every vault;
@@ -126,7 +131,7 @@ const (
 	FromVault   Source = "vault"
 )
 
-// Effective are the preferences Atlas acts on: the vault's, else the machine's, else the default.
+// Effective are the preferences Almagest acts on: the vault's, else the machine's, else the default.
 type Effective struct {
 	Agent           string            `json:"agent"`
 	AgentCommand    string            `json:"agent_command"`

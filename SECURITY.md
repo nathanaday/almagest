@@ -1,6 +1,6 @@
 # Security
 
-This page lists what Atlas trusts, what it guards against and how, and what it does not
+This page lists what Almagest trusts, what it guards against and how, and what it does not
 guard against.
 
 ## Reporting a vulnerability
@@ -8,11 +8,11 @@ guard against.
 Report it privately through **Report a vulnerability** on the repository's Security tab.
 Do not open a public issue for it.
 
-## What Atlas is
+## What Almagest is
 
-Atlas runs on your machine. It has three parts:
+Almagest runs on your machine. It has three parts:
 
-- the `atlas-obsidian` binary, which serves the agent's tools over stdio and runs the
+- the `almagest` binary, which serves the agent's tools over stdio and runs the
   hooks;
 - the agent plugin, which holds the skills, the agents, and the hook configuration;
 - the Obsidian plugin.
@@ -21,12 +21,12 @@ The binary does not listen on a port. The Obsidian plugin makes no network reque
 
 ## Trust model
 
-Atlas trusts:
+Almagest trusts:
 
 - you, in your terminal and in Obsidian;
 - the host (Claude Code or Codex), which runs the hooks and reports your prompts.
 
-Atlas does not trust:
+Almagest does not trust:
 
 - **The agent.** An agent can make a mistake, or follow instructions it read in a captured
   source, a wiki page, or a diff.
@@ -34,7 +34,7 @@ Atlas does not trust:
   can come from a `git pull` of a shared vault, or from a shell command.
 - **The contents of a linked repository.**
 
-## What Atlas guards against, and how
+## What Almagest guards against, and how
 
 ### An agent changes the wiki without your yes
 
@@ -56,22 +56,22 @@ press Approve in the change document and apply it yourself.
 - The gate does not read your prompt. The skill reads your answer and decides whether to
   apply.
 - Two ways to apply have no gate, because you take each one yourself:
-  `atlas-obsidian change apply` in your terminal, and Approve in the change document in
-  Obsidian. Approve runs that same command as you. Cancel runs `atlas-obsidian change
-  reject`. A change that `atlas-obsidian change propose` writes from a terminal names no
+  `almagest change apply` in your terminal, and Approve in the change document in
+  Obsidian. Approve runs that same command as you. Cancel runs `almagest change
+  reject`. A change that `almagest change propose` writes from a terminal names no
   session, so only these two apply it.
 - A work document (a change with status `running`) holds no writes, and apply refuses
   any change that is not proposed. The agent proposes into it later, and the gate above holds for that
   proposal. Cancel on a running document rejects it, and the `change` tool then refuses
   the agent's progress and proposal.
-- `atlas-obsidian vault trash` is your safe delete; the Obsidian plugin runs it as you.
+- `almagest vault trash` is your safe delete; the Obsidian plugin runs it as you.
   It moves nothing while a file links the one you delete. A topic, a source, or a
   repository leaves through a change that the command applies at once as your own
   action, so the change records it and `change undo` brings it back. Any other file
   moves to `trash/` in a commit of its own. The `change` tool refuses an agent's undo of
   a change that names no session: your safe delete, your Return, and a change proposed
   from a terminal. You undo those in a terminal.
-- `atlas-obsidian journal publish` is your act too; the Obsidian plugin's Publish runs
+- `almagest journal publish` is your act too; the Obsidian plugin's Publish runs
   it as you. It captures a journal volume as a pending source, an edition. In the
   volume it writes only the publication history, and changes no note. The agent then absorbs the edition through a change, and the
   gate above holds for it. The `source` tool cannot write `origin: journal`.
@@ -84,7 +84,7 @@ press Approve in the change document and apply it yourself.
   write whose original changed after the proposal.
 - The `wikify` tool changes no knowledge document. `start` copies a note into
   `scratchpad/` as `<name> · wikified.md` and never changes the original. It refuses a
-  file that is not markdown, `Atlas.md`, and a note under `source-core/`, `changes/`,
+  file that is not markdown, `Almagest.md`, and a note under `source-core/`, `changes/`,
   `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`. `mark` writes only a wikified
   copy: a note directly in `scratchpad/` whose name holds ` · wikified` and ends in
   `.md`. It refuses any other note. Neither commits. A topic for a new subject enters
@@ -94,7 +94,7 @@ press Approve in the change document and apply it yourself.
 ### An agent edits files that code owns
 
 The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
-`apply_patch`, and Bash call, and before each call of the atlas tools that can write:
+`apply_patch`, and Bash call, and before each call of the almagest tools that can write:
 `change`, `source`, `vault`, `checkout`, and `wikify`. The other four, `search`,
 `context`, `match`, and `lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
 edit of:
@@ -108,11 +108,11 @@ edit of:
 - `trash/`: what safe delete and a change's remove took out. You empty it.
 - `checkout/`: the copies, reading lists, and ledger that the `checkout` tool writes.
   You read and edit the copies; `return` proposes your edits as a change.
-- `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
+- `Almagest.md`, a `.base` file, and `.claude/settings.local.json`.
 - `sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.
-- `.atlas/config.json`, anything under `.obsidian/plugins/atlas/`, and the machine's
-  `config.json` in `~/.atlas` (or `$ATLAS_HOME`). These files decide what Atlas runs; see
+- `.almagest/config.json`, anything under `.obsidian/plugins/almagest/`, and the machine's
+  `config.json` in `~/.almagest` (or `$ALMAGEST_HOME`). These files decide what Almagest runs; see
   [A shared vault changes what runs](#a-shared-vault-changes-what-runs).
 
 The guard does not refuse an edit inside a linked repository, or in `threads/`, the
@@ -127,7 +127,7 @@ the rule on the machine's `config.json`.
 ### A read-only agent writes
 
 The plugin's three read-only agents are `wiki-audit`, `wiki-draft`, and `wiki-extract`.
-For each of them, the guard refuses the edit tools, every shell command, and every atlas
+For each of them, the guard refuses the edit tools, every shell command, and every almagest
 call except the calls that only read: `search`, `context`, `match`, and `lint`;
 `vault status`; `change show`; `source` with `chunks` or `read`; and `checkout` with
 `list` or `candidates`. The guard counts a
@@ -137,8 +137,8 @@ call that this list does not name as a write.
 
 The guard reads a Bash command as bash and zsh read it: quotes, escapes, separators, brace
 lists, redirects, process substitutions, and a quoted string that a shell or `eval` runs.
-It refuses a command that runs one of these, as `atlas-obsidian` or under the old name
-`atlas`:
+It refuses a command that runs one of these, as `almagest` or under a name the binary had
+before 11.0 (`atlas-obsidian`, `atlas`), since an older install may still run in the vault:
 
 - `change … apply`, which applies a change without the gate;
 - `change … undo`, which takes back a change, your own act among them;
@@ -148,7 +148,7 @@ It refuses a command that runs one of these, as `atlas-obsidian` or under the ol
 - `journal … publish`, which copies a journal volume into the wiki's sources; only you
   decide when a journal is published;
 - `config set` or `config unset` of `terminal_command` or `agent_commands`, the commands
-  that Atlas runs.
+  that Almagest runs.
 
 A word that the shell builds when the command runs, such as a variable or `$(…)`, is out
 of the guard's reach. You can run each of these commands yourself, in a terminal or with
@@ -156,18 +156,18 @@ of the guard's reach. You can run each of these commands yourself, in a terminal
 
 ### A shared vault changes what runs
 
-Two files in a vault decide what Atlas runs:
+Two files in a vault decide what Almagest runs:
 
-- `.atlas/config.json` holds `terminal_command`, which opens the terminal for Start agent
+- `.almagest/config.json` holds `terminal_command`, which opens the terminal for Start agent
   and Resume, and `agent_commands`, the agent command that Start agent runs. The vault's
-  values win over the machine's `~/.atlas/config.json`.
-- `.obsidian/plugins/atlas/data.json` holds `binaryPath`, the binary that the Obsidian
+  values win over the machine's `~/.almagest/config.json`.
+- `.obsidian/plugins/almagest/data.json` holds `binaryPath`, the binary that the Obsidian
   plugin runs. The plugin uses a value that is not empty as it is, with no check.
 
 `.git/info/exclude` does not list these files. So the Obsidian plugin's quiet snapshot,
-or the next Atlas write, commits them with your hand edits, and a `git pull` of a shared
+or the next Almagest write, commits them with your hand edits, and a `git pull` of a shared
 vault brings in another person's values. The Obsidian plugin runs `terminal_command` and
-the agent command through a shell, as written. Trust a shared vault's `.atlas/` and `.obsidian/` folders as you
+the agent command through a shell, as written. Trust a shared vault's `.almagest/` and `.obsidian/` folders as you
 trust code: read a change to them before you pull it.
 
 The guard refuses an agent's edit of these files and of the machine's config file, and the
@@ -184,14 +184,14 @@ that writes the file.
 - Undo takes its paths from git history, not from frontmatter.
 - A change's remove deletes no file. Apply moves the document to
   `trash/<date>/<its path>` and records that path for recovery; undo moves it back.
-- Before Atlas uses a title as a file name, it removes path separators, leading dots, and
-  the characters that break a wikilink (`[ ] # ^`). Atlas builds a session file name from
+- Before Almagest uses a title as a file name, it removes path separators, leading dots, and
+  the characters that break a wikilink (`[ ] # ^`). Almagest builds a session file name from
   the date and a hex id.
 
 ### Commands run with attacker-chosen arguments
 
 - The binary runs git as an argument list, never through a shell. Paths follow `--`.
-- Atlas commits with `--no-verify`, so the vault's own git hooks do not run.
+- Almagest commits with `--no-verify`, so the vault's own git hooks do not run.
 - The Obsidian plugin runs the binary with `execFile`, without a shell.
 
 ### A different program runs in place of the binary
@@ -199,12 +199,12 @@ that writes the file.
 The wrapper script, the Codex server entry, and the Obsidian plugin never search `PATH` for
 the binary.
 
-- The wrapper and the Codex entry run the first executable of `$ATLAS_BIN`,
-  `$ATLAS_HOME/bin/atlas-obsidian` (default `~/.atlas/bin/atlas-obsidian`), and
-  `~/go/bin/atlas-obsidian`.
+- The wrapper and the Codex entry run the first executable of `$ALMAGEST_BIN`,
+  `$ALMAGEST_HOME/bin/almagest` (default `~/.almagest/bin/almagest`), and
+  `~/go/bin/almagest`.
 - The Obsidian plugin runs its `binaryPath` setting when it is set. Otherwise it runs the
-  first of `~/.atlas/bin/atlas-obsidian` and `~/go/bin/atlas-obsidian` that exists. It does
-  not read `ATLAS_BIN` or `ATLAS_HOME`.
+  first of `~/.almagest/bin/almagest` and `~/go/bin/almagest` that exists. It does
+  not read `ALMAGEST_BIN` or `ALMAGEST_HOME`.
 
 ### Vault text runs as code in Obsidian
 
@@ -215,8 +215,8 @@ nodes.
 
 `.git/info/exclude` lists `wiki-view/`, `.claude/settings.local.json`,
 `.obsidian/workspace.json`, `.obsidian/workspace-mobile.json`, `.obsidian/graph.json`,
-`.DS_Store`, and Atlas's temporary `.atlas-*` files, so they stay out of the vault's
-history. It does not list `.atlas/config.json` or the Obsidian plugin's `data.json`; see
+`.DS_Store`, and Almagest's temporary `.almagest-*` files, so they stay out of the vault's
+history. It does not list `.almagest/config.json` or the Obsidian plugin's `data.json`; see
 [A shared vault changes what runs](#a-shared-vault-changes-what-runs).
 
 ### Dependencies
@@ -225,7 +225,7 @@ history. It does not list `.atlas/config.json` or the Obsidian plugin's `data.js
 - npm: exact versions, locked with integrity hashes. Only the build of the Obsidian
   plugin uses them.
 
-## What Atlas does not guard against
+## What Almagest does not guard against
 
 - **An agent's shell.** A shell command can write any file you can, including the vault's
   documents. The guard checks a shell command only against the rules above. To limit the shell,
@@ -235,8 +235,8 @@ history. It does not list `.atlas/config.json` or the Obsidian plugin's `data.js
   on them.
 - **Your answer.** The gate checks that you sent a prompt after the proposal. It does not
   check that the prompt said yes.
-- **Two machines that write one vault.** Each write takes a lock on `.git/atlas.lock`
+- **Two machines that write one vault.** Each write takes a lock on `.git/almagest.lock`
   (flock). The lock works between the processes of one machine only. A vault that a sync
   service shares between machines gets no exclusion, so two machines can write at once.
-- **The hook log.** `ATLAS_HOOK_LOG` records every hook event in full, including your
+- **The hook log.** `ALMAGEST_HOOK_LOG` records every hook event in full, including your
   prompts and tool output. Use it only to debug, and delete the file after use.

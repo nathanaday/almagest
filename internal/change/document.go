@@ -8,9 +8,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Statuses of a change document.
@@ -34,7 +34,7 @@ const (
 // Widget is the block the Obsidian plugin renders as the change's buttons: Approve and
 // Cancel while it is proposed, its result after. It holds no data; the plugin reads the
 // document's frontmatter.
-const Widget = "```atlas-change\n```"
+const Widget = "```almagest-change\n```"
 
 // rewriteNote marks a modify the link or tag rewrite pass made.
 const rewriteNote = "Rewrite only."
@@ -360,7 +360,7 @@ func renderDocument(p *planned, id string, now time.Time, base *doc.Doc, prior b
 }
 
 // CSSClass styles a change document in Obsidian.
-const CSSClass = "atlas-change"
+const CSSClass = "almagest-change"
 
 // renderWork is a new work document: running, with its files and an empty Progress.
 func renderWork(id, kind string, files []string, now time.Time) string {

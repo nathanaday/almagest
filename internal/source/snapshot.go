@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Bounds of a snapshot.

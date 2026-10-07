@@ -1,7 +1,7 @@
-// Package hooks is every hook command: atlas-obsidian hook <event> reads the event's JSON on stdin.
+// Package hooks is every hook command: almagest hook <event> reads the event's JSON on stdin.
 // Hooks keep the rules that must hold (the guard) and the facts about sessions (every
 // session document and every link between a session and another document). A hook that
-// finds no vault for its session does nothing, so Atlas stays out of sessions that are
+// finds no vault for its session does nothing, so Almagest stays out of sessions that are
 // not its own.
 package hooks
 
@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // PluginName is the agent plugin's name, as its tools carry it.
-const PluginName = "atlas-obsidian"
+const PluginName = "almagest"
 
 // Events are the hook commands, by the event that runs each.
 var Events = map[string]string{
@@ -98,7 +98,7 @@ func findVault(in Input, env Env) *vault.Vault {
 		dir, _ = os.Getwd()
 	}
 	h := vault.HomeFrom(env.getenv)
-	// A hook never breaks a session: an ATLAS_VAULT that names no vault falls back to dir.
+	// A hook never breaks a session: an ALMAGEST_VAULT that names no vault falls back to dir.
 	if v, err := vault.Select("", dir, h, env.getenv(vault.EnvVault)); err == nil {
 		return v
 	}
@@ -109,14 +109,14 @@ func findVault(in Input, env Env) *vault.Vault {
 	return v
 }
 
-// atlasTool is the atlas tool a tool name calls, or "".
-func atlasTool(name string) string {
+// almagestTool is the almagest tool a tool name calls, or "".
+func almagestTool(name string) string {
 	if !strings.HasPrefix(name, "mcp__") {
 		return ""
 	}
 	i := strings.LastIndex(name, "__")
 	server, tool := name[len("mcp__"):i], name[i+2:]
-	if server == "atlas" || server == "plugin_"+PluginName+"_atlas" {
+	if server == "almagest" || server == "plugin_"+PluginName+"_almagest" {
 		return tool
 	}
 	return ""

@@ -12,15 +12,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/checkout"
-	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/journal"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/views"
+	"github.com/nathanaday/almagest/internal/checkout"
+	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/journal"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/views"
 )
 
 // VaultInfo names a vault.

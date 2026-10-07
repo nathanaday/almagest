@@ -1,9 +1,9 @@
 {
-  "name": "nathanaday-atlas-obsidian",
-  "interface": {"displayName": "Atlas Obsidian"},
+  "name": "nathanaday-almagest",
+  "interface": {"displayName": "Almagest"},
   "plugins": [
     {
-      "name": "atlas-obsidian",
+      "name": "almagest",
       "source": {"source": "local", "path": "./"},
       "policy": {"installation": "AVAILABLE", "authentication": "ON_INSTALL"},
       "category": "Productivity"

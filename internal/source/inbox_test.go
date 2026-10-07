@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 // outsideFile makes a folder beside the vault, in the test's temporary folder, holding

@@ -1,4 +1,4 @@
-module github.com/nathanaday/atlas-obsidian
+module github.com/nathanaday/almagest
 
 go 1.24.2
 

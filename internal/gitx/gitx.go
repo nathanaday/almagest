@@ -252,7 +252,7 @@ func (r Repo) identity() []string {
 	if err == nil && strings.TrimSpace(out) != "" {
 		return nil
 	}
-	return []string{"-c", "user.name=atlas", "-c", "user.email=atlas@localhost"}
+	return []string{"-c", "user.name=almagest", "-c", "user.email=almagest@localhost"}
 }
 
 // Commit records the index with message and returns the new commit. It skips commit

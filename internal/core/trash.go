@@ -9,9 +9,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Trashed is what safe delete did with a file: its backlinks, which keep it, or where it
@@ -119,9 +119,9 @@ func trashRefusal(rel string) string {
 		return slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(top, n) })
 	}
 	switch {
-	case strings.EqualFold(rel, vault.Marker):
+	case vault.IsMarker(rel):
 		return "is the vault's own document"
-	case is(vault.Obsidian, ".claude", ".atlas"):
+	case is(vault.Obsidian, ".claude", ".almagest", ".atlas"):
 		return "is a setting of the vault, not a note"
 	case is(vault.Changes, vault.Sessions):
 		return "is a record that code keeps"
@@ -130,7 +130,7 @@ func trashRefusal(rel string) string {
 	case is(vault.Trash):
 		return "is in the trash already; empty the trash to delete it"
 	case slices.ContainsFunc(shippedBases(), func(b string) bool { return strings.EqualFold(b, rel) }):
-		return "is a Base that Atlas ships"
+		return "is a Base that Almagest ships"
 	}
 	return ""
 }

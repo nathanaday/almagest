@@ -1,9 +1,9 @@
 ---
-name: atlas-onboard
-description: "Make a new Atlas vault: ask its name, its folder, and how freely to tag, then link its first repositories. Use for set up atlas, new vault, start a vault here, onboard, make this folder a vault. Linking a repository to a vault that exists is repo-link."
+name: almagest-onboard
+description: "Make a new Almagest vault: ask its name, its folder, and how freely to tag, then link its first repositories. Use for set up almagest, new vault, start a vault here, onboard, make this folder a vault. Linking a repository to a vault that exists is repo-link."
 ---
 
-# atlas-onboard
+# almagest-onboard
 
 A vault is one Obsidian vault and one git repository that holds every document of the
 user's work: the sources, repositories, and topics of the wiki, the sessions, and the
@@ -24,18 +24,18 @@ Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
    2. "Use my tags; ask before a new one" (`known`): the agent uses only tags that some
       document holds, and asks before it adds one.
 3. Ask for one or two sentences on what the vault is for. They become the body of
-   `Atlas.md`, the context every session reads first.
+   `Almagest.md`, the context every session reads first.
 4. Call `vault` with `action: init`, `name`, `path`, `tagging` (`open` or `known`), and
    `description`.
 5. Offer to link repositories. The user names paths, or a folder that holds
    repositories: then list the git work trees one level below it (`ls` and a check for
    `.git`) and let the user pick. Hand the list to repo-link, which links them in one
    change and proposes the tags of each.
-6. Tell the user to open the vault in Obsidian (`atlas-obsidian open --register`, or
-   Open folder as vault) and to turn on the Atlas plugin under Community plugins once.
+6. Tell the user to open the vault in Obsidian (`almagest open --register`, or
+   Open folder as vault) and to turn on the Almagest plugin under Community plugins once.
    The vault works without the plugin. The plugin adds the colors and icons of the
-   callouts, the Approve and Cancel buttons in each change document, the Atlas palette
-   (Ingest, Wiki lint, and Safe delete), the Atlas navigator, the sessions pane, the
+   callouts, the Approve and Cancel buttons in each change document, the Almagest palette
+   (Ingest, Wiki lint, and Safe delete), the Almagest navigator, the sessions pane, the
    repository panel, and quiet snapshots of the user's edits.
 
 ## Gate

@@ -11,7 +11,7 @@ import (
 
 // EnvLog names a file that receives every hook event, one JSON line each, for checking
 // what a host sends.
-const EnvLog = "ATLAS_HOOK_LOG"
+const EnvLog = "ALMAGEST_HOOK_LOG"
 
 // Deadlines are how long each hook waits for the vault lock: below its timeout in
 // hooks.json, so a hook that cannot get the lock gives up with an error before the host

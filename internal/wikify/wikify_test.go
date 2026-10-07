@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/wikify"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/wikify"
 )
 
 const draft = "---\ntags: [draft]\n---\n# Notes on gradient descent\n\nGradient descent needs a learning rate. See `gradient descent` in code, and [[Optimizers|gradient descent tools]].\n\nThe learning rate schedule matters, and momentum helps. Gradient descent again.\n\n```\ngradient descent in a fence\n```\n"
@@ -46,7 +46,7 @@ func TestStartCopiesIntoTheScratchpad(t *testing.T) {
 	if j, err := wikify.Start(tv.V, "journals/cs566/Week 1.md"); err != nil || j != "scratchpad/Week 1 · wikified.md" {
 		t.Fatalf("a journal note: %s %v", j, err)
 	}
-	for _, refused := range []string{"source-core/documents/X.md", "Atlas.md", "changes/x.md", "Nowhere.md", "image.png", "../out.md"} {
+	for _, refused := range []string{"source-core/documents/X.md", "Almagest.md", "changes/x.md", "Nowhere.md", "image.png", "../out.md"} {
 		if _, err := wikify.Start(tv.V, refused); err == nil {
 			t.Errorf("%s was copied", refused)
 		}

@@ -7,9 +7,9 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 const (

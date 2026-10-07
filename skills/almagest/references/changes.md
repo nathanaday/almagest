@@ -184,7 +184,7 @@ refuses when one of them changed since; then make the fix as a new change.
 
 ## Safe delete
 
-`atlas-obsidian vault trash PATH` is the user's safe delete. The palette in Obsidian
+`almagest vault trash PATH` is the user's safe delete. The palette in Obsidian
 runs it on the open file; no MCP action does it, and an agent never runs it.
 
 - When documents or notes link the file, it changes nothing, lists them, and exits 2.
@@ -193,8 +193,8 @@ runs it on the open file; no MCP action does it, and an agent never runs it.
 - With no links, a knowledge document leaves through a change that applies at once as
   the user's own action ("Delete <title>", one remove), so undo works on it. Any other
   file moves to `trash/` in a commit `trash: <path>`.
-- It refuses `Atlas.md`, the setting folders, `changes/`, `sessions/`, `wiki-view/`,
-  `trash/`, a Base that Atlas ships, and a folder.
+- It refuses `Almagest.md`, the setting folders, `changes/`, `sessions/`, `wiki-view/`,
+  `trash/`, a Base that Almagest ships, and a folder.
 
 The guard refuses every agent edit in `trash/`. The user empties it.
 

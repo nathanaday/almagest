@@ -11,8 +11,8 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
 )
 
 //go:embed template
@@ -25,11 +25,11 @@ type InitOptions struct {
 	Description string
 	// Tagging is open or known.
 	Tagging string
-	// Context is the body of Atlas.md; the description when empty.
+	// Context is the body of Almagest.md; the description when empty.
 	Context string
 }
 
-// Init makes a folder a vault: the layout, Atlas.md, the two Bases, the Obsidian plugin,
+// Init makes a folder a vault: the layout, Almagest.md, the two Bases, the Obsidian plugin,
 // git init when the folder is no repository, and one setup commit; then it lists the
 // folder in the machine file. A folder that holds notes, or that is already the root of a
 // repository, is adopted: init adds its files and never moves or edits one that is there.
@@ -55,8 +55,10 @@ func Init(opts InitOptions, h Home, now time.Time) (*Vault, error) {
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return nil, err
 	}
-	if _, err := os.Stat(filepath.Join(root, Marker)); err == nil {
-		return nil, fmt.Errorf("%s already holds an %s; it is a vault", root, Marker)
+	for _, m := range []string{Marker, LegacyMarker} {
+		if _, err := os.Stat(filepath.Join(root, m)); err == nil {
+			return nil, fmt.Errorf("%s already holds an %s; it is a vault", root, m)
+		}
 	}
 	if top := gitx.Top(root); top != "" && !gitx.IsRoot(root) {
 		return nil, fmt.Errorf("%s is inside the repository at %s; a vault must be the root of its own repository, so choose a folder outside it", root, top)
@@ -120,7 +122,7 @@ func writeLayout(v *Vault, name, description, tagging, context string, now time.
 	if body != "" {
 		body += "\n"
 	}
-	atlas := doc.Render([]doc.Field{
+	almagest := doc.Render([]doc.Field{
 		{Key: "id", Value: doc.NewID("vlt", nil)},
 		{Key: "type", Value: "vault"},
 		{Key: "name", Value: name},
@@ -131,7 +133,7 @@ func writeLayout(v *Vault, name, description, tagging, context string, now time.
 		{Key: "stale_hours", Value: DefaultStaleHours},
 		{Key: "layout", Value: Layout},
 	}, body)
-	if err := v.Write(Marker, []byte(atlas)); err != nil {
+	if err := v.Write(Marker, []byte(almagest)); err != nil {
 		return nil, err
 	}
 	written = append(written, Marker)

@@ -1,7 +1,7 @@
 ---
 name: wiki-audit
 description: "Read-only worker: read the topics under one tag and report what a deterministic check cannot find: gaps, claims their sources do not support, contradictions, stale topics, topics tagged too narrowly or too widely. Sent by the deep run of the wiki-review skill."
-tools: Read, Grep, Glob, mcp__plugin_atlas-obsidian_atlas__search, mcp__plugin_atlas-obsidian_atlas__lint, mcp__plugin_atlas-obsidian_atlas__context
+tools: Read, Grep, Glob, mcp__plugin_almagest_almagest__search, mcp__plugin_almagest_almagest__lint, mcp__plugin_almagest_almagest__context
 ---
 
 # wiki-audit

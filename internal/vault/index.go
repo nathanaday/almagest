@@ -12,10 +12,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/tags"
 )
 
 // skipDirs are folders the index never enters.
@@ -65,7 +65,7 @@ func cachedDoc(v *Vault, rel string) (*doc.Doc, error) {
 type Index struct {
 	V *Vault
 	// Docs are the typed documents in their place: the three types directly in
-	// source-core/documents, sessions under sessions/, changes under changes/, and Atlas.md.
+	// source-core/documents, sessions under sessions/, changes under changes/, and Almagest.md.
 	Docs []*doc.Doc
 	// Misplaced are typed documents anywhere else. Tools do not see them; lint reports
 	// them, and sync moves one under wiki/ back into the documents.
@@ -155,7 +155,7 @@ func Unread(rel string) bool {
 func InPlace(d *doc.Doc) bool {
 	switch t := d.Type(); {
 	case t == "vault":
-		return d.Path == Marker
+		return IsMarker(d.Path)
 	case t == "session":
 		return strings.HasPrefix(d.Path, Sessions+"/")
 	case t == "change":
@@ -194,9 +194,9 @@ func (idx *Index) ByID(id string) *doc.Doc { return idx.byID[id] }
 // ByPath is the parsed markdown file at a vault-relative path, or nil.
 func (idx *Index) ByPath(rel string) *doc.Doc { return idx.byPath[rel] }
 
-// Title is a document's title: its file name, or the vault's name for Atlas.md.
+// Title is a document's title: its file name, or the vault's name for Almagest.md.
 func Title(d *doc.Doc) string {
-	if d.Path == Marker {
+	if IsMarker(d.Path) {
 		if n := d.Str("name"); n != "" {
 			return n
 		}

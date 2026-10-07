@@ -1,18 +1,18 @@
 {
-  "name": "nathanaday-atlas-obsidian",
+  "name": "nathanaday-almagest",
   "owner": {
     "name": "nathanaday",
     "url": "https://github.com/nathanaday"
   },
   "metadata": {
-    "description": "Atlas: one Obsidian vault for the wiki, the sessions, and the changes of your work.",
+    "description": "Almagest: one Obsidian vault for the wiki, the sessions, and the changes of your work.",
     "version": "10.4.1"
   },
   "plugins": [
     {
-      "name": "atlas-obsidian",
+      "name": "almagest",
       "source": "./",
-      "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, backed by the atlas-obsidian binary.",
+      "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, backed by the almagest binary.",
       "version": "10.4.1",
       "category": "productivity"
     }

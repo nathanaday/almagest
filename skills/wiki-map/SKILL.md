@@ -13,7 +13,7 @@ parent tag, up to the top.
 
 Tools: `context`, `search`, `match`, `change`. Agents:
 [wiki-draft](../../agents/wiki-draft.md). References:
-[changes.md](../atlas/references/changes.md), [pages.md](../atlas/references/pages.md).
+[changes.md](../almagest/references/changes.md), [pages.md](../almagest/references/pages.md).
 
 ## Procedure
 

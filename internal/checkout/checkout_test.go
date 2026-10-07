@@ -5,12 +5,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/checkout"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/checkout"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func library(t *testing.T) *testvault.T {
@@ -69,7 +69,7 @@ func TestMakeAndReturn(t *testing.T) {
 		t.Fatalf("made %+v", m)
 	}
 	pg := tv.Read(folder + "/Policy gradient (checkout).md")
-	for _, want := range []string{"checkout_of: \"[[Policy gradient]]\"", "> [!atlas] A copy of [[Policy gradient]]", "unlike [[" + folder + "/Q-learning (checkout)|Q learning]]."} {
+	for _, want := range []string{"checkout_of: \"[[Policy gradient]]\"", "> [!almagest] A copy of [[Policy gradient]]", "unlike [[" + folder + "/Q-learning (checkout)|Q learning]]."} {
 		if !strings.Contains(pg, want) {
 			t.Fatalf("the copy lacks %q:\n%s", want, pg)
 		}

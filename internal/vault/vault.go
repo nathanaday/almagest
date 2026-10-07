@@ -1,4 +1,4 @@
-// Package vault is one vault on disk: its layout, the vault document Atlas.md, the machine
+// Package vault is one vault on disk: its layout, the vault document Almagest.md, the machine
 // file that lists every vault, the lock every write takes, and the index of every document
 // the other packages read.
 package vault
@@ -16,20 +16,23 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/schema"
 )
 
 // The layout, relative to the vault.
 const (
-	Marker     = "Atlas.md"
-	Ingest     = "ingest"
-	Scratchpad = "scratchpad"
-	Sessions   = "sessions"
-	Changes    = "changes"
+	Marker = "Almagest.md"
+	// LegacyMarker is the vault document of the releases before 11.0, when the project
+	// was named Atlas. The migration to layout 7 renames it.
+	LegacyMarker = "Atlas.md"
+	Ingest       = "ingest"
+	Scratchpad   = "scratchpad"
+	Sessions     = "sessions"
+	Changes      = "changes"
 	// Threads holds the thread documents and chord canvases of 8.x, which the 9.0
-	// migration moved out of the documents and chords/. Atlas reads none of it.
+	// migration moved out of the documents and chords/. Almagest reads none of it.
 	Threads = "threads"
 	// Core is the store of the wiki: the documents, and the originals they describe.
 	Core      = "source-core"
@@ -45,18 +48,23 @@ const (
 	Trash     = "trash"
 	Settings  = ".claude/settings.local.json"
 	Obsidian  = ".obsidian"
-	PluginDir = ".obsidian/plugins/atlas"
+	PluginDir = ".obsidian/plugins/almagest"
+	// LegacyPluginDir is the Obsidian plugin of the releases before 11.0, which runs the
+	// older binary. The user removes it in Obsidian.
+	LegacyPluginDir = ".obsidian/plugins/atlas"
 	// PluginLink opens the Obsidian plugin in Obsidian's community plugins, where the user
 	// installs it. No tool installs it in a vault.
-	PluginLink = "obsidian://show-plugin?id=atlas"
+	PluginLink = "obsidian://show-plugin?id=almagest"
 	AppJSON    = ".obsidian/app.json"
 )
 
-// Layout is the layout version this binary reads and writes, kept in Atlas.md's layout
-// field: 6 is 10.0; 5 is 9.0; 4 is the threads and chords of 8.x. Only the migrate
-// command writes a vault of an older layout, and only from 4 or 5.
+// Layout is the layout version this binary reads and writes, kept in Almagest.md's layout
+// field: 7 is 11.0, the rename to Almagest; 6 is 10.0; 5 is 9.0; 4 is the threads and
+// chords of 8.x. Only the migrate command writes a vault of an older layout, and only
+// from 4, 5, or 6.
 const (
-	Layout        = 6
+	Layout        = 7
+	Layout10      = 6
 	LayoutKB      = 5
 	LayoutThreads = 4
 )
@@ -68,7 +76,7 @@ var Folders = []string{Ingest, Scratchpad, Sessions, Changes, Core, Documents, O
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
 // Obsidian files it rewrites on every click and zoom, and the plugin on every change.
-var Excluded = []string{"/wiki-view/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store", ".atlas-*"}
+var Excluded = []string{"/wiki-view/", "/.claude/settings.local.json", "/.obsidian/workspace.json", "/.obsidian/workspace-mobile.json", "/.obsidian/graph.json", ".DS_Store", ".almagest-*"}
 
 // Defaults of the vault document.
 var (
@@ -115,24 +123,34 @@ type Vault struct {
 // ErrNoVault is returned when no vault holds a folder.
 var ErrNoVault = errors.New("no vault")
 
-// Open reads the vault at root. The folder must hold an Atlas.md of type vault.
+// Open reads the vault at root. The folder must hold an Almagest.md of type vault, or
+// the Atlas.md of an earlier release, which only the migration then takes.
 func Open(root string) (*Vault, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(abs, Marker))
+	marker := Marker
+	data, err := os.ReadFile(filepath.Join(abs, marker))
 	if err != nil {
-		return nil, fmt.Errorf("%s: %w: no %s", abs, ErrNoVault, Marker)
+		marker = LegacyMarker
+		if data, err = os.ReadFile(filepath.Join(abs, marker)); err != nil {
+			return nil, fmt.Errorf("%s: %w: no %s", abs, ErrNoVault, Marker)
+		}
 	}
-	d := doc.Parse(Marker, data)
+	d := doc.Parse(marker, data)
 	if d.FrontErr != nil {
-		return nil, fmt.Errorf("%s: %w", filepath.Join(abs, Marker), d.FrontErr)
+		return nil, fmt.Errorf("%s: %w", filepath.Join(abs, marker), d.FrontErr)
 	}
 	if d.Type() != "vault" {
-		return nil, fmt.Errorf("%s: %w: %s is not of type vault", abs, ErrNoVault, Marker)
+		return nil, fmt.Errorf("%s: %w: %s is not of type vault", abs, ErrNoVault, marker)
 	}
 	return &Vault{Root: abs, Doc: d}, nil
+}
+
+// IsMarker reports whether rel names a vault document, of this release or an earlier one.
+func IsMarker(rel string) bool {
+	return strings.EqualFold(rel, Marker) || strings.EqualFold(rel, LegacyMarker)
 }
 
 // ID is the vault's id.
@@ -163,7 +181,7 @@ func (v *Vault) Tagging() string {
 func (v *Vault) LayoutVersion() int { return v.Doc.Front.Int("layout") }
 
 // ErrLegacy is the refusal of every write on a vault of an older layout.
-var ErrLegacy = errors.New("this vault has the layout of an earlier release; run `atlas-obsidian vault migrate --dry-run` to see the move to 9.0, then `atlas-obsidian vault migrate` (type it yourself, or with ! in a session)")
+var ErrLegacy = errors.New("this vault has the layout of an earlier release; run `almagest vault migrate --dry-run` to see what moves, then `almagest vault migrate` (type it yourself, or with ! in a session)")
 
 // CheckLayout refuses a vault whose layout this binary does not write.
 func (v *Vault) CheckLayout() error {
@@ -181,7 +199,7 @@ func (v *Vault) StaleHours() int {
 	return DefaultStaleHours
 }
 
-// Context is the body of Atlas.md: the context every agent in the vault must know.
+// Context is the body of Almagest.md: the context every agent in the vault must know.
 func (v *Vault) Context() string { return strings.TrimSpace(doc.StripLead(v.Doc.Body)) }
 
 // Abs is a vault-relative path on disk.
@@ -206,7 +224,7 @@ func (v *Vault) Rel(abs string) string {
 // ErrOutside is the refusal of a path that does not stay inside the vault.
 var ErrOutside = errors.New("not a path inside the vault")
 
-// MaxNameBytes is the longest file name the file systems Atlas runs on accept.
+// MaxNameBytes is the longest file name the file systems Almagest runs on accept.
 const MaxNameBytes = 255
 
 // Contain refuses a vault-relative path that does not stay inside the vault: an absolute
@@ -467,7 +485,7 @@ func FindAbove(dir string) string {
 		return ""
 	}
 	for {
-		if isVaultDoc(filepath.Join(dir, Marker)) {
+		if isVaultDoc(filepath.Join(dir, Marker)) || isVaultDoc(filepath.Join(dir, LegacyMarker)) {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -505,14 +523,14 @@ func Find(dir string, h Home) (*Vault, error) {
 			}
 		}
 	}
-	return nil, fmt.Errorf("%w for %s: no Atlas.md at or above it, and no vault in %s links a repository that holds it", ErrNoVault, dir, h.ConfigPath())
+	return nil, fmt.Errorf("%w for %s: no Almagest.md at or above it, and no vault in %s links a repository that holds it", ErrNoVault, dir, h.ConfigPath())
 }
 
 // EnvVault names the variable that chooses the vault when a call names none.
-const EnvVault = "ATLAS_VAULT"
+const EnvVault = "ALMAGEST_VAULT"
 
 // Select is the one rule that chooses a vault for the CLI, the MCP server, and the hooks:
-// the vault the call names, else the vault $ATLAS_VAULT names (a path or a name from the
+// the vault the call names, else the vault $ALMAGEST_VAULT names (a path or a name from the
 // machine file), else the vault above dir.
 func Select(name, dir string, h Home, envVault string) (*Vault, error) {
 	if strings.TrimSpace(name) == "" && strings.TrimSpace(envVault) != "" {

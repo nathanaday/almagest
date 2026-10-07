@@ -11,7 +11,7 @@ Agents no longer work in the old folder. The topics under the repository's tag m
 somewhere, so this skill asks once, with a recommendation, and then makes the change.
 
 Tools: `context`, `search`, `change`. References:
-[changes.md](../atlas/references/changes.md).
+[changes.md](../almagest/references/changes.md).
 
 ## Procedure
 

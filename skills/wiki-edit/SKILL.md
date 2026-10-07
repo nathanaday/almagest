@@ -10,8 +10,8 @@ removes, and retags keep every link and tag true, because code rewrites them in 
 same commit. A remove moves the document to `trash/`; undo moves it back. You may undo
 only a change of a session: the user undoes the user's own acts (safe delete, Return).
 
-Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../atlas/references/changes.md),
-[pages.md](../atlas/references/pages.md).
+Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../almagest/references/changes.md),
+[pages.md](../almagest/references/pages.md).
 
 ## Procedure
 
@@ -86,7 +86,7 @@ propose into it with change propose and id <id>." The note is the wikified copy 
    (the tags of the documents it draws on; the tag list is in the session-start
    context, or `vault`), `aliases` (the note's wording when it differs), `status`
    (`draft` when the topic is thin), and `sources`. Write the body with the sections of
-   its kind ([pages.md](../atlas/references/pages.md)), and link the wiki's related
+   its kind ([pages.md](../almagest/references/pages.md)), and link the wiki's related
    topics under `## Related`.
 5. Cite every claim. Cite a document of the wiki, with a locator, for each claim it
    supports, and list it in `sources`. A claim that only the note makes is the user's:

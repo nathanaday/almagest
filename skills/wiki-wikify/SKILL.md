@@ -12,18 +12,18 @@ mark as a bubble. The user accepts a link, ignores a mark, or asks an agent to c
 the topic of a new subject.
 
 Tools: `wikify` (start, mark), `match`, and Read. References:
-[pages.md](../atlas/references/pages.md).
+[pages.md](../almagest/references/pages.md).
 
 ## Procedure
 
-1. **The copy.** The palette sends `/atlas-obsidian:wiki-wikify Wikify [[<copy title>]]:
+1. **The copy.** The palette sends `/almagest:wiki-wikify Wikify [[<copy title>]]:
    mark what the wiki knows and the subjects worth a topic, with wikify mark.` The link
    names the copy, `scratchpad/<copy title>.md`. The palette made the copy and opened
    it. From the chat ("wikify this note"), find the note that the user names, and ask
    when two notes match. Then call `wikify` with `action: start` and `note` set to the
    note's path in the vault. Code copies the note to `scratchpad/<name> · wikified.md`
    (`<name> · wikified (2).md` when that name is taken) and returns the path in `copy`.
-   Start refuses a file that is not markdown, `Atlas.md`, and a note under
+   Start refuses a file that is not markdown, `Almagest.md`, and a note under
    `source-core/`, `changes/`, `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`. A
    note in `journals/` may be wikified; its copy lies in `scratchpad/`.
 2. **Read** the copy with Read.

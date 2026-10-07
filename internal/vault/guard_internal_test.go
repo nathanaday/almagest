@@ -27,7 +27,7 @@ func TestAGuardedWriteChecksAgainBeforeTheRename(t *testing.T) {
 	if got, _ := os.ReadFile(file); string(got) != "saved meanwhile\n" {
 		t.Fatalf("the save was overwritten: %q", got)
 	}
-	if left, _ := filepath.Glob(filepath.Join(dir, ".atlas-*")); len(left) != 0 {
+	if left, _ := filepath.Glob(filepath.Join(dir, ".almagest-*")); len(left) != 0 {
 		t.Fatalf("temporary files left: %v", left)
 	}
 }

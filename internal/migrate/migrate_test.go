@@ -9,15 +9,15 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/migrate"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/migrate"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
-const atlas8 = "---\nid: vlt-aaaaaa\ntype: vault\nname: Work\ndescription: Work notes.\ncreated: 2026-09-01T00:00:00\nupdated: 2026-09-01T00:00:00\ntagging: open\nwikify: [source, spec, verification, chord, event]\nstale_hours: 12\nlayout: 4\n---\nThe vault's own context.\n"
+const almagest8 = "---\nid: vlt-aaaaaa\ntype: vault\nname: Work\ndescription: Work notes.\ncreated: 2026-09-01T00:00:00\nupdated: 2026-09-01T00:00:00\ntagging: open\nwikify: [source, spec, verification, chord, event]\nstale_hours: 12\nlayout: 4\n---\nThe vault's own context.\n"
 
 const canvas8 = "{\"nodes\":[{\"id\":\"a\",\"type\":\"file\",\"file\":\"wiki/documents/Filter alarms.md\",\"x\":0,\"y\":0,\"width\":400,\"height\":120}],\"edges\":[]}\n"
 
@@ -28,7 +28,7 @@ const threadsBase = "## Threads\n\n```base\nfilters:\n  and:\n    - 'type == \"s
 func eight(t *testing.T) *testvault.T {
 	tv := testvault.New(t)
 	repo := tv.Repo("p3-edge", nil)
-	tv.Write("Atlas.md", atlas8)
+	tv.Write("Almagest.md", almagest8)
 	tv.Doc("repository", "p3-edge", map[string]any{"path": repo, "defines": "work/p3-edge"}, "## What it is\n\nThe edge.\n\n"+threadsBase)
 	tv.Doc("source", "DINOv2", map[string]any{"file": "[[doc-aaaaaa.pdf]]", "sha256": "3f9c1e2a7b8d44aa", "from": "[[Filter alarms]]"}, "## Summary\n\nFeatures.\n")
 	tv.Write("wiki/assets/doc-aaaaaa.pdf", "%PDF")
@@ -51,9 +51,11 @@ func eight(t *testing.T) *testvault.T {
 }
 
 // older puts the files that testvault wrote in the 10.0 folders into the folders of 9.0
-// and 8.x, commits the tree, and opens the vault again.
+// and 8.x, gives the vault document its name of then (Atlas.md), commits the tree, and
+// opens the vault again.
 func older(t *testing.T, tv *testvault.T) *testvault.T {
 	t.Helper()
+	atlas(t, tv)
 	for _, m := range [][2]string{{vault.Documents, "wiki/documents"}, {vault.Originals, "wiki/assets"}, {vault.Ingest, "inbox"}, {vault.WikiView, "views"}} {
 		from, to := tv.V.Abs(m[0]), tv.V.Abs(m[1])
 		if err := os.MkdirAll(to, 0o755); err != nil {
@@ -113,7 +115,7 @@ func TestMigration(t *testing.T) {
 	if plan.From != "8.x" || len(plan.Moved) != len(moved) || !strings.Contains(strings.Join(plan.Warnings, " "), "chords/Chord notes.md") {
 		t.Fatalf("the plan: %+v", plan)
 	}
-	for _, p := range []string{"Atlas.md", "wiki/documents/Motion scoring.md", "wiki/documents/p3-edge.md", "wiki/documents/DINOv2.md", "sessions/2026-09/2026-09-08 0900 bbbbbb.md", "changes/2026-09/2026-09-10 Learn from the spec.md"} {
+	for _, p := range []string{vault.LegacyMarker, "wiki/documents/Motion scoring.md", "wiki/documents/p3-edge.md", "wiki/documents/DINOv2.md", "sessions/2026-09/2026-09-08 0900 bbbbbb.md", "changes/2026-09/2026-09-10 Learn from the spec.md"} {
 		if !slices.Contains(plan.Edited, p) {
 			t.Errorf("the plan does not edit %s: %v", p, plan.Edited)
 		}
@@ -127,7 +129,7 @@ func TestMigration(t *testing.T) {
 		t.Fatalf("the report: %+v", report)
 	}
 	tv.Clean()
-	if log := tv.Log(); log[0] != "layout: migrate to 10.0" || slices.ContainsFunc(log, func(s string) bool { return strings.HasPrefix(s, "layout: upgrade") }) {
+	if log := tv.Log(); log[0] != "layout: migrate to 11.0" || slices.ContainsFunc(log, func(s string) bool { return strings.HasPrefix(s, "layout: upgrade") }) {
 		t.Fatalf("the commits: %v", log)
 	}
 	// The canvas card and the chord's embed follow the moves; every other file moves as it was.
@@ -158,7 +160,7 @@ func TestMigration(t *testing.T) {
 		t.Fatal(err)
 	}
 	if v.LayoutVersion() != vault.Layout || v.Doc.Front.Has("wikify") {
-		t.Fatalf("Atlas.md:\n%s", v.Doc.Content)
+		t.Fatalf("Almagest.md:\n%s", v.Doc.Content)
 	}
 	topic := doc.Parse("", []byte(tv.Read(vault.DocPath("Motion scoring"))))
 	if topic.Front.Has("from") || strings.Contains(topic.Body, "## Threads") || !strings.Contains(topic.Body, "## Origin\n\nScore boxes by motion.") {
@@ -205,7 +207,7 @@ func TestMigration(t *testing.T) {
 		}
 	}
 
-	if _, err := migrate.Run(v, testvault.Now.Add(2*time.Hour)); err == nil || !strings.Contains(err.Error(), "10.0 layout already") {
+	if _, err := migrate.Run(v, testvault.Now.Add(2*time.Hour)); err == nil || !strings.Contains(err.Error(), "11.0 layout already") {
 		t.Fatalf("a second migration: %v", err)
 	}
 }
@@ -213,7 +215,7 @@ func TestMigration(t *testing.T) {
 // nine writes a vault as 9.0 left it, with paths in links, a Base, and a canvas.
 func nine(t *testing.T) *testvault.T {
 	tv := testvault.New(t)
-	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
 	tv.Doc("source", "DINOv2", map[string]any{"file": "[[doc-aaaaaa.pdf]]", "sha256": "3f9c1e2a7b8d44aa", "origin": "inbox", "locator": "DINOv2.pdf"}, "## Summary\n\nFeatures.\n")
 	tv.Write(vault.Originals+"/doc-aaaaaa.pdf", "%PDF")
 	tv.Write(vault.Originals+"/diagram.png", "png")
@@ -255,7 +257,7 @@ func TestMigrationFrom9(t *testing.T) {
 		t.Fatalf("the report: %+v %v", report, err)
 	}
 	tv.Clean()
-	if log := tv.Log(); log[0] != "layout: migrate to 10.0" {
+	if log := tv.Log(); log[0] != "layout: migrate to 11.0" {
 		t.Fatalf("the commits: %v", log)
 	}
 	for _, rel := range []string{"wiki", "inbox", "views"} {
@@ -323,7 +325,7 @@ func TestMigrationFrom9(t *testing.T) {
 func TestMigrationRefuses(t *testing.T) {
 	t.Run("a vault older than 8.0", func(t *testing.T) {
 		tv := eight(t)
-		tv.Write("Atlas.md", strings.Replace(atlas8, "layout: 4", "layout: 3", 1))
+		tv.Write("Almagest.md", strings.Replace(almagest8, "layout: 4", "layout: 3", 1))
 		tv.Commit()
 		v, _ := vault.Open(tv.V.Root)
 		if _, err := migrate.Plan(v); err == nil || !strings.Contains(err.Error(), "8.1.1") {
@@ -332,7 +334,7 @@ func TestMigrationRefuses(t *testing.T) {
 	})
 	t.Run("wikify without sources", func(t *testing.T) {
 		tv := eight(t)
-		tv.Write("Atlas.md", strings.Replace(atlas8, "wikify: [source, spec, verification, chord, event]", "wikify: [spec]", 1))
+		tv.Write("Almagest.md", strings.Replace(almagest8, "wikify: [source, spec, verification, chord, event]", "wikify: [spec]", 1))
 		tv.Commit()
 		v, _ := vault.Open(tv.V.Root)
 		if plan, err := migrate.Plan(v); err != nil || !strings.Contains(strings.Join(plan.Warnings, " "), "every source the wiki has not absorbed is pending") {
@@ -375,7 +377,7 @@ func TestMigrationRefuses(t *testing.T) {
 
 func TestAMigrationWhoseCommitFailsPutsTheVaultBack(t *testing.T) {
 	tv := eight(t)
-	atlas := tv.Read("Atlas.md")
+	almagest := tv.Read(vault.LegacyMarker)
 	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -385,7 +387,7 @@ func TestAMigrationWhoseCommitFailsPutsTheVaultBack(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "the vault is back as it was") {
 		t.Fatalf("a migration with the index locked: %v", err)
 	}
-	if tv.Read("Atlas.md") != atlas || !tv.V.Exists("wiki/documents/Filter alarms.md") || tv.Read("chords/Quiet edge.canvas") != canvas8 || !tv.V.Exists("chords/old/Loud edge.canvas") || tv.V.Exists("threads/Filter alarms.md") {
+	if tv.Read(vault.LegacyMarker) != almagest || tv.V.Exists(vault.Marker) || !tv.V.Exists("wiki/documents/Filter alarms.md") || tv.Read("chords/Quiet edge.canvas") != canvas8 || !tv.V.Exists("chords/old/Loud edge.canvas") || tv.V.Exists("threads/Filter alarms.md") {
 		t.Fatal("the failed migration left the vault changed")
 	}
 	if log := tv.Log(); strings.HasPrefix(log[0], "layout:") {
@@ -407,7 +409,7 @@ func TestAMigrationWhoseCommitFailsPutsTheVaultBack(t *testing.T) {
 // A save that lands during a migration, after the step that wrote its path, survives the
 // rollback of a migration whose commit fails, and the error names it.
 func TestAFailedMigrationKeepsASaveMadeDuringIt(t *testing.T) {
-	for _, path := range []string{"Atlas.md", ".obsidian/app.json"} {
+	for _, path := range []string{"Almagest.md", ".obsidian/app.json"} {
 		t.Run(path, func(t *testing.T) {
 			tv := eight(t)
 			git := func(args ...string) string {
@@ -449,12 +451,12 @@ func TestAFailedMigrationKeepsASaveMadeDuringIt(t *testing.T) {
 	}
 }
 
-// TestMigrateACopy migrates the vault that ATLAS_MIGRATE_COPY names, for a dry run on a
+// TestMigrateACopy migrates the vault that ALMAGEST_MIGRATE_COPY names, for a dry run on a
 // copy of a real vault: it prints the report and every lint finding.
 func TestMigrateACopy(t *testing.T) {
-	root := os.Getenv("ATLAS_MIGRATE_COPY")
+	root := os.Getenv("ALMAGEST_MIGRATE_COPY")
 	if root == "" {
-		t.Skip("set ATLAS_MIGRATE_COPY to the copy of a vault")
+		t.Skip("set ALMAGEST_MIGRATE_COPY to the copy of a vault")
 	}
 	t.Setenv(vault.EnvHome, t.TempDir())
 	v, err := vault.Open(root)
@@ -482,5 +484,137 @@ func TestMigrateACopy(t *testing.T) {
 		} else {
 			t.Logf("lint %s: %s %s: %s", x.Severity, x.Check, x.Doc.Path, x.Message)
 		}
+	}
+}
+
+// atlas renames the vault document to Atlas.md, as every release before 11.0 named it.
+func atlas(t *testing.T, tv *testvault.T) {
+	t.Helper()
+	if err := os.Rename(tv.V.Abs(vault.Marker), tv.V.Abs(vault.LegacyMarker)); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// ten writes a vault as 10.0 left it, with every name that code wrote while the project
+// was Atlas, and the user's own text that names Atlas too.
+func ten(t *testing.T) *testvault.T {
+	tv := testvault.New(t)
+	tv.Write(vault.Marker, strings.Replace(tv.Read(vault.Marker), "layout: 7", "layout: 6", 1))
+	atlas(t, tv)
+	repo := tv.Repo("p3-edge", nil)
+	tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "## What it is\n\nThe edge.\n\n```atlas-repo\n```\n")
+	tv.Doc("topic", "Widgets", map[string]any{"kind": "concept"}, "## Definition\n\nThe old plugin drew a block:\n\n```atlas-change\n```\n\nSee [[Atlas]] and [[Atlas|the vault document]].\n")
+	tv.Write("changes/2026-10/2026-10-06 Ingest 3 files.md", "---\nid: chg-ingest\ntype: change\ncreated: 2026-10-06T22:00:00\nupdated: 2026-10-06T22:00:00\nstatus: rejected\nkind: ingest\ncssclasses: [atlas-change]\n---\n\n> [!change] Rejected\n\n```atlas-change\n```\n\n## Notes\n\nx\n")
+	tv.Write("checkout/2026-10-06 Study/Widgets (checkout).md", "---\ncheckout_of: \"[[Widgets]]\"\n---\n\n> [!atlas] A copy of [[Widgets]], checked out 2026-10-06\n> Edit it as you like.\n\nThe text.\n")
+	tv.Write("checkout/Checkout · Ledger.md", "> [!atlas] Written by Atlas at each checkout and return\n> Every checkout, newest first.\n\n| Date |\n")
+	tv.Write("journals/cs566/Journal · cs566.md", "> [!atlas] Written by Atlas at each publish. Edits here are lost at the next one.\n\nEditions.\n")
+	tv.Write("scratchpad/Transcript.md", "> [!atlas] A callout of the user's\n\nAtlas was the old name.\n")
+	tv.Write(".atlas/config.json", "{\n  \"schema\": \"atlas.vault-config.v1\",\n  \"preferences\": {}\n}\n")
+	tv.Write(vault.LegacyPluginDir+"/manifest.json", "{\"id\": \"atlas\", \"version\": \"10.4.1\"}\n")
+	tv.Write(vault.WikiView+"/View · Home.md", "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync.\n\nHome.\n")
+	tv.Commit()
+	v, err := vault.Open(tv.V.Root)
+	if err != nil {
+		t.Fatal(err)
+	}
+	tv.V = v
+	return tv
+}
+
+func TestMigrationFrom10RenamesWhatCodeOwns(t *testing.T) {
+	tv := ten(t)
+	if tv.V.Doc.Path != vault.LegacyMarker {
+		t.Fatalf("the vault opens by %s", tv.V.Doc.Path)
+	}
+	plan, err := migrate.Plan(tv.V)
+	if err != nil || plan.From != "10.0" {
+		t.Fatalf("the plan: %+v %v", plan, err)
+	}
+	report, err := migrate.Run(tv.V, testvault.Now.Add(time.Hour))
+	if err != nil || report.Commit == "" {
+		t.Fatalf("the report: %+v %v", report, err)
+	}
+	if log := tv.Log(); log[0] != "layout: migrate to 11.0" {
+		t.Fatalf("the commits: %v", log)
+	}
+	if tv.V.Exists(vault.LegacyMarker) || !strings.Contains(tv.Read(vault.Marker), "\nlayout: 7\n") {
+		t.Fatalf("the vault document:\n%s", tv.Read(vault.Marker))
+	}
+	v, err := vault.Open(tv.V.Root)
+	if err != nil || v.Doc.Path != vault.Marker || v.CheckLayout() != nil {
+		t.Fatalf("the vault after: %v %v", v, err)
+	}
+	for rel, want := range map[string]string{
+		"source-core/documents/p3-edge.md":                "```almagest-repo\n```",
+		"changes/2026-10/2026-10-06 Ingest 3 files.md":    "cssclasses: [almagest-change]",
+		"checkout/2026-10-06 Study/Widgets (checkout).md": "> [!almagest] A copy of [[Widgets]], checked out 2026-10-06\n> Edit it as you like.",
+		"checkout/Checkout · Ledger.md":                   "> [!almagest] Written by Almagest at each checkout and return",
+		"journals/cs566/Journal · cs566.md":               "> [!almagest] Written by Almagest at each publish.",
+		".almagest/config.json":                           "\"schema\": \"almagest.vault-config.v1\"",
+		"source-core/documents/Widgets.md":                "See [[Almagest]] and [[Almagest|the vault document]].",
+	} {
+		if !strings.Contains(tv.Read(rel), want) {
+			t.Errorf("%s lacks %q:\n%s", rel, want, tv.Read(rel))
+		}
+	}
+	if got := tv.Read("changes/2026-10/2026-10-06 Ingest 3 files.md"); !strings.Contains(got, "```almagest-change\n```") || strings.Contains(got, "atlas") {
+		t.Errorf("the change document:\n%s", got)
+	}
+	// What the user wrote stays: a code example in a topic, and a callout in a note.
+	if !strings.Contains(tv.Read("source-core/documents/Widgets.md"), "```atlas-change\n```") {
+		t.Error("the topic's code example changed")
+	}
+	if tv.Read("scratchpad/Transcript.md") != "> [!atlas] A callout of the user's\n\nAtlas was the old name.\n" {
+		t.Error("the user's note changed")
+	}
+	if tv.V.Exists(".atlas") {
+		t.Error(".atlas/ stays")
+	}
+	if !slices.ContainsFunc(report.Warnings, func(w string) bool {
+		return strings.Contains(w, vault.LegacyPluginDir) && strings.Contains(w, vault.PluginLink)
+	}) {
+		t.Errorf("no warning names the old plugin: %v", report.Warnings)
+	}
+	tv.Clean()
+	if _, err := migrate.Run(v, testvault.Now.Add(2*time.Hour)); err == nil || !strings.Contains(err.Error(), "11.0 layout already") {
+		t.Fatalf("a second migration: %v", err)
+	}
+}
+
+func TestMigrationFrom10KeepsLinksWhenAnotherNoteIsTitledAtlas(t *testing.T) {
+	tv := ten(t)
+	tv.Write("scratchpad/Atlas.md", "The book of maps.\n")
+	tv.Commit()
+	report, err := migrate.Run(tv.V, testvault.Now.Add(time.Hour))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(tv.Read("source-core/documents/Widgets.md"), "See [[Atlas]]") {
+		t.Error("a link that may name the other note changed")
+	}
+	if !slices.ContainsFunc(report.Warnings, func(w string) bool { return strings.Contains(w, "another note is titled Atlas") }) {
+		t.Errorf("no warning: %v", report.Warnings)
+	}
+}
+
+func TestMigrationHoldsTheOldBinarysLock(t *testing.T) {
+	tv := ten(t)
+	unlock, err := tv.V.LockLegacy()
+	if err != nil {
+		t.Fatal(err)
+	}
+	done := make(chan error, 1)
+	go func() {
+		_, err := migrate.Run(tv.V, testvault.Now.Add(time.Hour))
+		done <- err
+	}()
+	select {
+	case err := <-done:
+		t.Fatalf("the migration ran while the old binary held its lock: %v", err)
+	case <-time.After(300 * time.Millisecond):
+	}
+	unlock()
+	if err := <-done; err != nil {
+		t.Fatal(err)
 	}
 }

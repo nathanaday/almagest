@@ -1,5 +1,5 @@
 // Package testvault builds scratch vaults and scratch repositories for tests. Nothing
-// here touches the real ~/.atlas: every vault gets its own machine folder.
+// here touches the real ~/.almagest: every vault gets its own machine folder.
 package testvault
 
 import (
@@ -10,9 +10,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Now is the fixed time tests run at.

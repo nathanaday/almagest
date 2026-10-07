@@ -5,8 +5,8 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/brief"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/brief"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestBriefOfARepositoryAndOfTags(t *testing.T) {

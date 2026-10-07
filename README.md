@@ -1,4 +1,4 @@
-# Atlas
+# Almagest
 
 Status: in development. The 5.x design (a project folder in every repository, and a
 terminal view) is retired; its code is on the `v1` branch.
@@ -6,7 +6,7 @@ terminal view) is retired; its code is on the `v1` branch.
 ## About
 
 Working with agents on long projects fails in two ways. You delegate and lose track of
-the work, or you spend your energy keeping documents current. Atlas keeps every document
+the work, or you spend your energy keeping documents current. Almagest keeps every document
 of your work in one Obsidian vault, and the agents write most of it for you:
 
 - what you know: **topics**, **sources**, and **repositories**, with a citation for every
@@ -22,15 +22,14 @@ you mean through its tags and its repository document, and it edits the code the
 session document records which repositories it touched. You read and edit every
 document in Obsidian.
 
-Atlas 8 also tracked work as threads and chords. Atlas 9.0 removed them. They now live in
+Release 8 also tracked work as threads and chords, and 9.0 removed them. They now live in
 the standalone project obsidian-threads (`~/projects/software/obsidian-threads`).
 
 ## Quickstart
 
-Atlas is three parts that share one version: the `atlas-obsidian` binary (Go, one
+Almagest is three parts that share one version: the `almagest` binary (Go, one
 static file), the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that
-`atlas-obsidian vault init` puts in the vault. The binary is not named `atlas`, because
-other programs install a binary of that name.
+`almagest vault init` puts in the vault.
 
 ### Prerequisites
 
@@ -40,20 +39,18 @@ other programs install a binary of that name.
 ### Build and install
 
 ```bash
-make install                                      # builds ~/.atlas/bin/atlas-obsidian
-~/.atlas/bin/atlas-obsidian setup                 # adds the agent plugin to Claude Code
-~/.atlas/bin/atlas-obsidian setup --agent codex   # or to Codex
+make install                                      # builds ~/.almagest/bin/almagest
+~/.almagest/bin/almagest setup                 # adds the agent plugin to Claude Code
+~/.almagest/bin/almagest setup --agent codex   # or to Codex
 ```
 
-The plugin finds the binary without `PATH`. To run `atlas-obsidian` from a shell, add
+The plugin finds the binary without `PATH`. To run `almagest` from a shell, add
 its folder to `PATH` in your shell profile:
 
 ```bash
-export PATH="$HOME/.atlas/bin:$PATH"
+export PATH="$HOME/.almagest/bin:$PATH"
 ```
 
-An install of 6.0 to 6.2 named the binary `atlas`. After you update, delete
-`~/.atlas/bin/atlas`.
 
 ### Add the plugin to an agent
 
@@ -61,11 +58,11 @@ An install of 6.0 to 6.2 named the binary `atlas`. After you update, delete
 these two commands, which you can also run yourself:
 
 ```bash
-claude plugin marketplace add nathanaday/atlas-obsidian
-claude plugin install atlas-obsidian@nathanaday-atlas-obsidian
+claude plugin marketplace add nathanaday/almagest
+claude plugin install almagest@nathanaday-almagest
 ```
 
-Restart Claude Code to load the plugin. `atlas-obsidian doctor` checks the binary, the
+Restart Claude Code to load the plugin. `almagest doctor` checks the binary, the
 plugin, and every vault. It also starts the plugin's MCP server as each agent runs it,
 and fails when the server does not list the binary's tools.
 
@@ -74,18 +71,18 @@ folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. To add the pl
 an account with its own config folder, run `setup` with that variable set:
 
 ```bash
-CLAUDE_CONFIG_DIR="$HOME/.claude-other" ~/.atlas/bin/atlas-obsidian setup
+CLAUDE_CONFIG_DIR="$HOME/.claude-other" ~/.almagest/bin/almagest setup
 ```
 
-Every account on the machine shares one binary (`~/.atlas/bin/atlas-obsidian`) and one
-list of vaults (`~/.atlas/config.json`), so each account finds the same vaults.
+Every account on the machine shares one binary (`~/.almagest/bin/almagest`) and one
+list of vaults (`~/.almagest/config.json`), so each account finds the same vaults.
 
 **Update.** Each account holds its own copy of the plugin. After a new release, update
 the plugin in each account, then the binary once:
 
 ```bash
-claude plugin marketplace update nathanaday-atlas-obsidian
-claude plugin update atlas-obsidian@nathanaday-atlas-obsidian
+claude plugin marketplace update nathanaday-almagest
+claude plugin update almagest@nathanaday-almagest
 make install
 ```
 
@@ -95,59 +92,59 @@ commands.
 **Codex.** `setup --agent codex` adds the plugin to Codex when Codex does not have it:
 
 ```bash
-codex plugin marketplace add nathanaday/atlas-obsidian
-codex plugin add atlas-obsidian@nathanaday-atlas-obsidian
+codex plugin marketplace add nathanaday/almagest
+codex plugin add almagest@nathanaday-almagest
 ```
 
 Codex runs a plugin's hooks only after you trust them. Without the hooks, the guard and
-the session record are off. Open `/hooks` in Codex, trust the `atlas-obsidian` hooks,
+the session record are off. Open `/hooks` in Codex, trust the `almagest` hooks,
 and start a new session. Each install or update that changes the hooks needs your trust
 again. `setup --agent codex` and `doctor` say how many hooks Codex runs.
 
 To update the plugin in Codex, fetch the marketplace again and add the plugin again:
 
 ```bash
-codex plugin marketplace upgrade nathanaday-atlas-obsidian
-codex plugin remove atlas-obsidian@nathanaday-atlas-obsidian
-codex plugin add atlas-obsidian@nathanaday-atlas-obsidian
+codex plugin marketplace upgrade nathanaday-almagest
+codex plugin remove almagest@nathanaday-almagest
+codex plugin add almagest@nathanaday-almagest
 ```
 
-Some parts of Atlas do not work on Codex yet:
+Some parts of Almagest do not work on Codex yet:
 
 - **No read-only agents.** Codex does not load a plugin's agents, so wiki-sync,
   wiki-review, and repo-ingest cannot send their workers, and the guard's read-only rule
   never applies.
 - **No `waiting` status.** Codex has no Notification event, so a Codex session never
   shows `waiting`.
-- **Linked repositories.** Atlas grants Claude Code write access to linked repositories
+- **Linked repositories.** Almagest grants Claude Code write access to linked repositories
   through the vault's `.claude/settings.local.json`. Codex reads
-  `sandbox_workspace_write.writable_roots` instead, and Atlas does not write it, so a
+  `sandbox_workspace_write.writable_roots` instead, and Almagest does not write it, so a
   Codex session may refuse a write in a linked repository, or ask before it.
 - **`--allow-vault`** has no effect with `--agent codex`.
 
-The Atlas design vault tracks these limits.
+The Almagest design vault tracks these limits.
 
 To try the plugin from a clone of this repository without installing it, start Claude
-Code with `claude --plugin-dir /path/to/atlas-obsidian`.
+Code with `claude --plugin-dir /path/to/almagest`.
 
 ### Make a vault
 
-Start Claude Code in an empty folder and say "set up atlas". Or from a shell:
+Start Claude Code in an empty folder and say "set up almagest". Or from a shell:
 
 ```bash
-atlas-obsidian vault init --path ~/notes/work --name Work --tagging open \
+almagest vault init --path ~/notes/work --name Work --tagging open \
   --description "Work notes: the p3 product and the tools around it."
-atlas-obsidian open --register --vault ~/notes/work   # opens it in Obsidian; turn on the Atlas plugin once
+almagest open --register --vault ~/notes/work   # opens it in Obsidian; turn on the Almagest plugin once
 ```
 
 A command that acts on a vault takes `--vault` (a folder, or a vault's name), else the
-vault that `ATLAS_VAULT` names, else the vault above the working folder.
+vault that `ALMAGEST_VAULT` names, else the vault above the working folder.
 
 ### Migrate a vault of 9.0 or 8.x
 
 A vault of 9.0 or 8.x needs one migration to the 10.0 layout. Obsidian shows a notice
-that opens the migration. From a shell, `atlas-obsidian vault migrate --dry-run` lists
-the moves, and `atlas-obsidian vault migrate` makes them in one commit:
+that opens the migration. From a shell, `almagest vault migrate --dry-run` lists
+the moves, and `almagest vault migrate` makes them in one commit:
 
 | 9.0 | 10.0 |
 | --- | --- |
@@ -173,11 +170,11 @@ step only:
 - topics and repositories lose their `## Threads` section; topics and sources lose
   `from`; sessions lose `threads`, `specs`, `work`, `checked`, and `events`; changes
   lose `work`;
-- `Atlas.md` loses `wikify`.
+- `Almagest.md` loses `wikify`.
 
 The migration refuses while a change is proposed: apply or reject it first. It also
 refuses when a file already exists where it would move one. A vault older than 8.0
-migrates with Atlas 8.1.1 (tag `threads-final`) first.
+migrates with release 8.1.1 (tag `threads-final`) first.
 
 ### Agent preferences
 
@@ -190,15 +187,15 @@ Start agent reads four preferences, and Resume reads `terminal` and `terminal_co
 | `terminal`              | `terminal`, `iterm`, `wezterm`, `ghostty`, `custom`     | `terminal` |
 | `terminal_command`      | for `custom`: a command with `{command}` for the agent's command | none |
 
-Two files hold them. `~/.atlas/config.json` holds them for every vault. `.atlas/config.json`
+Two files hold them. `~/.almagest/config.json` holds them for every vault. `.almagest/config.json`
 in a vault overrides them, key by key: when both files set a key, the vault's value wins.
-Set them in the Atlas settings in Obsidian, or from a shell:
+Set them in the Almagest settings in Obsidian, or from a shell:
 
 ```bash
-atlas-obsidian config set terminal wezterm --global        # every vault
-atlas-obsidian config set agent_commands.claude claude-work  # this vault: another account
-atlas-obsidian config                                      # the result, and where each value comes from
-atlas-obsidian config unset agent_commands.claude          # back to the global value
+almagest config set terminal wezterm --global        # every vault
+almagest config set agent_commands.claude claude-work  # this vault: another account
+almagest config                                      # the result, and where each value comes from
+almagest config unset agent_commands.claude          # back to the global value
 ```
 
 The terminal runs the command in your login shell, so your `PATH` and shell functions
@@ -208,20 +205,20 @@ apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
 
 | Variable | What it does |
 | --- | --- |
-| `ATLAS_HOME` | The machine folder: the binary, `config.json` with the list of vaults, and the global preferences. Default `~/.atlas`. |
-| `ATLAS_VAULT` | The vault a command, the MCP server, or a hook uses when the call names none: a folder or a vault's name. |
-| `ATLAS_BIN` | The binary that the wrapper script and the Codex server entry run, before `$ATLAS_HOME/bin` and `~/go/bin`. |
-| `ATLAS_HOOK_LOG` | A file that gets every hook event in full, your prompts included. Use it only to debug. |
+| `ALMAGEST_HOME` | The machine folder: the binary, `config.json` with the list of vaults, and the global preferences. Default `~/.almagest`. |
+| `ALMAGEST_VAULT` | The vault a command, the MCP server, or a hook uses when the call names none: a folder or a vault's name. |
+| `ALMAGEST_BIN` | The binary that the wrapper script and the Codex server entry run, before `$ALMAGEST_HOME/bin` and `~/go/bin`. |
+| `ALMAGEST_HOOK_LOG` | A file that gets every hook event in full, your prompts included. Use it only to debug. |
 | `CLAUDE_CONFIG_DIR` | Claude Code's config folder, which `setup` and `doctor` read. Default `~/.claude`. |
-| `CLAUDE_PROJECT_DIR` | The folder in which `atlas-obsidian mcp` looks for the vault, when set. |
+| `CLAUDE_PROJECT_DIR` | The folder in which `almagest mcp` looks for the vault, when set. |
 | `OBSIDIAN_CONFIG_DIR` | The folder of Obsidian's `obsidian.json`, which `open --register` edits. |
-| `CODEX_HOME` | Codex's own folder. Atlas does not read it, but the `codex` commands that `setup` and `doctor` run do. |
+| `CODEX_HOME` | Codex's own folder. Almagest does not read it, but the `codex` commands that `setup` and `doctor` run do. |
 
 ### Files in a vault
 
-Besides `source-core/documents/`, Atlas writes these files and folders in a vault:
+Besides `source-core/documents/`, Almagest writes these files and folders in a vault:
 
-- `Atlas.md`, the vault's own document.
+- `Almagest.md`, the vault's own document.
 - `ingest/`: files for the wiki to learn from.
 - `source-core/originals/`: the captured originals and your attachments.
 - `scratchpad/`: your notes, the ideas you ask an agent to note for later, and the
@@ -244,27 +241,27 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
   (unless you chose a folder) and keeps `wiki-view/` and `trash/` out of Obsidian's
   graph and search.
   It keeps every other key.
-- `.obsidian/plugins/atlas/`: the Obsidian plugin.
+- `.obsidian/plugins/almagest/`: the Obsidian plugin.
 - `.claude/settings.local.json`: the linked repositories, for Claude Code.
 - `.git/info/exclude`: `wiki-view/`, `.claude/settings.local.json`, Obsidian's workspace
-  and graph files, `.DS_Store`, and Atlas's temporary `.atlas-*` files stay out of the
+  and graph files, `.DS_Store`, and Almagest's temporary `.almagest-*` files stay out of the
   vault's history.
-- `.atlas/config.json`: the vault's agent preferences. Git commits it, so a shared vault
+- `.almagest/config.json`: the vault's agent preferences. Git commits it, so a shared vault
   shares it; see [SECURITY.md](SECURITY.md).
 
 Search and lint skip `scratchpad/`, `journals/`, `threads/`, and `checkout/`, but a link
-to a note there still resolves. Atlas skips `trash/` entirely.
+to a note there still resolves. Almagest skips `trash/` entirely.
 
 ## Usage
 
-Start the agent in the vault and ask in plain words. The `atlas` skill routes each
+Start the agent in the vault and ask in plain words. The `almagest` skill routes each
 request.
 
 - "Link the repository at ~/code/p3-edge under the tag work/p3." The agent proposes a
   change; you say yes, or press Approve in the change document in Obsidian. The agent
   cannot apply a change that writes until you send a prompt in the session that
   proposed it. A change with no writes
-  that only marks sources as absorbed applies at once. This gate holds against the atlas
+  that only marks sources as absorbed applies at once. This gate holds against the almagest
   tools; it is not a sandbox against an agent's shell. [SECURITY.md](SECURITY.md) gives
   the full rule.
 - "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
@@ -284,7 +281,7 @@ request.
 - "What waits for me?" The agent lists the proposed changes, the running work
   documents, the files in `ingest/`, the sources that wait for the wiki, and the
   checkouts with edits to return.
-- The Atlas palette in Obsidian starts an ingest, a wiki lint, a safe delete, a
+- The Almagest palette in Obsidian starts an ingest, a wiki lint, a safe delete, a
   checkout, the publish of a journal, or a wikify of the open note with one button. See [The Obsidian plugin](#the-obsidian-plugin).
 - "Publish my journal." The agent asks you to press Publish in the palette: only you
   publish a journal. See [Journals](#journals).
@@ -305,22 +302,22 @@ on a running document stops the agent.
 The same actions work from a shell:
 
 ```bash
-atlas-obsidian vault                      # the state of the vault
-atlas-obsidian search "remote update" --tag work/p3
-atlas-obsidian change show chg-r8m3tb     # a proposed change
-atlas-obsidian change start --kind ingest --file paper.pdf   # a work document for an ingest
-atlas-obsidian change progress chg-r8m3tb "captured 1 source"  # a step, in one line
-atlas-obsidian vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
-atlas-obsidian journal list               # the journal volumes, each with its latest edition
-atlas-obsidian journal publish cs566-notes   # publish a volume as a new edition
-atlas-obsidian checkout                   # the checkouts, newest first
-atlas-obsidian checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
-atlas-obsidian checkout make order.json   # copy the documents an order names (request, name, documents, notes)
-atlas-obsidian checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
-atlas-obsidian wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
-atlas-obsidian wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
-atlas-obsidian lint                       # the health check
-atlas-obsidian vault snapshot             # commit your hand edits now
+almagest vault                      # the state of the vault
+almagest search "remote update" --tag work/p3
+almagest change show chg-r8m3tb     # a proposed change
+almagest change start --kind ingest --file paper.pdf   # a work document for an ingest
+almagest change progress chg-r8m3tb "captured 1 source"  # a step, in one line
+almagest vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
+almagest journal list               # the journal volumes, each with its latest edition
+almagest journal publish cs566-notes   # publish a volume as a new edition
+almagest checkout                   # the checkouts, newest first
+almagest checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
+almagest checkout make order.json   # copy the documents an order names (request, name, documents, notes)
+almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
+almagest wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
+almagest wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
+almagest lint                       # the health check
+almagest vault snapshot             # commit your hand edits now
 ```
 
 In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
@@ -338,7 +335,7 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   publication history. The folder name gives the volume's name: `cs566-notes` reads
   "CS566 Notes".
 - **Publish.** Press Publish next to a volume in the palette, or run
-  `atlas-obsidian journal publish <volume>`. Atlas copies the volume into one source,
+  `almagest journal publish <volume>`. Almagest copies the volume into one source,
   an edition, in one commit. The palette then starts a work document and an agent that
   absorbs the edition into the wiki; you approve its change as usual. Publish refuses a
   volume with no note, and a volume with no change since its latest edition. An agent
@@ -387,8 +384,8 @@ reading order, and checks out a copy of each for you to read and mark up.
   request, the count of documents, the count of edited copies, and the date of its
   return. Code writes it again at each checkout and each return, so an edit there is
   lost.
-- **Return.** Press Return next to the checkout in the palette, or run `atlas-obsidian
-  checkout return <folder>`. Atlas proposes one change, "Return <folder>", with a modify
+- **Return.** Press Return next to the checkout in the palette, or run `almagest
+  checkout return <folder>`. Almagest proposes one change, "Return <folder>", with a modify
   of each original whose copy you edited. The links to copies point at the originals
   again. You decide in the change document, as for every change. Return skips a copy
   whose original changed since the checkout, and names it; its edits stay in the copy.
@@ -404,7 +401,7 @@ a change.
   note. `wikify start` copies the note to `scratchpad/<name> · wikified.md` (with
   " (2)" when that name is taken). The original stays as it is. The copy lies in
   `scratchpad/`, so a copy of a journal note never joins the volume's edition. Wikify
-  refuses a file that is not markdown, `Atlas.md`, and the folders that code writes:
+  refuses a file that is not markdown, `Almagest.md`, and the folders that code writes:
   `source-core/`, `changes/`, `sessions/`, `wiki-view/`, `trash/`, and `.obsidian/`.
 - **The marks.** The agent (the `wiki-wikify` skill) matches the note's subjects
   against the wiki, then calls `wikify mark` once. A mark is inline text:
@@ -413,7 +410,7 @@ a change.
   the first mention of its phrase, as whole words and in any case, outside the
   frontmatter, headings, table rows, code, links, URLs, and other marks. The agent marks a few new
   subjects at most, and never marks a phrase inside a quote of another person's words.
-  Atlas commits nothing; the next quiet snapshot keeps the copy.
+  Almagest commits nothing; the next quiet snapshot keeps the copy.
 - **The bubbles.** The plugin shows each mark as a bubble: the phrase, then `→ Title`
   for a link or `+ Title` for a new subject, and buttons. It does this in live preview
   and in reading view.
@@ -433,15 +430,15 @@ a change.
 
 The vault works without the plugin. With it, Obsidian adds:
 
-- **The Atlas palette** in the right sidebar (the Atlas ribbon button, or the command
-  "Open the Atlas palette"). It shows the proposed changes, the running work documents,
+- **The Almagest palette** in the right sidebar (the Almagest ribbon button, or the command
+  "Open the Almagest palette"). It shows the proposed changes, the running work documents,
   the files in `ingest/`, the pending sources, the live sessions, the files in `trash/`,
   the journal volumes, the checkouts, and the lint problems. Its actions:
   - **Ingest** starts a work document for the files in `ingest/`, opens it, and starts
     an agent that reports into it.
   - **Wiki lint** runs `lint` and lists the first findings. **Repair with an agent**
     starts a repair work document and an agent that proposes the repairs into it.
-  - **Safe delete this file** runs `atlas-obsidian vault trash` on the open file. When
+  - **Safe delete this file** runs `almagest vault trash` on the open file. When
     no file links it, the file moves to `trash/`; a topic, a source, or a repository
     leaves through a change that applies at once, so `change undo` in a terminal brings
     it back; an agent cannot undo it. When files link it, nothing moves, and a list
@@ -451,11 +448,11 @@ The vault works without the plugin. With it, Obsidian adds:
     `checkout/`, `threads/`, and the like) is yours to fix; while one stays, the agent
     proposes no remove, and you run Safe delete again after you fix it.
   - **Publish** next to a journal volume (marked when the volume has changes) runs
-    `atlas-obsidian journal publish`, then starts a work document and an agent that
+    `almagest journal publish`, then starts a work document and an agent that
     absorbs the edition. See [Journals](#journals).
   - **Checkout** asks for your request and starts an agent that checks out the
     material on it.
-  - **Return** next to a checkout runs `atlas-obsidian checkout return` and opens the
+  - **Return** next to a checkout runs `almagest checkout return` and opens the
     change. It is on when a copy is edited and the checkout is not returned. See
     [Checkouts](#checkouts).
   - **Wikify this note** (experimental) copies the open note to `scratchpad/`, opens
@@ -467,24 +464,24 @@ The vault works without the plugin. With it, Obsidian adds:
   message.
 - **Wikify bubbles** in a wikified copy: Accept, Ignore, Create, and Link on each mark.
 - **Approve and Cancel** in each change document. Approve applies the change, as
-  `atlas-obsidian change apply` does in a terminal. Cancel asks for an optional reason
+  `almagest change apply` does in a terminal. Cancel asks for an optional reason
   and rejects the change. After the decision, the document shows the result. A running
   work document shows its kind, its last progress line, and Cancel.
 - **Quiet snapshots.** After two minutes with no file change, the plugin commits your
-  edits to the vault's git history. Set the period in the Atlas settings; 0 turns it
-  off. Every Atlas write also commits your edits first, so you need not commit by hand.
-- **The Atlas navigator** in the left sidebar, which narrows the documents one tag at a
+  edits to the vault's git history. Set the period in the Almagest settings; 0 turns it
+  off. Every Almagest write also commits your edits first, so you need not commit by hand.
+- **The Almagest navigator** in the left sidebar, which narrows the documents one tag at a
   time.
 - **The sessions pane** in the right sidebar, with Resume, and the **Start agent**
   command.
 - **The repository panel** in each repository document: the branch, the head, and the
   uncommitted files of the linked repository.
-- Colors and icons for the callouts of Atlas documents.
+- Colors and icons for the callouts of Almagest documents.
 - A sync of the views a few seconds after you edit a note.
 
 ## Patterns and conventions
 
-The design lives in the maintainer's Atlas vault, outside this repository. These are
+The design lives in the maintainer's Almagest vault, outside this repository. These are
 its core rules:
 
 - Everything is a document with an id and a type. No database and no state folder.
@@ -498,16 +495,15 @@ its core rules:
 
 ## Layout
 
-- The binary: `cmd/atlas-obsidian/` and `internal/`, one package per part.
+- The binary: `cmd/almagest/` and `internal/`, one package per part.
   `internal/mcpserver` serves the nine tools: `vault`, `search`, `context`, `match`,
   `source`, `change`, `checkout`, `wikify`, and `lint`. `internal/hooks` serves the nine hooks,
   and `internal/cli` every command.
 - The agent plugin: `skills/` (fourteen skills), `agents/` (three read-only agents),
   `hooks/hooks.json`, `.mcp.json`,
-  `.claude-plugin/`, `.codex-plugin/`, and `scripts/atlas-obsidian`, the wrapper that finds
+  `.claude-plugin/`, `.codex-plugin/`, and `scripts/almagest`, the wrapper that finds
   the binary for the hooks and the MCP server. `.agents/plugins/marketplace.json` is a second
   marketplace entry, added with Codex support.
-- The Obsidian plugin: `obsidian/` (TypeScript); `make obsidian` builds it into the
-  binary.
+- The Obsidian plugin is in its own repository, `obsidian-almagest`.
 - `v7-design/`: the design pages of 7.0, kept for reference.
 - Notes for agents that work on this code: [CLAUDE.md](CLAUDE.md).

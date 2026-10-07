@@ -1,6 +1,6 @@
 ---
 name: wiki-ingest
-description: "Triage what waits in ingest/, and capture what the wiki should learn from: each item goes to the wiki as a source, or to a note in scratchpad/ when it holds work or an idea. Use for ingest, process ingest/, process the inbox, add this file to the wiki, read and file this, batch ingest. Saving part of this conversation is wiki-save; an idea to act on later is a note in scratchpad/ (the atlas skill)."
+description: "Triage what waits in ingest/, and capture what the wiki should learn from: each item goes to the wiki as a source, or to a note in scratchpad/ when it holds work or an idea. Use for ingest, process ingest/, process the inbox, add this file to the wiki, read and file this, batch ingest. Saving part of this conversation is wiki-save; an idea to act on later is a note in scratchpad/ (the almagest skill)."
 ---
 
 # wiki-ingest
@@ -12,7 +12,7 @@ wiki-sync, which writes the topics. One work document records the ingest from th
 step to the decision; the user watches it in Obsidian and decides once, at the end.
 
 Tools: `vault`, `change` (start, progress), `source` (capture). References:
-[changes.md](../atlas/references/changes.md).
+[changes.md](../almagest/references/changes.md).
 
 ## Procedure
 

@@ -51,7 +51,7 @@ func CodexHookTrust(dir string) (HookTrust, error) {
 		cmd.Wait()
 	}()
 	cwd, _ := json.Marshal(dir)
-	requests := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"atlas-obsidian","version":"1"}}}` + "\n" +
+	requests := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"clientInfo":{"name":"almagest","version":"1"}}}` + "\n" +
 		`{"jsonrpc":"2.0","method":"initialized"}` + "\n" +
 		`{"jsonrpc":"2.0","id":2,"method":"hooks/list","params":{"cwds":[` + string(cwd) + `]}}` + "\n"
 	if _, err := io.WriteString(stdin, requests); err != nil {

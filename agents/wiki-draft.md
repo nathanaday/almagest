@@ -1,7 +1,7 @@
 ---
 name: wiki-draft
 description: "Read-only worker: take a slice of a Match Map (at most eight subjects), decide for each whether the wiki creates, modifies, or skips a topic, and return the writes of a Wiki Change Plan with the skipped subjects and any new tags. Sent by the wiki-sync and wiki-map skills. It never proposes or applies a change."
-tools: Read, Grep, Glob, mcp__plugin_atlas-obsidian_atlas__search, mcp__plugin_atlas-obsidian_atlas__context, mcp__plugin_atlas-obsidian_atlas__source
+tools: Read, Grep, Glob, mcp__plugin_almagest_almagest__search, mcp__plugin_almagest_almagest__context, mcp__plugin_almagest_almagest__source
 ---
 
 # wiki-draft

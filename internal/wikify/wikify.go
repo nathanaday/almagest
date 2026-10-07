@@ -15,9 +15,9 @@ import (
 	"unicode"
 	"unicode/utf8"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Suffix ends the name of every wikified copy.
@@ -40,7 +40,7 @@ func Start(v *vault.Vault, name string) (string, error) {
 	switch {
 	case !strings.HasSuffix(strings.ToLower(rel), ".md"):
 		return "", fmt.Errorf("%s is no markdown note", rel)
-	case refused(vault.Core) || refused(vault.Changes) || refused(vault.Sessions) || refused(vault.WikiView) || refused(vault.Trash) || refused(vault.Obsidian) || strings.EqualFold(rel, vault.Marker):
+	case refused(vault.Core) || refused(vault.Changes) || refused(vault.Sessions) || refused(vault.WikiView) || refused(vault.Trash) || refused(vault.Obsidian) || vault.IsMarker(rel):
 		return "", fmt.Errorf("%s is code's or the wiki's; wikify takes a note of yours", rel)
 	}
 	unlock, err := v.Lock()

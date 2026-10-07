@@ -40,7 +40,7 @@ func TestAPanicInOneToolLeavesTheServerAnswering(t *testing.T) {
 			text += tc.Text
 		}
 	}
-	if !res.IsError || !strings.Contains(text, "boom failed inside atlas-obsidian") {
+	if !res.IsError || !strings.Contains(text, "boom failed inside almagest") {
 		t.Fatalf("the panic came back as %+v", res)
 	}
 	res, err = sess.CallTool(ctx, &mcp.CallToolParams{Name: "ping", Arguments: map[string]any{}})

@@ -7,10 +7,10 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/host"
-	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/host"
+	"github.com/nathanaday/almagest/internal/mcpserver"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func TestDoctorReportsADisabledPlugin(t *testing.T) {
@@ -42,7 +42,7 @@ func TestDoctorReportsADisabledPlugin(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	code, out, _ := r.atlas("", "doctor")
+	code, out, _ := r.almagest("", "doctor")
 	if code == 0 {
 		t.Fatalf("doctor passes with both plugins disabled:\n%s", out)
 	}
@@ -57,7 +57,7 @@ func TestDoctorReportsADisabledPlugin(t *testing.T) {
 }
 
 // fakeHosts puts fake claude and codex commands on PATH, with the plugin installed and
-// enabled in both. codexServer is the transport codex mcp list prints for atlas;
+// enabled in both. codexServer is the transport codex mcp list prints for almagest;
 // claudeServer is a script that the installed plugin's .mcp.json runs as
 // ${CLAUDE_PLUGIN_ROOT}/server. appServer is the
 // body of a shell case for codex app-server ("" answers nothing).
@@ -65,7 +65,7 @@ func fakeHosts(t *testing.T, codexServer, claudeServer, appServer string) {
 	t.Helper()
 	bin := t.TempDir()
 	codexList := `{"installed": [{"pluginId": "` + host.PluginID + `", "version": "8.1.1", "enabled": true}]}`
-	mcpList := `[{"name": "atlas", "enabled": true, "transport": ` + codexServer + `}]`
+	mcpList := `[{"name": "almagest", "enabled": true, "transport": ` + codexServer + `}]`
 	if appServer == "" {
 		appServer = "exit 1"
 	}
@@ -84,7 +84,7 @@ func fakeHosts(t *testing.T, codexServer, claudeServer, appServer string) {
 
 	claude := t.TempDir()
 	t.Setenv("CLAUDE_CONFIG_DIR", claude)
-	plugin := filepath.Join(claude, "plugins", "cache", "m", "atlas-obsidian", "8.1.1")
+	plugin := filepath.Join(claude, "plugins", "cache", "m", "almagest", "8.1.1")
 	if err := os.MkdirAll(plugin, 0o755); err != nil {
 		t.Fatal(err)
 	}
@@ -95,7 +95,7 @@ func fakeHosts(t *testing.T, codexServer, claudeServer, appServer string) {
 	if err := os.WriteFile(filepath.Join(plugin, "server"), script, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mcp := `{"mcpServers": {"atlas": {"command": "${CLAUDE_PLUGIN_ROOT}/server", "args": []}}}`
+	mcp := `{"mcpServers": {"almagest": {"command": "${CLAUDE_PLUGIN_ROOT}/server", "args": []}}}`
 	if err := os.WriteFile(filepath.Join(plugin, ".mcp.json"), []byte(mcp), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -111,29 +111,29 @@ func TestDoctorStartsEachHostsServer(t *testing.T) {
 	cases := []struct {
 		name, codex, want string
 	}{
-		{"the 8.1.1 entry", `{"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp"], "env": null, "env_vars": [], "cwd": null}`,
-			`FAIL codex server     codex runs "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", whose placeholder it does not expand; run: codex plugin marketplace upgrade ` + host.Marketplace + ` (a Git marketplace only)`},
+		{"the 8.1.1 entry", `{"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/almagest", "args": ["mcp"], "env": null, "env_vars": [], "cwd": null}`,
+			`FAIL codex server     codex runs "${CLAUDE_PLUGIN_ROOT}/scripts/almagest", whose placeholder it does not expand; run: codex plugin marketplace upgrade ` + host.Marketplace + ` (a Git marketplace only)`},
 		{"fewer tools", `{"type": "stdio", "command": "` + testvault.MCPServer(t, "vault", "search") + `", "args": [], "env": null, "env_vars": [], "cwd": null}`,
 			"FAIL codex server     the server lists vault, search, and this binary serves " + strings.Join(all, ", ")},
-		{"a server that does not start", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "echo atlas: the atlas-obsidian binary is not installed. >&2; exit 1"], "env": null, "env_vars": [], "cwd": null}`,
-			"FAIL codex server     the server did not start: atlas: the atlas-obsidian binary is not installed."},
+		{"a server that does not start", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "echo almagest: the almagest binary is not installed. >&2; exit 1"], "env": null, "env_vars": [], "cwd": null}`,
+			"FAIL codex server     the server did not start: almagest: the almagest binary is not installed."},
 		{"a server that exits with nothing on stderr", `{"type": "stdio", "command": "/usr/bin/true", "args": [], "env": null, "env_vars": [], "cwd": null}`,
 			"FAIL codex server     the server did not start: the server ended (exit status 0) before it answered, and wrote nothing to stderr; codex mcp list --json shows the command Codex runs; run it in a shell to see what it does"},
-		{"a working entry", `{"type": "stdio", "command": "` + working + `", "args": [], "env": null, "env_vars": ["ATLAS_HOME"], "cwd": null}`,
-			"ok   codex server     atlas: " + fmt.Sprint(len(all)) + " tools"},
-		{"a working entry whose script expands variables", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "w=${ATLAS_BIN:-` + working + `}; exec \\"$w\\""], "env": null, "env_vars": [], "cwd": null}`,
-			"ok   codex server     atlas: " + fmt.Sprint(len(all)) + " tools"},
+		{"a working entry", `{"type": "stdio", "command": "` + working + `", "args": [], "env": null, "env_vars": ["ALMAGEST_HOME"], "cwd": null}`,
+			"ok   codex server     almagest: " + fmt.Sprint(len(all)) + " tools"},
+		{"a working entry whose script expands variables", `{"type": "stdio", "command": "/bin/sh", "args": ["-c", "w=${ALMAGEST_BIN:-` + working + `}; exec \\"$w\\""], "env": null, "env_vars": [], "cwd": null}`,
+			"ok   codex server     almagest: " + fmt.Sprint(len(all)) + " tools"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			tv := testvault.New(t)
 			r := run{t: t, tv: tv}
 			fakeHosts(t, c.codex, working, "")
-			code, out, _ := r.atlas("", "doctor")
+			code, out, _ := r.almagest("", "doctor")
 			if !strings.Contains(out, c.want) {
 				t.Fatalf("doctor lacks %q:\n%s", c.want, out)
 			}
-			if !strings.Contains(out, "ok   claude server    atlas: "+fmt.Sprint(len(all))+" tools") {
+			if !strings.Contains(out, "ok   claude server    almagest: "+fmt.Sprint(len(all))+" tools") {
 				t.Fatalf("the Claude Code server, with ${CLAUDE_PLUGIN_ROOT} expanded, is not ok:\n%s", out)
 			}
 			if strings.HasPrefix(c.want, "FAIL") && code == 0 {
@@ -176,7 +176,7 @@ func TestDoctorReadsTheCodexHookTrust(t *testing.T) {
 			tv := testvault.New(t)
 			r := run{t: t, tv: tv}
 			fakeHosts(t, entry, working, c.appServer)
-			code, out, _ := r.atlas("", "doctor")
+			code, out, _ := r.almagest("", "doctor")
 			if !strings.Contains(out, c.want) {
 				t.Fatalf("doctor lacks %q:\n%s", c.want, out)
 			}
@@ -188,23 +188,23 @@ func TestDoctorReadsTheCodexHookTrust(t *testing.T) {
 }
 
 func TestDoctorFitsTheCodexUpdateToTheMarketplace(t *testing.T) {
-	entry := `{"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp"], "env": null, "env_vars": [], "cwd": null}`
+	entry := `{"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/almagest", "args": ["mcp"], "env": null, "env_vars": [], "cwd": null}`
 	working := testvault.MCPServer(t, mcpserver.ToolNames()...)
 	for _, c := range []struct{ kind, want string }{
 		{"git", "run: codex plugin marketplace upgrade " + host.Marketplace + " && codex plugin remove " + host.PluginID + " && codex plugin add " + host.PluginID},
-		{"local", "bring the marketplace folder /src/atlas up to date, then run: codex plugin remove " + host.PluginID + " && codex plugin add " + host.PluginID},
+		{"local", "bring the marketplace folder /src/almagest up to date, then run: codex plugin remove " + host.PluginID + " && codex plugin add " + host.PluginID},
 	} {
 		t.Run(c.kind, func(t *testing.T) {
 			tv := testvault.New(t)
 			r := run{t: t, tv: tv}
 			fakeHosts(t, entry, working, "")
 			list := filepath.Join(t.TempDir(), "list.json")
-			body := `{"marketplaces": [{"name": "` + host.Marketplace + `", "root": "/x", "marketplaceSource": {"sourceType": "` + c.kind + `", "source": "/src/atlas"}}]}`
+			body := `{"marketplaces": [{"name": "` + host.Marketplace + `", "root": "/x", "marketplaceSource": {"sourceType": "` + c.kind + `", "source": "/src/almagest"}}]}`
 			if err := os.WriteFile(list, []byte(body), 0o644); err != nil {
 				t.Fatal(err)
 			}
 			t.Setenv("FAKE_MARKETPLACES", list)
-			_, out, _ := r.atlas("", "doctor")
+			_, out, _ := r.almagest("", "doctor")
 			if !strings.Contains(out, "whose placeholder it does not expand; "+c.want) {
 				t.Fatalf("doctor lacks %q:\n%s", c.want, out)
 			}
@@ -216,12 +216,12 @@ func TestDoctorNamesTheMigrationOfAnOldLayout(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
 	t.Setenv("PATH", t.TempDir()+":/usr/bin:/bin")
-	atlas := tv.Read("Atlas.md")
-	if !strings.Contains(atlas, "\nlayout: 6\n") {
-		t.Fatalf("Atlas.md holds no layout 6:\n%s", atlas)
+	almagest := tv.Read("Almagest.md")
+	if !strings.Contains(almagest, "\nlayout: 7\n") {
+		t.Fatalf("Almagest.md holds no layout 7:\n%s", almagest)
 	}
-	tv.Write("Atlas.md", strings.Replace(atlas, "\nlayout: 6\n", "\nlayout: 4\n", 1))
-	_, out, _ := r.atlas("", "doctor")
+	tv.Write("Almagest.md", strings.Replace(almagest, "\nlayout: 7\n", "\nlayout: 4\n", 1))
+	_, out, _ := r.almagest("", "doctor")
 	if !strings.Contains(out, vault.ErrLegacy.Error()) || strings.Contains(out, "8.x layout") || !strings.Contains(out, "vault migrate --dry-run --vault ") {
 		t.Fatalf("doctor on a layout-4 vault:\n%s", out)
 	}

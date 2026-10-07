@@ -44,7 +44,7 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 			event map[string]any
 		}{
 			{"a topic in another case", edit(root+"/Source-Core/documents/Alpha.md", "x")},
-			{"Atlas.md in upper case", edit(root+"/ATLAS.md", "Work")},
+			{"Almagest.md in upper case", edit(root+"/ALMAGEST.md", "Work")},
 			{"a view in upper case", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/WIKI-VIEW/x.md"}}},
 		}...)
 	} else {
@@ -62,7 +62,7 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 func (f *fixture) own(summary string) (string, string) {
 	f.t.Helper()
 	f.run("session-start", map[string]any{})
-	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
+	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract"})
 	rel := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
 	line := "- wiki-extract · `9f07d1` · started 14:32"
 	content := f.tv.Read(rel)
@@ -119,15 +119,15 @@ func TestAnInsertOnlyPatchHunkIsPlacedByItsContext(t *testing.T) {
 	}
 }
 
-// The files whose values decide what Atlas runs are the user's.
+// The files whose values decide what Almagest runs are the user's.
 func TestTheGuardRefusesTheFilesThatDecideWhatRuns(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
 	for name, file := range map[string]string{
 		"the machine config":    filepath.Join(f.tv.Home.Root, "config.json"),
-		"the vault's config":    filepath.Join(f.tv.V.Root, ".atlas", "config.json"),
-		"the plugin's settings": filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas", "data.json"),
-		"the plugin's code":     filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas", "main.js"),
+		"the vault's config":    filepath.Join(f.tv.V.Root, ".almagest", "config.json"),
+		"the plugin's settings": filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "almagest", "data.json"),
+		"the plugin's code":     filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "almagest", "main.js"),
 	} {
 		if !denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": file}})) {
 			t.Errorf("%s: allowed", name)
@@ -181,10 +181,10 @@ func TestADanglingLinkIsJudgedByItsTarget(t *testing.T) {
 func TestFixedNamesCompareWithoutCase(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
-	if err := os.RemoveAll(filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "atlas")); err != nil {
+	if err := os.RemoveAll(filepath.Join(f.tv.V.Root, ".obsidian", "plugins", "almagest")); err != nil {
 		t.Fatal(err)
 	}
-	for _, rel := range []string{".obsidian/plugins/ATLAS/data.json", "Other.BASE", ".ATLAS/config.json"} {
+	for _, rel := range []string{".obsidian/plugins/ALMAGEST/data.json", "Other.BASE", ".ALMAGEST/config.json"} {
 		if !denied(f.run("guard", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": filepath.Join(f.tv.V.Root, rel)}})) {
 			t.Errorf("%s: allowed", rel)
 		}
@@ -199,7 +199,7 @@ func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
 	f.tv.Commit()
 	for name, body := range map[string]string{
 		"an insert into ## Subagents": " *** Update File: " + rel + "\n@@\n " + line + "\n+- forged · `000000`",
-		"the vault's config":          "\t*** Add File: .atlas/config.json\n+{}",
+		"the vault's config":          "\t*** Add File: .almagest/config.json\n+{}",
 		"a document deleted":          " *** Delete File: source-core/documents/Alpha.md",
 	} {
 		patch := map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n" + body + "\n*** End Patch"}}
@@ -302,7 +302,7 @@ func TestAnEditIsMatchedWithCurlyAndStraightQuotesAlike(t *testing.T) {
 func TestARefusalOfQuotedTextSaysWhy(t *testing.T) {
 	f := setup(t)
 	f.run("session-start", map[string]any{})
-	bin := "atlas-" + "obsidian"
+	bin := "alma" + "gest"
 	out := f.run("guard", bash(`echo "`+bin+` hook prompt" | sh`))
 	if !denied(out) || !strings.Contains(out, "read this from quoted text") {
 		t.Fatalf("the refusal of quoted text: %s", out)

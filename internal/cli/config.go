@@ -6,10 +6,10 @@ import (
 	"strings"
 	"text/tabwriter"
 
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
-// configView is what config prints: the preferences Atlas acts on, and each file's own.
+// configView is what config prints: the preferences Almagest acts on, and each file's own.
 type configView struct {
 	Preferences vault.Effective    `json:"preferences"`
 	Global      vault.Preferences  `json:"global"`
@@ -29,7 +29,7 @@ func (c *CLI) configCmd(argv []string) error {
 		view := configView{Global: global.Preferences, Files: map[string]string{"global": home.ConfigPath()}}
 		var local vault.Preferences
 		// Outside a vault, config shows the machine's preferences; a vault named with --vault
-		// or $ATLAS_VAULT must open.
+		// or $ALMAGEST_VAULT must open.
 		if v, err := c.open(a); err == nil {
 			vc, err := v.LoadConfig()
 			if err != nil {
@@ -48,11 +48,11 @@ func (c *CLI) configCmd(argv []string) error {
 		if a.arg(0) == "unset" {
 			value = ""
 		} else if value == "" {
-			return fmt.Errorf("usage: atlas-obsidian config set KEY VALUE [--global]; the keys are %s", strings.Join(vault.PreferenceKeys(), ", "))
+			return fmt.Errorf("usage: almagest config set KEY VALUE [--global]; the keys are %s", strings.Join(vault.PreferenceKeys(), ", "))
 		}
 		if a.has("global") {
 			// The result shows the vault a call names; check it before the write, so a bad
-			// --vault or $ATLAS_VAULT fails with nothing written.
+			// --vault or $ALMAGEST_VAULT fails with nothing written.
 			if c.namesVault(a) {
 				if _, err := c.open(a); err != nil {
 					return err
@@ -118,7 +118,7 @@ func printConfig(w io.Writer, view configView) {
 	}
 }
 
-// namesVault reports whether a call names its vault, with --vault or $ATLAS_VAULT, as
+// namesVault reports whether a call names its vault, with --vault or $ALMAGEST_VAULT, as
 // vault.Select reads them; a vault so named must open.
 func (c *CLI) namesVault(a args) bool {
 	return strings.TrimSpace(a.get("vault")) != "" || strings.TrimSpace(c.Getenv(vault.EnvVault)) != ""

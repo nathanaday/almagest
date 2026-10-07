@@ -7,8 +7,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestACaptureWhoseNameCleansToNothingKeepsTheServerAnswering(t *testing.T) {

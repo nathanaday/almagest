@@ -6,9 +6,9 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Touched links the session to what a call touched: the repository an edit landed in,
@@ -56,7 +56,7 @@ func Touched(r io.Reader, env Env) error {
 					}
 				}
 			}
-		case atlasTool(in.ToolName) == "change" && (in.tool().Action == "propose" || in.tool().Action == "start") && !failed(decodeAll(in.ToolResponse)):
+		case almagestTool(in.ToolName) == "change" && (in.tool().Action == "propose" || in.tool().Action == "start") && !failed(decodeAll(in.ToolResponse)):
 			ref := findObject(decodeAll(in.ToolResponse), "ref")
 			title, _ := ref["title"].(string)
 			p, _ := ref["path"].(string)

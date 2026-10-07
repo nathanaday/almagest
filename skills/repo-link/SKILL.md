@@ -12,7 +12,7 @@ knowledge, so a lookup by tag finds the repository, its pages, and the policies 
 apply to it. This skill writes one change: a create per repository.
 
 Tools: `context`, `search`, `vault`, `change`. References:
-[changes.md](../atlas/references/changes.md), [pages.md](../atlas/references/pages.md).
+[changes.md](../almagest/references/changes.md), [pages.md](../almagest/references/pages.md).
 
 ## Procedure
 

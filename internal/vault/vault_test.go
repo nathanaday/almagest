@@ -9,9 +9,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
@@ -21,7 +21,7 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 		t.Fatalf("settings: %s %s %d %d", v.Name(), v.Tagging(), v.StaleHours(), v.LayoutVersion())
 	}
 	if strings.Contains(tv.Read(vault.Marker), "wikify") {
-		t.Fatalf("Atlas.md names wikify:\n%s", tv.Read(vault.Marker))
+		t.Fatalf("Almagest.md names wikify:\n%s", tv.Read(vault.Marker))
 	}
 	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/app.json", "source-core/documents", "source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
 		if !v.Exists(rel) {
@@ -312,21 +312,62 @@ func TestOpenNote(t *testing.T) {
 	}
 }
 
-func TestSelectTakesTheNamedVaultThenAtlasVaultThenTheFolder(t *testing.T) {
+func TestSelectTakesTheNamedVaultThenAlmagestVaultThenTheFolder(t *testing.T) {
 	one, two := testvault.New(t), testvault.New(t)
 	if v, err := vault.Select("", one.V.Root, one.Home, two.V.Root); err != nil || v.Root != two.V.Root {
-		t.Fatalf("ATLAS_VAULT as a path: %v %v", v, err)
+		t.Fatalf("ALMAGEST_VAULT as a path: %v %v", v, err)
 	}
 	if v, err := vault.Select("", "/", one.Home, "work"); err != nil || v.Root != one.V.Root {
-		t.Fatalf("ATLAS_VAULT as a name: %v %v", v, err)
+		t.Fatalf("ALMAGEST_VAULT as a name: %v %v", v, err)
 	}
 	if v, err := vault.Select(one.V.Root, two.V.Root, one.Home, two.V.Root); err != nil || v.Root != one.V.Root {
-		t.Fatalf("a named vault beats ATLAS_VAULT: %v %v", v, err)
+		t.Fatalf("a named vault beats ALMAGEST_VAULT: %v %v", v, err)
 	}
 	if v, err := vault.Select("", one.V.Root, one.Home, ""); err != nil || v.Root != one.V.Root {
-		t.Fatalf("no ATLAS_VAULT: the folder's vault: %v %v", v, err)
+		t.Fatalf("no ALMAGEST_VAULT: the folder's vault: %v %v", v, err)
 	}
-	if _, err := vault.Select("", one.V.Root, one.Home, filepath.Join(t.TempDir(), "none")); err == nil || !strings.Contains(err.Error(), "ATLAS_VAULT=") {
-		t.Fatalf("a bad ATLAS_VAULT: %v", err)
+	if _, err := vault.Select("", one.V.Root, one.Home, filepath.Join(t.TempDir(), "none")); err == nil || !strings.Contains(err.Error(), "ALMAGEST_VAULT=") {
+		t.Fatalf("a bad ALMAGEST_VAULT: %v", err)
+	}
+}
+
+// The commits of the releases before 11.0 name a change under the trailer Atlas-Change.
+func TestAChangeCommitIsFoundUnderTheOldTrailer(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("notes.md", "x\n")
+	g := tv.V.Git()
+	if err := g.Add("notes.md"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := g.Commit("change: Old\n\nAtlas-Change: chg-old001"); err != nil {
+		t.Fatal(err)
+	}
+	sha, err := vault.ChangeCommit(g, "chg-old001")
+	if err != nil || sha == "" {
+		t.Fatalf("the old trailer: %q %v", sha, err)
+	}
+}
+
+// The first Load copies the machine file of before 11.0, under the new schema, and keeps
+// the old one for the older binary.
+func TestTheMachineFileCarriesOverFromAtlas(t *testing.T) {
+	dir := t.TempDir()
+	h := vault.Home{Root: filepath.Join(dir, ".almagest"), Legacy: filepath.Join(dir, ".atlas")}
+	if err := os.MkdirAll(h.Legacy, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	old := "{\"schema\": \"atlas.config.v1\", \"vaults\": [\"/v/one\"], \"preferences\": {}}\n"
+	if err := os.WriteFile(h.LegacyConfigPath(), []byte(old), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	c, err := h.Load()
+	if err != nil || len(c.Vaults) != 1 || c.Vaults[0] != "/v/one" || c.Schema != vault.ConfigSchema {
+		t.Fatalf("the carried config: %+v %v", c, err)
+	}
+	if data, _ := os.ReadFile(h.ConfigPath()); !strings.Contains(string(data), vault.ConfigSchema) {
+		t.Fatalf("the new file: %s", data)
+	}
+	if data, _ := os.ReadFile(h.LegacyConfigPath()); string(data) != old {
+		t.Fatal("the old file changed")
 	}
 }

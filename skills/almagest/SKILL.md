@@ -1,18 +1,18 @@
 ---
-name: atlas
-description: "Orient in the Atlas vault, say what waits for the user, do the work a request asks in a linked repository, and route any other request to the skill that owns it. Use for /atlas, what is going on, status, what waits for me, where do I work on X, work on X, fix this, implement, build, note this, remember to, publish my journal, what is in my journals, and any request when the right skill is not clear. Keeping part of this conversation is wiki-save; files to learn from are wiki-ingest."
+name: almagest
+description: "Orient in the Almagest vault, say what waits for the user, do the work a request asks in a linked repository, and route any other request to the skill that owns it. Use for /almagest, what is going on, status, what waits for me, where do I work on X, work on X, fix this, implement, build, note this, remember to, publish my journal, what is in my journals, and any request when the right skill is not clear. Keeping part of this conversation is wiki-save; files to learn from are wiki-ingest."
 ---
 
-# atlas
+# almagest
 
 Every request passes this skill first. It reads where the session stands, names the kind
 of request, finds the repository or the tags that the request names, and hands off. A
 request to change code in a linked repository goes to no other skill: this skill finds
 the repository and does the work.
 
-Threads and chords left Atlas in 9.0. They live in the standalone project
+Threads and chords left Almagest in 9.0. They live in the standalone project
 obsidian-threads. The 9.0 migration moved the old thread documents to `threads/`, which
-Atlas does not read.
+Almagest does not read.
 
 Tools: `vault`, `search`, `context`. References:
 [conventions.md](references/conventions.md).
@@ -50,26 +50,26 @@ Tools: `vault`, `search`, `context`. References:
 | to organize the knowledge under a tag | [wiki-map](../wiki-map/SKILL.md) |
 | a reading stack: check out the material on a subject, or return a checkout | [wiki-checkout](../wiki-checkout/SKILL.md) |
 | to wikify a note: mark what the wiki knows in it, and the subjects worth a topic | [wiki-wikify](../wiki-wikify/SKILL.md) |
-| a new vault | [atlas-onboard](../atlas-onboard/SKILL.md) |
+| a new vault | [almagest-onboard](../almagest-onboard/SKILL.md) |
 
 A question can turn into work. When the user then asks for a change to a repository, do
 the work.
 
 ## Messages from the palette
 
-The Atlas palette in Obsidian starts an agent with one of seven messages. Each one names
+The Almagest palette in Obsidian starts an agent with one of seven messages. Each one names
 its skill, and four name a work document. A work document's kind is `ingest`, `repair`,
 or `draft`:
 
 | The message | Skill |
 |---|---|
-| `/atlas-obsidian:wiki-ingest Ingest the files of ingest/ … Your work document is [[…]] (<id>) …` | [wiki-ingest](../wiki-ingest/SKILL.md) |
-| `/atlas-obsidian:wiki-review …` with a repair work document | [wiki-review](../wiki-review/SKILL.md), its Repair path |
-| `/atlas-obsidian:wiki-sync Absorb the source [[<edition>]] (<id>), the user's journal edition. … Your work document is [[…]] (<id>) …` | [wiki-sync](../wiki-sync/SKILL.md), its journal edition rules |
-| `/atlas-obsidian:wiki-edit Remove [[<title>]] …: point each backlink elsewhere …` | [wiki-edit](../wiki-edit/SKILL.md), its Safe delete path |
-| `/atlas-obsidian:wiki-checkout Check out the material on: <request>` | [wiki-checkout](../wiki-checkout/SKILL.md) |
-| `/atlas-obsidian:wiki-wikify Wikify [[<copy title>]]: mark what the wiki knows …` | [wiki-wikify](../wiki-wikify/SKILL.md) |
-| `/atlas-obsidian:wiki-edit Draft a topic titled <Title> from [[<note>]] … Your work document is [[…]] (<id>) …` with a draft work document | [wiki-edit](../wiki-edit/SKILL.md), its Draft path |
+| `/almagest:wiki-ingest Ingest the files of ingest/ … Your work document is [[…]] (<id>) …` | [wiki-ingest](../wiki-ingest/SKILL.md) |
+| `/almagest:wiki-review …` with a repair work document | [wiki-review](../wiki-review/SKILL.md), its Repair path |
+| `/almagest:wiki-sync Absorb the source [[<edition>]] (<id>), the user's journal edition. … Your work document is [[…]] (<id>) …` | [wiki-sync](../wiki-sync/SKILL.md), its journal edition rules |
+| `/almagest:wiki-edit Remove [[<title>]] …: point each backlink elsewhere …` | [wiki-edit](../wiki-edit/SKILL.md), its Safe delete path |
+| `/almagest:wiki-checkout Check out the material on: <request>` | [wiki-checkout](../wiki-checkout/SKILL.md) |
+| `/almagest:wiki-wikify Wikify [[<copy title>]]: mark what the wiki knows …` | [wiki-wikify](../wiki-wikify/SKILL.md) |
+| `/almagest:wiki-edit Draft a topic titled <Title> from [[<note>]] … Your work document is [[…]] (<id>) …` with a draft work document | [wiki-edit](../wiki-edit/SKILL.md), its Draft path |
 
 The user decides in the document (Approve or Cancel), so these tasks do not stop for a
 yes before they propose. Ask the user only for a real edge case that the skill names.
@@ -106,15 +106,15 @@ goes in `ingest/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
 history, `Journal · <folder>.md`, which code writes.
 
 - **"Publish my journal."** Publish is the user's act. Tell the user to press Publish
-  next to the volume in the Journals section of the Atlas palette, or to type
-  `! atlas-obsidian journal publish <volume>` in the session. Never run that command
+  next to the volume in the Journals section of the Almagest palette, or to type
+  `! almagest journal publish <volume>` in the session. Never run that command
   yourself: the guard refuses it from your shell. Publish captures the volume as one
   source, an edition. The palette then starts wiki-sync on the edition, with a work
   document. After a publish with `!`, the edition waits as a pending source; absorb it
   with [wiki-sync](../wiki-sync/SKILL.md) when the user asks.
 - **"What is in my journals?"** `vault` status (`journals`) names each volume with its
   note count, its latest edition, and whether it changed since that edition.
-  `atlas-obsidian journal list` prints the same. Read the notes with Read, Grep, and
+  `almagest journal list` prints the same. Read the notes with Read, Grep, and
   Glob; search does not index `journals/`. Never edit a file there.
 
 ## Status
@@ -135,7 +135,7 @@ changes to publish.
 - Never report the vault's git state to the user. The Obsidian plugin commits the
   user's hand edits as quiet snapshots, and every write tool commits a snapshot first.
 - `journals/` holds the user's own writing. Read it when the request needs it; never
-  edit a file there, and never run `atlas-obsidian journal publish`. The guard refuses
+  edit a file there, and never run `almagest journal publish`. The guard refuses
   every agent edit under `journals/`, and the publish command from your shell.
 - `checkout/` is the user's: the copies the librarian checked out, their reading lists,
   and the ledger. Code writes it; the user reads and edits the copies. Never edit a file
@@ -143,7 +143,7 @@ changes to publish.
 - A wikified copy (`scratchpad/<name> · wikified.md`) is the user's scratch. Only
   `wikify mark` writes into it; never edit it with Edit or Write.
 - `trash/` holds what the user deleted. Never read or edit it, and never run
-  `atlas-obsidian vault trash`: safe delete is the user's action. The guard refuses
+  `almagest vault trash`: safe delete is the user's action. The guard refuses
   every agent edit under `trash/`.
 
 ## Gate

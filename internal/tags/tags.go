@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/links"
+	"github.com/nathanaday/almagest/internal/links"
 )
 
 var (

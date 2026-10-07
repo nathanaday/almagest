@@ -13,8 +13,8 @@ so a lookup under that tag finds it.
 
 Tools: `context`, `source` (capture, chunks, read), `match`, `change`.
 Agents: [wiki-extract](../../agents/wiki-extract.md), [wiki-draft](../../agents/wiki-draft.md).
-References: [changes.md](../atlas/references/changes.md),
-[pages.md](../atlas/references/pages.md).
+References: [changes.md](../almagest/references/changes.md),
+[pages.md](../almagest/references/pages.md).
 
 ## Procedure
 

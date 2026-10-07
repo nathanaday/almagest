@@ -13,10 +13,10 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/tags"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Bounds of what a brief carries.
@@ -124,10 +124,10 @@ func Of(idx *vault.Index, in Input) (*Brief, error) {
 	if err != nil {
 		return nil, err
 	}
-	atlas := idx.ByPath(vault.Marker)
+	almagest := idx.ByPath(idx.V.Doc.Path)
 	b := &Brief{Tags: []TagCount{}, Pages: []Page{}, Repositories: []vault.Ref{}, Policies: []Policy{}}
-	if atlas != nil {
-		b.Vault = Page{Ref: idx.Ref(atlas), Body: bounded(doc.StripLead(atlas.Body), MaxBodyLines)}
+	if almagest != nil {
+		b.Vault = Page{Ref: idx.Ref(almagest), Body: bounded(doc.StripLead(almagest.Body), MaxBodyLines)}
 	}
 	// held are the tags the brief stands under: a repository's own and the one it defines,
 	// or the tags asked for.

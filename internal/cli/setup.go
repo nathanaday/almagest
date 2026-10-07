@@ -9,16 +9,16 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/host"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
-	"github.com/nathanaday/atlas-obsidian/internal/obsidian"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/host"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/mcpserver"
+	"github.com/nathanaday/almagest/internal/obsidian"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
-// setupCmd installs the binary under ~/.atlas/bin, adds the agent plugin to the host, and
+// setupCmd installs the binary under ~/.almagest/bin, adds the agent plugin to the host, and
 // makes a first vault when asked.
 func (c *CLI) setupCmd(argv []string) error {
 	a := parse(argv, "no-plugin", "allow-vault", "yes")
@@ -34,7 +34,7 @@ func (c *CLI) setupCmd(argv []string) error {
 	}
 	h := c.home()
 	if !gitx.Available() {
-		return errors.New("git is not on PATH; atlas needs it for every vault's history")
+		return errors.New("git is not on PATH; almagest needs it for every vault's history")
 	}
 	// The binary.
 	self, err := os.Executable()
@@ -103,14 +103,14 @@ func (c *CLI) setupCmd(argv []string) error {
 	fmt.Fprintln(c.Out, "")
 	fmt.Fprintln(c.Out, "Next:")
 	if made != "" {
-		fmt.Fprintf(c.Out, "  atlas-obsidian open --register --vault %s\n", shellArg(made))
+		fmt.Fprintf(c.Out, "  almagest open --register --vault %s\n", shellArg(made))
 	} else {
-		fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up atlas\": the atlas-onboard skill makes the vault\n", agent)
-		fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --tagging open --description \"...\"")
-		fmt.Fprintln(c.Out, "  then: atlas-obsidian open --register --vault ~/notes/work")
+		fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up almagest\": the almagest-onboard skill makes the vault\n", agent)
+		fmt.Fprintln(c.Out, "  or: almagest vault init --path ~/notes/work --name Work --tagging open --description \"...\"")
+		fmt.Fprintln(c.Out, "  then: almagest open --register --vault ~/notes/work")
 	}
-	fmt.Fprintf(c.Out, "  optional: the Atlas plugin for Obsidian, from its community plugins: %s\n", vault.PluginLink)
-	fmt.Fprintln(c.Out, "  atlas-obsidian doctor checks every part")
+	fmt.Fprintf(c.Out, "  optional: the Almagest plugin for Obsidian, from its community plugins: %s\n", vault.PluginLink)
+	fmt.Fprintln(c.Out, "  almagest doctor checks every part")
 	return nil
 }
 
@@ -160,7 +160,7 @@ func (c *CLI) doctorCmd(argv []string) int {
 		case err != nil:
 			line(false, agent+" plugin", err.Error())
 		case inst == nil:
-			note(agent+" plugin", "not installed: atlas-obsidian setup --agent "+agent)
+			note(agent+" plugin", "not installed: almagest setup --agent "+agent)
 		case !inst.Enabled:
 			line(false, agent+" plugin", inst.Version+" is installed but disabled; "+host.EnableHint(agent))
 		case inst.Version != Version && Version != "dev":
@@ -200,14 +200,14 @@ func (c *CLI) doctorCmd(argv []string) int {
 		}
 		if err := v.CheckLayout(); err != nil {
 			at := shellArg(vault.Shorten(v.Root))
-			line(false, "vault "+v.Name(), fmt.Sprintf("%s: %v. From another folder: atlas-obsidian vault migrate --dry-run --vault %s, then atlas-obsidian vault migrate --vault %s", vault.Shorten(v.Root), err, at, at))
+			line(false, "vault "+v.Name(), fmt.Sprintf("%s: %v. From another folder: almagest vault migrate --dry-run --vault %s, then almagest vault migrate --vault %s", vault.Shorten(v.Root), err, at, at))
 			continue
 		}
 		f, _ := lint.Run(idx, lint.Options{Quick: true, Now: c.Now()})
 		detail := fmt.Sprintf("%s · %d documents", vault.Shorten(v.Root), len(idx.Docs))
 		ok := true
 		if f != nil && f.Counts[lint.Error] > 0 {
-			detail += fmt.Sprintf(" · %d errors (atlas-obsidian lint)", f.Counts[lint.Error])
+			detail += fmt.Sprintf(" · %d errors (almagest lint)", f.Counts[lint.Error])
 			ok = false
 		}
 		if installed := v.InstalledPluginVersion(); installed != "" {
@@ -262,7 +262,7 @@ func codexHooks(dir string) (int, string) {
 		return checkUnknown, fmt.Sprintf("Codex did not report its hooks (%v); open /hooks in Codex to see whether it trusts the %s hooks", err, host.Plugin)
 	}
 	if trust.Total() == 0 {
-		return checkUnknown, fmt.Sprintf("Codex lists no %s hook; start a new Codex session, then run atlas-obsidian doctor again", host.Plugin)
+		return checkUnknown, fmt.Sprintf("Codex lists no %s hook; start a new Codex session, then run almagest doctor again", host.Plugin)
 	}
 	if off := trust.Off(); off > 0 {
 		return checkFail, fmt.Sprintf("Codex runs %d of %d %s hooks (%d untrusted, %d modified); open /hooks in Codex, trust the %s hooks, and start a new session",
@@ -291,7 +291,7 @@ func sameSet(a, b []string) bool {
 // know is added to its registry with --register, which restarts Obsidian on macOS.
 func (c *CLI) openCmd(argv []string) error {
 	a := parse(argv, "register", "update-plugin")
-	if err := a.removed("update-plugin", "Obsidian installs and updates the Atlas plugin from its community plugins: "+vault.PluginLink); err != nil {
+	if err := a.removed("update-plugin", "Obsidian installs and updates the Almagest plugin from its community plugins: "+vault.PluginLink); err != nil {
 		return err
 	}
 	v, err := c.open(a)
@@ -316,7 +316,7 @@ func (c *CLI) openCmd(argv []string) error {
 	}
 	if !registered {
 		if !a.has("register") {
-			fmt.Fprintf(c.Out, "Obsidian does not know %s yet. Run atlas-obsidian open --register --vault %s (it restarts Obsidian on macOS), or use Open folder as vault.\n", v.Root, shellArg(v.Root))
+			fmt.Fprintf(c.Out, "Obsidian does not know %s yet. Run almagest open --register --vault %s (it restarts Obsidian on macOS), or use Open folder as vault.\n", v.Root, shellArg(v.Root))
 			return nil
 		}
 		if err := obsidian.RegisterAndOpen(v.Root); err != nil {

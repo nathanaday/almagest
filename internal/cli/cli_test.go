@@ -9,10 +9,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/cli"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/views"
+	"github.com/nathanaday/almagest/internal/cli"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/views"
 )
 
 type run struct {
@@ -20,9 +20,9 @@ type run struct {
 	tv *testvault.T
 }
 
-// atlas runs the command in the vault with stdin and returns its exit code, stdout, and
+// almagest runs the command in the vault with stdin and returns its exit code, stdout, and
 // stderr.
-func (r run) atlas(stdin string, args ...string) (int, string, string) {
+func (r run) almagest(stdin string, args ...string) (int, string, string) {
 	r.t.Helper()
 	var out, errOut bytes.Buffer
 	c := &cli.CLI{In: strings.NewReader(stdin), Out: &out, Err: &errOut, Dir: r.tv.V.Root,
@@ -38,9 +38,9 @@ func (r run) atlas(stdin string, args ...string) (int, string, string) {
 
 func (r run) ok(stdin string, args ...string) string {
 	r.t.Helper()
-	code, out, errOut := r.atlas(stdin, args...)
+	code, out, errOut := r.almagest(stdin, args...)
 	if code != 0 {
-		r.t.Fatalf("atlas %s: exit %d: %s", strings.Join(args, " "), code, errOut)
+		r.t.Fatalf("almagest %s: exit %d: %s", strings.Join(args, " "), code, errOut)
 	}
 	return out
 }
@@ -111,15 +111,15 @@ func TestCommands(t *testing.T) {
 	if !tv.V.Exists("wiki-view/View · Home.md") {
 		t.Fatal("the views")
 	}
-	if code, _, errOut := r.atlas("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "10.0 layout already") {
+	if code, _, errOut := r.almagest("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "11.0 layout already") {
 		t.Fatalf("a 10.0 vault: %d %s", code, errOut)
 	}
 
-	code, _, errOut := r.atlas("", "change", "apply", "chg-zzzzzz")
-	if code != 1 || !strings.HasPrefix(errOut, "atlas: ") {
+	code, _, errOut := r.almagest("", "change", "apply", "chg-zzzzzz")
+	if code != 1 || !strings.HasPrefix(errOut, "almagest: ") {
 		t.Fatalf("an error: %d %q", code, errOut)
 	}
-	if code, _, _ := r.atlas("", "nothing"); code != 1 {
+	if code, _, _ := r.almagest("", "nothing"); code != 1 {
 		t.Fatal("an unknown command fails")
 	}
 }
@@ -128,12 +128,12 @@ func TestThreadAndChordAreNoCommands(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
 	for _, args := range [][]string{{"thread"}, {"thread", "stub", "An idea."}, {"chord", "list"}} {
-		code, out, errOut := r.atlas("", args...)
-		if code != 1 || out != "" || errOut != "atlas: no command \""+args[0]+"\"; atlas-obsidian help lists them\n" {
+		code, out, errOut := r.almagest("", args...)
+		if code != 1 || out != "" || errOut != "almagest: no command \""+args[0]+"\"; almagest help lists them\n" {
 			t.Fatalf("%v: exit %d %q %q", args, code, out, errOut)
 		}
 	}
-	if code, _, errOut := r.atlas("", "source", "capture", "--ingest", "x.md", "--resolves", "An idea"); code != 1 || !strings.Contains(errOut, "--resolves") {
+	if code, _, errOut := r.almagest("", "source", "capture", "--ingest", "x.md", "--resolves", "An idea"); code != 1 || !strings.Contains(errOut, "--resolves") {
 		t.Fatalf("capture with --resolves: exit %d %q", code, errOut)
 	}
 	for _, args := range [][]string{{"help"}, {"help", "thread"}} {
@@ -146,7 +146,7 @@ func TestThreadAndChordAreNoCommands(t *testing.T) {
 func TestMigrateCommand(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
 	topic := "---\nid: doc-p3aaaa\ntype: topic\nkind: overview\ndescription: P3.\ncreated: 2026-09-03T10:00:00\nupdated: 2026-09-03T10:00:00\n---\n\n## Summary\n\nThe stack, as drawn: ![[wiki/assets/diagram.png]]. Agents read wiki/documents.\n"
 	tv.Write("wiki/documents/P3.md", topic)
 	tv.Write("wiki/assets/diagram.png", "png")
@@ -181,8 +181,8 @@ func TestMigrateCommand(t *testing.T) {
 			t.Errorf("%s/ is still there", rel)
 		}
 	}
-	if !strings.Contains(tv.Read("Atlas.md"), "\nlayout: 6\n") || !tv.V.Exists("wiki-view/View · Home.md") {
-		t.Fatalf("Atlas.md or the views:\n%s", tv.Read("Atlas.md"))
+	if !strings.Contains(tv.Read("Almagest.md"), "\nlayout: 7\n") || !tv.V.Exists("wiki-view/View · Home.md") {
+		t.Fatalf("Almagest.md or the views:\n%s", tv.Read("Almagest.md"))
 	}
 }
 
@@ -193,7 +193,7 @@ func TestHookCommandReadsStdin(t *testing.T) {
 	if out := r.ok(event, "hook", "guard"); !strings.Contains(out, `"permissionDecision":"deny"`) {
 		t.Fatalf("guard:\n%s", out)
 	}
-	if code, _, _ := r.atlas("", "hook", "nothing"); code != 1 {
+	if code, _, _ := r.almagest("", "hook", "nothing"); code != 1 {
 		t.Fatal("an unknown hook fails")
 	}
 }
@@ -218,7 +218,7 @@ func TestConfigCommand(t *testing.T) {
 		view.Preferences.Terminal != "wezterm" || view.Preferences.Sources["terminal"] != "global" || view.Vault == nil {
 		t.Fatalf("config: %+v", view)
 	}
-	if _, err := os.Stat(filepath.Join(tv.V.Root, ".atlas", "config.json")); err != nil {
+	if _, err := os.Stat(filepath.Join(tv.V.Root, ".almagest", "config.json")); err != nil {
 		t.Fatalf("the vault's file: %v", err)
 	}
 	r.ok("", "config", "set", "terminal", "terminal")
@@ -230,7 +230,7 @@ func TestConfigCommand(t *testing.T) {
 	if view.Preferences.Terminal != "wezterm" {
 		t.Fatalf("unset falls back to the global file: %+v", view)
 	}
-	if code, _, errOut := r.atlas("", "config", "set", "terminal", "kitty"); code == 0 || !strings.Contains(errOut, "kitty") {
+	if code, _, errOut := r.almagest("", "config", "set", "terminal", "kitty"); code == 0 || !strings.Contains(errOut, "kitty") {
 		t.Fatalf("a bad value: %d %s", code, errOut)
 	}
 }
@@ -242,7 +242,7 @@ func TestTheJSONOfAWriteNamesANoteMovedOutOfViews(t *testing.T) {
 	tv.Write("wiki-view/Draft.md", "# Draft\n\nMine.\n")
 	r := run{t, tv}
 	plan := `{"title": "Add Idea", "writes": [{"op": "create", "type": "topic", "kind": "overview", "title": "Idea", "fields": {"description": "An idea."}}]}`
-	code, out, errOut := r.atlas(plan, "change", "propose", "-", "--json")
+	code, out, errOut := r.almagest(plan, "change", "propose", "-", "--json")
 	if code != 0 {
 		t.Fatalf("exit %d: %s", code, errOut)
 	}
@@ -260,7 +260,7 @@ func TestTheJSONOfAWriteNamesANoteMovedOutOfViews(t *testing.T) {
 	}
 }
 
-func TestTheCLITakesTheVaultFromAtlasVault(t *testing.T) {
+func TestTheCLITakesTheVaultFromAlmagestVault(t *testing.T) {
 	one, two := testvault.New(t), testvault.New(t)
 	two.Doc("topic", "Only in the second vault", map[string]any{"kind": "overview"}, "")
 	two.Commit()
@@ -276,17 +276,17 @@ func TestTheCLITakesTheVaultFromAtlasVault(t *testing.T) {
 		return c.Run(args), out.String(), errOut.String()
 	}
 	if _, out, _ := runIn(map[string]string{vault.EnvVault: two.V.Root}, "search", "second", "vault", "--json"); !strings.Contains(out, "Only in the second vault") {
-		t.Fatalf("ATLAS_VAULT did not choose the second vault:\n%s", out)
+		t.Fatalf("ALMAGEST_VAULT did not choose the second vault:\n%s", out)
 	}
 	if _, out, _ := runIn(map[string]string{vault.EnvVault: two.V.Root}, "search", "second", "vault", "--json", "--vault", one.V.Root); strings.Contains(out, "Only in the second vault") {
-		t.Fatalf("--vault did not beat ATLAS_VAULT:\n%s", out)
+		t.Fatalf("--vault did not beat ALMAGEST_VAULT:\n%s", out)
 	}
-	if code, _, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, "search", "second", "vault"); code == 0 || !strings.Contains(errOut, "ATLAS_VAULT=/no/such/vault") {
-		t.Fatalf("a bad ATLAS_VAULT: exit %d %s", code, errOut)
+	if code, _, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, "search", "second", "vault"); code == 0 || !strings.Contains(errOut, "ALMAGEST_VAULT=/no/such/vault") {
+		t.Fatalf("a bad ALMAGEST_VAULT: exit %d %s", code, errOut)
 	}
 }
 
-func TestConfigFailsOnAnAtlasVaultThatNamesNoVault(t *testing.T) {
+func TestConfigFailsOnAnAlmagestVaultThatNamesNoVault(t *testing.T) {
 	tv := testvault.New(t)
 	runIn := func(dir string, env map[string]string, args ...string) (int, string, string) {
 		var out, errOut bytes.Buffer
@@ -300,15 +300,15 @@ func TestConfigFailsOnAnAtlasVaultThatNamesNoVault(t *testing.T) {
 		return c.Run(args), out.String(), errOut.String()
 	}
 	outside := t.TempDir()
-	if code, _, errOut := runIn(outside, map[string]string{vault.EnvVault: "/no/such/vault"}, "config"); code == 0 || !strings.Contains(errOut, "ATLAS_VAULT=/no/such/vault") {
-		t.Fatalf("config with a bad ATLAS_VAULT: exit %d %s", code, errOut)
+	if code, _, errOut := runIn(outside, map[string]string{vault.EnvVault: "/no/such/vault"}, "config"); code == 0 || !strings.Contains(errOut, "ALMAGEST_VAULT=/no/such/vault") {
+		t.Fatalf("config with a bad ALMAGEST_VAULT: exit %d %s", code, errOut)
 	}
 	if code, out, errOut := runIn(outside, nil, "config"); code != 0 || !strings.Contains(out, "No vault here") {
-		t.Fatalf("config outside a vault with no ATLAS_VAULT: exit %d %s %s", code, out, errOut)
+		t.Fatalf("config outside a vault with no ALMAGEST_VAULT: exit %d %s %s", code, out, errOut)
 	}
 }
 
-func TestConfigSetGlobalWritesNothingOnABadAtlasVault(t *testing.T) {
+func TestConfigSetGlobalWritesNothingOnABadAlmagestVault(t *testing.T) {
 	tv := testvault.New(t)
 	runIn := func(env map[string]string, args ...string) (int, string) {
 		var out, errOut bytes.Buffer
@@ -323,8 +323,8 @@ func TestConfigSetGlobalWritesNothingOnABadAtlasVault(t *testing.T) {
 	}
 	before, _ := os.ReadFile(tv.Home.ConfigPath())
 	for _, args := range [][]string{{"config", "set", "terminal", "wezterm", "--global"}, {"config", "unset", "terminal", "--global"}} {
-		if code, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, args...); code == 0 || !strings.Contains(errOut, "ATLAS_VAULT=/no/such/vault") {
-			t.Fatalf("%v with a bad ATLAS_VAULT: exit %d %s", args, code, errOut)
+		if code, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, args...); code == 0 || !strings.Contains(errOut, "ALMAGEST_VAULT=/no/such/vault") {
+			t.Fatalf("%v with a bad ALMAGEST_VAULT: exit %d %s", args, code, errOut)
 		}
 		if after, _ := os.ReadFile(tv.Home.ConfigPath()); string(after) != string(before) {
 			t.Fatalf("%v wrote the global file before it failed", args)
@@ -352,13 +352,13 @@ func TestConfigHintsGlobalOnlyWhenNoVaultWasNamed(t *testing.T) {
 		return c.Run(args), out.String(), errOut.String()
 	}
 	if code, _, errOut := runIn(map[string]string{vault.EnvVault: "/no/such/vault"}, "config", "set", "terminal", "ghostty"); code == 0 || strings.Contains(errOut, "--global") {
-		t.Fatalf("a bad ATLAS_VAULT: exit %d, and the hint to add --global, which fails the same way: %s", code, errOut)
+		t.Fatalf("a bad ALMAGEST_VAULT: exit %d, and the hint to add --global, which fails the same way: %s", code, errOut)
 	}
 	if code, _, errOut := runIn(nil, "config", "set", "terminal", "ghostty"); code == 0 || !strings.Contains(errOut, "add --global") {
 		t.Fatalf("no vault anywhere: exit %d, want the --global hint: %s", code, errOut)
 	}
 	if code, out, errOut := runIn(map[string]string{vault.EnvVault: "  "}, "config"); code != 0 || !strings.Contains(out, "No vault here") {
-		t.Fatalf("an ATLAS_VAULT of spaces counts as unset, as vault.Select reads it: exit %d %s %s", code, out, errOut)
+		t.Fatalf("an ALMAGEST_VAULT of spaces counts as unset, as vault.Select reads it: exit %d %s %s", code, out, errOut)
 	}
 }
 
@@ -381,7 +381,7 @@ func TestWorkDocumentsAndSafeDeleteFromTheShell(t *testing.T) {
 	if !strings.Contains(tv.Read(started.Ref.Path), " captured paper.pdf\n") {
 		t.Fatalf("the progress line:\n%s", tv.Read(started.Ref.Path))
 	}
-	code, out, errOut := r.atlas("", "vault", "trash", vault.DocPath("Kept"))
+	code, out, errOut := r.almagest("", "vault", "trash", vault.DocPath("Kept"))
 	if code != 2 || !strings.Contains(out, "Notes.md") || !strings.Contains(errOut, "links it") {
 		t.Fatalf("a linked topic: %d %s %s", code, out, errOut)
 	}

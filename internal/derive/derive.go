@@ -13,11 +13,11 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/tags"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // WriteFunc writes a file when its content differs, and reports whether it wrote.
@@ -59,7 +59,7 @@ func derived(idx *vault.Index, d *doc.Doc) string {
 		content = putOriginal(content, d)
 	case "repository":
 		content = doc.ReplaceLead(content, RepositoryLead(d))
-		content = putBlock(content, "atlas-repo", RepoBlock(d))
+		content = putBlock(content, "almagest-repo", RepoBlock(d))
 		front, body, _ := doc.Split(content)
 		order := schema.Get("repository").Sections
 		if def := d.Str("defines"); def != "" && tags.Valid(def) {
@@ -272,7 +272,7 @@ func shortRemote(r string) string {
 
 // RepoBlock is a repository's live status block, which the Obsidian plugin renders.
 func RepoBlock(d *doc.Doc) string {
-	return "```atlas-repo\n" + d.ID() + " · " + d.Str("path") + " · live status needs the Atlas plugin\n```"
+	return "```almagest-repo\n" + d.ID() + " · " + d.Str("path") + " · live status needs the Almagest plugin\n```"
 }
 
 // TopicLead is a topic's card: its kind, its status, its sources, and its tags. A policy

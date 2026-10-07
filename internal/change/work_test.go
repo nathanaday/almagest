@@ -5,11 +5,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // A work document runs from the first step: progress lines gather in it, and the plan
@@ -33,7 +33,7 @@ func TestAWorkDocumentRunsThenTakesTheProposal(t *testing.T) {
 		t.Fatalf("the work document: %+v", pv)
 	}
 	work := tv.Read(pv.Ref.Path)
-	for _, want := range []string{"status: running", "kind: ingest", "files: [DINOv2.pdf, notes.md]", "cssclasses: [atlas-change]", "> [!change] Running · ingest · 2 files", change.Widget, "## Files\n\n- `DINOv2.pdf`\n- `notes.md`", "## Progress"} {
+	for _, want := range []string{"status: running", "kind: ingest", "files: [DINOv2.pdf, notes.md]", "cssclasses: [almagest-change]", "> [!change] Running · ingest · 2 files", change.Widget, "## Files\n\n- `DINOv2.pdf`\n- `notes.md`", "## Progress"} {
 		if !strings.Contains(work, want) {
 			t.Fatalf("the work document lacks %q:\n%s", want, work)
 		}

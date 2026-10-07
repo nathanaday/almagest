@@ -12,12 +12,12 @@ gives each one a reason. Return turns the edited copies into one proposed change
 their originals.
 
 Tools: `checkout` (candidates, make, list, return), and Read. References:
-[changes.md](../atlas/references/changes.md).
+[changes.md](../almagest/references/changes.md).
 
 ## Procedure
 
 1. Take the request in the user's words. The palette sends
-   `/atlas-obsidian:wiki-checkout Check out the material on: <request>`; the text after
+   `/almagest:wiki-checkout Check out the material on: <request>`; the text after
    the colon is the request. When the request names a project or a category, turn the
    words that name tags of the vocabulary into `tags` (the tag list in the
    session-start context, or `vault`).

@@ -17,12 +17,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/journal"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/journal"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/tags"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Titles and places of the views.
@@ -39,7 +39,15 @@ const (
 )
 
 // Notice opens every view.
-const Notice = "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync."
+const Notice = "> [!view] Written by Almagest from the documents. Edits here are lost at the next sync."
+
+// legacyNotice opened the notes of the releases before 11.0.
+const legacyNotice = "> [!view] Written by Atlas from the documents. Edits here are lost at the next sync."
+
+// Written reports whether a note is one the views wrote, in this release or an earlier one.
+func Written(data []byte) bool {
+	return strings.Contains(string(data), Notice) || strings.Contains(string(data), legacyNotice)
+}
 
 // TagTitle is the title of a tag's view: Tag · school › cs513.
 func TagTitle(t string) string {
@@ -83,7 +91,7 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 		if err != nil {
 			continue
 		}
-		if strings.Contains(string(data), Notice) {
+		if Written(data) {
 			if err := v.Remove(rel); err == nil {
 				written = append(written, rel)
 			}
@@ -208,7 +216,7 @@ func (r *renderer) home() string {
 	for _, t := range []string{"topic", "source", "repository"} {
 		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], doc.Plural(counts[t], t, plurals[t])))
 	}
-	head := doc.Callout("atlas", r.idx.V.Name(),
+	head := doc.Callout("almagest", r.idx.V.Name(),
 		strings.Join(typeCounts, " · "),
 		fmt.Sprintf("%d pending · %d proposed %s · %d live %s", pending, len(proposed), doc.Plural(len(proposed), "change", "changes"), len(live), doc.Plural(len(live), "session", "sessions")))
 	var wait []string

@@ -1,13 +1,13 @@
 {
-  "name": "atlas-obsidian",
+  "name": "almagest",
   "version": "10.4.1",
-  "description": "One Obsidian vault holds the wiki, the sessions, and the changes of your work. Agents start in the vault, work in the linked repositories, and write what they learn into the wiki through changes you approve. Fourteen skills on three nouns (atlas, repo, wiki), three read-only agents, and hooks that keep the rules and a document for every session. Pairs with the atlas-obsidian binary, which serves the nine tools.",
+  "description": "One Obsidian vault holds the wiki, the sessions, and the changes of your work. Agents start in the vault, work in the linked repositories, and write what they learn into the wiki through changes you approve. Fourteen skills on three nouns (almagest, repo, wiki), three read-only agents, and hooks that keep the rules and a document for every session. Pairs with the almagest binary, which serves the nine tools.",
   "author": {
     "name": "nathanaday",
     "url": "https://github.com/nathanaday"
   },
   "license": "MIT",
-  "homepage": "https://github.com/nathanaday/atlas-obsidian",
-  "repository": "https://github.com/nathanaday/atlas-obsidian",
+  "homepage": "https://github.com/nathanaday/almagest",
+  "repository": "https://github.com/nathanaday/almagest",
   "keywords": ["obsidian", "knowledge-base", "wiki", "vault", "sessions", "agents"]
 }

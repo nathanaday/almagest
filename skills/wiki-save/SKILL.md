@@ -1,6 +1,6 @@
 ---
 name: wiki-save
-description: "Keep something from this conversation in the wiki: an answer, a decision, a comparison, a finding, cited to this session. Use for save this, keep this answer, file this decision, remember this in the wiki. Files are wiki-ingest; an idea to act on later is a note in scratchpad/ (the atlas skill)."
+description: "Keep something from this conversation in the wiki: an answer, a decision, a comparison, a finding, cited to this session. Use for save this, keep this answer, file this decision, remember this in the wiki. Files are wiki-ingest; an idea to act on later is a note in scratchpad/ (the almagest skill)."
 ---
 
 # wiki-save
@@ -10,7 +10,7 @@ change absorbs. The source is the passage itself, so the topics cite a document 
 holds the claims, and its locator names this session.
 
 Tools: `source` capture. Skills: [wiki-sync](../wiki-sync/SKILL.md). References:
-[changes.md](../atlas/references/changes.md), [pages.md](../atlas/references/pages.md).
+[changes.md](../almagest/references/changes.md), [pages.md](../almagest/references/pages.md).
 
 ## Procedure
 

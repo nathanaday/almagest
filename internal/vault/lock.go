@@ -31,7 +31,7 @@ func processLock(root string) *sync.Mutex {
 	return m
 }
 
-// Lock takes .git/atlas.lock for one write: a hook's, a tool's, or sync's. Two processes,
+// Lock takes .git/almagest.lock for one write: a hook's, a tool's, or sync's. Two processes,
 // and two calls in one process, never write the vault at once. The lock is not
 // re-entrant; a write takes it once.
 func (v *Vault) Lock() (func(), error) {
@@ -45,7 +45,7 @@ func (v *Vault) LockWithin(wait time.Duration) (func(), error) {
 	m := processLock(v.Root)
 	for !m.TryLock() {
 		if time.Now().After(deadline) {
-			return nil, fmt.Errorf("another atlas write in this process holds the lock of %s; try again", v.Root)
+			return nil, fmt.Errorf("another almagest write in this process holds the lock of %s; try again", v.Root)
 		}
 		time.Sleep(15 * time.Millisecond)
 	}
@@ -54,9 +54,31 @@ func (v *Vault) LockWithin(wait time.Duration) (func(), error) {
 		// A vault that is not a repository yet (during init) locks nothing on disk.
 		return m.Unlock, nil
 	}
-	f, err := os.OpenFile(filepath.Join(dir, "atlas.lock"), os.O_CREATE|os.O_RDWR, 0o644)
+	unlock, err := flock(filepath.Join(dir, "almagest.lock"), deadline)
 	if err != nil {
 		m.Unlock()
+		return nil, err
+	}
+	return func() {
+		unlock()
+		m.Unlock()
+	}, nil
+}
+
+// LockLegacy takes .git/atlas.lock, the lock of the binary before 11.0, which may still be
+// installed and read the vault. The migration holds it with Lock, so that binary waits.
+func (v *Vault) LockLegacy() (func(), error) {
+	dir := v.Git().GitDir()
+	if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+		return func() {}, nil
+	}
+	return flock(filepath.Join(dir, "atlas.lock"), time.Now().Add(LockWait))
+}
+
+// flock takes an exclusive lock on file, waiting until deadline.
+func flock(file string, deadline time.Time) (func(), error) {
+	f, err := os.OpenFile(file, os.O_CREATE|os.O_RDWR, 0o644)
+	if err != nil {
 		return nil, err
 	}
 	for {
@@ -66,15 +88,13 @@ func (v *Vault) LockWithin(wait time.Duration) (func(), error) {
 		}
 		if time.Now().After(deadline) {
 			f.Close()
-			m.Unlock()
-			return nil, fmt.Errorf("another atlas write holds %s; try again", filepath.Join(dir, "atlas.lock"))
+			return nil, fmt.Errorf("another write holds %s; try again", file)
 		}
 		time.Sleep(15 * time.Millisecond)
 	}
 	return func() {
 		syscall.Flock(int(f.Fd()), syscall.LOCK_UN)
 		f.Close()
-		m.Unlock()
 	}, nil
 }
 

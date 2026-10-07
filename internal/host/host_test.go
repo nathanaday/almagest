@@ -8,7 +8,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestClaudeInstalledReadsEnabledPlugins(t *testing.T) {
@@ -80,17 +80,17 @@ func TestCodexInstallReadsEnabled(t *testing.T) {
 	}
 }
 
-func TestCodexEntryReadsTheAtlasTransport(t *testing.T) {
+func TestCodexEntryReadsTheAlmagestTransport(t *testing.T) {
 	data := `[{"name": "other", "transport": {"type": "stdio", "command": "x"}},
-	 {"name": "atlas", "enabled": true, "transport": {"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp"], "env": null, "env_vars": ["ATLAS_HOME"], "cwd": null}}]`
+	 {"name": "almagest", "enabled": true, "transport": {"type": "stdio", "command": "${CLAUDE_PLUGIN_ROOT}/scripts/almagest", "args": ["mcp"], "env": null, "env_vars": ["ALMAGEST_HOME"], "cwd": null}}]`
 	s, err := codexEntry([]byte(data))
-	if err != nil || s.Command != "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian" || len(s.Args) != 1 || s.EnvVars[0] != "ATLAS_HOME" || s.Cwd != "" {
+	if err != nil || s.Command != "${CLAUDE_PLUGIN_ROOT}/scripts/almagest" || len(s.Args) != 1 || s.EnvVars[0] != "ALMAGEST_HOME" || s.Cwd != "" {
 		t.Fatalf("%+v %v", s, err)
 	}
-	if _, err := codexEntry([]byte(`[{"name": "other", "transport": {"type": "stdio", "command": "x"}}]`)); err == nil || !strings.Contains(err.Error(), "no atlas server") {
+	if _, err := codexEntry([]byte(`[{"name": "other", "transport": {"type": "stdio", "command": "x"}}]`)); err == nil || !strings.Contains(err.Error(), "no almagest server") {
 		t.Fatalf("no entry: %v", err)
 	}
-	if _, err := codexEntry([]byte(`[{"name": "atlas", "transport": {"type": "streamable_http", "url": "http://x"}}]`)); err == nil || !strings.Contains(err.Error(), "not stdio") {
+	if _, err := codexEntry([]byte(`[{"name": "almagest", "transport": {"type": "streamable_http", "url": "http://x"}}]`)); err == nil || !strings.Contains(err.Error(), "not stdio") {
 		t.Fatalf("http entry: %v", err)
 	}
 }
@@ -102,7 +102,7 @@ func TestClaudeEntrySubstitutesThePluginRoot(t *testing.T) {
 	if err := os.MkdirAll(plugin, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	mcp := `{"mcpServers": {"atlas": {"command": "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian", "args": ["mcp", "${CLAUDE_PLUGIN_ROOT}"]}}}`
+	mcp := `{"mcpServers": {"almagest": {"command": "${CLAUDE_PLUGIN_ROOT}/scripts/almagest", "args": ["mcp", "${CLAUDE_PLUGIN_ROOT}"]}}}`
 	if err := os.WriteFile(filepath.Join(plugin, ".mcp.json"), []byte(mcp), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -114,7 +114,7 @@ func TestClaudeEntrySubstitutesThePluginRoot(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if s.Command != plugin+"/scripts/atlas-obsidian" || s.Args[1] != plugin || s.Env["CLAUDE_PLUGIN_ROOT"] != plugin {
+	if s.Command != plugin+"/scripts/almagest" || s.Args[1] != plugin || s.Env["CLAUDE_PLUGIN_ROOT"] != plugin {
 		t.Fatalf("%+v", s)
 	}
 	if _, err := claudeEntry(""); err == nil || !strings.Contains(err.Error(), "installPath") {
@@ -123,29 +123,29 @@ func TestClaudeEntrySubstitutesThePluginRoot(t *testing.T) {
 }
 
 func TestProbeListsTheToolsWithAReducedEnvironment(t *testing.T) {
-	t.Setenv("ATLAS_HOME", "/atlas-home")
+	t.Setenv("ALMAGEST_HOME", "/almagest-home")
 	t.Setenv("SECRET", "leaked")
-	s := &Server{Command: testvault.MCPServer(t, "vault", "${ATLAS_HOME:-none}", "${SECRET:-none}", "${FROM_ENTRY:-none}"),
-		EnvVars: []string{"ATLAS_HOME"}, Env: map[string]string{"FROM_ENTRY": "entry"}}
+	s := &Server{Command: testvault.MCPServer(t, "vault", "${ALMAGEST_HOME:-none}", "${SECRET:-none}", "${FROM_ENTRY:-none}"),
+		EnvVars: []string{"ALMAGEST_HOME"}, Env: map[string]string{"FROM_ENTRY": "entry"}}
 	names, err := Probe(context.Background(), s, t.TempDir())
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := strings.Join(names, " "); got != "vault /atlas-home none entry" {
-		t.Fatalf("tools %q; want ATLAS_HOME and the entry's env passed, SECRET not", got)
+	if got := strings.Join(names, " "); got != "vault /almagest-home none entry" {
+		t.Fatalf("tools %q; want ALMAGEST_HOME and the entry's env passed, SECRET not", got)
 	}
 }
 
 func TestProbeSaysWhyAServerDidNotStart(t *testing.T) {
 	script := filepath.Join(t.TempDir(), "server")
-	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'atlas: the atlas-obsidian binary is not installed.' >&2\nexit 1\n"), 0o755); err != nil {
+	if err := os.WriteFile(script, []byte("#!/bin/sh\necho 'almagest: the almagest binary is not installed.' >&2\nexit 1\n"), 0o755); err != nil {
 		t.Fatal(err)
 	}
 	_, err := Probe(context.Background(), &Server{Command: script}, t.TempDir())
 	if err == nil || !strings.Contains(err.Error(), "not installed") {
 		t.Fatalf("%v", err)
 	}
-	_, err = Probe(context.Background(), &Server{Command: "${CLAUDE_PLUGIN_ROOT}/scripts/atlas-obsidian"}, t.TempDir())
+	_, err = Probe(context.Background(), &Server{Command: "${CLAUDE_PLUGIN_ROOT}/scripts/almagest"}, t.TempDir())
 	if err == nil {
 		t.Fatal("a placeholder command started")
 	}
@@ -184,8 +184,8 @@ func TestShellLineQuotesWhatAShellWouldSplit(t *testing.T) {
 
 func TestCodexMarketplaceSourceReadsTheListing(t *testing.T) {
 	data := `{"marketplaces": [{"name": "openai-api-curated", "root": "/x/.tmp/plugins"},
-	 {"name": "` + Marketplace + `", "root": "/x/.tmp/marketplaces/m", "marketplaceSource": {"sourceType": "git", "source": "https://github.com/nathanaday/atlas-obsidian.git"}}]}`
-	if kind, source := codexMarketplaceSource([]byte(data)); kind != "git" || source != "https://github.com/nathanaday/atlas-obsidian.git" {
+	 {"name": "` + Marketplace + `", "root": "/x/.tmp/marketplaces/m", "marketplaceSource": {"sourceType": "git", "source": "https://github.com/nathanaday/almagest.git"}}]}`
+	if kind, source := codexMarketplaceSource([]byte(data)); kind != "git" || source != "https://github.com/nathanaday/almagest.git" {
 		t.Fatalf("%q %q", kind, source)
 	}
 	if kind, _ := codexMarketplaceSource([]byte(`{"marketplaces": []}`)); kind != "" {

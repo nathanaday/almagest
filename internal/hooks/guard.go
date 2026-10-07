@@ -10,11 +10,11 @@ import (
 	"slices"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/wikify"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/wikify"
 )
 
 // deny prints the refusal a PreToolUse hook gives.
@@ -22,11 +22,11 @@ func deny(w io.Writer, reason string) error {
 	return json.NewEncoder(w).Encode(map[string]any{"hookSpecificOutput": map[string]any{
 		"hookEventName":            "PreToolUse",
 		"permissionDecision":       "deny",
-		"permissionDecisionReason": "atlas: " + reason,
+		"permissionDecisionReason": "almagest: " + reason,
 	}})
 }
 
-// readActions are, per atlas tool, the actions that only read; a tool listed with nil
+// readActions are, per almagest tool, the actions that only read; a tool listed with nil
 // only reads. A read-only agent makes no other call: an action or a tool this list does
 // not know is a write until someone lists it here.
 var readActions = map[string]map[string]bool{
@@ -40,7 +40,7 @@ var readActions = map[string]map[string]bool{
 	"source":   {"chunks": true, "read": true},
 }
 
-// readsOnly reports whether a call of an atlas tool only reads.
+// readsOnly reports whether a call of an almagest tool only reads.
 func readsOnly(tool, action string) bool {
 	reads, ok := readActions[tool]
 	return ok && (reads == nil || reads[action])
@@ -49,7 +49,7 @@ func readsOnly(tool, action string) bool {
 // Guard refuses a call that breaks a rule. The first rule that matches decides.
 func Guard(r io.Reader, w io.Writer, env Env) error {
 	in := readInput(r)
-	tool := atlasTool(in.ToolName)
+	tool := almagestTool(in.ToolName)
 	// Rule 1: a read-only agent writes nothing.
 	if in.AgentType != "" && sessions.ReadOnly(in.AgentType) {
 		if reason := readOnlyRefusal(in, tool); reason != "" {
@@ -60,7 +60,7 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	// Rule 2: the shell does not do what only the user does. The change tool keeps the
 	// gate, and the prompt hook records the user's turns.
 	if in.ToolName == "Bash" {
-		if reason := atlasCommandRefusal(in.tool().Command); reason != "" {
+		if reason := almagestCommandRefusal(in.tool().Command); reason != "" {
 			return deny(w, reason)
 		}
 		return nil
@@ -72,8 +72,9 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		// Every rule judges the file as the disk names it, whatever case, Unicode form,
 		// or link the agent wrote.
 		f.Path = canonical(f.Path)
-		if strings.EqualFold(f.Path, canonical(vault.HomeFrom(env.getenv).ConfigPath())) {
-			return deny(w, f.Path+" holds the commands Atlas runs (terminal_command, agent_commands); the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config")
+		home := vault.HomeFrom(env.getenv)
+		if strings.EqualFold(f.Path, canonical(home.ConfigPath())) || (home.Legacy != "" && strings.EqualFold(f.Path, canonical(home.LegacyConfigPath()))) {
+			return deny(w, f.Path+" holds the commands Almagest runs (terminal_command, agent_commands); the user changes it in the Almagest settings in Obsidian, or with almagest config")
 		}
 		// A file belongs to the vault above it, wherever the session runs.
 		root := vault.FindAbove(filepath.Dir(f.Path))
@@ -91,13 +92,13 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	return nil
 }
 
-// binaryNames are the binary's name and the name it had in 6.0 to 6.2, which an older
-// install may still hold.
-var binaryNames = []string{"atlas-obsidian", "atlas"}
+// binaryNames are the binary's name and the names it had before 11.0 (atlas-obsidian;
+// atlas in 6.0 to 6.2). An older install may still hold one, and it reads the same vaults.
+var binaryNames = []string{"almagest", "atlas-obsidian", "atlas"}
 
-// atlasCommandRefusal is why a shell command may not run the atlas-obsidian binary, or "":
+// almagestCommandRefusal is why a shell command may not run the almagest binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
-func atlasCommandRefusal(cmd string) string {
+func almagestCommandRefusal(cmd string) string {
 	for _, c := range splitCommands(cmd, 4) {
 		if why := commandRefusal(c.words); why != "" {
 			if c.pipe < 0 {
@@ -123,19 +124,19 @@ func commandRefusal(words []string) string {
 		}
 		switch {
 		case rest[0] == "hook":
-			return "atlas-obsidian hook runs only from the host; the shell does not send hook events"
+			return "almagest hook runs only from the host; the shell does not send hook events"
 		case rest[0] == "change" && slices.Contains(rest[1:], "apply"):
 			return "apply a change with the change tool after the user's yes; the user can also press Approve in the change document in Obsidian, or run the command with !"
 		case rest[0] == "config" && (slices.Contains(rest[1:], "set") || slices.Contains(rest[1:], "unset")) && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
-			return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
+			return "terminal_command and agent_commands are the commands Almagest runs, so only the user sets them: in the Almagest settings in Obsidian, or by typing the command with !"
 		case rest[0] == "change" && slices.Contains(rest[1:], "undo"):
 			return "undo a change with the change tool, which leaves the user's own acts (safe delete, Return) to the user"
 		case rest[0] == "journal" && slices.Contains(rest[1:], "publish"):
-			return "a journal is published when the user decides: ask the user to press Publish in the Atlas palette"
+			return "a journal is published when the user decides: ask the user to press Publish in the Almagest palette"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "trash"):
-			return "safe delete is the user's act: it applies a remove at once, with no yes; propose a remove with the change tool, or ask the user to press Safe delete in the Atlas palette"
+			return "safe delete is the user's act: it applies a remove at once, with no yes; propose a remove with the change tool, or ask the user to press Safe delete in the Almagest palette"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
-			return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
+			return "the migration rewrites the whole vault, so only the user runs it: ask the user to type almagest vault migrate, or run it with !"
 		}
 	}
 	return ""
@@ -180,10 +181,10 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	is := func(name string) bool { return key == strings.ToLower(name) }
 	under := func(dir string) bool { return strings.HasPrefix(key, strings.ToLower(dir)+"/") }
 	switch {
-	case is(vault.VaultConfigFile):
-		return rel + " holds the commands Atlas runs for this vault (terminal_command, agent_commands), which win over the machine's; the user changes it in the Atlas settings in Obsidian, or with atlas-obsidian config"
-	case is(vault.PluginDir) || under(vault.PluginDir):
-		return rel + " is the Atlas plugin, whose code and binaryPath decide what runs; vault init and vault sync install it, and the user sets binaryPath in the Atlas settings in Obsidian"
+	case is(vault.VaultConfigFile) || is(vault.LegacyVaultConfigFile):
+		return rel + " holds the commands Almagest runs for this vault (terminal_command, agent_commands), which win over the machine's; the user changes it in the Almagest settings in Obsidian, or with almagest config"
+	case is(vault.PluginDir) || under(vault.PluginDir) || is(vault.LegacyPluginDir) || under(vault.LegacyPluginDir):
+		return rel + " is the Almagest plugin, whose code and binaryPath decide what runs; the user installs it from Obsidian's community plugins and sets binaryPath in its settings"
 	case strings.EqualFold(path.Dir(rel), vault.Documents):
 		return documentRefusal(v, f, rel)
 	case under(vault.Originals):
@@ -194,8 +195,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " is a change document, and only the change tool writes it. To change a proposed change, propose a new one with supersedes; the user can edit one in Obsidian before pressing Approve"
 	case under(vault.WikiView):
 		return rel + " is a view, which code writes from the documents; change the documents instead"
-	case is(vault.Marker):
-		return "Atlas.md is the user's; ask the user to edit it"
+	case vault.IsMarker(rel):
+		return rel + " is the user's; ask the user to edit it"
 	case strings.HasSuffix(key, ".base"):
 		return rel + " is a Base that vault init ships; ask the user to change it in Obsidian"
 	case is(vault.Settings):

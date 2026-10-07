@@ -1,7 +1,7 @@
 # The conventions step
 
 Find the policies of the wiki that apply to a piece of work in a repository, so the work
-follows them. The atlas skill runs this step before it changes code in a linked
+follows them. The almagest skill runs this step before it changes code in a linked
 repository.
 
 1. Call `context` with `repository` for each repository the work touches, or with `tags`

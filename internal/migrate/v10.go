@@ -10,9 +10,9 @@ import (
 	"sort"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/views"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/views"
 )
 
 // The folders of 9.0 that 10.0 renames.
@@ -102,12 +102,12 @@ func rewriteRefs(ext, s string) string {
 // build10 computes the step from 9.0 to 10.0: every file of wiki/, inbox/, and views/
 // moves to its 10.0 folder, except the notes code wrote in views/, which go; the path
 // references of every note, canvas, and Base but the captured originals follow; a
-// source's origin inbox becomes ingest; and Atlas.md takes the layout of 10.0.
+// source's origin inbox becomes ingest; and Almagest.md takes the layout of 10.0.
 func build10(v *vault.Vault, report *Report) (*plan, error) {
 	p := &plan{}
 	for _, dir := range []string{vault.Journals, vault.Checkout, vault.Trash} {
 		if st, err := os.Stat(v.Abs(dir)); err == nil && st.IsDir() {
-			report.Warnings = append(report.Warnings, fmt.Sprintf("the folder %s/ exists and takes Atlas's meaning from 10.0: %s", dir, folderMeaning[dir]))
+			report.Warnings = append(report.Warnings, fmt.Sprintf("the folder %s/ exists and takes Almagest's meaning from 10.0: %s", dir, folderMeaning[dir]))
 		}
 	}
 	taken := map[string]bool{}
@@ -124,7 +124,7 @@ func build10(v *vault.Vault, report *Report) (*plan, error) {
 	}
 	err := walkFiles(v, legacyViews, func(rel string) error {
 		if strings.HasSuffix(rel, ".md") {
-			if data, err := v.Read(rel); err == nil && strings.HasPrefix(string(data), views.Notice) {
+			if data, err := v.Read(rel); err == nil && views.Written(data) {
 				p.removes = append(p.removes, rel)
 				report.Removed = append(report.Removed, rel)
 				return nil
@@ -205,9 +205,9 @@ const bookmarks = ".obsidian/bookmarks.json"
 
 // folderMeaning says what each folder that 10.0 claims holds from now on.
 var folderMeaning = map[string]string{
-	vault.Journals: "your journals, which no agent edits and which Atlas publishes only when you press Publish",
+	vault.Journals: "your journals, which no agent edits and which Almagest publishes only when you press Publish",
 	vault.Checkout: "the librarian's checkouts, which only the checkout tool writes",
-	vault.Trash:    "what safe delete removed, which Atlas never reads",
+	vault.Trash:    "what safe delete removed, which Almagest never reads",
 }
 
 // retype gives a note the fields of 10.0: the vault document its layout, and a source
@@ -215,8 +215,8 @@ var folderMeaning = map[string]string{
 func retype(rel, content string) string {
 	d := doc.Parse(rel, []byte(content))
 	switch {
-	case rel == vault.Marker && d.Type() == "vault":
-		return doc.SetField(content, "layout", vault.Layout)
+	case vault.IsMarker(rel) && d.Type() == "vault":
+		return doc.SetField(content, "layout", vault.Layout10)
 	case d.Type() == "source" && d.Str("origin") == legacyInbox:
 		return doc.SetField(content, "origin", "ingest")
 	}

@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/tags"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/tags"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Severities.
@@ -153,7 +153,7 @@ func (r *run) selected() []*doc.Doc {
 
 func (r *run) titles(docs []*doc.Doc) {
 	for _, d := range docs {
-		if d.Path == vault.Marker {
+		if vault.IsMarker(d.Path) {
 			continue
 		}
 		if schema.IsDocument(d.Type()) && vault.ReservedTitle(d.Title()) {
@@ -190,7 +190,7 @@ func fixFor(d *doc.Doc) string {
 	case t.Family == schema.Knowledge:
 		return "wiki-edit (a change)"
 	case d.Type() == "vault":
-		return "edit Atlas.md"
+		return "edit Almagest.md"
 	}
 	return "vault sync"
 }
@@ -283,7 +283,7 @@ func (r *run) placement() {
 		switch {
 		case path.Dir(d.Path) != vault.Documents:
 		case slices.Contains(schema.ArchivedTypes, d.Type()):
-			r.add("archived", Error, d, "move it into "+vault.Threads+"/", "a %s of Atlas 8.x in "+vault.Documents+"; Atlas keeps thread documents in %s/ and reads none of them", d.Type(), vault.Threads)
+			r.add("archived", Error, d, "move it into "+vault.Threads+"/", "a %s of Almagest 8.x in "+vault.Documents+"; Almagest keeps thread documents in %s/ and reads none of them", d.Type(), vault.Threads)
 		case !r.opts.Quick:
 			r.add("untyped", Warning, d, "wiki-ingest: capture it, or move it out of "+vault.Documents, "a note with no type in "+vault.Documents)
 		}
@@ -406,7 +406,7 @@ func (r *run) nearTags() {
 		byKey[k] = append(byKey[k], t)
 	}
 	reported := map[string]bool{}
-	anchor := r.idx.ByPath(vault.Marker)
+	anchor := r.idx.ByPath(r.idx.V.Doc.Path)
 	if anchor == nil {
 		return
 	}

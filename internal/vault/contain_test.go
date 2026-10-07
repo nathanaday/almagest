@@ -7,9 +7,9 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // outside makes a folder beside the vault, in the test's temporary folder, with one file.
@@ -84,7 +84,7 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 		"source-core/documents/new/folder/Deep.md",
 		"scratchpad/docs/Alpha.md",
 		"scratchpad/alpha.md",
-		".obsidian/plugins/atlas/data.json",
+		".obsidian/plugins/almagest/data.json",
 	} {
 		if err := v.Contain(rel); err != nil {
 			t.Errorf("Contain(%q) = %v, want nil", rel, err)
@@ -151,12 +151,12 @@ func TestAFailedRenameLeavesNoTemporaryFile(t *testing.T) {
 	if err := v.Write("source-core/documents/Busy", []byte("a file over a folder\n")); err == nil {
 		t.Fatal("the write over a folder succeeded")
 	}
-	left, _ := filepath.Glob(v.Abs("source-core/documents/.atlas-*"))
+	left, _ := filepath.Glob(v.Abs("source-core/documents/.almagest-*"))
 	if len(left) != 0 {
 		t.Fatalf("temporary files left: %v", left)
 	}
-	if !strings.Contains(strings.Join(vault.Excluded, " "), ".atlas-*") {
-		t.Fatalf("Excluded holds no .atlas-*: %v", vault.Excluded)
+	if !strings.Contains(strings.Join(vault.Excluded, " "), ".almagest-*") {
+		t.Fatalf("Excluded holds no .almagest-*: %v", vault.Excluded)
 	}
 }
 
@@ -227,7 +227,7 @@ func TestRollbackLeavesASaveMadeDuringTheWrite(t *testing.T) {
 	}
 }
 
-// The harness writes .claude/settings.local.json too. A change that lands while Atlas
+// The harness writes .claude/settings.local.json too. A change that lands while Almagest
 // merges the file makes the merge run again, so both writes keep their keys.
 func TestSyncSettingsMergesAgainWhenTheFileChanges(t *testing.T) {
 	tv := testvault.New(t)

@@ -5,8 +5,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func run(t *testing.T, tv *testvault.T, opts lint.Options) *lint.Findings {
@@ -35,7 +35,7 @@ func TestNewVaultLintsClean(t *testing.T) {
 		t.Fatalf("a new vault has findings: %+v", f.Findings)
 	}
 	if f.Checked != 1 {
-		t.Fatalf("checked %d; Atlas.md is the one document", f.Checked)
+		t.Fatalf("checked %d; Almagest.md is the one document", f.Checked)
 	}
 	tv.Write("wiki-view/View · Home.md", "[[Nothing]]\n")
 	if f := run(t, tv, lint.Options{}); len(f.Findings) != 0 {

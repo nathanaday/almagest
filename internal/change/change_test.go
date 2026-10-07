@@ -8,10 +8,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func str(s string) *string { return &s }
@@ -82,7 +82,7 @@ func TestProposeThenApply(t *testing.T) {
 		}
 	}
 	rp := tv.Read("source-core/documents/p3-edge.md")
-	for _, want := range []string{"defines: work/p3/p3-edge", "branch: ", "head: ", "> [!repository] `", "```atlas-repo", "## Knowledge"} {
+	for _, want := range []string{"defines: work/p3/p3-edge", "branch: ", "head: ", "> [!repository] `", "```almagest-repo", "## Knowledge"} {
 		if !strings.Contains(rp, want) {
 			t.Errorf("repository lacks %q:\n%s", want, rp)
 		}
@@ -111,7 +111,7 @@ func TestRefusals(t *testing.T) {
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "repository", Title: "R", Fields: map[string]any{"description": "x", "path": tv.V.Root}}}}, "inside the vault")
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "create", Type: "topic", Kind: "concept", Title: "C", Fields: map[string]any{"description": "x", "tags": []any{"bad tag!"}}}}}, "no valid tag")
 	refused(t, tv, change.Plan{Title: "x", Writes: []change.Write{{Op: "retag", From: "nothing", To: "x"}}}, "no document holds nothing")
-	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "tagging: open", "tagging: known", 1))
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "tagging: open", "tagging: known", 1))
 	tv.Commit()
 	v, _ := vault.Open(tv.V.Root)
 	tv.V = v

@@ -9,11 +9,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/core"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 func TestStatusCountsTheVault(t *testing.T) {
@@ -28,7 +28,7 @@ func TestStatusCountsTheVault(t *testing.T) {
 	if st.Documents["topic"] != 1 || st.Documents["source"] != 1 || len(st.Documents) != 3 || st.Topics.Kinds["concept"] != 1 || st.Topics.Draft != 1 {
 		t.Fatalf("counts %+v", st)
 	}
-	if len(st.Tags) != 2 || st.Tags[0].Tag != "work" || st.Vault.Layout != 6 {
+	if len(st.Tags) != 2 || st.Tags[0].Tag != "work" || st.Vault.Layout != 7 {
 		t.Fatalf("tags %+v", st.Tags)
 	}
 	if len(st.Ingest) != 1 || st.Ingest[0].Kind != "pdf" || len(st.Pending) != 1 {
@@ -64,7 +64,7 @@ func TestSyncRewrites(t *testing.T) {
 		t.Fatal("sync writes the views")
 	}
 	// A vault of an earlier layout refuses a sync.
-	tv.Write("Atlas.md", strings.Replace(tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
 	v, _ := vault.Open(tv.V.Root)
 	if _, err := core.Sync(v, testvault.Now, core.SyncOptions{}); err == nil || !strings.Contains(err.Error(), "vault migrate") {
 		t.Fatalf("legacy: %v", err)

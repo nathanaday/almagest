@@ -18,9 +18,9 @@ import (
 	"time"
 	"unicode"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // HistoryPrefix begins the title of the note code writes at the root of a volume, its
@@ -29,7 +29,7 @@ import (
 const HistoryPrefix = "Journal · "
 
 // HistoryNotice opens the publication history: code writes it again at each publish.
-const HistoryNotice = "> [!atlas] Written by Atlas at each publish. Edits here are lost at the next one."
+const HistoryNotice = "> [!almagest] Written by Almagest at each publish. Edits here are lost at the next one."
 
 // Volume is one journal volume and its state against its latest edition.
 type Volume struct {

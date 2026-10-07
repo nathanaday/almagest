@@ -4,7 +4,7 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
+	"github.com/nathanaday/almagest/internal/doc"
 )
 
 // TaskLine is one open task line of a markdown file: `- [ ] …`.

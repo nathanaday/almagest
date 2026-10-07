@@ -5,8 +5,8 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/source"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/source"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 var at = testvault.Now
@@ -56,7 +56,7 @@ func TestCaptureFromTheInbox(t *testing.T) {
 	if err != nil || res.Captured[0].Duplicate == "" || tv.V.Exists("ingest/copy.md") {
 		t.Fatalf("duplicate %+v %v", res, err)
 	}
-	if _, err := source.Capture(tv.V, source.Request{Ingest: []string{"../Atlas.md"}}, at); err == nil {
+	if _, err := source.Capture(tv.V, source.Request{Ingest: []string{"../Almagest.md"}}, at); err == nil {
 		t.Fatal("a name outside the inbox is refused")
 	}
 }

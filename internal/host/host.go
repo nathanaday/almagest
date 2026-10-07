@@ -15,11 +15,11 @@ import (
 
 // The agent plugin's names.
 const (
-	Plugin      = "atlas-obsidian"
-	Marketplace = "nathanaday-atlas-obsidian"
+	Plugin      = "almagest"
+	Marketplace = "nathanaday-almagest"
 	PluginID    = Plugin + "@" + Marketplace
 	// Source is where the marketplace lives by default.
-	Source = "nathanaday/atlas-obsidian"
+	Source = "nathanaday/almagest"
 )
 
 // Hosts are the agent harnesses setup knows.

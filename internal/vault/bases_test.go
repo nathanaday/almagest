@@ -7,11 +7,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
-// A Base equal to any copy Atlas shipped moves to the current one; an edited Base stays.
+// A Base equal to any copy Almagest shipped moves to the current one; an edited Base stays.
 func TestABaseUpgradesFromEveryShippedCopy(t *testing.T) {
 	current := read(t, "template/Sessions.base")
 	for name, before := range map[string]string{

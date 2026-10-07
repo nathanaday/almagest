@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 // A Base upgrade before an apply lands in a commit of its own, so undo of the change

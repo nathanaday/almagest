@@ -43,4 +43,4 @@ None. The skill writes nothing.
 [wiki-save](../wiki-save/SKILL.md) when the answer is new synthesis the user wants kept.
 [wiki-checkout](../wiki-checkout/SKILL.md) when the user wants to read the material
 itself: a reading list and copies to mark up.
-[atlas](../atlas/SKILL.md) when the question turns into work in a repository.
+[almagest](../almagest/SKILL.md) when the question turns into work in a repository.

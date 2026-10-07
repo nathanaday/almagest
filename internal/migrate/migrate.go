@@ -1,10 +1,11 @@
-// Package migrate moves a vault of an earlier layout to the layout of 10.0 in one commit,
-// in up to two steps. The step from 8.x (v9.go) moves the thread documents and the chord
+// Package migrate moves a vault of an earlier layout to the layout of 11.0 in one commit,
+// in up to three steps. The step from 8.x (v9.go) moves the thread documents and the chord
 // canvases to threads/, and takes the fields and sections that served threads out of the
 // documents that stay. The step from 9.0 (v10.go) renames the folders: wiki/ becomes
 // source-core/, inbox/ becomes ingest/, and views/ becomes wiki-view/, and the paths that
-// links and Bases name follow. An 8.x vault takes both steps. A vault older than 8.0
-// migrates with 8.1.1 first. Plan computes the move and writes nothing; Run writes it.
+// links and Bases name follow. The step from 10.0 (v11.go) renames what code owns from
+// Atlas to Almagest. An older vault takes every step after its own. A vault older than
+// 8.0 migrates with 8.1.1 first. Plan computes the move and writes nothing; Run writes it.
 package migrate
 
 import (
@@ -16,14 +17,14 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/lint"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
-	"github.com/nathanaday/atlas-obsidian/internal/views"
+	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/lint"
+	"github.com/nathanaday/almagest/internal/vault"
+	"github.com/nathanaday/almagest/internal/views"
 )
 
 // Trailer marks the migration's commit.
-const Trailer = "Atlas-Migrate: 10.0"
+const Trailer = "Almagest-Migrate: 11.0"
 
 // Move is one file the migration moves as it is.
 type Move struct {
@@ -34,7 +35,7 @@ type Move struct {
 // Report is what a migration does.
 type Report struct {
 	Vault string `json:"vault"`
-	// From is the layout the vault had: 8.x or 9.0.
+	// From is the layout the vault had: 8.x, 9.0, or 10.0.
 	From string `json:"from"`
 	// Moved are the files the migration moved: the thread documents and chord canvases
 	// of 8.x to threads/, and every file of the renamed folders.
@@ -75,9 +76,9 @@ func newReport(v *vault.Vault) *Report {
 func check(v *vault.Vault) error {
 	switch layout := v.LayoutVersion(); {
 	case layout >= vault.Layout:
-		return errors.New("this vault has the 10.0 layout already; there is nothing to migrate")
+		return errors.New("this vault has the 11.0 layout already; there is nothing to migrate")
 	case layout < vault.LayoutThreads:
-		return errors.New("this vault has the layout of 7.x or earlier; migrate it with Atlas 8.1.1 first (the tag threads-final of atlas-obsidian), then with this release")
+		return errors.New("this vault has the layout of 7.x or earlier; migrate it with release 8.1.1 first (the tag threads-final of this repository, when the project was Atlas), then with this release")
 	}
 	var waiting []string
 	for _, c := range changes(v) {
@@ -101,17 +102,24 @@ func Plan(v *vault.Vault) (*Report, error) {
 		return nil, err
 	}
 	report := newReport(v)
-	if v.LayoutVersion() == vault.LayoutThreads {
+	switch v.LayoutVersion() {
+	case vault.LayoutThreads:
 		report.From = "8.x"
 		if _, err := build9(v, report); err != nil {
 			return nil, err
 		}
-		report.Warnings = append(report.Warnings, "this lists the first step, from 8.x to 9.0; the same run then renames the folders of 10.0 (wiki/ to source-core/, inbox/ to ingest/, views/ to wiki-view/)")
-		return report, nil
-	}
-	report.From = "9.0"
-	if _, err := build10(v, report); err != nil {
-		return nil, err
+		report.Warnings = append(report.Warnings, "this lists the first step, from 8.x to 9.0; the same run then renames the folders of 10.0 (wiki/ to source-core/, inbox/ to ingest/, views/ to wiki-view/) and the names of 11.0 (Atlas.md to Almagest.md)")
+	case vault.LayoutKB:
+		report.From = "9.0"
+		if _, err := build10(v, report); err != nil {
+			return nil, err
+		}
+		report.Warnings = append(report.Warnings, "this lists the first step, from 9.0 to 10.0; the same run then renames what code owns from Atlas to Almagest (Atlas.md to Almagest.md, the change and repository blocks, .atlas/ to .almagest/)")
+	default:
+		report.From = "10.0"
+		if _, err := build11(v, report); err != nil {
+			return nil, err
+		}
 	}
 	return report, nil
 }
@@ -137,8 +145,17 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	if err := check(fresh); err != nil {
 		return nil, err
 	}
+	// An older binary holds the lock of its own name, so neither writes while the other does.
+	unlockLegacy, err := fresh.LockLegacy()
+	if err != nil {
+		return nil, err
+	}
+	defer unlockLegacy()
 	report := newReport(fresh)
-	report.From = "9.0"
+	report.From = map[int]string{vault.LayoutThreads: "8.x", vault.LayoutKB: "9.0"}[fresh.LayoutVersion()]
+	if report.From == "" {
+		report.From = "10.0"
+	}
 	if fresh.LayoutVersion() == vault.LayoutThreads {
 		report.From = "8.x"
 		p, err := build9(fresh, report)
@@ -153,16 +170,29 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 			return nil, err
 		}
 	}
-	p, err := build10(fresh, report)
+	if fresh.LayoutVersion() == vault.LayoutKB {
+		p, err := build10(fresh, report)
+		if err != nil {
+			return nil, err
+		}
+		if err := p.execute(tx); err != nil {
+			return nil, err
+		}
+		for _, dir := range []string{legacyWiki, legacyInbox, legacyViews} {
+			prune(fresh.Abs(dir))
+		}
+		if fresh, err = vault.Open(v.Root); err != nil {
+			return nil, err
+		}
+	}
+	p, err := build11(fresh, report)
 	if err != nil {
 		return nil, err
 	}
 	if err := p.execute(tx); err != nil {
 		return nil, err
 	}
-	for _, dir := range []string{legacyWiki, legacyInbox, legacyViews} {
-		prune(fresh.Abs(dir))
-	}
+	prune(fresh.Abs(legacyConfigDir))
 	if fresh, err = vault.Open(v.Root); err != nil {
 		return nil, err
 	}
@@ -190,7 +220,7 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	if beforeCommit != nil {
 		beforeCommit()
 	}
-	sha, err := tx.CommitAll("layout: migrate to 10.0\n\n" + Trailer + " from " + report.From)
+	sha, err := tx.CommitAll("layout: migrate to 11.0\n\n" + Trailer + " from " + report.From)
 	if err != nil {
 		return nil, err
 	}

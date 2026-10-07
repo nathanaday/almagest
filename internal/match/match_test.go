@@ -3,8 +3,8 @@ package match_test
 import (
 	"testing"
 
-	"github.com/nathanaday/atlas-obsidian/internal/match"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/match"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestJoinAndMatch(t *testing.T) {

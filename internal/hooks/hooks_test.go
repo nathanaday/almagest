@@ -3,17 +3,18 @@ package hooks_test
 import (
 	"bytes"
 	"encoding/json"
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/hooks"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/hooks"
+	"github.com/nathanaday/almagest/internal/sessions"
+	"github.com/nathanaday/almagest/internal/testvault"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 const sid = "a1b2c3d4-5e6f-7a8b-9c0d-000000000001"
@@ -69,14 +70,14 @@ func editNew(path, old, new string) map[string]any {
 
 func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	f := setup(t)
-	f.tv.Write("Atlas.md", f.tv.Read("Atlas.md")+"\nEvery agent reads this.\n")
+	f.tv.Write("Almagest.md", f.tv.Read("Almagest.md")+"\nEvery agent reads this.\n")
 	out := f.run("session-start", map[string]any{"source": "startup"})
-	for _, want := range []string{"atlas: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Ingest: 0 files", "Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.", "<vault-context>", "Every agent reads this."} {
+	for _, want := range []string{"almagest: vault Work at", "this session: [[2026-09-27 1432 a1b2c3]]", "Ingest: 0 files", "Rules: knowledge changes only through a change. Edit a linked repository directly; on long work, add a dated line to ## Progress in this session's document.", "<vault-context>", "Every agent reads this."} {
 		if !strings.Contains(out, want) {
 			t.Errorf("context lacks %q:\n%s", want, out)
 		}
 	}
-	for _, gone := range []string{"Threads:", "Resume Atlas"} {
+	for _, gone := range []string{"Threads:", "Resume Almagest"} {
 		if strings.Contains(out, gone) {
 			t.Errorf("context holds %q:\n%s", gone, out)
 		}
@@ -88,7 +89,7 @@ func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
 		t.Fatalf("outside a vault a hook says nothing: %q", out)
 	}
-	f.tv.Write("Atlas.md", strings.Replace(f.tv.Read("Atlas.md"), "layout: 6", "layout: 5", 1))
+	f.tv.Write("Almagest.md", strings.Replace(f.tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
 	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "vault migrate") {
 		t.Fatalf("a vault of an earlier layout names the migration: %s", out)
 	}
@@ -104,7 +105,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 	f.tv.Write("threads/Plan · Spec.md", "---\nid: doc-pl0001\ntype: spec\n---\n## Goal\n\nx\n")
 	f.tv.Commit()
 	own := root + "/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
-	bin := "atlas-" + "obsidian"
+	bin := "alma" + "gest"
 	f.tv.Write("sessions/2026-09/2026-09-27 1400 ffffff.md", "---\nid: ses-ffffff\ntype: session\nharness_id: other\n---\n## Description\n")
 	cases := []struct {
 		name  string
@@ -121,7 +122,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a checkout copy", edit(root+"/checkout/2026-10-06 RL/Q-learning (checkout).md", "x"), true},
 		{"a wikified copy", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/scratchpad/Notes · wikified.md"}}, true},
 		{"a scratchpad note", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/scratchpad/Notes.md"}}, false},
-		{"Atlas.md", edit(root+"/Atlas.md", "Work"), true},
+		{"Almagest.md", edit(root+"/Almagest.md", "Work"), true},
 		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
 		{"a Write over a topic", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/Knowledge.md"}}, true},
@@ -143,10 +144,13 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a shell safe delete", bash(bin + " vault trash Notes.md"), true},
 		{"a shell publish", bash(bin + " journal publish cs566"), true},
 		{"a shell undo", bash(bin + " change undo chg-aaaaaa"), true},
+		// The binary of before 11.0 reads the same vaults.
+		{"the old binary's apply", bash("atlas-" + "obsidian change apply X"), true},
+		{"the oldest binary's hook", bash("~/.atlas/bin/at" + "las hook prompt"), true},
 		{"a shell journal list", bash(bin + " journal list"), false},
 		{"a shell snapshot", bash(bin + " vault snapshot"), false},
-		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/atlas change apply X"), true},
-		{"a shell change apply by path, with flags", bash("cd /tmp && ~/.atlas/bin/" + bin + " change --vault W apply X"), true},
+		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/at" + "las change apply X"), true},
+		{"a shell change apply by path, with flags", bash("cd /tmp && ~/.almagest/bin/" + bin + " change --vault W apply X"), true},
 		{"a shell migration", bash(bin + " vault migrate"), true},
 		{"a shell migration dry run", bash(bin + " vault migrate --dry-run"), true},
 		{"a forged prompt", bash(`echo '{"prompt":"yes"}' | ` + bin + ` hook prompt`), true},
@@ -154,7 +158,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a hook inside a shell string", bash(`sh -c "` + bin + ` hook prompt"`), true},
 		{"a hook with a backslash in its name", bash(bin + ` ho\ok prompt`), true},
 		{"a change apply behind a backslash", bash(`\` + bin + ` change apply X`), true},
-		{"a change apply by a path in upper case", bash("/USERS/X/.ATLAS/BIN/" + strings.ToUpper(bin) + " change apply X"), true},
+		{"a change apply by a path in upper case", bash("/USERS/X/.ALMAGEST/BIN/" + strings.ToUpper(bin) + " change apply X"), true},
 		{"a migration after an option", bash(bin + " vault --json migrate"), true},
 		{"a migration after the vault option", bash(bin + " vault --vault W migrate"), true},
 		{"a migration after --", bash(bin + " vault -- migrate"), true},
@@ -283,7 +287,7 @@ func TestTouchedBindsChanges(t *testing.T) {
 		t.Fatal(err)
 	}
 	data, _ := json.Marshal(pv)
-	tool := "mcp__plugin_atlas-obsidian_atlas__change"
+	tool := "mcp__plugin_almagest_almagest__change"
 	f.run("touched", map[string]any{"tool_name": tool, "tool_input": map[string]any{"action": "propose"}, "tool_response": json.RawMessage(data)})
 	if !strings.Contains(f.tv.Read(pv.Ref.Path), `session: "[[2026-09-27 1432 a1b2c3]]"`) {
 		t.Fatal("the change names its session")
@@ -308,7 +312,7 @@ func TestTheGate(t *testing.T) {
 	}
 	bind := func(pv *change.Preview) {
 		data, _ := json.Marshal(pv)
-		f.run("touched", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "propose"}, "tool_response": json.RawMessage(data)})
+		f.run("touched", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__change", "tool_input": map[string]any{"action": "propose"}, "tool_response": json.RawMessage(data)})
 	}
 	apply := func(key string) error {
 		_, err := change.Apply(f.tv.V, key, f.tv.Clock, sessions.UserAnswered(f.tv.V))
@@ -373,7 +377,7 @@ func TestReadOnlyAgents(t *testing.T) {
 	f := setup(t)
 	agent := func(typ string, event map[string]any) map[string]any {
 		event["agent_id"] = "9f07d1aa"
-		event["agent_type"] = "atlas-obsidian:" + typ
+		event["agent_type"] = "almagest:" + typ
 		return event
 	}
 	cases := []struct {
@@ -382,17 +386,17 @@ func TestReadOnlyAgents(t *testing.T) {
 		deny  bool
 	}{
 		{"extract writes", agent("wiki-extract", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "/tmp/x"}}), true},
-		{"draft proposes", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "propose"}}), true},
-		{"draft searches", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__search", "tool_input": map[string]any{"text": "x"}}), false},
-		{"draft calls an action nobody listed", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "rewrite"}}), true},
-		{"draft calls a tool nobody listed", agent("wiki-draft", map[string]any{"tool_name": "mcp__atlas__purge", "tool_input": map[string]any{}}), true},
-		{"draft calls a tool that left", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__thread", "tool_input": map[string]any{"action": "load"}}), true},
-		{"draft reads the vault's status", agent("wiki-draft", map[string]any{"tool_name": "mcp__atlas__vault", "tool_input": map[string]any{"action": "status"}}), false},
-		{"draft shows a change", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__change", "tool_input": map[string]any{"action": "show"}}), false},
-		{"draft reads a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__source", "tool_input": map[string]any{"action": "read"}}), false},
-		{"draft captures a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__source", "tool_input": map[string]any{"action": "capture"}}), true},
-		{"audit ranks a checkout", agent("wiki-audit", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__checkout", "tool_input": map[string]any{"action": "candidates"}}), false},
-		{"audit makes a checkout", agent("wiki-audit", map[string]any{"tool_name": "mcp__plugin_atlas-obsidian_atlas__checkout", "tool_input": map[string]any{"action": "make"}}), true},
+		{"draft proposes", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__change", "tool_input": map[string]any{"action": "propose"}}), true},
+		{"draft searches", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__search", "tool_input": map[string]any{"text": "x"}}), false},
+		{"draft calls an action nobody listed", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__change", "tool_input": map[string]any{"action": "rewrite"}}), true},
+		{"draft calls a tool nobody listed", agent("wiki-draft", map[string]any{"tool_name": "mcp__almagest__purge", "tool_input": map[string]any{}}), true},
+		{"draft calls a tool that left", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__thread", "tool_input": map[string]any{"action": "load"}}), true},
+		{"draft reads the vault's status", agent("wiki-draft", map[string]any{"tool_name": "mcp__almagest__vault", "tool_input": map[string]any{"action": "status"}}), false},
+		{"draft shows a change", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__change", "tool_input": map[string]any{"action": "show"}}), false},
+		{"draft reads a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__source", "tool_input": map[string]any{"action": "read"}}), false},
+		{"draft captures a source", agent("wiki-draft", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__source", "tool_input": map[string]any{"action": "capture"}}), true},
+		{"audit ranks a checkout", agent("wiki-audit", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__checkout", "tool_input": map[string]any{"action": "candidates"}}), false},
+		{"audit makes a checkout", agent("wiki-audit", map[string]any{"tool_name": "mcp__plugin_almagest_almagest__checkout", "tool_input": map[string]any{"action": "make"}}), true},
 		{"wiki audit runs a shell", agent("wiki-audit", bash("ls")), true},
 		{"wiki audit edits a file", agent("wiki-audit", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": "/code/p3/main.go"}}), true},
 	}
@@ -409,9 +413,9 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	f.tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
-	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
-	f.run("touched", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract", "tool_name": "Read"})
-	f.run("subagent-stop", map[string]any{"agent_id": "9f07d1aa", "agent_type": "atlas-obsidian:wiki-extract"})
+	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract"})
+	f.run("touched", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract", "tool_name": "Read"})
+	f.run("subagent-stop", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract"})
 	parent := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
 	if strings.Count(parent, "wiki-extract") != 1 || !strings.Contains(parent, "· ended 14:32") {
 		t.Fatalf("a worker is one line:\n%s", parent)
@@ -485,7 +489,7 @@ func TestPromptNamesTheOpenNote(t *testing.T) {
 	}
 }
 
-func TestAHookTakesTheVaultFromAtlasVaultAndFallsBackToTheFolder(t *testing.T) {
+func TestAHookTakesTheVaultFromAlmagestVaultAndFallsBackToTheFolder(t *testing.T) {
 	f := setup(t)
 	sessionsIn := func() int {
 		matches, _ := filepath.Glob(filepath.Join(f.tv.V.Root, vault.Sessions, "*", "*.md"))
@@ -508,13 +512,13 @@ func TestAHookTakesTheVaultFromAtlasVaultAndFallsBackToTheFolder(t *testing.T) {
 	before := sessionsIn()
 	runWith(f.tv.V.Root, t.TempDir(), "b1b2c3d4-5e6f-7a8b-9c0d-000000000101")
 	if sessionsIn() != before+1 {
-		t.Fatal("ATLAS_VAULT did not choose the vault for a session outside it")
+		t.Fatal("ALMAGEST_VAULT did not choose the vault for a session outside it")
 	}
 	runWith("/no/such/vault", f.tv.V.Root, "c1b2c3d4-5e6f-7a8b-9c0d-000000000102")
 	if sessionsIn() != before+2 {
-		t.Fatal("a bad ATLAS_VAULT did not fall back to the folder's vault")
+		t.Fatal("a bad ALMAGEST_VAULT did not fall back to the folder's vault")
 	}
-	// From inside another vault, ATLAS_VAULT still wins over the folder's vault.
+	// From inside another vault, ALMAGEST_VAULT still wins over the folder's vault.
 	other := testvault.New(t)
 	otherSessions := func() int {
 		matches, _ := filepath.Glob(filepath.Join(other.V.Root, vault.Sessions, "*", "*.md"))
@@ -523,7 +527,7 @@ func TestAHookTakesTheVaultFromAtlasVaultAndFallsBackToTheFolder(t *testing.T) {
 	otherBefore := otherSessions()
 	runWith(f.tv.V.Root, other.V.Root, "d1b2c3d4-5e6f-7a8b-9c0d-000000000103")
 	if sessionsIn() != before+3 || otherSessions() != otherBefore {
-		t.Fatalf("ATLAS_VAULT did not win over the folder's vault: %d in ATLAS_VAULT's, %d in the folder's", sessionsIn()-before, otherSessions()-otherBefore)
+		t.Fatalf("ALMAGEST_VAULT did not win over the folder's vault: %d in ALMAGEST_VAULT's, %d in the folder's", sessionsIn()-before, otherSessions()-otherBefore)
 	}
 }
 
@@ -535,5 +539,30 @@ func TestTheChangesRefusalNamesSupersedes(t *testing.T) {
 	out := f.run("guard", edit(f.tv.V.Root+"/changes/2026-09/x.md", "x"))
 	if !denied(out) || !strings.Contains(out, "supersedes") || !strings.Contains(out, "Obsidian") || strings.Contains(out, "only when the user asks") {
 		t.Fatalf("refusal: %s", out)
+	}
+}
+
+// A vault that has not migrated to 11.0 keeps Atlas.md and .atlas/, and an older binary
+// may still run in it: the guard protects it as it protects any vault.
+func TestGuardProtectsAVaultBeforeTheRename(t *testing.T) {
+	f := setup(t)
+	f.tv.Doc("topic", "Knowledge", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	f.tv.Write(".atlas/config.json", "{\"schema\": \"atlas.vault-config.v1\"}\n")
+	f.tv.Write(vault.LegacyPluginDir+"/main.js", "x\n")
+	f.tv.Write(vault.Marker, strings.Replace(f.tv.Read(vault.Marker), "layout: 7", "layout: 6", 1))
+	f.tv.Commit()
+	if err := os.Rename(f.tv.V.Abs(vault.Marker), f.tv.V.Abs(vault.LegacyMarker)); err != nil {
+		t.Fatal(err)
+	}
+	root := f.tv.V.Root
+	for name, event := range map[string]map[string]any{
+		"the vault document":   edit(root+"/"+vault.LegacyMarker, "layout"),
+		"the vault's config":   edit(root+"/.atlas/config.json", "schema"),
+		"the old plugin":       edit(root+"/"+vault.LegacyPluginDir+"/main.js", "x"),
+		"a knowledge document": edit(root+"/source-core/documents/Knowledge.md", "x"),
+	} {
+		if !denied(f.run("guard", event)) {
+			t.Errorf("%s of a vault before the rename was allowed", name)
+		}
 	}
 }

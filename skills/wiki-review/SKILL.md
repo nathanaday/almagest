@@ -38,7 +38,7 @@ Tools: `lint`, `vault`, `change` (progress, propose, on the repair path). Agents
    - `pending` → [wiki-sync](../wiki-sync/SKILL.md);
    - `untyped` → [wiki-ingest](../wiki-ingest/SKILL.md);
    - `archived` → the user moves the file into `threads/`: a thread document of
-     Atlas 8.x, which 9.0 does not read.
+     Almagest 8.x, which 9.0 does not read.
 
 ## Repair
 

@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/testvault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/testvault"
 )
 
 func TestARenameAppliesTheTitleItsPreviewShowed(t *testing.T) {

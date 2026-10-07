@@ -1,28 +1,28 @@
 {
-  "name": "atlas-obsidian",
+  "name": "almagest",
   "version": "10.4.1",
   "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, shared by Claude Code and Codex.",
   "author": {"name": "nathanaday", "url": "https://github.com/nathanaday"},
   "license": "MIT",
   "skills": "./skills/",
   "mcpServers": {
-    "atlas": {
+    "almagest": {
       "command": "/bin/sh",
       "args": [
         "-c",
-        "h=$ATLAS_HOME; [ -n \"$h\" ] || h=$HOME/.atlas; for b in \"$ATLAS_BIN\" \"$h/bin/atlas-obsidian\" \"$HOME/go/bin/atlas-obsidian\"; do if [ -n \"$b\" ] && [ -x \"$b\" ]; then exec \"$b\" mcp; fi; done; echo 'atlas: the atlas-obsidian binary is not installed.' >&2; echo 'Install it with: make install (in an atlas-obsidian checkout), or set ATLAS_BIN to its path.' >&2; exit 1"
+        "h=$ALMAGEST_HOME; [ -n \"$h\" ] || h=$HOME/.almagest; for b in \"$ALMAGEST_BIN\" \"$h/bin/almagest\" \"$HOME/go/bin/almagest\"; do if [ -n \"$b\" ] && [ -x \"$b\" ]; then exec \"$b\" mcp; fi; done; echo 'almagest: the almagest binary is not installed.' >&2; echo 'Install it with: make install (in an almagest checkout), or set ALMAGEST_BIN to its path.' >&2; exit 1"
       ],
-      "env_vars": ["ATLAS_BIN", "ATLAS_HOME", "ATLAS_VAULT"]
+      "env_vars": ["ALMAGEST_BIN", "ALMAGEST_HOME", "ALMAGEST_VAULT"]
     }
   },
   "interface": {
-    "displayName": "Atlas",
+    "displayName": "Almagest",
     "shortDescription": "One vault for the wiki, the sessions, and the changes.",
     "longDescription": "Keep what you know and what your agents do in one Obsidian vault, with a reviewed change for every wiki edit and a session document for every agent session.",
     "developerName": "nathanaday",
     "category": "Productivity",
     "capabilities": ["Read", "Write"],
-    "websiteURL": "https://github.com/nathanaday/atlas-obsidian",
-    "defaultPrompt": ["Use the atlas skill to orient me in this vault."]
+    "websiteURL": "https://github.com/nathanaday/almagest",
+    "defaultPrompt": ["Use the almagest skill to orient me in this vault."]
   }
 }

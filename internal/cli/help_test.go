@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/cli"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/cli"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // --help prints a command's usage and runs nothing, even for the commands that act at
@@ -34,7 +34,7 @@ func TestHelpRunsNothing(t *testing.T) {
 			if code := c.Run(args); code != 0 {
 				t.Fatalf("%v: exit %d: %s", args, code, errOut.String())
 			}
-			if !strings.Contains(out.String(), "atlas-obsidian "+call[0]) {
+			if !strings.Contains(out.String(), "almagest "+call[0]) {
 				t.Fatalf("%v printed no usage of %s:\n%s", args, call[0], out.String())
 			}
 			for _, d := range []string{dir, home} {

@@ -15,12 +15,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/change"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/search"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/change"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/search"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Ledger is the note of every checkout, in checkout/. Its prefix is reserved, so no
@@ -276,8 +276,8 @@ func Make(v *vault.Vault, o Order, now time.Time) (_ *Made, err error) {
 			{Key: "checked_out", Value: stamp},
 			{Key: "description", Value: d.Str("description")},
 		}
-		callout := doc.Callout("atlas", "A copy of "+doc.Link(title)+", checked out "+vault.Date(now),
-			"Edit it freely. Return in the Atlas palette proposes your edits to the wiki as a change.")
+		callout := doc.Callout("almagest", "A copy of "+doc.Link(title)+", checked out "+vault.Date(now),
+			"Edit it freely. Return in the Almagest palette proposes your edits to the wiki as a change.")
 		if err := tx.Write(rel, []byte(doc.Render(fields, callout+"\n\n"+body))); err != nil {
 			return nil, err
 		}
@@ -294,7 +294,7 @@ func Make(v *vault.Vault, o Order, now time.Time) (_ *Made, err error) {
 		{Key: "documents", Value: len(docs)},
 		{Key: "returned", Value: ""},
 	}
-	body := doc.Callout("atlas", "Checked out "+vault.Date(now), "The librarian's picks, in reading order. The copies are yours to read and edit.") +
+	body := doc.Callout("almagest", "Checked out "+vault.Date(now), "The librarian's picks, in reading order. The copies are yours to read and edit.") +
 		"\n\n## Request\n\n" + strings.TrimSpace(o.Request) + "\n\n## Reading order\n\n" + list.String()
 	if notes := strings.TrimSpace(o.Notes); notes != "" {
 		body += "\n## Notes\n\n" + notes + "\n"
@@ -469,7 +469,7 @@ func readCopies(v *vault.Vault, folder string) ([]aCopy, error) {
 // counts, though the index has not read it.
 func writeLedger(v *vault.Vault, tx *vault.Tx, _ string) error {
 	var b strings.Builder
-	b.WriteString(doc.Callout("atlas", "Written by Atlas at each checkout and return", "Every checkout, newest first.") + "\n\n")
+	b.WriteString(doc.Callout("almagest", "Written by Almagest at each checkout and return", "Every checkout, newest first.") + "\n\n")
 	b.WriteString("| Checked out | Request | Documents | Edited | Returned |\n|---|---|---|---|---|\n")
 	for _, e := range List(v) {
 		returned := "no"

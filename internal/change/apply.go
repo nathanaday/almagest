@@ -12,12 +12,12 @@ import (
 	"strings"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/derive"
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/gitx"
-	"github.com/nathanaday/atlas-obsidian/internal/links"
-	"github.com/nathanaday/atlas-obsidian/internal/schema"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
+	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/gitx"
+	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/schema"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // Trailer names the change a commit applied.
@@ -430,7 +430,7 @@ func Show(idx *vault.Index, key string) (*Preview, error) {
 	prior := current(idx)
 	sha := ""
 	if s := d.Str("status"); s == Applied || s == Undone {
-		sha, _ = idx.V.Git().FindTrailer(Trailer, d.ID())
+		sha, _ = vault.ChangeCommit(idx.V.Git(), d.ID())
 		if sha != "" {
 			prior = atParent(idx, sha)
 		}
@@ -994,7 +994,7 @@ func Undo(v *vault.Vault, key string, now time.Time) (_ *Preview, err error) {
 		return nil, fmt.Errorf("%s is %s; only an applied change can be undone", vault.Title(d), s)
 	}
 	g := v.Git()
-	sha, err := g.FindTrailer(Trailer, d.ID())
+	sha, err := vault.ChangeCommit(g, d.ID())
 	if err != nil {
 		return nil, err
 	}
@@ -1059,7 +1059,7 @@ func Undo(v *vault.Vault, key string, now time.Time) (_ *Preview, err error) {
 		return nil, err
 	}
 	title := strings.TrimSpace(strings.TrimPrefix(vault.Title(d), vault.Date(createdOf(d))))
-	undo, err := tx.Commit("undo: "+title, "Atlas-Undo: "+d.ID())
+	undo, err := tx.Commit("undo: "+title, "Almagest-Undo: "+d.ID())
 	if err != nil {
 		return nil, err
 	}

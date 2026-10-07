@@ -10,7 +10,7 @@ import (
 	"syscall"
 )
 
-// harnessNames are the process names of the agents whose sessions Atlas records.
+// harnessNames are the process names of the agents whose sessions Almagest records.
 var harnessNames = []string{"claude", "codex"}
 
 // MaxAncestors bounds the walk up the process tree from a hook to its agent.

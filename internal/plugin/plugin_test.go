@@ -13,10 +13,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/nathanaday/atlas-obsidian/internal/doc"
-	"github.com/nathanaday/atlas-obsidian/internal/hooks"
-	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
-	"github.com/nathanaday/atlas-obsidian/internal/sessions"
+	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/hooks"
+	"github.com/nathanaday/almagest/internal/mcpserver"
+	"github.com/nathanaday/almagest/internal/sessions"
 )
 
 // root is the plugin's folder: the repository root.
@@ -24,9 +24,9 @@ const root = "../.."
 
 // Skills are the skills of the design's map, by noun.
 var Skills = map[string][]string{
-	"atlas": {"atlas", "atlas-onboard"},
-	"repo":  {"repo-link", "repo-unlink", "repo-ingest"},
-	"wiki":  {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review", "wiki-checkout", "wiki-wikify"},
+	"almagest": {"almagest", "almagest-onboard"},
+	"repo":     {"repo-link", "repo-unlink", "repo-ingest"},
+	"wiki":     {"wiki-ingest", "wiki-sync", "wiki-save", "wiki-query", "wiki-edit", "wiki-map", "wiki-review", "wiki-checkout", "wiki-wikify"},
 }
 
 func allSkills() []string {
@@ -81,7 +81,7 @@ func TestEverySkillHasItsForm(t *testing.T) {
 				t.Errorf("%s: lacks %q", name, strings.TrimSpace(want))
 			}
 		}
-		if !strings.Contains(text, "\n## Procedure\n") && name != "atlas" {
+		if !strings.Contains(text, "\n## Procedure\n") && name != "almagest" {
 			t.Errorf("%s: lacks its Procedure", name)
 		}
 		if !strings.Contains(text, "\n## Gate\n") && !strings.Contains(text, "\n## Gates\n") {
@@ -113,7 +113,7 @@ func TestEveryLinkResolves(t *testing.T) {
 func TestAgentsAreTheReadOnlyWorkers(t *testing.T) {
 	tools := map[string]bool{}
 	for _, n := range mcpserver.ToolNames() {
-		tools["mcp__plugin_"+hooks.PluginName+"_atlas__"+n] = true
+		tools["mcp__plugin_"+hooks.PluginName+"_almagest__"+n] = true
 	}
 	entries, _ := os.ReadDir(filepath.Join(root, "agents"))
 	var names []string
@@ -157,7 +157,7 @@ func TestSkillsNameOnlyWhatExists(t *testing.T) {
 	for _, n := range mcpserver.ToolNames() {
 		tools[n] = true
 	}
-	name := regexp.MustCompile(`\[((?:atlas|repo|wiki|thread|chord)-[a-z]+)\]\(`)
+	name := regexp.MustCompile(`\[((?:almagest|repo|wiki|thread|chord)-[a-z]+)\]\(`)
 	toolsLine := regexp.MustCompile("(?m)^Tools: (.*)$")
 	for _, s := range allSkills() {
 		text := read(t, "skills/"+s+"/SKILL.md")
@@ -219,21 +219,21 @@ func TestHooksFileMatchesTheCommands(t *testing.T) {
 	}
 	// The hosts test the matcher as written, unanchored, so it anchors itself.
 	guard := regexp.MustCompile(file.Hooks["PreToolUse"][0].Matcher)
-	for _, tool := range []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_atlas__change", "mcp__plugin_" + hooks.PluginName + "_atlas__source", "mcp__plugin_" + hooks.PluginName + "_atlas__vault", "mcp__atlas__change", "mcp__atlas__vault"} {
+	for _, tool := range []string{"Write", "Edit", "MultiEdit", "NotebookEdit", "Bash", "apply_patch", "mcp__plugin_" + hooks.PluginName + "_almagest__change", "mcp__plugin_" + hooks.PluginName + "_almagest__source", "mcp__plugin_" + hooks.PluginName + "_almagest__vault", "mcp__almagest__change", "mcp__almagest__vault"} {
 		if !guard.MatchString(tool) {
 			t.Errorf("the guard does not see %s", tool)
 		}
 	}
-	for _, tool := range []string{"WriteFile", "mcp__x_atlas__changelog", "mcp__plugin_other_atlas__change", "mcp__atlas__change_log", "mcp__atlas__search", "mcp__plugin_" + hooks.PluginName + "_atlas__thread", "mcp__atlas__chord", "Read"} {
+	for _, tool := range []string{"WriteFile", "mcp__x_almagest__changelog", "mcp__plugin_other_almagest__change", "mcp__almagest__change_log", "mcp__almagest__search", "mcp__plugin_" + hooks.PluginName + "_almagest__thread", "mcp__almagest__chord", "Read"} {
 		if guard.MatchString(tool) {
 			t.Errorf("the guard sees %s", tool)
 		}
 	}
-	// Every atlas tool that can write reaches the guard on both hosts; a new tool fails
+	// Every almagest tool that can write reaches the guard on both hosts; a new tool fails
 	// here until the matcher names it, or this list says it only reads.
 	readsOnly := map[string]bool{"search": true, "context": true, "match": true, "lint": true}
 	for _, tool := range mcpserver.ToolNames() {
-		for _, name := range []string{"mcp__plugin_" + hooks.PluginName + "_atlas__" + tool, "mcp__atlas__" + tool} {
+		for _, name := range []string{"mcp__plugin_" + hooks.PluginName + "_almagest__" + tool, "mcp__almagest__" + tool} {
 			if !readsOnly[tool] && !guard.MatchString(name) {
 				t.Errorf("the guard does not see %s, which can write", name)
 			}
