@@ -1,61 +1,223 @@
 # Almagest
 
-Status: in development. The 5.x design (a project folder in every repository, and a
-terminal view) is retired; its code is on the `v1` branch.
+**A wiki in your Obsidian vault that your coding agents write, and you approve.**
 
-## About
+Almagest turns an Obsidian vault into a knowledge base for long projects. You keep working
+with Claude Code or Codex as you do now. The agent reads your papers, notes, and code,
+and writes what it learns into the vault as linked, cited pages. Nothing changes in the
+wiki until you approve it.
 
-Working with agents on long projects fails in two ways. You delegate and lose track of
-the work, or you spend your energy keeping documents current. Almagest keeps every document
-of your work in one Obsidian vault, and the agents write most of it for you:
+Status: early and in active development (11.0). macOS and Linux. Almagest was named Atlas
+before 11.0.
 
-- what you know: **topics**, **sources**, and **repositories**, with a citation for every
-  claim;
-- what your agents do now and did before: one **session** document per agent session;
-- every edit an agent made to the knowledge: a **change** document you approve;
-- what you write yourself: **journals**, which no agent edits.
+## What Almagest does
 
-Every document of the wiki lies flat in `source-core/documents/`. Tags sort it, and a
-document may hold many: a page tagged `cs513` and `self-driving` shows up under both, and
-a search for both tags finds it. You start an agent in the vault. It finds the repository
-you mean through its tags and its repository document, and it edits the code there. Its
-session document records which repositories it touched. You read and edit every
-document in Obsidian.
+Long projects with agents tend to fail in one of two ways. You delegate, and you lose track
+of what was decided and why. Or you spend your energy keeping notes and documents current.
+Almagest gives that work to the agent, and keeps you in charge of it:
 
-Release 8 also tracked work as threads and chords, and 9.0 removed them. They now live in
-the standalone project obsidian-threads (`~/projects/software/obsidian-threads`).
+- **The agent writes the wiki.** Drop a paper, a PDF, or a set of notes into `ingest/`, and
+  the agent turns them into topic pages that cite their sources. Point it at a code
+  repository, and it writes a page that describes the code.
+- **You approve every edit.** Each edit arrives as a *change document*: a list of the pages
+  the agent wants to create or modify, the full new text of each, and one line on why.
+  You press Approve, or say yes in the chat. Until then, the wiki stays as it is.
+- **Every session leaves a record.** Each agent session gets a document: what it worked on,
+  which repositories it touched, and where the work stands. Next week, you and the next
+  agent can pick up from there.
+- **Your own writing stays yours.** Agents read your journals and never edit them. You
+  decide when a journal goes into the wiki.
+
+## Why it is different
+
+Most AI plugins for Obsidian put a chat beside your notes, write text into the note you
+have open, or search your notes through an embedding index. Almagest takes another
+approach.
+
+- **It uses the agent you already have.** Almagest is a plugin for Claude Code and Codex.
+  The agent that edits your code also keeps your wiki, in the same session. Obsidian
+  holds no API key. Almagest itself makes one network request: the download of its
+  own program from GitHub, the first time.
+- **Edits are reviewed, not trusted.** An agent cannot apply a change that writes until
+  you reply in its session. Code enforces this rule through hooks, not the prompt, so a
+  confused agent cannot skip it. Your safe delete, your journal publish, and the vault
+  migration run only when you start them.
+- **Plain files and git, no database.** Every page is a Markdown file with an id and a
+  type. Every write is a git commit, so you can read the history and undo any change.
+  There is no vector store and no hidden state to fall out of step.
+- **Code keeps the structure; the model writes the prose.** Ids, links, tags, citations,
+  the hashes of captured sources, and the overview pages come from code. A rename
+  rewrites every link to the page. A lint check finds broken links and topics with no
+  source. So the wiki stays consistent as it grows to hundreds of pages.
+- **Citations you can check.** A source is captured once into the vault, with its
+  original file and a hash. Topics cite the source, so each claim leads back to where it
+  came from.
+- **Knowledge and code in one place.** Repository pages link the wiki to the code
+  repositories on your machine. An agent started in the vault finds the repository you
+  mean through its tags, and works in it.
+
+## How it works
+
+```text
+ what goes in            what your agent does          what you get
+ ──────────────────      ───────────────────────       ──────────────────────────────
+ ingest/ papers, notes ─▶ captures and drafts pages ─▶ a change ─▶ you approve ─▶ wiki
+ code repositories     ─▶ reads and edits the code  ─▶ a session record
+ journals/ (yours)     ─▶ reads only                ─▶ an edition, when you publish
+```
+
+The vault holds a few kinds of document:
+
+- **Topics**: what you know, one subject per page, with citations.
+- **Sources**: the papers, articles, and notes that topics cite. The original file stays
+  in the vault.
+- **Repositories**: one page per code repository on your machine, linked by its path.
+- **Changes**: the edits an agent proposes, and their result after you decide.
+- **Sessions**: one record per agent session.
+
+Tags sort the wiki. A page may hold many tags, so a page tagged `cs513` and
+`self-driving` shows under both, and a search for both finds it.
+
+## Features
+
+- **Ingest.** Turn the files in `ingest/` into cited topic pages. The agent reports each
+  step in one work document, then proposes all the pages into it, so you decide once.
+- **Repository pages.** Link a code repository, and the agent describes it. Code keeps
+  the branch, the last commit, and the remote current.
+- **Changes you approve.** Approve or Cancel in the change document, or in the chat. Undo
+  takes back an applied change.
+- **Search and context.** Search the wiki by words and tags, and give an agent the pages
+  a task needs.
+- **Lint and repair.** A health check for broken links, topics with no source, and
+  topics whose sources changed after them. An agent can propose the repairs.
+- **Safe delete.** Move a file to `trash/` only when nothing links it, or let an agent
+  repoint the links first.
+- **Journals.** Your own writing, which agents never edit. Publish a volume when you
+  want the wiki to learn from it. See [Journals](#journals).
+- **Checkouts.** Ask a librarian agent for the material on a subject. It picks the pages
+  that serve your request, in reading order, and copies them for you to read and mark up.
+  Return proposes your edits as one change. See [Checkouts](#checkouts).
+- **Wikify a note** (experimental). Mark a copy of any note with what the wiki already
+  knows and the subjects it lacks, then accept or ignore each mark. See
+  [Wikify a note](#wikify-a-note-experimental).
+- **Views.** Code writes overview notes: a home page, a timeline, a library, the
+  repositories, and one page per tag.
+- **Almagest for Obsidian** (optional). A tool palette, Approve and Cancel buttons in each
+  change, a tag navigator, a sessions pane, and automatic snapshots of your hand edits.
+  See [The Obsidian plugin](#the-obsidian-plugin).
 
 ## Quickstart
 
-Almagest has three parts:
+You need macOS or Linux with `git` and `curl`, Claude Code (or Codex), and Obsidian.
 
-- the **agent plugin** for Claude Code or Codex: skills, hooks, and the MCP server;
-- the **`almagest` binary** (Go, one static file), which the agent plugin installs and
-  runs;
-- **Almagest for Obsidian**, an optional plugin from Obsidian's community plugins: the
-  palette, the Approve and Cancel widget, the navigator, and the sessions pane
-  ([obsidian-almagest](https://github.com/nathanaday/obsidian-almagest)).
+1. **Install the agent plugin** in Claude Code:
 
-You install the agent plugin. You build nothing and run no setup step.
+   ```bash
+   claude plugin marketplace add nathanaday/almagest
+   claude plugin install almagest@nathanaday-almagest
+   ```
 
-### Prerequisites
+   Restart Claude Code. The plugin's first session installs the `almagest` program for
+   your system and checks it against the checksum the plugin carries. You build nothing.
+   For Codex, see [Codex](#codex).
 
-- macOS or Linux (arm64 or amd64), `git`, and `curl`.
-- Claude Code (or Codex), and Obsidian.
+2. **Make a vault.** Start Claude Code in an empty folder and say **"set up almagest"**.
+   The agent asks a few questions, makes the vault, and offers to link your code
+   repositories.
 
-### Install
+3. **Open it in Obsidian** (Open folder as vault). For the palette and the Approve
+   buttons, install **Almagest** from Obsidian's community plugins
+   (`obsidian://show-plugin?id=almagest`). The vault works without it.
 
-In Claude Code:
+4. **Give it something to learn.** Put a paper or a few notes in the vault's `ingest/`
+   folder, start Claude Code in the vault, and say **"ingest my files"**.
+
+5. **Review and approve.** The agent writes a change document in `changes/`. Read it, edit
+   it if you like, then press Approve (or say yes). The new pages appear in
+   `source-core/documents/`, and the views in `wiki-view/` show them.
+
+Then ask questions about what the wiki holds, link more repositories, or ask "what waits
+for me?". [What to ask](#what-to-ask) lists more. `almagest doctor` checks the whole install
+when something does not work.
+
+## What to ask
+
+Start your agent in the vault and ask in plain words. The `almagest` skill routes each
+request to the skill that does it.
+
+- "Link the repository at ~/code/p3-edge under the tag work/p3." The agent proposes a
+  change; you say yes, or press Approve in the change document in Obsidian. The agent
+  cannot apply a change that writes until you send a prompt in the session that
+  proposed it. A change with no writes
+  that only marks sources as absorbed applies at once. This gate holds against the almagest
+  tools; it is not a sandbox against an agent's shell. [SECURITY.md](SECURITY.md) gives
+  the full rule.
+- "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
+- "In p3-edge, score boxes by motion." The agent finds the repository, reads its
+  instruction files and the policies of the wiki that apply to it, and edits the code.
+  On long work it writes where the work stands under `## Progress` in its session
+  document.
+- "Note this: try a smaller backbone on p3-edge." The agent writes the idea in a note in
+  `scratchpad/`.
+- "Start agent" in Obsidian opens a terminal with your agent in the vault. The agent
+  preferences choose the agent and the terminal (see
+  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
+  the open sessions and the ones that closed in the last two hours, with Resume.
+- "Ingest my files." Files you dropped in `ingest/` become cited wiki pages. The agent
+  writes each step in one work document in `changes/`, then proposes the pages into the
+  same document. You decide once, at the end.
+- "What waits for me?" The agent lists the proposed changes, the running work
+  documents, the files in `ingest/`, the sources that wait for the wiki, and the
+  checkouts with edits to return.
+- The Almagest palette in Obsidian starts an ingest, a wiki lint, a safe delete, a
+  checkout, the publish of a journal, or a wikify of the open note with one button. See
+  [The Obsidian plugin](#the-obsidian-plugin).
+- "Publish my journal." The agent asks you to press Publish in the palette: only you
+  publish a journal. See [Journals](#journals).
+- "What do we know about my cs513 self-driving project?" The agent searches the
+  documents that hold both tags.
+- "Check out the material on reinforcement learning." The agent chooses the documents
+  that serve the request and copies them into `checkout/`, with a reading list. See
+  [Checkouts](#checkouts).
+- "Wikify this note." (experimental) The agent marks a copy of the note with what the
+  wiki knows and the subjects worth a topic. You accept or ignore each mark. See
+  [Wikify a note](#wikify-a-note-experimental).
+
+A **work document** is a change document that starts before the agent knows its writes.
+Its status is `running`. The agent adds one line under `## Progress` for each step
+(captured, extracted 9 of 12 chunks, matched, drafted), then proposes its writes into it.
+A proposed change opens with a `## Summary`: one line per write, with the reason. Cancel
+on a running document stops the agent.
+
+The same actions work from a shell:
 
 ```bash
-claude plugin marketplace add nathanaday/almagest
-claude plugin install almagest@nathanaday-almagest
+almagest vault                      # the state of the vault
+almagest search "remote update" --tag work/p3
+almagest change show chg-r8m3tb     # a proposed change
+almagest change start --kind ingest --file paper.pdf   # a work document for an ingest
+almagest change progress chg-r8m3tb "captured 1 source"  # a step, in one line
+almagest vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
+almagest journal list               # the journal volumes, each with its latest edition
+almagest journal publish cs566-notes   # publish a volume as a new edition
+almagest checkout                   # the checkouts, newest first
+almagest checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
+almagest checkout make order.json   # copy the documents an order names (request, name, documents, notes)
+almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
+almagest wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
+almagest wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
+almagest lint                       # the health check
+almagest vault snapshot             # commit your hand edits now
 ```
 
-Restart Claude Code. The plugin's first session installs the binary; see
-[How the binary is installed](#how-the-binary-is-installed). Then make a vault (below),
-and in Obsidian install **Almagest** from the community plugins if you want its
-interface.
+In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
+Repositories, one timeline per month under `wiki-view/timeline/`, and one view per tag
+under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
+`changes/Changes.base` lists the changes that wait for you.
+
+## Install and update
+
+### Check the install
 
 `almagest doctor` checks the binary, the plugin, and every vault. It also starts the
 plugin's MCP server as each agent runs it, and fails when the server does not list the
@@ -164,6 +326,8 @@ The Almagest design vault tracks these limits.
 To try the plugin from a clone of this repository without installing it, start Claude
 Code with `claude --plugin-dir /path/to/almagest`.
 
+## Your vault
+
 ### Make a vault
 
 Start Claude Code in an empty folder and say "set up almagest". Or from a shell:
@@ -176,81 +340,6 @@ almagest open --register --vault ~/notes/work   # opens it in Obsidian
 
 A command that acts on a vault takes `--vault` (a folder, or a vault's name), else the
 vault that `ALMAGEST_VAULT` names, else the vault above the working folder.
-
-### Migrate a vault of 9.0 or 8.x
-
-A vault of 9.0 or 8.x needs one migration to the 10.0 layout. Obsidian shows a notice
-that opens the migration. From a shell, `almagest vault migrate --dry-run` lists
-the moves, and `almagest vault migrate` makes them in one commit:
-
-| 9.0 | 10.0 |
-| --- | --- |
-| `wiki/documents/` | `source-core/documents/` |
-| `wiki/assets/` | `source-core/originals/` |
-| `inbox/` | `ingest/` |
-| `views/` | `wiki-view/`, written again by code; a note of yours there moves to `ingest/` |
-| `views/tags/` | `wiki-view/nav/` |
-
-- Links, embeds, and Bases that name a moved folder follow the move. Prose that names a
-  folder stays as you wrote it.
-- A source captured from the old inbox gets `origin: ingest`.
-- New attachments go to `source-core/originals/`, and `wiki-view/` stays out of
-  Obsidian's search, unless you chose other settings.
-- The vault gets the 10.0 Obsidian plugin. Reload Obsidian after the migration.
-
-A vault of 8.x first takes the step to 9.0, in the same commit. Its dry run lists that
-step only:
-
-- every stub, spec, task list, verification, chord, and event document moves from
-  `wiki/documents/` to `threads/`, with its file name and content unchanged;
-- every canvas in `chords/` moves to `threads/`, and `chords/` goes;
-- topics and repositories lose their `## Threads` section; topics and sources lose
-  `from`; sessions lose `threads`, `specs`, `work`, `checked`, and `events`; changes
-  lose `work`;
-- `Almagest.md` loses `wikify`.
-
-The migration refuses while a change is proposed: apply or reject it first. It also
-refuses when a file already exists where it would move one. A vault older than 8.0
-migrates with release 8.1.1 (tag `threads-final`) first.
-
-### Agent preferences
-
-Start agent reads four preferences, and Resume reads `terminal` and `terminal_command`:
-
-| Key                     | Values                                                  | Default    |
-| ----------------------- | ------------------------------------------------------- | ---------- |
-| `agent`                 | `claude`, `codex`                                       | `claude`   |
-| `agent_commands.<agent>`| the command as you type it in a shell, such as a shell function | the agent's name |
-| `terminal`              | `terminal`, `iterm`, `wezterm`, `ghostty`, `custom`     | `terminal` |
-| `terminal_command`      | for `custom`: a command with `{command}` for the agent's command | none |
-
-Two files hold them. `~/.almagest/config.json` holds them for every vault. `.almagest/config.json`
-in a vault overrides them, key by key: when both files set a key, the vault's value wins.
-Set them in the Almagest settings in Obsidian, or from a shell:
-
-```bash
-almagest config set terminal wezterm --global        # every vault
-almagest config set agent_commands.claude claude-work  # this vault: another account
-almagest config                                      # the result, and where each value comes from
-almagest config unset agent_commands.claude          # back to the global value
-```
-
-The terminal runs the command in your login shell, so your `PATH` and shell functions
-apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
-
-### Environment variables
-
-| Variable | What it does |
-| --- | --- |
-| `ALMAGEST_HOME` | The machine folder: the binaries, `config.json` with the list of vaults, the global preferences, and `install.log`. Default `~/.almagest`. |
-| `ALMAGEST_VAULT` | The vault a command, the MCP server, or a hook uses when the call names none: a folder or a vault's name. |
-| `ALMAGEST_BIN` | A binary of your own, which the launcher runs in place of the plugin's version; it then downloads nothing. |
-| `ALMAGEST_NO_DOWNLOAD` | Set to `1`, the launcher never downloads a binary. |
-| `ALMAGEST_HOOK_LOG` | A file that gets every hook event in full, your prompts included. Use it only to debug. |
-| `CLAUDE_CONFIG_DIR` | Claude Code's config folder, which `setup` and `doctor` read. Default `~/.claude`. |
-| `CLAUDE_PROJECT_DIR` | The folder in which `almagest mcp` looks for the vault, when set. |
-| `OBSIDIAN_CONFIG_DIR` | The folder of Obsidian's `obsidian.json`, which `open --register` edits. |
-| `CODEX_HOME` | Codex's own folder. Almagest does not read it, but the `codex` commands that `setup` and `doctor` run do. |
 
 ### Files in a vault
 
@@ -291,78 +380,58 @@ Besides `source-core/documents/`, Almagest writes these files and folders in a v
 Search and lint skip `scratchpad/`, `journals/`, `threads/`, and `checkout/`, but a link
 to a note there still resolves. Almagest skips `trash/` entirely.
 
-## Usage
+### Migrate a vault from an earlier release
 
-Start the agent in the vault and ask in plain words. The `almagest` skill routes each
-request.
+A vault made by an earlier release (Atlas 8.x, 9.0, or 10.x) needs one migration to the
+11.0 layout. Almagest for Obsidian shows a notice that opens it. From a shell,
+`almagest vault migrate --dry-run` lists the moves, and `almagest vault migrate` makes
+every step in one commit. Only you run it; the guard refuses it from an agent.
 
-- "Link the repository at ~/code/p3-edge under the tag work/p3." The agent proposes a
-  change; you say yes, or press Approve in the change document in Obsidian. The agent
-  cannot apply a change that writes until you send a prompt in the session that
-  proposed it. A change with no writes
-  that only marks sources as absorbed applies at once. This gate holds against the almagest
-  tools; it is not a sandbox against an agent's shell. [SECURITY.md](SECURITY.md) gives
-  the full rule.
-- "Describe p3-edge in the wiki." The agent snapshots the code and proposes the pages.
-- "In p3-edge, score boxes by motion." The agent finds the repository, reads its
-  instruction files and the policies of the wiki that apply to it, and edits the code.
-  On long work it writes where the work stands under `## Progress` in its session
-  document.
-- "Note this: try a smaller backbone on p3-edge." The agent writes the idea in a note in
-  `scratchpad/`.
-- "Start agent" in Obsidian opens a terminal with your agent in the vault. The agent
-  preferences choose the agent and the terminal (see
-  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
-  the open sessions and the ones that closed in the last two hours, with Resume.
-- "Ingest my files." Files you dropped in `ingest/` become cited wiki pages. The agent
-  writes each step in one work document in `changes/`, then proposes the pages into the
-  same document. You decide once, at the end.
-- "What waits for me?" The agent lists the proposed changes, the running work
-  documents, the files in `ingest/`, the sources that wait for the wiki, and the
-  checkouts with edits to return.
-- The Almagest palette in Obsidian starts an ingest, a wiki lint, a safe delete, a
-  checkout, the publish of a journal, or a wikify of the open note with one button. See [The Obsidian plugin](#the-obsidian-plugin).
-- "Publish my journal." The agent asks you to press Publish in the palette: only you
-  publish a journal. See [Journals](#journals).
-- "What do we know about my cs513 self-driving project?" The agent searches the
-  documents that hold both tags.
-- "Check out the material on reinforcement learning." The agent chooses the documents
-  that serve the request and copies them into `checkout/`, with a reading list. See [Checkouts](#checkouts).
-- "Wikify this note." (experimental) The agent marks a copy of the note with what the
-  wiki knows and the subjects worth a topic. You accept or ignore each mark. See
-  [Wikify a note](#wikify-a-note-experimental).
+**From 10.0** (the rename from Atlas to Almagest), the migration renames only what code
+wrote:
 
-A **work document** is a change document that starts before the agent knows its writes.
-Its status is `running`. The agent adds one line under `## Progress` for each step
-(captured, extracted 9 of 12 chunks, matched, drafted), then proposes its writes into it.
-A proposed change opens with a `## Summary`: one line per write, with the reason. Cancel
-on a running document stops the agent.
+- `Atlas.md` becomes `Almagest.md`, and `.atlas/` becomes `.almagest/`;
+- the `atlas-change` and `atlas-repo` blocks, the change documents' class, and the
+  callouts of checkouts and publication histories take the name Almagest;
+- links to `[[Atlas]]` point at `[[Almagest]]`, unless another note is titled Atlas.
 
-The same actions work from a shell:
+Your own text stays as you wrote it, even where it says "Atlas". The old Atlas plugin in
+`.obsidian/plugins/atlas/` stays too: turn it off and remove it in Obsidian, then install
+Almagest from the community plugins. The migration's report reminds you.
 
-```bash
-almagest vault                      # the state of the vault
-almagest search "remote update" --tag work/p3
-almagest change show chg-r8m3tb     # a proposed change
-almagest change start --kind ingest --file paper.pdf   # a work document for an ingest
-almagest change progress chg-r8m3tb "captured 1 source"  # a step, in one line
-almagest vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
-almagest journal list               # the journal volumes, each with its latest edition
-almagest journal publish cs566-notes   # publish a volume as a new edition
-almagest checkout                   # the checkouts, newest first
-almagest checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
-almagest checkout make order.json   # copy the documents an order names (request, name, documents, notes)
-almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
-almagest wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
-almagest wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
-almagest lint                       # the health check
-almagest vault snapshot             # commit your hand edits now
-```
+**From 9.0**, it first renames the folders of 10.0:
 
-In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
-Repositories, one timeline per month under `wiki-view/timeline/`, and one view per tag
-under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
-`changes/Changes.base` lists the changes that wait for you.
+| 9.0 | 10.0 |
+| --- | --- |
+| `wiki/documents/` | `source-core/documents/` |
+| `wiki/assets/` | `source-core/originals/` |
+| `inbox/` | `ingest/` |
+| `views/` | `wiki-view/`, written again by code; a note of yours there moves to `ingest/` |
+| `views/tags/` | `wiki-view/nav/` |
+
+- Links, embeds, and Bases that name a moved folder follow the move. Prose that names a
+  folder stays as you wrote it.
+- A source captured from the old inbox gets `origin: ingest`.
+- New attachments go to `source-core/originals/`, and `wiki-view/` stays out of
+  Obsidian's search, unless you chose other settings.
+
+**From 8.x**, it first takes the step to 9.0:
+
+- every stub, spec, task list, verification, chord, and event document moves from
+  `wiki/documents/` to `threads/`, with its file name and content unchanged;
+- every canvas in `chords/` moves to `threads/`, and `chords/` goes;
+- topics and repositories lose their `## Threads` section; topics and sources lose
+  `from`; sessions lose `threads`, `specs`, `work`, `checked`, and `events`; changes
+  lose `work`;
+- the vault document loses `wikify`.
+
+The dry run of a 9.0 or 8.x vault lists its first step only, since the next ones read
+what it moves. The migration refuses while a change is proposed: apply or reject it
+first, with the release that made the vault. It also refuses when a file already exists
+where it would move one. A vault older than 8.0 migrates with release 8.1.1 (tag
+`threads-final`) first.
+
+## Features in depth
 
 ### Journals
 
@@ -518,10 +587,50 @@ The vault works without the plugin. With it, Obsidian adds:
 - Colors and icons for the callouts of Almagest documents.
 - A sync of the views a few seconds after you edit a note.
 
-## Patterns and conventions
+## Settings
 
-The design lives in the maintainer's Almagest vault, outside this repository. These are
-its core rules:
+### Agent preferences
+
+Start agent reads four preferences, and Resume reads `terminal` and `terminal_command`:
+
+| Key                     | Values                                                  | Default    |
+| ----------------------- | ------------------------------------------------------- | ---------- |
+| `agent`                 | `claude`, `codex`                                       | `claude`   |
+| `agent_commands.<agent>`| the command as you type it in a shell, such as a shell function | the agent's name |
+| `terminal`              | `terminal`, `iterm`, `wezterm`, `ghostty`, `custom`     | `terminal` |
+| `terminal_command`      | for `custom`: a command with `{command}` for the agent's command | none |
+
+Two files hold them. `~/.almagest/config.json` holds them for every vault. `.almagest/config.json`
+in a vault overrides them, key by key: when both files set a key, the vault's value wins.
+Set them in the Almagest settings in Obsidian, or from a shell:
+
+```bash
+almagest config set terminal wezterm --global        # every vault
+almagest config set agent_commands.claude claude-work  # this vault: another account
+almagest config                                      # the result, and where each value comes from
+almagest config unset agent_commands.claude          # back to the global value
+```
+
+The terminal runs the command in your login shell, so your `PATH` and shell functions
+apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
+
+### Environment variables
+
+| Variable | What it does |
+| --- | --- |
+| `ALMAGEST_HOME` | The machine folder: the binaries, `config.json` with the list of vaults, the global preferences, and `install.log`. Default `~/.almagest`. |
+| `ALMAGEST_VAULT` | The vault a command, the MCP server, or a hook uses when the call names none: a folder or a vault's name. |
+| `ALMAGEST_BIN` | A binary of your own, which the launcher runs in place of the plugin's version; it then downloads nothing. |
+| `ALMAGEST_NO_DOWNLOAD` | Set to `1`, the launcher never downloads a binary. |
+| `ALMAGEST_HOOK_LOG` | A file that gets every hook event in full, your prompts included. Use it only to debug. |
+| `CLAUDE_CONFIG_DIR` | Claude Code's config folder, which `setup` and `doctor` read. Default `~/.claude`. |
+| `CLAUDE_PROJECT_DIR` | The folder in which `almagest mcp` looks for the vault, when set. |
+| `OBSIDIAN_CONFIG_DIR` | The folder of Obsidian's `obsidian.json`, which `open --register` edits. |
+| `CODEX_HOME` | Codex's own folder. Almagest does not read it, but the `codex` commands that `setup` and `doctor` run do. |
+
+## Design principles
+
+These rules hold everywhere in Almagest:
 
 - Everything is a document with an id and a type. No database and no state folder.
 - Code owns what code can derive: ids, statuses, links, hashes, git facts, the first
@@ -532,7 +641,7 @@ its core rules:
   each session touched.
 - Hooks keep a document for every session, so the record does not depend on the model.
 
-## Layout
+## Repository layout
 
 - The binary: `cmd/almagest/` and `internal/`, one package per part.
   `internal/mcpserver` serves the nine tools: `vault`, `search`, `context`, `match`,
@@ -548,3 +657,7 @@ its core rules:
 - The Obsidian plugin is in its own repository, `obsidian-almagest`.
 - `v7-design/`: the design pages of 7.0, kept for reference.
 - Notes for agents that work on this code: [CLAUDE.md](CLAUDE.md).
+
+## License
+
+MIT. See [LICENSE](LICENSE).
