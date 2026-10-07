@@ -1,8 +1,10 @@
+# The checks of every change: on preview, and on each pull request into main, which needs
+# them to pass before it merges.
 name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [preview]
   pull_request:
 
 jobs:
@@ -22,3 +24,42 @@ jobs:
 
       - run: go vet ./...
       - run: go test ./...
+
+  # What merges into main is a release, or a change that leaves the binary as released: either
+  # way, its build must have the bytes that release/checksums.txt pins. On preview the code
+  # moves ahead of the pin, so only a pull request runs this.
+  checksums:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v6
+        with:
+          go-version-file: go.mod
+
+      - run: make release
+
+      - name: Check the binaries against the checksums the plugin pins
+        run: |
+          if ! diff -u release/checksums.txt build/release/checksums.txt; then
+            echo "The binary differs from what release/checksums.txt pins. For a release, run make version V=<new version>; a change that should not reach the binary must leave it as it is."
+            exit 1
+          fi
+
+  # main takes pull requests from preview alone; GitHub's rules cannot name the source
+  # branch, so this check, which the ruleset of main requires, does.
+  from-preview:
+    name: from preview
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check the source branch
+        env:
+          HEAD: ${{ github.head_ref }}
+          BASE: ${{ github.base_ref }}
+        run: |
+          if [ "$BASE" = main ] && [ "$HEAD" != preview ]; then
+            echo "main takes pull requests from preview only, not from $HEAD."
+            exit 1
+          fi

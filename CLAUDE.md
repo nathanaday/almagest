@@ -669,19 +669,27 @@ claude -p --continue "yes" --plugin-dir …     # the user's answer at a gate
 
 ## Release
 
-The marketplace entry pins the plugin to its release tag (`source: github`, `ref`), so a
-Claude Code user installs only a release; Codex's local entry takes `main`. So the
-version, `release/checksums.txt`, and the launcher change only in a release commit, and
-`main` between releases runs the binary of the last release. To release X.Y.Z:
+Work happens on `preview`. `main` takes changes only through a pull request from
+`preview` whose checks pass (a ruleset on GitHub), so `main` is always a release or a
+change that leaves the released binary as it is. The marketplace entry pins the plugin to
+its release tag (`source: github`, `ref`); Codex's local entry takes `main`, which is safe
+for that reason.
 
-1. Set X.Y.Z in `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and
-   `.claude-plugin/marketplace.json` (the entry's `version` and `ref`, and the metadata).
-2. `make pin`, then `make test`, and commit.
-3. Tag X.Y.Z and push the tag alone: `git push origin X.Y.Z`. The release workflow builds
-   the binaries again, compares them with `release/checksums.txt`, attests them, and
-   publishes the release.
-4. When the release is up, push `main`. The marketplace then names the new tag, and the
-   launcher finds its binary on the first session.
+To release X.Y.Z:
+
+1. On `preview`, `make version V=X.Y.Z`. It sets X.Y.Z in both plugin manifests and the
+   marketplace entry (its `version` and `ref`), builds the binaries, and pins their
+   checksums in `release/checksums.txt` and the launcher. Run `make test`, commit, push.
+2. Open a pull request into `main`. CI runs the tests on Linux and macOS, and `checksums`
+   builds the binaries again and requires the pinned bytes.
+3. Merge it. The release workflow builds again, checks the bytes, attests the binaries,
+   tags the commit X.Y.Z, and publishes the release. Nothing else to tag or push.
+
+A pull request without a new version merges when its binary builds the bytes already
+pinned (docs, skills, tests); the release workflow then publishes nothing. A change to the
+binary without `make version` fails `checksums`. For the minute between the merge and the
+release, the marketplace names a tag that does not exist yet, and an update then fails
+and succeeds on the next try.
 
 A session started inside this checkout may report that the project MCP server
 `${CLAUDE_PLUGIN_ROOT}/bin/almagest` failed to start. Claude Code reads the

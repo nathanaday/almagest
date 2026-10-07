@@ -1,12 +1,18 @@
-# Publishes the binaries of a version when its tag is pushed. The release commit pins
-# their sha256 in release/checksums.txt (make pin), and the agent plugin's launcher installs
-# a binary only when it matches. This job builds them again from the tag, the same way,
-# and publishes them only when every byte matches what the commit pins.
+# Releases the plugin's version when main gets it. main takes changes only through a pull
+# request from preview whose checks pass. Each push to main builds the binaries again, the
+# same way on every machine, and stops when their bytes differ from the checksums that
+# release/checksums.txt pins: the plugin's launcher installs only those bytes. When no
+# release has this version yet, it attests the binaries, tags the commit, and publishes
+# them. When the version is released already (a change to the docs, say), it stops there.
 name: Release
 
 on:
   push:
-    tags: ['[0-9]+.[0-9]+.[0-9]+']
+    branches: [main]
+
+concurrency:
+  group: release
+  cancel-in-progress: false
 
 jobs:
   release:
@@ -22,36 +28,45 @@ jobs:
         with:
           go-version-file: go.mod
 
-      - name: Check that the tag is the plugin's version
-        run: |
-          version=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' .claude-plugin/plugin.json | head -1)
-          if [ "$version" != "$GITHUB_REF_NAME" ]; then
-            echo "The tag $GITHUB_REF_NAME is not the version $version of .claude-plugin/plugin.json."
-            exit 1
-          fi
-
       - run: go vet ./...
       - run: go test ./...
       - run: make release
 
-      - name: Check the binaries against the checksums the commit pins
+      - name: Check the binaries against the checksums the plugin pins
         run: |
           if ! diff -u release/checksums.txt build/release/checksums.txt; then
-            echo "The build of $GITHUB_REF_NAME differs from release/checksums.txt. Run make pin on the release commit, then tag it again."
+            echo "The build of main differs from release/checksums.txt. Set a new version with make version V=<version> on preview, and merge it."
             exit 1
           fi
 
+      - name: Read the version, and whether it is released
+        id: version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(sed -n 's/.*"version": "\([^"]*\)".*/\1/p' .claude-plugin/plugin.json | head -1)
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          if gh release view "$version" >/dev/null 2>&1; then
+            echo "Version $version is released already, and main still builds its bytes; nothing to publish."
+            echo "new=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "new=true" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Attest the build provenance
+        if: steps.version.outputs.new == 'true'
         uses: actions/attest@v4
         with:
           subject-path: build/release/almagest-*
 
-      - name: Publish the release
+      - name: Tag the commit and publish the release
+        if: steps.version.outputs.new == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          gh release create "$GITHUB_REF_NAME" \
-            --title "Almagest $GITHUB_REF_NAME" \
-            --notes "The almagest binary of $GITHUB_REF_NAME for macOS and Linux. The agent plugin installs the one for your machine; see the README. Each file's sha256 is in checksums.txt, and \`gh attestation verify <file> --repo nathanaday/almagest\` checks its provenance." \
-            --verify-tag \
+          gh release create "$VERSION" \
+            --target "$GITHUB_SHA" \
+            --title "Almagest $VERSION" \
+            --notes "The almagest binary of $VERSION for macOS and Linux. The agent plugin installs the one for your machine; see the README. Each file's sha256 is in checksums.txt, and \`gh attestation verify <file> --repo nathanaday/almagest\` checks its provenance." \
             build/release/almagest-* build/release/checksums.txt

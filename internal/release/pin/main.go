@@ -1,6 +1,7 @@
 // Command pin writes the launcher of the plugin's version, with the checksums of
-// release/checksums.txt, to bin/almagest and into the Codex server entry. Run it from the
-// repository root (make pin).
+// release/checksums.txt, to bin/almagest and into the Codex server entry. With -set
+// VERSION, it first sets the version in both plugin manifests and the marketplace entry
+// (its version and its ref). Run it from the repository root (make pin, make version).
 package main
 
 import (
@@ -8,11 +9,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"regexp"
+	"strings"
 
 	"github.com/nathanaday/almagest/internal/release"
 )
 
 func main() {
+	if len(os.Args) == 3 && os.Args[1] == "-set" {
+		if err := setVersion(os.Args[2]); err != nil {
+			fmt.Fprintln(os.Stderr, "pin:", err)
+			os.Exit(1)
+		}
+		return
+	}
 	if err := pin(); err != nil {
 		fmt.Fprintln(os.Stderr, "pin:", err)
 		os.Exit(1)
@@ -43,6 +53,47 @@ func pin() error {
 		return err
 	}
 	return writeCodexEntry(launcher)
+}
+
+// semver is a release version as its tag names it: no v in front.
+var semver = regexp.MustCompile(`^\d+\.\d+\.\d+$`)
+
+// setVersion replaces the plugin's version in every manifest that names it. The launcher
+// and its checksums follow with make pin.
+func setVersion(version string) error {
+	if !semver.MatchString(version) {
+		return fmt.Errorf("%q is not major.minor.patch, such as 11.0.1 (no v in front)", version)
+	}
+	old, err := pluginVersion()
+	if err != nil {
+		return err
+	}
+	edits := []struct {
+		file  string
+		from  string
+		count int
+	}{
+		{".claude-plugin/plugin.json", `"version": "` + old + `"`, 1},
+		// The Codex manifest's launcher names the version too; make pin writes it again.
+		{".codex-plugin/plugin.json", `"version": "` + old + `"`, 1},
+		{".claude-plugin/marketplace.json", `"version": "` + old + `"`, 2},
+		{".claude-plugin/marketplace.json", `"ref": "` + old + `"`, 1},
+	}
+	for _, e := range edits {
+		data, err := os.ReadFile(e.file)
+		if err != nil {
+			return err
+		}
+		text := string(data)
+		if n := strings.Count(text, e.from); n != e.count {
+			return fmt.Errorf("%s holds %s %d times, not %d; set the version by hand", e.file, e.from, n, e.count)
+		}
+		to := strings.Replace(e.from, old, version, 1)
+		if err := os.WriteFile(e.file, []byte(strings.ReplaceAll(text, e.from, to)), 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 func pluginVersion() (string, error) {

@@ -9,7 +9,7 @@ RELEASE_FLAGS := -trimpath -buildvcs=false -ldflags "-s -w -X github.com/nathana
 PLATFORMS := darwin/arm64 darwin/amd64 linux/arm64 linux/amd64
 SHA256 := $(shell command -v sha256sum >/dev/null 2>&1 && echo sha256sum || echo "shasum -a 256")
 
-.PHONY: build install test vet release pin
+.PHONY: build install test vet release pin version
 
 build:
 	go build $(LDFLAGS) -o build/$(BIN) ./cmd/$(BIN)
@@ -40,3 +40,11 @@ release:
 pin: release
 	cp build/release/checksums.txt release/checksums.txt
 	go run ./internal/release/pin
+
+# version sets V as the version of the plugin, the marketplace entry, and its ref, then
+# pins the binaries of that version. Merge it into main through a pull request from
+# preview, and the release workflow publishes it.
+version:
+	@test -n "$(V)" || (echo "Usage: make version V=<major.minor.patch>" && exit 1)
+	go run ./internal/release/pin -set $(V)
+	$(MAKE) pin
