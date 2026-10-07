@@ -20,16 +20,17 @@ You have built a large knowledge base, and the graph looks great. Now what?
 
 Almagest is about the human side: understanding and working with what you built.
 
-- **A wiki you can read.** The documents the agent maintains live in `source-core/`.
-  What you read lives in `wiki-view/`: a home page, a timeline, a library, and a
-  navigation page for each tag.
+- **A wiki you can read.** What you read lives in `wiki-view/`: a home page, a timeline,
+  a library, and a navigation page for each tag. What Almagest keeps for itself (the
+  documents the agent maintains, the session records, and the trash) lives in `tool/`,
+  which you need not open.
 - **A librarian.** Ask for the material on a subject, and an agent pulls together the
   pages that serve your question, in reading order, for you to read and mark up.
 - **Your own words, kept.** Your journals are yours. Agents read them and never change
   them, and an ingest never rewrites them. You publish a journal into the wiki when you
   choose, and the wiki cites it by name and date.
 - **A vault that never feels fragile.** Agents generate many documents. Each edit to the
-  wiki arrives as a change you approve or cancel. Safe delete moves a file to `trash/`
+  wiki arrives as a change you approve or cancel. Safe delete moves a file to `tool/trash/`
   only when nothing links it, so nothing is lost by accident.
 - **One tool, done well.** Build the wiki, query it, and enjoy using it.
 
@@ -78,16 +79,17 @@ scratchpad, and it never enters the wiki by itself.
 
 ### Safe delete
 
-Not sure whether you can delete a page? Safe delete moves it to `trash/` when nothing
+Not sure whether you can delete a page? Safe delete moves it to `tool/trash/` when nothing
 links it. When something does, it shows the links, and an agent can repoint them for
-you. Empty `trash/` yourself when you like.
+you. Empty `tool/trash/` yourself when you like.
 
 ### A light touch on Obsidian
 
-Installing Almagest does not change how your Obsidian looks or behaves. It adds its own
-callouts, widgets inside its documents, and one pane of its own, the palette, with one
-ribbon button. With the Duet plugin, the agents work in
-Obsidian beside you; without it, they start in your terminal.
+Installing Almagest does not change how your Obsidian behaves. It adds its own callouts,
+widgets inside its documents, and one pane of its own, the palette, with one ribbon button.
+In the file explorer it colors the folders you use: `wiki-view/` in cyan, `journals/` and
+`ingest/` in purple, and `tool/` dimmed (a setting turns this off). With the Duet plugin,
+the agents work in Obsidian beside you; without it, they start in your terminal.
 
 ## Quickstart
 

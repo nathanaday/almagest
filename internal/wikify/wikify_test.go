@@ -26,8 +26,12 @@ func TestAMarkTakesTheMatchNotThePhrasesLength(t *testing.T) {
 	if got := tv.Read(rel); got != "Water boils at 373 {{new:Kelvin scale|\u212Aelvin}}.\n" {
 		t.Fatalf("the note: %q", got)
 	}
-	if _, err := wikify.Start(tv.V, "Source-Core/documents/X.md"); err == nil {
+	if _, err := wikify.Start(tv.V, "Tool/Source-Core/documents/X.md"); err == nil {
 		t.Fatal("a document of the wiki in another case")
+	}
+	tv.Write("tool/sessions/2026-09/S.md", "A session.\n")
+	if _, err := wikify.Start(tv.V, "tool/sessions/2026-09/S.md"); err == nil || !strings.Contains(err.Error(), "wikify takes a note of yours") {
+		t.Fatalf("a session record: %v", err)
 	}
 }
 
@@ -46,7 +50,7 @@ func TestStartCopiesIntoTheScratchpad(t *testing.T) {
 	if j, err := wikify.Start(tv.V, "journals/cs566/Week 1.md"); err != nil || j != "scratchpad/Week 1 · wikified.md" {
 		t.Fatalf("a journal note: %s %v", j, err)
 	}
-	for _, refused := range []string{"source-core/documents/X.md", "Almagest.md", "changes/x.md", "Nowhere.md", "image.png", "../out.md"} {
+	for _, refused := range []string{"tool/source-core/documents/X.md", "Almagest.md", "changes/x.md", "Nowhere.md", "image.png", "../out.md"} {
 		if _, err := wikify.Start(tv.V, refused); err == nil {
 			t.Errorf("%s was copied", refused)
 		}

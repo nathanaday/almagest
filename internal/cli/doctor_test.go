@@ -212,14 +212,20 @@ func TestDoctorFitsTheCodexUpdateToTheMarketplace(t *testing.T) {
 	}
 }
 
-// A vault that a newer almagest wrote names the update.
+// A vault that a newer almagest wrote names the update; one of the layout before tool/ names
+// the migration.
 func TestDoctorNamesAVaultOfAnotherLayout(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
 	t.Setenv("PATH", t.TempDir()+":/usr/bin:/bin")
-	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "\nlayout: 7\n", "\nlayout: 8\n", 1))
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "\nlayout: 8\n", "\nlayout: 9\n", 1))
 	_, out, _ := r.almagest("", "doctor")
-	if !strings.Contains(out, vault.ErrLayout.Error()) || !strings.Contains(out, "(vault layout 8, almagest reads 7)") {
-		t.Fatalf("doctor on a layout-8 vault:\n%s", out)
+	if !strings.Contains(out, vault.ErrLayout.Error()) || !strings.Contains(out, "(vault layout 9, almagest reads 8)") {
+		t.Fatalf("doctor on a layout-9 vault:\n%s", out)
+	}
+	// A vault of the layout before tool/ names the migration instead.
+	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "\nlayout: 9\n", "\nlayout: 7\n", 1))
+	if _, out, _ = r.almagest("", "doctor"); !strings.Contains(out, vault.ErrMigrate.Error()) || !strings.Contains(out, "(vault layout 7, almagest reads 8)") {
+		t.Fatalf("doctor on a layout-7 vault:\n%s", out)
 	}
 }

@@ -29,7 +29,7 @@ func TestDerivedParts(t *testing.T) {
 		"Scoring":  {"> [!concept] Concept\n> 0 sources · #work/p3/p3-edge/ml"},
 	}
 	for title, wants := range checks {
-		got := tv.Read("source-core/documents/" + title + ".md")
+		got := tv.Read("tool/source-core/documents/" + title + ".md")
 		for _, w := range wants {
 			if !strings.Contains(got, w) {
 				t.Errorf("%s lacks %q:\n%s", title, w, got)
@@ -46,7 +46,7 @@ func TestDerivedParts(t *testing.T) {
 	if err != nil || len(facts) != 1 {
 		t.Fatalf("facts %v %v", facts, err)
 	}
-	got := tv.Read("source-core/documents/p3-edge.md")
+	got := tv.Read("tool/source-core/documents/p3-edge.md")
 	if !strings.Contains(got, "branch: ") || !strings.Contains(got, "head: ") || !strings.Contains(got, "refreshed: 2026-09-27T14:32:00") {
 		t.Fatalf("facts:\n%s", got)
 	}

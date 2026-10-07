@@ -1,4 +1,4 @@
-// Package sessions keeps one document per agent session in sessions/. The hooks create
+// Package sessions keeps one document per agent session in tool/sessions/. The hooks create
 // it and keep every field; the agent writes three sections of its own document with
 // Edit: a description, its progress, and a summary.
 package sessions
@@ -120,7 +120,7 @@ func Find(v *vault.Vault, key string) *doc.Doc {
 	return nil
 }
 
-// ByTitle finds a session document by its title: sessions/<month>/<title>.md.
+// ByTitle finds a session document by its title: tool/sessions/<month>/<title>.md.
 func ByTitle(v *vault.Vault, title string) *doc.Doc {
 	if title == "" || strings.ContainsAny(title, `/\`) {
 		return nil

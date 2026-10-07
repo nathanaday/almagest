@@ -1,6 +1,6 @@
 # Documents
 
-Every document of the wiki lives flat in `source-core/documents/`. There are three
+Every document of the wiki lives flat in `tool/source-core/documents/`. There are three
 types:
 
 | Type | Kinds | Written by |
@@ -11,7 +11,7 @@ types:
 
 These documents are what the vault knows; only an applied change writes them
 ([changes.md](changes.md)). The file name is the title. Code routes every new document
-to `source-core/documents/<title>.md`, so give a type, a kind, and a title, never a path.
+to `tool/source-core/documents/<title>.md`, so give a type, a kind, and a title, never a path.
 
 ## Fields every document has
 

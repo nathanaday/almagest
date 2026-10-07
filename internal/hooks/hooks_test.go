@@ -81,16 +81,45 @@ func TestSessionStartCreatesTheDocumentAndPrintsContext(t *testing.T) {
 			t.Errorf("context holds %q:\n%s", gone, out)
 		}
 	}
-	d := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	d := f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md")
 	if !strings.Contains(d, "status: running") || !strings.Contains(d, "harness_id: "+sid) || !strings.Contains(d, "> [!session] running") {
 		t.Fatalf("session:\n%s", d)
 	}
 	if out := f.run("session-start", map[string]any{"cwd": f.tv.Dir}); out != "" {
 		t.Fatalf("outside a vault a hook says nothing: %q", out)
 	}
-	f.tv.Write("Almagest.md", strings.Replace(f.tv.Read("Almagest.md"), "layout: 7", "layout: 8", 1))
+	f.tv.Write("Almagest.md", strings.Replace(f.tv.Read("Almagest.md"), "layout: 8", "layout: 9", 1))
 	if out := f.run("session-start", map[string]any{}); !strings.Contains(out, "update the almagest plugin") {
 		t.Fatalf("a vault of another layout names the update: %s", out)
+	}
+}
+
+// A vault of the layout before tool/ waits for the user's migration: no hook writes in it,
+// the opening context says what to run, and the guard refuses every write, since its rules
+// name the folders of the current layout.
+func TestHooksLeaveAVaultThatWaitsForItsMigration(t *testing.T) {
+	f := setup(t)
+	root := f.tv.V.Root
+	f.tv.Write("Almagest.md", strings.Replace(f.tv.Read("Almagest.md"), "layout: 8", "layout: 7", 1))
+	f.tv.Commit()
+	out := f.run("session-start", map[string]any{"source": "startup"})
+	if !strings.Contains(out, "almagest vault migrate") || strings.Contains(out, "<vault-context>") {
+		t.Fatalf("the opening context:\n%s", out)
+	}
+	f.run("prompt", map[string]any{"prompt": "hello"})
+	f.run("stop", map[string]any{})
+	if matches, _ := filepath.Glob(filepath.Join(root, "tool", "sessions", "*", "*.md")); len(matches) > 0 {
+		t.Fatalf("a hook wrote a session record: %v", matches)
+	}
+	f.tv.Clean()
+	for _, ev := range []map[string]any{
+		edit(root+"/source-core/documents/Alpha.md", "x"),
+		edit(root+"/Ideas.md", "x"),
+		{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/source-core/documents/X.md"}},
+	} {
+		if out := f.run("guard", ev); !denied(out) || !strings.Contains(out, "almagest vault migrate") {
+			t.Errorf("guard %v:\n%s", ev["tool_input"], out)
+		}
 	}
 }
 
@@ -103,44 +132,46 @@ func TestGuardProtectsTheVault(t *testing.T) {
 	f.tv.Doc("spec", "Old · Spec", map[string]any{"thread": "[[Old]]"}, "## Goal\n\nx\n")
 	f.tv.Write("threads/Plan · Spec.md", "---\nid: doc-pl0001\ntype: spec\n---\n## Goal\n\nx\n")
 	f.tv.Commit()
-	own := root + "/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	own := root + "/tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
 	bin := "alma" + "gest"
-	f.tv.Write("sessions/2026-09/2026-09-27 1400 ffffff.md", "---\nid: ses-ffffff\ntype: session\nharness_id: other\n---\n## Description\n")
+	f.tv.Write("tool/sessions/2026-09/2026-09-27 1400 ffffff.md", "---\nid: ses-ffffff\ntype: session\nharness_id: other\n---\n## Description\n")
 	cases := []struct {
 		name  string
 		event map[string]any
 		deny  bool
 	}{
-		{"a new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/X.md"}}, true},
-		{"a relative new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "source-core/documents/X.md"}}, true},
-		{"a topic", edit(root+"/source-core/documents/Knowledge.md", "x"), true},
-		{"an asset", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/originals/x.png"}}, true},
-		{"another folder of the wiki", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/notes/x.md"}}, true},
+		{"a new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/source-core/documents/X.md"}}, true},
+		{"a relative new document", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": "tool/source-core/documents/X.md"}}, true},
+		{"a topic", edit(root+"/tool/source-core/documents/Knowledge.md", "x"), true},
+		{"an asset", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/source-core/originals/x.png"}}, true},
+		{"another folder of the wiki", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/source-core/notes/x.md"}}, true},
 		{"a view", edit(root+"/wiki-view/View · Home.md", "x"), true},
-		{"the trash", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/trash/2026-10-06/x.md"}}, true},
+		{"the trash", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/trash/2026-10-06/x.md"}}, true},
 		{"a checkout copy", edit(root+"/checkout/2026-10-06 RL/Q-learning (checkout).md", "x"), true},
 		{"a wikified copy", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/scratchpad/Notes · wikified.md"}}, true},
 		{"a scratchpad note", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/scratchpad/Notes.md"}}, false},
 		{"Almagest.md", edit(root+"/Almagest.md", "Work"), true},
-		{"a Base", edit(root+"/sessions/Sessions.base", "filters"), true},
+		{"a Base", edit(root+"/tool/sessions/Sessions.base", "filters"), true},
 		{"a change document", edit(root+"/changes/2026-09/x.md", "x"), true},
-		{"a Write over a topic", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/Knowledge.md"}}, true},
-		{"a source", edit(root+"/source-core/documents/Paper.md", "abcdef0123456789"), true},
-		{"a codex patch into a topic", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: source-core/documents/Knowledge.md\n@@\n+## Findings\n+- found a thing\n*** End Patch"}}, true},
-		{"a document of an unknown type", edit(root+"/source-core/documents/Old · Spec.md", "## Goal\n\nx"), false},
+		{"a Write over a topic", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/source-core/documents/Knowledge.md"}}, true},
+		{"a source", edit(root+"/tool/source-core/documents/Paper.md", "abcdef0123456789"), true},
+		{"a codex patch into a topic", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: tool/source-core/documents/Knowledge.md\n@@\n+## Findings\n+- found a thing\n*** End Patch"}}, true},
+		{"a document of an unknown type", edit(root+"/tool/source-core/documents/Old · Spec.md", "## Goal\n\nx"), false},
 		{"a note in the threads archive", edit(root+"/threads/Plan · Spec.md", "## Goal\n\nx"), false},
 		{"a new note in the threads archive", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/threads/Plan · Notes.md"}}, false},
-		{"another session's document", edit(root+"/sessions/2026-09/2026-09-27 1400 ffffff.md", "## Description"), true},
+		{"another session's document", edit(root+"/tool/sessions/2026-09/2026-09-27 1400 ffffff.md", "## Description"), true},
 		{"its own status", edit(own, "status: running"), true},
 		{"its own lead", edit(own, "> [!session] running"), true},
 		{"its own description", edit(own, "## Description\n"), false},
 		{"its own subagents", edit(own, "## Subagents"), true},
 		{"a note of the user's", edit(root+"/Ideas.md", "x"), false},
-		{"a codex patch into the documents", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: source-core/documents/notes.md\n*** End Patch"}}, true},
-		{"a document from a session outside the vault", map[string]any{"cwd": t.TempDir(), "tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/source-core/documents/X.md"}}, true},
+		{"a codex patch into the documents", map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: notes.md\n*** Move to: tool/source-core/documents/notes.md\n*** End Patch"}}, true},
+		{"a document from a session outside the vault", map[string]any{"cwd": t.TempDir(), "tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/tool/source-core/documents/X.md"}}, true},
 		{"a change document from a session outside the vault", map[string]any{"cwd": "/", "tool_name": "Edit", "tool_input": map[string]any{"file_path": root + "/changes/2026-09/x.md", "old_string": "x"}}, true},
 		{"a shell change apply", bash(bin + " change apply X"), true},
 		{"a shell safe delete", bash(bin + " vault trash Notes.md"), true},
+		{"a shell migration", bash(bin + " vault migrate"), true},
+		{"a shell dry run of the migration", bash(bin + " vault migrate --dry-run"), true},
 		{"a shell publish", bash(bin + " journal publish cs566"), true},
 		{"a shell undo", bash(bin + " change undo chg-aaaaaa"), true},
 		{"a shell journal list", bash(bin + " journal list"), false},
@@ -250,7 +281,7 @@ func TestAnEditInALinkedRepositoryNeedsNoThread(t *testing.T) {
 	f.tv.Doc("repository", "p3-cloud", map[string]any{"path": cloud}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
-	own := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	own := "tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
 	write := edit(edge+"/main.go", "a")
 	if out := f.run("guard", write); denied(out) {
 		t.Fatalf("an edit in a linked repository from a session that started no thread: %s", out)
@@ -285,7 +316,7 @@ func TestTouchedBindsChanges(t *testing.T) {
 	if !strings.Contains(f.tv.Read(pv.Ref.Path), `session: "[[2026-09-27 1432 a1b2c3]]"`) {
 		t.Fatal("the change names its session")
 	}
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[["+pv.Ref.Title+"]]") {
+	if !strings.Contains(f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "[["+pv.Ref.Title+"]]") {
 		t.Fatal("the session lists its change")
 	}
 }
@@ -409,12 +440,12 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract"})
 	f.run("touched", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract", "tool_name": "Read"})
 	f.run("subagent-stop", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract"})
-	parent := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md")
+	parent := f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md")
 	if strings.Count(parent, "wiki-extract") != 1 || !strings.Contains(parent, "· ended 14:32") {
 		t.Fatalf("a worker is one line:\n%s", parent)
 	}
 	f.run("subagent-start", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
-	child := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md")
+	child := f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md")
 	if !strings.Contains(child, `parent: "[[2026-09-27 1432 a1b2c3]]"`) || !strings.Contains(child, `agent: general-purpose`) {
 		t.Fatalf("a writing subagent gets its own document:\n%s", child)
 	}
@@ -423,16 +454,16 @@ func TestSubagentsAndTheEndOfASession(t *testing.T) {
 		t.Fatal("the subagent may edit a linked repository")
 	}
 	f.run("touched", write)
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md"), "[[p3-edge]]") {
+	if !strings.Contains(f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3 · 7e55aa.md"), "[[p3-edge]]") {
 		t.Fatal("the subagent's edit lands in its own record")
 	}
 	f.run("notify", map[string]any{"notification_type": "permission_prompt"})
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: waiting") {
+	if !strings.Contains(f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: waiting") {
 		t.Fatal("waiting")
 	}
 	f.run("subagent-stop", map[string]any{"agent_id": "7e55aa01", "agent_type": "general-purpose"})
 	f.run("session-end", map[string]any{"reason": "exit"})
-	if s := f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"); !strings.Contains(s, "status: ended") {
+	if s := f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"); !strings.Contains(s, "status: ended") {
 		t.Fatalf("ended:\n%s", s)
 	}
 }
@@ -450,7 +481,7 @@ func TestStopRemindsOnce(t *testing.T) {
 	if out := f.run("stop", map[string]any{}); out != "" {
 		t.Fatalf("once: %s", out)
 	}
-	if !strings.Contains(f.tv.Read("sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: idle") {
+	if !strings.Contains(f.tv.Read("tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"), "status: idle") {
 		t.Fatal("idle")
 	}
 }
@@ -461,7 +492,7 @@ func TestStopAsksNoRecordOfRepositoryWork(t *testing.T) {
 	f.tv.Doc("repository", "p3-edge", map[string]any{"path": repo}, "")
 	f.tv.Commit()
 	f.run("session-start", map[string]any{})
-	own := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	own := "tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
 	f.tv.Write(own, strings.Replace(f.tv.Read(own), "## Description\n", "## Description\n\nWork on the edge.\n", 1))
 	f.run("touched", map[string]any{"tool_name": "Edit", "tool_input": map[string]any{"file_path": repo + "/x.go"}})
 	if !strings.Contains(f.tv.Read(own), "[[p3-edge]]") {

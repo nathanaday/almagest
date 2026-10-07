@@ -55,7 +55,7 @@ func TestChecks(t *testing.T) {
 	tv.Doc("topic", "Defines wrong", map[string]any{"kind": "concept", "defines": "x"}, "")
 	tv.Doc("topic", "View · Mine", map[string]any{"kind": "concept"}, "")
 	tv.Write("scratchpad/Motion scoring.md", "a scratch note with the same title\n")
-	tv.Write("source-core/documents/Loose note.md", "no frontmatter\n")
+	tv.Write("tool/source-core/documents/Loose note.md", "no frontmatter\n")
 	tv.Write("notes/Stray.md", "---\nid: doc-stray1\ntype: topic\nkind: concept\ndescription: x\n---\n")
 	tv.Doc("topic", "Papers", map[string]any{"kind": "concept", "tags": []string{"paper", "papers"}}, "")
 	f := run(t, tv, lint.Options{})

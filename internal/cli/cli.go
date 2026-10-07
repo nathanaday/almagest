@@ -69,7 +69,7 @@ No --json: setup, open, doctor, version, help, hook, mcp.
 
 // commands are the usage of each command, in the order help lists them.
 var commands = []struct{ name, usage string }{
-	{"vault", `  almagest vault [status] | sync [--views] | snapshot | trash PATH
+	{"vault", `  almagest vault [status] | sync [--views] | snapshot | trash PATH | migrate [--dry-run]
                        | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
 `},
 	{"search", `  almagest search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]

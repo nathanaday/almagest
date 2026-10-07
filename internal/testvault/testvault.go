@@ -117,7 +117,7 @@ func (tv *T) Read(rel string) string {
 	return string(data)
 }
 
-// Doc writes a typed document straight to source-core/documents, the way a hand edit or an
+// Doc writes a typed document straight to tool/source-core/documents, the way a hand edit or an
 // earlier write would leave it, and returns its id. fields may name links by title; a
 // field set to nil is left out. A document without a description gets one.
 func (tv *T) Doc(typ, title string, fields map[string]any, body string) string {

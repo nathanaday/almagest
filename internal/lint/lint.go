@@ -270,7 +270,7 @@ func (r *run) tagPages(docs []*doc.Doc) {
 }
 
 // placement reports typed documents out of place, and files with no type in
-// source-core/documents.
+// tool/source-core/documents.
 func (r *run) placement() {
 	for _, d := range r.idx.Misplaced {
 		fix := "move it into " + vault.Documents + " (sync does so for a file under " + vault.Core + "/)"

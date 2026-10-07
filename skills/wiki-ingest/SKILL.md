@@ -18,7 +18,7 @@ Tools: `vault`, `change` (start, progress), `source` (capture). References:
 
 1. Call `vault` for the files in `ingest/`, the tag list, and the vault's `tagging`
    mode. For text the user pasted, use `text` and a `title` in step 5. A note with no
-   type in `source-core/documents/` (lint's `untyped`) waits to be ingested too: move it
+   type in `tool/source-core/documents/` (lint's `untyped`) waits to be ingested too: move it
    into `ingest/` first, because capture takes only names in `ingest/`.
 2. **The work document.** When the request names one (the palette's message says "Your
    work document is [[…]] (<id>)"), use its id. Otherwise call `change` with

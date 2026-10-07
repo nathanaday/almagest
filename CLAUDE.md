@@ -34,6 +34,22 @@ The design pages are the spec. When the code departs from them, the reason is be
 
 ## Design decisions
 
+- **`tool/` holds what Almagest keeps for itself** (layout 8): `tool/source-core/`,
+  `tool/sessions/`, and `tool/trash/`. The root holds what the user uses: `wiki-view/`,
+  `journals/`, `ingest/`, `changes/`, `checkout/`, and `scratchpad/`. Every folder name
+  is a constant in `internal/vault/vault.go`; `internal/schema` repeats two, since it
+  cannot import `vault`. A folder check uses `vault.InFolder`, never the first path part.
+- **Only the user migrates a vault.** `vault migrate` (`internal/migrate`) takes layout 7
+  (`vault.LayoutBeforeTool`, the 11.0 layout) to 8 in one commit: it moves the three
+  folders and rewrites a path only in a link, a Base, a `base` block, a canvas,
+  `bookmarks.json`, and `app.json`. A closing fence must be as long as its opener, so the
+  writes that a change document fences in five backticks keep their history. It does
+  not refuse a pending change: a change names documents by id, and its base ignores the
+  code sections that a sync rewrites. The guard refuses the command to an agent. In a
+  vault of another layout, no hook writes (so no session record lands in a folder the
+  layout lacks), the opening context names the fix, and the guard refuses every agent
+  edit, since its rules name this layout's folders. `vault.CheckLayout` names the
+  migration for layout 7 (`ErrMigrate`) and the update for any other (`ErrLayout`).
 - **The setting is `tagging`, not `tags`.** `Almagest.md` holds `tagging: open | known`,
   and `vault init` takes `tagging`. `tags` is Obsidian's own property.
 - **A change's base ignores what code derives** (`change.BaseHash`): code-owned fields,
@@ -61,7 +77,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   by it; lint names the fix.
 - **`journals/` is the user's.** The guard refuses every agent edit under it. The index
   keeps its notes as link targets only (`vault.Unread`, with the scratchpad and `checkout/`), so search, lint, a rename's link rewrite, and a retag skip them. The
-  index skips `wiki-view/` and `trash/` entirely.
+  index skips `wiki-view/` and `tool/trash/` entirely.
 - **Packages:** the design's context package is `internal/brief`, since `context` is a
   standard Go package. `internal/derive` writes the code-owned parts of sources,
   repositories, and topics (lead callouts, the `almagest-repo` block, git facts).
@@ -154,8 +170,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   that is neither `proposed` nor `running`, since such a record may name a document a
   later change removed. Every change document carries `cssclasses: [almagest-change]`
   (`change.CSSClass`), and the lead callout comes from the frontmatter (`leadFor`).
-- **A remove moves the document to `trash/`.** Apply picks the place with
-  `vault.TrashPath` (`trash/<date>/<vault path>`, with " (2)" before the extension when
+- **A remove moves the document to `tool/trash/`.** Apply picks the place with
+  `vault.TrashPath` (`tool/trash/<date>/<vault path>`, with " (2)" before the extension when
   the place is taken) and lists it in `paths`, so recovery and undo cover it: undo puts
   the document back and takes the trash copy away. The preview's write carries the
   place in `trash`.
@@ -171,8 +187,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   palette offers "Resolve with an agent" only for a knowledge document that knowledge
   documents link; a link in any other file is the user's to fix, and the agent's
   message then says to propose no remove. It refuses `Almagest.md`, `.obsidian/`, `.claude/`, `.almagest/`,
-  `changes/`, `sessions/`, `wiki-view/`, `trash/`, a shipped Base, a folder, and a path
-  outside the vault. The index skips `trash/`, and the guard refuses agent edits in it.
+  `changes/`, `tool/sessions/`, `wiki-view/`, `tool/trash/`, a shipped Base, a folder, and a path
+  outside the vault. The index skips `tool/trash/`, and the guard refuses agent edits in it.
 - **A journal volume is a folder directly under `journals/`** (`journal.Volumes`). Its
   notes are every `.md` file under it, in path order, except its history note,
   `Journal · <folder>.md`; dot files, dot folders, and symbolic links are skipped. `journal.Name`
@@ -193,7 +209,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   numbers a second edition of one day (" (2)"). The tags of the latest edition carry
   forward, with `NewTags` set. Publish refuses a folder name that is not clean (`.`,
   `..`, a slash). One commit holds the source, its original in
-  `source-core/originals/`, and the publication history. The lead callout says
+  `tool/source-core/originals/`, and the publication history. The lead callout says
   "Captured <date> from the journal `<volume>`".
 - **Code's notes take reserved titles.** A note that code writes beside the user's files
   takes a title with a prefix of `vault.ReservedPrefixes` (`Tag · `, `View · `,
@@ -273,8 +289,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   when that name is taken. The strategy note put the copy beside the note, but a copy
   of a journal note there would join the volume's next edition, since an edition holds
   every `.md` file under the volume. Start never changes the original. It refuses a
-  file that is not markdown, `Almagest.md`, and a note under `source-core/`, `changes/`,
-  `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`; a note in `journals/` passes.
+  file that is not markdown, `Almagest.md`, and a note under `tool/source-core/`, `changes/`,
+  `tool/sessions/`, `wiki-view/`, `tool/trash/`, or `.obsidian/`; a note in `journals/` passes.
 - **A mark is inline text**: `{{link:<Title>|<phrase>}}` where the phrase names a
   document, `{{new:<Title>|<phrase>}}` where it names a subject worth a topic
   (`wikify.Text`). The plugin parses this syntax; change it in both places.
@@ -306,7 +322,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   that wiki-edit fills with the one topic that Create asked for; its default title is
   "Draft a topic". The schema's change `kind` and the search's kinds list `draft`.
 - **Status shows the work and the trash.** `vault --json` adds `changes.running` (the
-  running work documents) and `trash` (the count of files under `trash/`, `.DS_Store`
+  running work documents) and `trash` (the count of files under `tool/trash/`, `.DS_Store`
   aside). Home lists each running work document with what waits.
 - **The plugin commits hand edits as quiet snapshots.** After `snapshotQuietSeconds`
   (default 120; 0 turns it off) with no create, modify, delete, or rename outside the

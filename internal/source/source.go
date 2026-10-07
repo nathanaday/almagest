@@ -1,5 +1,5 @@
 // Package source brings outside documents into the vault and reads any document in
-// chunks. Capture copies a file into source-core/originals/, never to be edited again, and writes
+// chunks. Capture copies a file into tool/source-core/originals/, never to be edited again, and writes
 // its source document; the source stays pending until a change absorbs it.
 package source
 
@@ -95,7 +95,7 @@ func Media(name string) string {
 }
 
 // Capture brings the requested documents into the vault as one commit: each file becomes
-// an original in source-core/originals and a pending source that names it. A file that
+// an original in tool/source-core/originals and a pending source that names it. A file that
 // the vault holds already (the same sha256) is reported as a duplicate, and its ingest copy
 // goes.
 func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) {

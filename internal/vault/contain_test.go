@@ -41,17 +41,17 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 	out := outside(t)
 	link(t, out, v.Abs("ingest/away"))
 	link(t, filepath.Join(out, "secret.md"), v.Abs("ingest/secret.md"))
-	link(t, v.Abs("source-core/documents"), v.Abs("scratchpad/docs"))
-	tv.Write("source-core/documents/Alpha.md", "alpha\n")
-	link(t, v.Abs("source-core/documents/Alpha.md"), v.Abs("scratchpad/alpha.md"))
+	link(t, v.Abs("tool/source-core/documents"), v.Abs("scratchpad/docs"))
+	tv.Write("tool/source-core/documents/Alpha.md", "alpha\n")
+	link(t, v.Abs("tool/source-core/documents/Alpha.md"), v.Abs("scratchpad/alpha.md"))
 
 	for _, rel := range []string{
 		"",
 		"/etc/passwd",
 		"../outside/secret.md",
-		"source-core/documents/../../../outside/secret.md",
+		"tool/source-core/documents/../../../outside/secret.md",
 		"wiki//documents/Alpha.md",
-		"./source-core/documents/Alpha.md",
+		"./tool/source-core/documents/Alpha.md",
 		`wiki\documents\Alpha.md`,
 		".git/config",
 		".GIT/x.md",
@@ -59,7 +59,7 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 		"ingest/away/secret.md",
 		"ingest/away/new/deeper.md",
 		"ingest/secret.md",
-		"source-core/documents/" + strings.Repeat("a", 253) + ".md",
+		"tool/source-core/documents/" + strings.Repeat("a", 253) + ".md",
 	} {
 		err := v.Contain(rel)
 		if !errors.Is(err, vault.ErrOutside) {
@@ -79,9 +79,9 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 		}
 	}
 	for _, rel := range []string{
-		"source-core/documents/Alpha.md",
-		"source-core/documents/New.md",
-		"source-core/documents/new/folder/Deep.md",
+		"tool/source-core/documents/Alpha.md",
+		"tool/source-core/documents/New.md",
+		"tool/source-core/documents/new/folder/Deep.md",
 		"scratchpad/docs/Alpha.md",
 		"scratchpad/alpha.md",
 		".obsidian/plugins/almagest/data.json",
@@ -90,10 +90,10 @@ func TestContainRefusesEveryPathThatLeavesTheVault(t *testing.T) {
 			t.Errorf("Contain(%q) = %v, want nil", rel, err)
 		}
 	}
-	if !v.Local("scratchpad/docs/Alpha.md") || !v.Local("source-core/documents/Alpha.md") {
+	if !v.Local("scratchpad/docs/Alpha.md") || !v.Local("tool/source-core/documents/Alpha.md") {
 		t.Error("Local refuses a document inside the vault")
 	}
-	for _, rel := range []string{".obsidian/x.md", ".Obsidian/x.md", ".CLAUDE/x.md", ".claude/x.md", "source-core/documents/Alpha.txt"} {
+	for _, rel := range []string{".obsidian/x.md", ".Obsidian/x.md", ".CLAUDE/x.md", ".claude/x.md", "tool/source-core/documents/Alpha.txt"} {
 		if v.Local(rel) {
 			t.Errorf("Local(%q) is true", rel)
 		}
@@ -107,23 +107,23 @@ func TestEveryWriteOfATransactionStaysInTheVault(t *testing.T) {
 	tv := testvault.New(t)
 	v := tv.V
 	out := outside(t)
-	link(t, out, v.Abs("source-core/documents/out"))
-	tv.Write("source-core/documents/A.md", "a\n")
+	link(t, out, v.Abs("tool/source-core/documents/out"))
+	tv.Write("tool/source-core/documents/A.md", "a\n")
 	tx, err := vault.BeginWrite(v)
 	if err != nil {
 		t.Fatal(err)
 	}
 	defer tx.Close()
-	if err := tx.Write("source-core/documents/out/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+	if err := tx.Write("tool/source-core/documents/out/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
 		t.Errorf("Write: %v", err)
 	}
-	if _, err := tx.WriteIfChanged("source-core/documents/out/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+	if _, err := tx.WriteIfChanged("tool/source-core/documents/out/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
 		t.Errorf("WriteIfChanged: %v", err)
 	}
-	if err := tx.Remove("source-core/documents/out/secret.md"); !errors.Is(err, vault.ErrOutside) {
+	if err := tx.Remove("tool/source-core/documents/out/secret.md"); !errors.Is(err, vault.ErrOutside) {
 		t.Errorf("Remove: %v", err)
 	}
-	if err := tx.Move("source-core/documents/A.md", "source-core/documents/out/A.md"); !errors.Is(err, vault.ErrOutside) {
+	if err := tx.Move("tool/source-core/documents/A.md", "tool/source-core/documents/out/A.md"); !errors.Is(err, vault.ErrOutside) {
 		t.Errorf("Move: %v", err)
 	}
 	if err := tx.Write("../escape.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
@@ -136,10 +136,10 @@ func TestEveryWriteOfATransactionStaysInTheVault(t *testing.T) {
 	if len(entries) != 1 || entries[0].Name() != "secret.md" {
 		t.Fatalf("the outside folder changed: %v", entries)
 	}
-	if !v.Exists("source-core/documents/A.md") {
+	if !v.Exists("tool/source-core/documents/A.md") {
 		t.Fatal("the refused move took the file")
 	}
-	if err := tx.Write("source-core/documents/B.md", []byte("b\n")); err != nil {
+	if err := tx.Write("tool/source-core/documents/B.md", []byte("b\n")); err != nil {
 		t.Fatalf("a write inside the vault: %v", err)
 	}
 }
@@ -147,11 +147,11 @@ func TestEveryWriteOfATransactionStaysInTheVault(t *testing.T) {
 func TestAFailedRenameLeavesNoTemporaryFile(t *testing.T) {
 	tv := testvault.New(t)
 	v := tv.V
-	tv.Write("source-core/documents/Busy/inner.md", "inner\n")
-	if err := v.Write("source-core/documents/Busy", []byte("a file over a folder\n")); err == nil {
+	tv.Write("tool/source-core/documents/Busy/inner.md", "inner\n")
+	if err := v.Write("tool/source-core/documents/Busy", []byte("a file over a folder\n")); err == nil {
 		t.Fatal("the write over a folder succeeded")
 	}
-	left, _ := filepath.Glob(v.Abs("source-core/documents/.almagest-*"))
+	left, _ := filepath.Glob(v.Abs("tool/source-core/documents/.almagest-*"))
 	if len(left) != 0 {
 		t.Fatalf("temporary files left: %v", left)
 	}
@@ -163,11 +163,11 @@ func TestAFailedRenameLeavesNoTemporaryFile(t *testing.T) {
 func TestVaultWriteRefusesAPathThroughALinkOut(t *testing.T) {
 	tv := testvault.New(t)
 	out := outside(t)
-	link(t, out, tv.V.Abs("sessions/2026-10"))
-	if err := tv.V.Write("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+	link(t, out, tv.V.Abs("tool/sessions/2026-10"))
+	if err := tv.V.Write("tool/sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
 		t.Errorf("Write: %v", err)
 	}
-	if _, err := tv.V.WriteIfChanged("sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
+	if _, err := tv.V.WriteIfChanged("tool/sessions/2026-10/x.md", []byte("x\n")); !errors.Is(err, vault.ErrOutside) {
 		t.Errorf("WriteIfChanged: %v", err)
 	}
 	if entries, _ := os.ReadDir(out); len(entries) != 1 {
@@ -195,20 +195,20 @@ func TestTheSettingsWriteThroughALinkedObsidianFolder(t *testing.T) {
 // puts back only what still holds the write's own bytes.
 func TestRollbackLeavesASaveMadeDuringTheWrite(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write("source-core/documents/A.md", "before\n")
-	tv.Write("source-core/documents/B.md", "before\n")
+	tv.Write("tool/source-core/documents/A.md", "before\n")
+	tv.Write("tool/source-core/documents/B.md", "before\n")
 	tv.Commit()
 	tx, err := vault.BeginWrite(tv.V)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.Write("source-core/documents/A.md", []byte("written by the call\n")); err != nil {
+	if err := tx.Write("tool/source-core/documents/A.md", []byte("written by the call\n")); err != nil {
 		t.Fatal(err)
 	}
-	if err := tx.Write("source-core/documents/B.md", []byte("written by the call\n")); err != nil {
+	if err := tx.Write("tool/source-core/documents/B.md", []byte("written by the call\n")); err != nil {
 		t.Fatal(err)
 	}
-	tv.Write("source-core/documents/A.md", "saved in Obsidian\n")
+	tv.Write("tool/source-core/documents/A.md", "saved in Obsidian\n")
 	lock := filepath.Join(tv.V.Root, ".git", "index.lock")
 	if err := os.WriteFile(lock, nil, 0o644); err != nil {
 		t.Fatal(err)
@@ -216,13 +216,13 @@ func TestRollbackLeavesASaveMadeDuringTheWrite(t *testing.T) {
 	_, err = tx.Commit("a write that fails")
 	os.Remove(lock)
 	tx.Close()
-	if err == nil || !strings.Contains(err.Error(), "left as saved") || !strings.Contains(err.Error(), "source-core/documents/A.md") {
+	if err == nil || !strings.Contains(err.Error(), "left as saved") || !strings.Contains(err.Error(), "tool/source-core/documents/A.md") {
 		t.Fatalf("the failure message: %v", err)
 	}
-	if got := tv.Read("source-core/documents/A.md"); got != "saved in Obsidian\n" {
+	if got := tv.Read("tool/source-core/documents/A.md"); got != "saved in Obsidian\n" {
 		t.Fatalf("the save was rolled back: %q", got)
 	}
-	if got := tv.Read("source-core/documents/B.md"); got != "before\n" {
+	if got := tv.Read("tool/source-core/documents/B.md"); got != "before\n" {
 		t.Fatalf("B was not put back: %q", got)
 	}
 }
@@ -261,7 +261,7 @@ func TestASyncKeepsADocumentSavedDuringItsWrite(t *testing.T) {
 	tv := testvault.New(t)
 	tv.Doc("topic", "Plan C", map[string]any{"kind": "concept"}, "## Definition\n\nShip it.\n")
 	tv.Commit()
-	file := tv.V.Abs("source-core/documents/Plan C.md")
+	file := tv.V.Abs("tool/source-core/documents/Plan C.md")
 	data, _ := os.ReadFile(file)
 	saved := []byte(strings.Replace(string(data), "Ship it.", "Ship it soon.", 1))
 	vault.SetBeforeRename(func(f string) {
@@ -277,7 +277,7 @@ func TestASyncKeepsADocumentSavedDuringItsWrite(t *testing.T) {
 	if got, err := os.ReadFile(file); string(got) != string(saved) {
 		t.Fatalf("the save was overwritten (%v, skipped %v):\n%s", err, synced.Skipped, got)
 	}
-	if !strings.Contains(strings.Join(synced.Skipped, "|"), "source-core/documents/Plan C.md") {
+	if !strings.Contains(strings.Join(synced.Skipped, "|"), "tool/source-core/documents/Plan C.md") {
 		t.Fatalf("skipped %v", synced.Skipped)
 	}
 }

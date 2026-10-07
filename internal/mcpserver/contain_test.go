@@ -70,13 +70,13 @@ func TestNoReadFollowsALinkOutOfTheRepositoryOrTheVault(t *testing.T) {
 	}
 	snap, _ := c.call("source", map[string]any{"action": "capture", "repository": "p3-edge"}, false)
 	id, _ := dig(snap["captured"].([]any)[0].(map[string]any), "ref", "id").(string)
-	report := tv.Read("source-core/originals/" + id + ".md")
+	report := tv.Read("tool/source-core/originals/" + id + ".md")
 	if strings.Contains(report, "OUTSIDE") || !strings.Contains(report, "score boxes") {
 		t.Fatalf("the snapshot:\n%s", report)
 	}
 	for _, action := range []string{"chunks", "read"} {
 		_, msg := c.call("source", map[string]any{"action": action, "doc": creds, "chunk": 1}, true)
-		if !strings.Contains(msg, "names no file of source-core/originals/") {
+		if !strings.Contains(msg, "names no file of tool/source-core/originals/") {
 			t.Errorf("%s: %s", action, msg)
 		}
 	}

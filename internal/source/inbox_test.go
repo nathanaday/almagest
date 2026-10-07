@@ -43,7 +43,7 @@ func TestTheInboxTakesOnlyAFileKeptInIt(t *testing.T) {
 	if data, err := os.ReadFile(file); err != nil || string(data) != "secret\n" {
 		t.Fatalf("the outside file changed: %q %v", data, err)
 	}
-	if entries, _ := os.ReadDir(tv.V.Abs("source-core/documents")); len(entries) != 0 {
+	if entries, _ := os.ReadDir(tv.V.Abs("tool/source-core/documents")); len(entries) != 0 {
 		t.Fatalf("a refused capture wrote %v", entries)
 	}
 	tv.Write("ingest/kept.txt", "kept\n")
@@ -71,10 +71,10 @@ func TestACaptureWhoseCommitFailsPutsTheInboxBack(t *testing.T) {
 	if tv.Read("ingest/notes.md") != "# Notes\n\nKept.\n" {
 		t.Fatal("the inbox file is gone or changed")
 	}
-	if entries, _ := os.ReadDir(tv.V.Abs("source-core/documents")); len(entries) != 0 {
+	if entries, _ := os.ReadDir(tv.V.Abs("tool/source-core/documents")); len(entries) != 0 {
 		t.Fatalf("a source stayed: %v", entries)
 	}
-	if entries, _ := os.ReadDir(tv.V.Abs("source-core/originals")); len(entries) != 0 {
+	if entries, _ := os.ReadDir(tv.V.Abs("tool/source-core/originals")); len(entries) != 0 {
 		t.Fatalf("an asset stayed: %v", entries)
 	}
 	if out, err := exec.Command("git", "-C", tv.V.Root, "status", "--porcelain").CombinedOutput(); err != nil || strings.TrimSpace(string(out)) != "" {

@@ -156,7 +156,7 @@ func TestEveryToolAndAction(t *testing.T) {
 	// The model's apply waits for the user of the session that proposed the change, even
 	// from outside the vault and by another name for the change.
 	path := dig(pv, "ref", "path").(string)
-	session := "sessions/2026-09/2026-09-27 1432 a1b2c3"
+	session := "tool/sessions/2026-09/2026-09-27 1432 a1b2c3"
 	tv.Write(session+".md", "---\nid: ses-a1b2c3\ntype: session\nharness_id: a1b2c3\nlast_prompt: \"\"\n---\n")
 	tv.Write(path, doc.SetField(tv.Read(path), "session", doc.Link("2026-09-27 1432 a1b2c3")))
 	outside := connect(t, tv, t.TempDir())

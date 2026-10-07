@@ -169,8 +169,8 @@ func NoteTitle(rel string) string {
 }
 
 // ObsidianSettings sets the two app settings a vault needs in .obsidian/app.json, and
-// keeps every other key: new attachments go to source-core/originals, unless the user
-// chose a folder, and wiki-view/ and trash/ are among the excluded files, so the views
+// keeps every other key: new attachments go to tool/source-core/originals, unless the user
+// chose a folder, and wiki-view/ and tool/trash/ are among the excluded files, so the views
 // and what safe delete removed stay out of the graph and search. It reports whether it
 // wrote.
 func ObsidianSettings(v *Vault) (bool, error) {

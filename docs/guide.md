@@ -84,7 +84,7 @@ almagest vault snapshot             # commit your hand edits now
 
 In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
 Repositories, one timeline per month under `wiki-view/timeline/`, and one view per tag
-under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
+under `wiki-view/nav/`. `tool/sessions/Sessions.base` shows what runs now, and
 `changes/Changes.base` lists the changes that wait for you.
 
 ## Install and update
@@ -142,6 +142,24 @@ claude plugin update almagest@nathanaday-almagest
 The next session installs the binary of the new version. The marketplace pins the
 plugin to its release tag, so you never get a commit between releases. Almagest for
 Obsidian updates through Obsidian's community plugins.
+
+**A vault from 11.0.** Almagest 11.0 kept `sessions/`, `source-core/`, and `trash/` at the
+vault's root; later releases keep them in `tool/`. An agent session in such a vault says
+so, and every Almagest command and agent edit there waits. Migrate the vault yourself,
+once, after you update the agent plugin:
+
+```bash
+almagest vault migrate --dry-run --vault ~/notes/work   # lists what moves; writes nothing
+almagest vault migrate --vault ~/notes/work
+```
+
+In a session, type `! almagest vault migrate`. An agent cannot run it. The migration
+commits your hand edits first, then moves every file of the three folders into `tool/`
+in one commit, and points the links, Bases, bookmarks, and Obsidian settings that name a
+moved path at its new place. It leaves prose, code, the captured originals, and the
+contents of the trash as they were. A change that waits for your answer still applies
+after it. Undo takes back no change applied before the migration, since its documents
+moved. Then update Almagest for Obsidian and start a new agent session.
 
 **A second Claude Code account.** Claude Code keeps each account's plugins in its config
 folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. Install the plugin with
@@ -210,27 +228,31 @@ vault that `ALMAGEST_VAULT` names, else the vault above the working folder.
 
 ### Files in a vault
 
-Besides `source-core/documents/`, Almagest writes these files and folders in a vault:
+A vault keeps what you use at its root, and what Almagest keeps for itself in `tool/`,
+which you need not open. Almagest writes these files and folders:
 
 - `Almagest.md`, the vault's own document.
 - `ingest/`: files for the wiki to learn from.
-- `source-core/originals/`: the captured originals and your attachments.
+- `tool/source-core/documents/`: the documents of the wiki (topics, sources, and
+  repositories), which the agent maintains through changes.
+- `tool/source-core/originals/`: the captured originals and your attachments.
 - `scratchpad/`: your notes, the ideas you ask an agent to note for later, and the
   wikified copies of your notes (see [Wikify a note](#wikify-a-note-experimental)).
 - `journals/`: your own writing, one volume per folder. No agent edits it. See
   [Journals](#journals).
 - `journals/<volume>/Journal · <volume>.md`: the publication history of a volume, which
   code writes at each publish.
-- `sessions/` and `changes/`: the session and change documents.
+- `changes/`: the change documents, which you read and approve.
+- `tool/sessions/`: one document per agent session.
 - `checkout/`: the librarian's checkouts, one folder each, and the ledger,
   `checkout/Checkout · Ledger.md`.
   Code writes it, and you read and edit the copies. No agent edits it. See
   [Checkouts](#checkouts).
-- `trash/`: what safe delete and a change's remove took out, under
-  `trash/<date>/<old path>`. Git keeps it. Empty it yourself.
+- `tool/trash/`: what safe delete and a change's remove took out, under
+  `tool/trash/<date>/<old path>`. Git keeps it. Empty it yourself.
 - `wiki-view/`: the notes that code writes for reading. Each sync writes them again.
-- `.obsidian/app.json`: `vault init` sends new attachments to `source-core/originals/`
-  (unless you chose a folder) and keeps `wiki-view/` and `trash/` out of Obsidian's
+- `.obsidian/app.json`: `vault init` sends new attachments to `tool/source-core/originals/`
+  (unless you chose a folder) and keeps `wiki-view/` and `tool/trash/` out of Obsidian's
   graph and search.
   It keeps every other key.
 - `.obsidian/plugins/almagest/`: Almagest for Obsidian, when you install it from the
@@ -243,7 +265,7 @@ Besides `source-core/documents/`, Almagest writes these files and folders in a v
   shares it; see [SECURITY.md](../SECURITY.md).
 
 Search and lint skip `scratchpad/`, `journals/`, and `checkout/`, but a link
-to a note there still resolves. Almagest skips `trash/` entirely.
+to a note there still resolves. Almagest skips `tool/trash/` entirely.
 
 ## Journals
 
@@ -265,7 +287,7 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   day ends in " (2)". The edition holds each note under a heading with its path in the
   volume, without its frontmatter. Its fields are `origin: journal`, `authority:
   primary`, `volume`, `edition` (the date), and `journal_hash`. It keeps the tags of the
-  volume's latest edition. Every edition stays in `source-core/originals/`, and topics
+  volume's latest edition. Every edition stays in `tool/source-core/originals/`, and topics
   cite the edition, not the notes.
 - **Publication history.** Each publish writes `Journal · <volume>.md` at the volume's
   root: a table of the volume's editions. No document can take a title that begins with
@@ -322,7 +344,7 @@ a change.
   " (2)" when that name is taken). The original stays as it is. The copy lies in
   `scratchpad/`, so a copy of a journal note never joins the volume's edition. Wikify
   refuses a file that is not markdown, `Almagest.md`, and the folders that code writes:
-  `source-core/`, `changes/`, `sessions/`, `wiki-view/`, `trash/`, and `.obsidian/`.
+  `tool/source-core/`, `changes/`, `tool/sessions/`, `wiki-view/`, `tool/trash/`, and `.obsidian/`.
 - **The marks.** The agent (the `wiki-wikify` skill) matches the note's subjects
   against the wiki, then calls `wikify mark` once. A mark is inline text:
   `{{link:<Title>|<phrase>}}` where the phrase names a document of the wiki, and
@@ -376,7 +398,7 @@ The vault works without the plugin. With it, Obsidian adds:
   - **This note**: **Wikify this note** (experimental) copies the open note to
     `scratchpad/`, opens the copy, and starts an agent that marks it (see
     [Wikify a note](#wikify-a-note-experimental)). **Safe delete this note**
-    runs `almagest vault trash` on it. When nothing links it, it moves to `trash/`; a
+    runs `almagest vault trash` on it. When nothing links it, it moves to `tool/trash/`; a
     topic, a source, or a repository leaves through a change that applies at once, so
     `change undo` in a terminal brings it back, and no agent can undo it. When files link
     it, nothing moves, and a list names the links. For a knowledge document that

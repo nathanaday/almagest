@@ -17,7 +17,10 @@ Tools: `vault`, `search`, `context`. References:
 
 1. Read the opening context: the vault, its repositories, the live sessions, the tags
    with their counts, and this session's document. Call `vault` when the context is
-   missing or the user asks for the state.
+   missing or the user asks for the state. When the context says that the vault waits
+   for `almagest vault migrate`, stop: tell the user to type `! almagest vault migrate`
+   in this session (you cannot run it), then to start a new session. Until then, every
+   tool and every edit in the vault refuses.
 2. Name the kind of request with the table below.
 3. When the request names work in a repository, find the repository: `search` with
    `types: [repository]` and the request's words, then `context` with `repository` set
@@ -138,9 +141,9 @@ changes to publish.
   there; the guard refuses every agent edit under `checkout/`.
 - A wikified copy (`scratchpad/<name> · wikified.md`) is the user's scratch. Only
   `wikify mark` writes into it; never edit it with Edit or Write.
-- `trash/` holds what the user deleted. Never read or edit it, and never run
+- `tool/trash/` holds what the user deleted. Never read or edit it, and never run
   `almagest vault trash`: safe delete is the user's action. The guard refuses
-  every agent edit under `trash/`.
+  every agent edit under `tool/trash/`.
 
 ## Gate
 

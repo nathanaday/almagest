@@ -123,7 +123,7 @@ func TestCommands(t *testing.T) {
 func TestHookCommandReadsStdin(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	event := `{"session_id": "abcdef12-0000", "cwd": "` + tv.V.Root + `", "tool_name": "Write", "tool_input": {"file_path": "` + tv.V.Root + `/source-core/documents/X.md"}}`
+	event := `{"session_id": "abcdef12-0000", "cwd": "` + tv.V.Root + `", "tool_name": "Write", "tool_input": {"file_path": "` + tv.V.Root + `/tool/source-core/documents/X.md"}}`
 	if out := r.ok(event, "hook", "guard"); !strings.Contains(out, `"permissionDecision":"deny"`) {
 		t.Fatalf("guard:\n%s", out)
 	}
@@ -319,7 +319,7 @@ func TestWorkDocumentsAndSafeDeleteFromTheShell(t *testing.T) {
 	if code != 2 || !strings.Contains(out, "Notes.md") || !strings.Contains(errOut, "links it") {
 		t.Fatalf("a linked topic: %d %s %s", code, out, errOut)
 	}
-	if out := r.ok("", "vault", "trash", "Notes.md"); !strings.Contains(out, "Moved Notes.md to trash/") {
+	if out := r.ok("", "vault", "trash", "Notes.md"); !strings.Contains(out, "Moved Notes.md to tool/trash/") {
 		t.Fatalf("a note:\n%s", out)
 	}
 }

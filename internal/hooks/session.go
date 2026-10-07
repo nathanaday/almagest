@@ -26,7 +26,9 @@ const (
 // locked runs fn on the session's vault under the lock. It does nothing outside a vault.
 func locked(in Input, env Env, fn func(v *vault.Vault) error) error {
 	v := findVault(in, env)
-	if v == nil {
+	// A vault of another layout is the other binary's, or waits for its migration; a
+	// hook writes nothing there, so no session record lands where the layout has none.
+	if v == nil || v.CheckLayout() != nil {
 		return nil
 	}
 	wait := env.wait
@@ -46,25 +48,24 @@ func locked(in Input, env Env, fn func(v *vault.Vault) error) error {
 func SessionStart(r io.Reader, w io.Writer, env Env) error {
 	in := readInput(r)
 	now := env.now()
-	var v *vault.Vault
+	v := findVault(in, env)
+	if v == nil {
+		return nil
+	}
+	if err := v.CheckLayout(); err != nil {
+		_, err = fmt.Fprintf(w, "almagest: vault %s at %s · %v\n", v.Name(), vault.Shorten(v.Root), err)
+		return err
+	}
 	var rel string
-	err := locked(in, env, func(vv *vault.Vault) error {
-		v = vv
+	err := locked(in, env, func(v *vault.Vault) error {
 		var err error
 		if rel, err = sessions.Start(v, in.event(), now); err != nil {
 			return err
 		}
-		if v.CheckLayout() != nil {
-			return nil
-		}
 		_, err = core.SyncLocked(v, now, core.SyncOptions{})
 		return err
 	})
-	if err != nil || v == nil {
-		return err
-	}
-	if err := v.CheckLayout(); err != nil {
-		_, err = fmt.Fprintf(w, "almagest: vault %s at %s · %v\n", v.Name(), vault.Shorten(v.Root), err)
+	if err != nil {
 		return err
 	}
 	idx, err := vault.Load(v)

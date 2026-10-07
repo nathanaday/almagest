@@ -65,7 +65,7 @@ func cachedDoc(v *Vault, rel string) (*doc.Doc, error) {
 type Index struct {
 	V *Vault
 	// Docs are the typed documents in their place: the three types directly in
-	// source-core/documents, sessions under sessions/, changes under changes/, and Almagest.md.
+	// tool/source-core/documents, sessions under tool/sessions/, changes under changes/, and Almagest.md.
 	Docs []*doc.Doc
 	// Misplaced are typed documents anywhere else. Tools do not see them; lint reports
 	// them, and sync moves one under wiki/ back into the documents.
@@ -98,7 +98,7 @@ type absorber struct {
 	change *doc.Doc
 }
 
-// Load reads every document of the vault. It skips wiki-view/ and trash/.
+// Load reads every document of the vault. It skips wiki-view/ and tool/trash/.
 func Load(v *Vault) (*Index, error) {
 	idx := &Index{V: v, byID: map[string]*doc.Doc{}, byTitle: map[string][]string{}, byAlias: map[string][]*doc.Doc{}, byPath: map[string]*doc.Doc{}, fileKey: map[string][]string{}}
 	err := filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {

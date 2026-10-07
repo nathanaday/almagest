@@ -35,8 +35,7 @@ func Start(v *vault.Vault, name string) (string, error) {
 		return "", err
 	}
 	rel = v.Spelled(rel)
-	top, _, _ := strings.Cut(rel, "/")
-	refused := func(n string) bool { return strings.EqualFold(top, n) }
+	refused := func(dir string) bool { return vault.InFolder(rel, dir) }
 	switch {
 	case !strings.HasSuffix(strings.ToLower(rel), ".md"):
 		return "", fmt.Errorf("%s is no markdown note", rel)

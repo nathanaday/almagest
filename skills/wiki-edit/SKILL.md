@@ -7,7 +7,7 @@ description: "Change knowledge that exists: rewrite, rename, merge, split, remov
 
 Every change to knowledge that exists goes through one change document. Renames,
 removes, and retags keep every link and tag true, because code rewrites them in the
-same commit. A remove moves the document to `trash/`; undo moves it back. You may undo
+same commit. A remove moves the document to `tool/trash/`; undo moves it back. You may undo
 only a change of a session: the user undoes the user's own acts (safe delete, Return).
 
 Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../almagest/references/changes.md),
@@ -27,7 +27,7 @@ Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../almagest
    - split: a `modify` of the topic, and a `create` (`type: topic`, `kind`, `title`,
      `fields`, `body`) for each new topic, linked both ways;
    - remove: a `remove` with `redirect` set to the document that links now name; tell
-     the user that the document goes to `trash/`;
+     the user that the document goes to `tool/trash/`;
    - new tags on a document: a `modify` of `fields.tags` (the whole list);
    - rename or merge a tag: a `retag` with `from` and `to`; code rewrites the tag in
      every document, the tags below it too; a `to` that exists merges the two;
@@ -62,7 +62,7 @@ them: "[[<note>]] is the user's to fix, so leave it and propose no remove".
    checked-out copy links its original in `checkout_of`.
 4. A file that is not a knowledge document (a note, an original) never comes to you
    from the palette, and no change removes it. A source's original in
-   `source-core/originals/` leaves only with its source.
+   `tool/source-core/originals/` leaves only with its source.
 
 ## Draft a topic from a wikified note
 
@@ -100,7 +100,7 @@ propose into it with change propose and id <id>." The note is the wikified copy 
 
 Propose with `change` `action: propose`, with `id` when a work document runs. End the
 turn with one or two lines: the change document as a link, each new tag, the count of
-documents a retag rewrites, and for a remove, that the document goes to `trash/`. Wait
+documents a retag rewrites, and for a remove, that the document goes to `tool/trash/`. Wait
 for the yes in the chat, then apply, or let the user decide in the document. The change
 tool refuses apply in the same turn as the proposal.
 

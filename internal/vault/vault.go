@@ -26,12 +26,15 @@ const (
 	Marker     = "Almagest.md"
 	Ingest     = "ingest"
 	Scratchpad = "scratchpad"
-	Sessions   = "sessions"
 	Changes    = "changes"
+	// Tool holds what Almagest keeps for itself, which the user need not open: the store
+	// of the wiki, the session records, and the trash.
+	Tool     = "tool"
+	Sessions = "tool/sessions"
 	// Core is the store of the wiki: the documents, and the originals they describe.
-	Core      = "source-core"
-	Documents = "source-core/documents"
-	Originals = "source-core/originals"
+	Core      = "tool/source-core"
+	Documents = "tool/source-core/documents"
+	Originals = "tool/source-core/originals"
 	// WikiView is the reading layer that code writes from the documents.
 	WikiView = "wiki-view"
 	// Journals holds the user's own writing, one volume per folder; agents never change it.
@@ -39,7 +42,7 @@ const (
 	// Checkout holds the librarian's copies of documents, and its ledger.
 	Checkout = "checkout"
 	// Trash holds what safe delete removed; the user empties it.
-	Trash     = "trash"
+	Trash     = "tool/trash"
 	Settings  = ".claude/settings.local.json"
 	Obsidian  = ".obsidian"
 	PluginDir = ".obsidian/plugins/almagest"
@@ -51,11 +54,11 @@ const (
 
 // Layout is the version of the vault's layout that this binary reads and writes, kept in
 // Almagest.md's layout field.
-const Layout = 7
+const Layout = 8
 
 // Folders are the folders every vault has. EnsureFolders makes the ones a clone left
 // out, because git keeps no empty folder. Checkout and Trash appear when first used.
-var Folders = []string{Ingest, Scratchpad, Sessions, Changes, Core, Documents, Originals, WikiView, Journals}
+var Folders = []string{Ingest, Scratchpad, Changes, Tool, Sessions, Core, Documents, Originals, WikiView, Journals}
 
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
@@ -156,15 +159,26 @@ func (v *Vault) Tagging() string {
 // LayoutVersion is the layout the vault document records.
 func (v *Vault) LayoutVersion() int { return v.Doc.Front.Int("layout") }
 
+// LayoutBeforeTool is the layout before tool/ held sessions/, source-core/, and trash/;
+// almagest vault migrate takes a vault of it to Layout.
+const LayoutBeforeTool = 7
+
 // ErrLayout is the refusal of a vault whose layout this binary does not read.
 var ErrLayout = errors.New("this vault's layout is not the one this almagest reads; update the almagest plugin (claude plugin update almagest@nathanaday-almagest), then start a new session")
 
+// ErrMigrate is the refusal of a vault that keeps sessions/, source-core/, and trash/ at its
+// root. Only the user migrates it: the guard refuses the command to an agent.
+var ErrMigrate = errors.New("this vault keeps sessions/, source-core/, and trash/ at its root, and this almagest keeps them in tool/; the user runs almagest vault migrate in the vault, which moves them in one commit, then starts a new session")
+
 // CheckLayout refuses a vault of another layout than this binary's.
 func (v *Vault) CheckLayout() error {
-	if v.LayoutVersion() != Layout {
-		return fmt.Errorf("%w (vault layout %d, almagest reads %d)", ErrLayout, v.LayoutVersion(), Layout)
+	switch v.LayoutVersion() {
+	case Layout:
+		return nil
+	case LayoutBeforeTool:
+		return fmt.Errorf("%w (vault layout %d, almagest reads %d)", ErrMigrate, v.LayoutVersion(), Layout)
 	}
-	return nil
+	return fmt.Errorf("%w (vault layout %d, almagest reads %d)", ErrLayout, v.LayoutVersion(), Layout)
 }
 
 // StaleHours is how long a live session may go without a hook event before it is lost.
@@ -270,6 +284,13 @@ func (v *Vault) linkOut(rel string) string {
 		}
 	}
 	return rel
+}
+
+// InFolder reports whether a vault-relative path is the folder dir or lies under it, in
+// any case.
+func InFolder(rel, dir string) bool {
+	key, d := strings.ToLower(rel), strings.ToLower(dir)
+	return key == d || strings.HasPrefix(key, d+"/")
 }
 
 // Local reports whether a vault-relative path names a document a change may write: a .md

@@ -6,12 +6,14 @@ import (
 	"strings"
 
 	"github.com/nathanaday/almagest/internal/core"
+	"github.com/nathanaday/almagest/internal/migrate"
 	"github.com/nathanaday/almagest/internal/vault"
 )
 
-// vaultCmd is almagest vault: the status, init, sync, snapshot, and safe delete.
+// vaultCmd is almagest vault: the status, init, sync, snapshot, safe delete, and the
+// migration of a vault of the layout before tool/.
 func (c *CLI) vaultCmd(argv []string) error {
-	a := parse(argv, "views")
+	a := parse(argv, "views", "dry-run")
 	now := c.Now()
 	switch a.arg(0) {
 	case "", "status":
@@ -94,8 +96,45 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return exitError{code: 2, err: fmt.Errorf("%s stays: %s; point them elsewhere first", res.Path, count(len(res.Backlinks), "document links it", "documents link it"))}
 		}
 		return nil
+	case "migrate":
+		v, err := c.open(a)
+		if err != nil {
+			return err
+		}
+		if a.has("dry-run") {
+			r, err := migrate.Plan(v)
+			if err != nil {
+				return err
+			}
+			return c.emit(a, map[string]any{"migration": r}, func(w io.Writer) { printMigration(w, r) })
+		}
+		r, err := migrate.Run(v, now)
+		if err != nil {
+			return err
+		}
+		return c.emit(a, map[string]any{"migration": r}, func(w io.Writer) { printMigration(w, r) })
 	}
-	return fmt.Errorf("vault takes status, init, sync, snapshot, or trash, not %q", a.arg(0))
+	return fmt.Errorf("vault takes status, init, sync, snapshot, trash, or migrate, not %q", a.arg(0))
+}
+
+func printMigration(w io.Writer, r *migrate.Report) {
+	if r.Commit == "" {
+		fmt.Fprintf(w, "The migration of %s would move %s into %s/ and edit %s. Nothing was written.\n", r.Vault, count(len(r.Moved), "file", "files"), vault.Tool, count(len(r.Edited), "file", "files"))
+	} else {
+		fmt.Fprintf(w, "Migrated %s to layout %d in one commit, %s: moved %s into %s/ and edited %s.\n", r.Vault, r.To, short(r.Commit), count(len(r.Moved), "file", "files"), vault.Tool, count(len(r.Edited), "file", "files"))
+	}
+	for _, e := range r.Edited {
+		fmt.Fprintf(w, "  edits %s\n", e)
+	}
+	for _, x := range r.Warnings {
+		fmt.Fprintf(w, "Note: %s.\n", x)
+	}
+	if r.Commit != "" {
+		if r.Problems > 0 {
+			fmt.Fprintf(w, "almagest lint finds %s; they were there before the migration, or name a path it could not follow.\n", count(r.Problems, "error", "errors"))
+		}
+		fmt.Fprintln(w, "Update the Almagest plugin in Obsidian, then start a new agent session.")
+	}
 }
 
 func printTrash(w io.Writer, r *core.Trashed) {

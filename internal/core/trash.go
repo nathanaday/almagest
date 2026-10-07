@@ -23,7 +23,7 @@ type Trashed struct {
 	Change    *vault.Ref  `json:"change,omitempty"`
 }
 
-// Trash is safe delete, the user's own act: a file that nothing links goes to trash/,
+// Trash is safe delete, the user's own act: a file that nothing links goes to tool/trash/,
 // and a file that something links stays, with its backlinks named. A knowledge document
 // leaves through a change applied at once, so its record and its undo are a change's;
 // any other file moves in a commit of its own.
@@ -114,9 +114,8 @@ func trashFile(v *vault.Vault, rel string, now time.Time) (_ string, err error) 
 
 // trashRefusal says why safe delete does not take a path, or "".
 func trashRefusal(rel string) string {
-	top, _, _ := strings.Cut(rel, "/")
-	is := func(names ...string) bool {
-		return slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(top, n) })
+	is := func(dirs ...string) bool {
+		return slices.ContainsFunc(dirs, func(d string) bool { return vault.InFolder(rel, d) })
 	}
 	switch {
 	case vault.IsMarker(rel):

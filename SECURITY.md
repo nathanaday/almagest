@@ -68,7 +68,7 @@ press Approve in the change document and apply it yourself.
   It moves nothing while a file links the one you delete. A topic, a source, or a
   repository leaves through a change that the command applies at once as your own
   action, so the change records it and `change undo` brings it back. Any other file
-  moves to `trash/` in a commit of its own. The `change` tool refuses an agent's undo of
+  moves to `tool/trash/` in a commit of its own. The `change` tool refuses an agent's undo of
   a change that names no session: your safe delete, your Return, and a change proposed
   from a terminal. You undo those in a terminal.
 - `almagest journal publish` is your act too; the Obsidian plugin's Publish runs
@@ -84,8 +84,8 @@ press Approve in the change document and apply it yourself.
   write whose original changed after the proposal.
 - The `wikify` tool changes no knowledge document. `start` copies a note into
   `scratchpad/` as `<name> · wikified.md` and never changes the original. It refuses a
-  file that is not markdown, `Almagest.md`, and a note under `source-core/`, `changes/`,
-  `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`. `mark` writes only a wikified
+  file that is not markdown, `Almagest.md`, and a note under `tool/source-core/`, `changes/`,
+  `tool/sessions/`, `wiki-view/`, `tool/trash/`, or `.obsidian/`. `mark` writes only a wikified
   copy: a note directly in `scratchpad/` whose name holds ` · wikified` and ends in
   `.md`. It refuses any other note. Neither commits. A topic for a new subject enters
   the wiki only through a change, and the gate above holds for it. The guard refuses
@@ -99,17 +99,17 @@ The `guard` hook runs before each Write, Edit, MultiEdit, NotebookEdit, Codex
 `context`, `match`, and `lint`, only read, and the guard does not see them. In a vault, it refuses an agent's
 edit of:
 
-- `source-core/documents/`: a new document, which the change and source tools make; and
+- `tool/source-core/documents/`: a new document, which the change and source tools make; and
   a topic, a source, or a repository, which change only through a change.
-- `source-core/originals/`, and any other folder under `source-core/`.
+- `tool/source-core/originals/`, and any other folder under `tool/source-core/`.
 - `changes/` and `wiki-view/`, which code writes.
 - `journals/`: your own writing, since 10.0. No agent edits a file there, the
   publication history that code writes included.
-- `trash/`: what safe delete and a change's remove took out. You empty it.
+- `tool/trash/`: what safe delete and a change's remove took out. You empty it.
 - `checkout/`: the copies, reading lists, and ledger that the `checkout` tool writes.
   You read and edit the copies; `return` proposes your edits as a change.
 - `Almagest.md`, a `.base` file, and `.claude/settings.local.json`.
-- `sessions/`, except the Description, Progress, and Summary sections of the agent's own
+- `tool/sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.
 - `.almagest/config.json`, anything under `.obsidian/plugins/almagest/`, and the machine's
   `config.json` in `~/.almagest` (or `$ALMAGEST_HOME`). These files decide what Almagest runs; see
@@ -121,7 +121,9 @@ The guard judges a path as the disk names it. It follows links, and it matches e
 name without regard to case, so another spelling of a path meets the rule of the real file.
 It uses the vault that holds the edited file, not the vault of the session's folder. So a
 session that runs outside the vault gets the same refusals. A file in no vault meets only
-the rule on the machine's `config.json`.
+the rule on the machine's `config.json`. In a vault whose layout the binary does not read,
+such as an 11.0 vault that waits for `almagest vault migrate`, the guard refuses every
+agent edit, since its rules name the folders of its own layout.
 
 ### A read-only agent writes
 
@@ -142,6 +144,7 @@ It refuses a command that runs `almagest` with one of these:
 - `change … undo`, which takes back a change, your own act among them;
 - `hook`, which sends the binary a fake hook event, for example a fake prompt from you;
 - `vault … trash`, your safe delete, which applies a remove without the gate;
+- `vault … migrate`, which moves the folders of a whole vault;
 - `journal … publish`, which copies a journal volume into the wiki's sources; only you
   decide when a journal is published;
 - `config set` or `config unset` of `terminal_command` or `agent_commands`, the commands
@@ -180,7 +183,7 @@ that writes the file.
   outside the vault.
 - Undo takes its paths from git history, not from frontmatter.
 - A change's remove deletes no file. Apply moves the document to
-  `trash/<date>/<its path>` and records that path for recovery; undo moves it back.
+  `tool/trash/<date>/<its path>` and records that path for recovery; undo moves it back.
 - Before Almagest uses a title as a file name, it removes path separators, leading dots, and
   the characters that break a wikilink (`[ ] # ^`). Almagest builds a session file name from
   the date and a hex id.

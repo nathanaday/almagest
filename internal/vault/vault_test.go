@@ -22,13 +22,13 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 	if strings.Contains(tv.Read(vault.Marker), "wikify") {
 		t.Fatalf("Almagest.md names wikify:\n%s", tv.Read(vault.Marker))
 	}
-	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/app.json", "source-core/documents", "source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
+	for _, rel := range []string{"tool/sessions/Sessions.base", "changes/Changes.base", ".obsidian/app.json", "tool/source-core/documents", "tool/source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
 		if !v.Exists(rel) {
 			t.Errorf("missing %s", rel)
 		}
 	}
 	var app map[string]any
-	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "trash/") {
+	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "tool/source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "tool/trash/") {
 		t.Fatalf("app settings %v %v", app, err)
 	}
 	if log := tv.Log(); len(log) != 1 || log[0] != "setup: Work" {
@@ -147,7 +147,7 @@ func TestIndexResolvesIdsTitlesAliasesAndTags(t *testing.T) {
 	if got := idx.TagChildren("school"); len(got) != 1 || got[0] != "school/cs513" {
 		t.Fatalf("children %v", got)
 	}
-	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "source-core/documents/Self-supervised learning.md" || ref.Kind != "concept" || len(ref.Tags) != 2 {
+	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "tool/source-core/documents/Self-supervised learning.md" || ref.Kind != "concept" || len(ref.Tags) != 2 {
 		t.Fatalf("ref %+v", ref)
 	}
 }
@@ -184,7 +184,7 @@ func TestPendingFollowsAbsorbedHashes(t *testing.T) {
 		t.Fatalf("pending docs %v", got)
 	}
 	// A new file under the same source is pending again.
-	tv.Write("source-core/documents/DINOv2.md", strings.Replace(tv.Read("source-core/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
+	tv.Write("tool/source-core/documents/DINOv2.md", strings.Replace(tv.Read("tool/source-core/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
 	if idx := tv.Index(); !idx.Pending(idx.ByID(src)) {
 		t.Fatal("a source with a new hash is pending")
 	}
@@ -277,8 +277,8 @@ func TestSyncSettingsKeepsOtherKeys(t *testing.T) {
 
 func TestOpenNote(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write(".obsidian/workspace.json", `{"main":{"id":"a","type":"split","children":[{"id":"b","type":"tabs","children":[{"id":"leaf1","type":"leaf","state":{"type":"markdown","state":{"file":"source-core/documents/X.md"}}}]}]},"active":"leaf1","lastOpenFiles":["Other.md"]}`)
-	if got := tv.V.OpenNote(); got != "source-core/documents/X.md" {
+	tv.Write(".obsidian/workspace.json", `{"main":{"id":"a","type":"split","children":[{"id":"b","type":"tabs","children":[{"id":"leaf1","type":"leaf","state":{"type":"markdown","state":{"file":"tool/source-core/documents/X.md"}}}]}]},"active":"leaf1","lastOpenFiles":["Other.md"]}`)
+	if got := tv.V.OpenNote(); got != "tool/source-core/documents/X.md" {
 		t.Fatalf("open note %q", got)
 	}
 }

@@ -84,6 +84,10 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		if err != nil {
 			continue
 		}
+		// The rules name this layout's folders, so they cannot judge a vault of another.
+		if err := v.CheckLayout(); err != nil {
+			return deny(w, f.Path+" is in a vault that this almagest does not read yet: "+err.Error())
+		}
 		if reason := pathRefusal(v, in, f); reason != "" {
 			return deny(w, reason)
 		}
@@ -131,6 +135,8 @@ func commandRefusal(words []string) string {
 			return "undo a change with the change tool, which leaves the user's own acts (safe delete, Return) to the user"
 		case rest[0] == "journal" && slices.Contains(rest[1:], "publish"):
 			return "a journal is published when the user decides: ask the user to press Publish in the Almagest palette"
+		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
+			return "the migration moves the user's whole vault, so the user runs it: ask the user to type ! almagest vault migrate in this session, or to run it in a terminal"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "trash"):
 			return "safe delete is the user's act: it applies a remove at once, with no yes; propose a remove with the change tool, or ask the user to press Safe delete in the Almagest palette"
 		}
@@ -211,7 +217,7 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	return ""
 }
 
-// documentRefusal keeps the documents of source-core/documents to their writers: a new file
+// documentRefusal keeps the documents of tool/source-core/documents to their writers: a new file
 // comes from a tool, and knowledge changes through a change.
 func documentRefusal(v *vault.Vault, f patchFile, rel string) string {
 	data, err := v.Read(rel)

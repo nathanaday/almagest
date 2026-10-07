@@ -24,7 +24,7 @@ func TestRankingFiltersAndFacets(t *testing.T) {
 	tv.Doc("topic", "False alarms", map[string]any{"kind": "concept", "status": "draft", "tags": []string{"work/p3/p3-edge"}}, "## Definition\n\nvehicle false alarms\n")
 	tv.Doc("topic", "Old alarms", map[string]any{"kind": "concept", "status": "deprecated"}, "## Definition\n\nvehicle alarms long ago\n")
 	tv.Doc("source", "Alarm log", map[string]any{"file": "[[log.txt]]", "sha256": "abc"}, "vehicle alarms\n")
-	tv.Write("sessions/2026-09/2026-09-26 0900 aaaaaa.md", "---\nid: ses-aaaaaa\ntype: session\nharness_id: aaaaaa\nstatus: ended\nupdated: 2026-09-26T09:00:00\nrepositories: [\"[[p3-edge]]\"]\n---\n")
+	tv.Write("tool/sessions/2026-09/2026-09-26 0900 aaaaaa.md", "---\nid: ses-aaaaaa\ntype: session\nharness_id: aaaaaa\nstatus: ended\nupdated: 2026-09-26T09:00:00\nrepositories: [\"[[p3-edge]]\"]\n---\n")
 	idx := tv.Index()
 
 	hits, err := search.Search(idx, search.Query{Text: "p3 cloud front end", Types: []string{"repository"}})
