@@ -44,7 +44,7 @@ func isHarness(name string) bool {
 
 // HarnessPID is the id of the agent process that runs this hook: the nearest ancestor
 // whose name is claude or codex, or 0. A hook runs as a child of the agent, through a
-// shell and the plugin's wrapper script.
+// shell and the plugin's launcher, which execs the binary.
 func HarnessPID() int {
 	pid := os.Getppid()
 	for i := 0; i < MaxAncestors && pid > 1; i++ {

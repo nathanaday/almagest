@@ -1,7 +1,7 @@
 {
   "mcpServers": {
     "almagest": {
-      "command": "${CLAUDE_PLUGIN_ROOT}/scripts/almagest",
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/almagest",
       "args": ["mcp"]
     }
   }

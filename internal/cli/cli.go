@@ -35,6 +35,11 @@ import (
 // Version is the binary's version; the build stamps it.
 var Version = "dev"
 
+// Protocol is the version of what the Obsidian plugin reads: the commands it runs, their
+// flags, and their JSON. It goes up when one of them changes in a way an older plugin
+// would misread, and the plugin names the update that each side needs.
+const Protocol = 1
+
 // CLI is one run of the command.
 type CLI struct {
 	// moved are the notes the views step of this command moved out of wiki-view/.
@@ -120,7 +125,7 @@ var commands = []struct{ name, usage string }{
 `},
 	{"doctor", `  almagest doctor                            checks the binary, each agent's plugin and server, and every vault
 `},
-	{"version", `  almagest version
+	{"version", `  almagest version [--json]                          the version, and the protocol the Obsidian plugin reads
 `},
 	{"open", `  almagest open [DOC] [--register]
 `},
@@ -210,7 +215,9 @@ func (c *CLI) Run(argv []string) int {
 	case "doctor":
 		return c.doctorCmd(rest)
 	case "version", "--version", "-v":
-		fmt.Fprintln(c.Out, "almagest "+Version)
+		err = c.emit(parse(rest), map[string]any{"version": Version, "protocol": Protocol}, func(w io.Writer) {
+			fmt.Fprintln(w, "almagest "+Version)
+		})
 	case "open":
 		err = c.openCmd(rest)
 	case "help", "--help", "-h":

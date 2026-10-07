@@ -22,6 +22,12 @@ old commits (`vault.ChangeCommit`, for undo and recovery), `~/.atlas/config.json
 first `Home.Load` copies it), and the old binary names, which the guard's shell rule
 refuses. The migration also holds `.git/atlas.lock`, the older binary's lock.
 
+11.0 also changed how the binary reaches a machine. The user installs the agent plugin
+and nothing else: its launcher, `bin/almagest`, installs the binary of the plugin's own
+version from the GitHub release, checked against the sha256 that the plugin pins
+(`release/checksums.txt`). The release workflow publishes a binary only when a build of
+the tag has those bytes. The marketplace entry pins the plugin to the release tag.
+
 10.0.0 (layout 6) renamed the vault's folders: `wiki/documents/` became
 `source-core/documents/`, `wiki/assets/` became `source-core/originals/`, `inbox/` became
 `ingest/`, and `views/` became `wiki-view/` (tag views in `wiki-view/nav/`). It added
@@ -531,13 +537,24 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The guard refuses the old binary names too.** 6.0 to 6.2 shipped the binary as
   `atlas`, and 6.3 to 10.4 as `atlas-obsidian`. An older install may still hold one, and
   it reads the same vaults, so the guard's shell rule refuses all three names.
-- **The wrapper, the Codex entry, and the Obsidian plugin never search PATH or the system
-  folders** for the binary, so another tool's binary never runs in its place. The wrapper
-  and the Codex entry run the first executable of `$ALMAGEST_BIN`,
-  `${ALMAGEST_HOME:-~/.almagest}/bin/almagest`, and `~/go/bin/almagest`. The plugin
-  runs its `binaryPath` setting as given when it is set (`helpers.ts`), else the first of
-  `~/.almagest/bin/almagest` and `~/go/bin/almagest` that exists; it reads
-  neither `ALMAGEST_BIN` nor `ALMAGEST_HOME`.
+- **The launcher runs the binary of the plugin's own version.** `bin/almagest` (made by
+  `make pin` from `internal/release/launcher.sh`) holds the version and the pinned
+  checksums inline. It runs `$ALMAGEST_BIN` when set, else
+  `$ALMAGEST_HOME/bin/<version>/almagest`; when that file is missing it downloads the
+  release asset over HTTPS, installs it only when its sha256 matches, points
+  `~/.almagest/bin/almagest` at it, and appends to `~/.almagest/install.log`. It never
+  searches PATH, so another tool's binary never runs in its place, and drops `~/go/bin`:
+  a `go install` pins no version. A hook with no binary passes (the session start says
+  why); any other call fails with the reason. `ALMAGEST_RELEASE_BASE` changes the
+  download's source for the tests; the checksums still decide what installs. Claude Code
+  puts `bin/` on the Bash tool's PATH only, so `.mcp.json` and `hooks.json` name it by
+  `${CLAUDE_PLUGIN_ROOT}`. The Obsidian plugin runs its `binaryPath` setting, else
+  `~/.almagest/bin/almagest`.
+- **A release builds the same bytes on every machine.** `make release` builds each
+  platform with `CGO_ENABLED=0`, `-trimpath`, `-buildvcs=false`, and the exact toolchain
+  (`TOOLCHAIN`, through `GOTOOLCHAIN`), so the sha256 of each binary is known before the
+  tag: `make pin` writes them to `release/checksums.txt` and into the launcher. The
+  release workflow builds again from the tag and publishes only when the bytes match.
 - **One rule chooses the vault** (`vault.Select`): the vault a call names (`--vault`, or
   a tool's `vault` input), else `$ALMAGEST_VAULT` (a path or a machine-file name), else the
   vault above the working folder. The CLI, the MCP server, and the hooks call it; a bad
@@ -546,13 +563,14 @@ The design pages are the spec. When the code departs from them, the reason is be
   before dispatch, since `parse` would read `--help` as an option and `setup`, `vault
   init`, `hook`, and `mcp` act at once. A test (`usage_test.go`) holds every option a
   command reads to its usage entry.
-- **Codex runs its own copy of the wrapper's lookup.** `.codex-plugin/plugin.json` holds
-  the almagest server inline: `/bin/sh -c` with the same three candidates, no `cwd`, and
-  `env_vars` for `ALMAGEST_BIN`, `ALMAGEST_HOME`, and `ALMAGEST_VAULT`. Codex 0.155.1 expands no
-  placeholder in a plugin's MCP config, ignores a root `plugin.json`, and resolves a
-  `cwd` against the plugin's cache folder, where the server would find no vault.
-  `internal/plugin/codex_test.go` runs the entry and the wrapper side by side and
-  requires the same result. Claude Code keeps reading `.mcp.json`.
+- **Codex runs the launcher inline.** `.codex-plugin/plugin.json` holds the almagest
+  server as `/bin/sh -c <the launcher> almagest mcp`, no `cwd`, and `env_vars` for
+  `ALMAGEST_BIN`, `ALMAGEST_HOME`, `ALMAGEST_VAULT`, and `ALMAGEST_NO_DOWNLOAD`. Codex
+  0.155.1 expands no placeholder in a plugin's MCP config, ignores a root `plugin.json`,
+  and resolves a `cwd` against the plugin's cache folder, where the server would find no
+  vault; so the launcher carries its version and checksums instead of reading a file
+  beside it, and holds no `${`. `make pin` writes both copies from one template, and
+  `internal/plugin` runs each through every case. Claude Code keeps reading `.mcp.json`.
 - **`doctor` starts each host's server as the host runs it** (`host.Entry`,
   `host.Probe`): Codex's transport from `codex mcp list --json`, Claude Code's
   `.mcp.json` from the install path with `${CLAUDE_PLUGIN_ROOT}` expanded, with only
@@ -629,13 +647,15 @@ prints the report and every lint finding.
 
 ```bash
 make build        # build/almagest
-make install      # ~/.almagest/bin/almagest, with the version of .claude-plugin/plugin.json
+make install      # ~/.almagest/bin/<version>/almagest and the link, as the launcher installs
 make test
+make release      # build/release: each platform's binary and checksums.txt
+make pin          # make release, then release/checksums.txt and the launcher
 ```
 
-The binary, both plugin manifests, and the marketplace entry share one version; the
-`internal/plugin` tests fail when they drift. `make test` runs them; `make build` and
-`make install` do not.
+The binary, both plugin manifests, the marketplace entry and its `ref`, and the
+launcher share one version; the `internal/plugin` tests fail when they drift. `make test`
+runs them; `make build` and `make install` do not.
 
 End to end in a scratch vault, without touching the real machine folder:
 
@@ -649,19 +669,22 @@ claude -p --continue "yes" --plugin-dir …     # the user's answer at a gate
 
 ## Release
 
-The installed plugin is a git clone of this repository's `main` at a commit.
-`claude plugin update` fetches a new one only when the version in
-`.claude-plugin/plugin.json` and `marketplace.json` went up, and the marketplace clone
-fetches from GitHub, so push `main` first:
+The marketplace entry pins the plugin to its release tag (`source: github`, `ref`), so a
+Claude Code user installs only a release; Codex's local entry takes `main`. So the
+version, `release/checksums.txt`, and the launcher change only in a release commit, and
+`main` between releases runs the binary of the last release. To release X.Y.Z:
 
-```bash
-claude plugin marketplace update nathanaday-almagest
-claude plugin update almagest@nathanaday-almagest
-make install
-```
+1. Set X.Y.Z in `.claude-plugin/plugin.json`, `.codex-plugin/plugin.json`, and
+   `.claude-plugin/marketplace.json` (the entry's `version` and `ref`, and the metadata).
+2. `make pin`, then `make test`, and commit.
+3. Tag X.Y.Z and push the tag alone: `git push origin X.Y.Z`. The release workflow builds
+   the binaries again, compares them with `release/checksums.txt`, attests them, and
+   publishes the release.
+4. When the release is up, push `main`. The marketplace then names the new tag, and the
+   launcher finds its binary on the first session.
 
 A session started inside this checkout may report that the project MCP server
-`${CLAUDE_PLUGIN_ROOT}/scripts/almagest` failed to start. Claude Code reads the
+`${CLAUDE_PLUGIN_ROOT}/bin/almagest` failed to start. Claude Code reads the
 checkout's own `.mcp.json` as a project server, and that variable is set only for plugins.
 It starts that server only when the checkout's untracked `.claude/settings.local.json`
 enables it (`enabledMcpjsonServers` or `enableAllProjectMcpServers`). The plugin's own
@@ -669,8 +692,7 @@ server still runs; remove the project server from that file to silence the error
 
 ## Not built yet
 
-- The npm package that `npx almagest setup` installs from (the Stack page). Setup
-  runs from the binary for now.
+- Signing and notarizing the macOS binaries, and a Homebrew tap.
 - Fetching a page from a URL. `source capture --text FILE --locator URL` already records
   `origin: url`; nothing fetches the page.
 - The "Later" items of the Obsidian plugin page.

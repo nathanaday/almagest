@@ -47,8 +47,41 @@ func (h Home) LegacyConfigPath() string { return filepath.Join(h.Legacy, "config
 // ConfigPath is the machine file.
 func (h Home) ConfigPath() string { return filepath.Join(h.Root, "config.json") }
 
-// BinPath is where setup installs the binary.
-func (h Home) BinPath() string { return filepath.Join(h.Root, "bin", "almagest") }
+// VersionBin is where a version of the binary lies: the plugin's launcher runs the one of
+// the plugin's version, and installs it there.
+func (h Home) VersionBin(version string) string {
+	return filepath.Join(h.Root, "bin", version, "almagest")
+}
+
+// LinkPath is the link to the binary installed last, which the Obsidian plugin and a
+// shell run.
+func (h Home) LinkPath() string { return filepath.Join(h.Root, "bin", "almagest") }
+
+// InstallBinary copies the binary at from to the folder of version, and points the link
+// at it. Each step replaces its file at once, so a launch never sees half of one.
+func (h Home) InstallBinary(from, version string) (string, error) {
+	to := h.VersionBin(version)
+	data, err := os.ReadFile(from)
+	if err != nil {
+		return "", err
+	}
+	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
+		return "", err
+	}
+	tmp := to + ".tmp"
+	if err := os.WriteFile(tmp, data, 0o755); err != nil {
+		return "", err
+	}
+	if err := os.Rename(tmp, to); err != nil {
+		return "", err
+	}
+	link := h.LinkPath() + ".tmp"
+	os.Remove(link)
+	if err := os.Symlink(filepath.Join(version, "almagest"), link); err != nil {
+		return "", err
+	}
+	return to, os.Rename(link, h.LinkPath())
+}
 
 // Config is the machine file: the paths of this machine's vaults, and the preferences
 // of every vault.

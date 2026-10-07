@@ -27,69 +27,105 @@ the standalone project obsidian-threads (`~/projects/software/obsidian-threads`)
 
 ## Quickstart
 
-Almagest is three parts that share one version: the `almagest` binary (Go, one
-static file), the agent plugin for Claude Code or Codex, and a thin Obsidian plugin that
-`almagest vault init` puts in the vault.
+Almagest has three parts:
+
+- the **agent plugin** for Claude Code or Codex: skills, hooks, and the MCP server;
+- the **`almagest` binary** (Go, one static file), which the agent plugin installs and
+  runs;
+- **Almagest for Obsidian**, an optional plugin from Obsidian's community plugins: the
+  palette, the Approve and Cancel widget, the navigator, and the sessions pane
+  ([obsidian-almagest](https://github.com/nathanaday/obsidian-almagest)).
+
+You install the agent plugin. You build nothing and run no setup step.
 
 ### Prerequisites
 
-- macOS or Linux, `git`, Go 1.24 to build.
+- macOS or Linux (arm64 or amd64), `git`, and `curl`.
 - Claude Code (or Codex), and Obsidian.
 
-### Build and install
+### Install
 
-```bash
-make install                                      # builds ~/.almagest/bin/almagest
-~/.almagest/bin/almagest setup                 # adds the agent plugin to Claude Code
-~/.almagest/bin/almagest setup --agent codex   # or to Codex
-```
-
-The plugin finds the binary without `PATH`. To run `almagest` from a shell, add
-its folder to `PATH` in your shell profile:
-
-```bash
-export PATH="$HOME/.almagest/bin:$PATH"
-```
-
-
-### Add the plugin to an agent
-
-`setup` adds the agent plugin to Claude Code when Claude Code does not have it. It runs
-these two commands, which you can also run yourself:
+In Claude Code:
 
 ```bash
 claude plugin marketplace add nathanaday/almagest
 claude plugin install almagest@nathanaday-almagest
 ```
 
-Restart Claude Code to load the plugin. `almagest doctor` checks the binary, the
-plugin, and every vault. It also starts the plugin's MCP server as each agent runs it,
-and fails when the server does not list the binary's tools.
+Restart Claude Code. The plugin's first session installs the binary; see
+[How the binary is installed](#how-the-binary-is-installed). Then make a vault (below),
+and in Obsidian install **Almagest** from the community plugins if you want its
+interface.
 
-**A second Claude Code account.** Claude Code keeps each account's plugins in its config
-folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. To add the plugin to
-an account with its own config folder, run `setup` with that variable set:
+`almagest doctor` checks the binary, the plugin, and every vault. It also starts the
+plugin's MCP server as each agent runs it, and fails when the server does not list the
+binary's tools. Agents in a session run `almagest` as a bare command. To run it in your
+own shell, add its folder to `PATH` in your shell profile (doctor prints the line):
 
 ```bash
-CLAUDE_CONFIG_DIR="$HOME/.claude-other" ~/.almagest/bin/almagest setup
+export PATH="$HOME/.almagest/bin:$PATH"
 ```
 
-Every account on the machine shares one binary (`~/.almagest/bin/almagest`) and one
-list of vaults (`~/.almagest/config.json`), so each account finds the same vaults.
+### How the binary is installed
 
-**Update.** Each account holds its own copy of the plugin. After a new release, update
-the plugin in each account, then the binary once:
+The plugin carries a launcher, `bin/almagest`, which its MCP server and hooks run. The
+launcher runs the binary of the plugin's own version, `~/.almagest/bin/<version>/almagest`.
+When that file is missing, the launcher:
+
+1. downloads the binary for your system from the GitHub release of that version,
+   `https://github.com/nathanaday/almagest/releases/download/<version>/almagest-<version>-<os>-<arch>`,
+   over HTTPS only;
+2. checks its sha256 against the checksum that the plugin pins
+   ([`release/checksums.txt`](release/checksums.txt), also inside the launcher), and
+   installs nothing when they differ;
+3. installs it at `~/.almagest/bin/<version>/almagest`, points the link
+   `~/.almagest/bin/almagest` at it, and adds one line to `~/.almagest/install.log`: the
+   time, the version, the path, the sha256, and the URL.
+
+It writes nothing else: no `sudo`, no shell profile, no system folder. The release CI
+builds each binary from the tagged commit and publishes it only when its bytes match the
+checksums that the commit pins, and it attests each file's provenance:
+
+```bash
+gh attestation verify ~/.almagest/bin/<version>/almagest --repo nathanaday/almagest
+```
+
+To use a binary of your own, set `ALMAGEST_BIN` to its path. To turn the download off,
+set `ALMAGEST_NO_DOWNLOAD=1`; then install with `make install` from a clone of this
+repository, which builds into the same folder. To remove Almagest from the machine,
+uninstall the plugin and delete `~/.almagest/`.
+
+### Update
+
+Each Claude Code account holds its own copy of the plugin. Turn on auto-update for the
+`nathanaday-almagest` marketplace in `/plugin`, or update by hand:
 
 ```bash
 claude plugin marketplace update nathanaday-almagest
 claude plugin update almagest@nathanaday-almagest
-make install
 ```
 
-For an account with its own config folder, set `CLAUDE_CONFIG_DIR` on the two `claude`
-commands.
+The next session installs the binary of the new version. The marketplace pins the
+plugin to its release tag, so you never get a commit between releases. Almagest for
+Obsidian updates through Obsidian's community plugins. A vault of an earlier release
+needs `almagest vault migrate` (below), which only you run.
 
-**Codex.** `setup --agent codex` adds the plugin to Codex when Codex does not have it:
+**A second Claude Code account.** Claude Code keeps each account's plugins in its config
+folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. Install the plugin with
+that variable set:
+
+```bash
+CLAUDE_CONFIG_DIR="$HOME/.claude-other" claude plugin install almagest@nathanaday-almagest
+```
+
+Every account on the machine shares the binaries (`~/.almagest/bin/`) and one list of
+vaults (`~/.almagest/config.json`), so each account finds the same vaults.
+
+**Before 11.0** the project was Atlas (`atlas-obsidian`), with `~/.atlas/`. The first
+command of 11.0 copies `~/.atlas/config.json`, so your vaults carry over. Uninstall the
+`atlas-obsidian` plugin, and delete `~/.atlas/` once every vault is migrated.
+
+### Codex
 
 ```bash
 codex plugin marketplace add nathanaday/almagest
@@ -97,9 +133,10 @@ codex plugin add almagest@nathanaday-almagest
 ```
 
 Codex runs a plugin's hooks only after you trust them. Without the hooks, the guard and
-the session record are off. Open `/hooks` in Codex, trust the `almagest` hooks,
-and start a new session. Each install or update that changes the hooks needs your trust
-again. `setup --agent codex` and `doctor` say how many hooks Codex runs.
+the session record are off. Open `/hooks` in Codex, trust the `almagest` hooks, and start
+a new session. Each install or update that changes the hooks needs your trust again.
+`doctor` says how many hooks Codex runs. Codex's MCP server entry holds the same launcher
+as `bin/almagest`.
 
 To update the plugin in Codex, fetch the marketplace again and add the plugin again:
 
@@ -134,7 +171,7 @@ Start Claude Code in an empty folder and say "set up almagest". Or from a shell:
 ```bash
 almagest vault init --path ~/notes/work --name Work --tagging open \
   --description "Work notes: the p3 product and the tools around it."
-almagest open --register --vault ~/notes/work   # opens it in Obsidian; turn on the Almagest plugin once
+almagest open --register --vault ~/notes/work   # opens it in Obsidian
 ```
 
 A command that acts on a vault takes `--vault` (a folder, or a vault's name), else the
@@ -205,9 +242,10 @@ apply. [TESTED.md](TESTED.md) lists the agent and terminal pairs we tested.
 
 | Variable | What it does |
 | --- | --- |
-| `ALMAGEST_HOME` | The machine folder: the binary, `config.json` with the list of vaults, and the global preferences. Default `~/.almagest`. |
+| `ALMAGEST_HOME` | The machine folder: the binaries, `config.json` with the list of vaults, the global preferences, and `install.log`. Default `~/.almagest`. |
 | `ALMAGEST_VAULT` | The vault a command, the MCP server, or a hook uses when the call names none: a folder or a vault's name. |
-| `ALMAGEST_BIN` | The binary that the wrapper script and the Codex server entry run, before `$ALMAGEST_HOME/bin` and `~/go/bin`. |
+| `ALMAGEST_BIN` | A binary of your own, which the launcher runs in place of the plugin's version; it then downloads nothing. |
+| `ALMAGEST_NO_DOWNLOAD` | Set to `1`, the launcher never downloads a binary. |
 | `ALMAGEST_HOOK_LOG` | A file that gets every hook event in full, your prompts included. Use it only to debug. |
 | `CLAUDE_CONFIG_DIR` | Claude Code's config folder, which `setup` and `doctor` read. Default `~/.claude`. |
 | `CLAUDE_PROJECT_DIR` | The folder in which `almagest mcp` looks for the vault, when set. |
@@ -241,7 +279,8 @@ Besides `source-core/documents/`, Almagest writes these files and folders in a v
   (unless you chose a folder) and keeps `wiki-view/` and `trash/` out of Obsidian's
   graph and search.
   It keeps every other key.
-- `.obsidian/plugins/almagest/`: the Obsidian plugin.
+- `.obsidian/plugins/almagest/`: Almagest for Obsidian, when you install it from the
+  community plugins. No Almagest tool writes it.
 - `.claude/settings.local.json`: the linked repositories, for Claude Code.
 - `.git/info/exclude`: `wiki-view/`, `.claude/settings.local.json`, Obsidian's workspace
   and graph files, `.DS_Store`, and Almagest's temporary `.almagest-*` files stay out of the
@@ -500,10 +539,12 @@ its core rules:
   `source`, `change`, `checkout`, `wikify`, and `lint`. `internal/hooks` serves the nine hooks,
   and `internal/cli` every command.
 - The agent plugin: `skills/` (fourteen skills), `agents/` (three read-only agents),
-  `hooks/hooks.json`, `.mcp.json`,
-  `.claude-plugin/`, `.codex-plugin/`, and `scripts/almagest`, the wrapper that finds
-  the binary for the hooks and the MCP server. `.agents/plugins/marketplace.json` is a second
-  marketplace entry, added with Codex support.
+  `hooks/hooks.json`, `.mcp.json`, `.claude-plugin/`, `.codex-plugin/`, and
+  `bin/almagest`, the launcher. `.agents/plugins/marketplace.json` is the Codex
+  marketplace entry.
+- The release: `release/checksums.txt` (the pinned sha256 of each binary),
+  `internal/release` (the launcher's template and `make pin`), and
+  `.github/workflows/release.yml`.
 - The Obsidian plugin is in its own repository, `obsidian-almagest`.
 - `v7-design/`: the design pages of 7.0, kept for reference.
 - Notes for agents that work on this code: [CLAUDE.md](CLAUDE.md).

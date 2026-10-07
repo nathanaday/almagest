@@ -32,7 +32,8 @@ Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
    `.git`) and let the user pick. Hand the list to repo-link, which links them in one
    change and proposes the tags of each.
 6. Tell the user to open the vault in Obsidian (`almagest open --register`, or
-   Open folder as vault) and to turn on the Almagest plugin under Community plugins once.
+   Open folder as vault) and, for its interface, to install Almagest from Obsidian's
+   community plugins (obsidian://show-plugin?id=almagest).
    The vault works without the plugin. The plugin adds the colors and icons of the
    callouts, the Approve and Cancel buttons in each change document, the Almagest palette
    (Ingest, Wiki lint, and Safe delete), the Almagest navigator, the sessions pane, the

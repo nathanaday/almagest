@@ -1,8 +1,11 @@
 {
   "name": "almagest",
-  "version": "10.4.1",
+  "version": "11.0.0",
   "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, shared by Claude Code and Codex.",
-  "author": {"name": "nathanaday", "url": "https://github.com/nathanaday"},
+  "author": {
+    "name": "nathanaday",
+    "url": "https://github.com/nathanaday"
+  },
   "license": "MIT",
   "skills": "./skills/",
   "mcpServers": {
@@ -10,9 +13,16 @@
       "command": "/bin/sh",
       "args": [
         "-c",
-        "h=$ALMAGEST_HOME; [ -n \"$h\" ] || h=$HOME/.almagest; for b in \"$ALMAGEST_BIN\" \"$h/bin/almagest\" \"$HOME/go/bin/almagest\"; do if [ -n \"$b\" ] && [ -x \"$b\" ]; then exec \"$b\" mcp; fi; done; echo 'almagest: the almagest binary is not installed.' >&2; echo 'Install it with: make install (in an almagest checkout), or set ALMAGEST_BIN to its path.' >&2; exit 1"
+        "#!/bin/sh\n# The almagest launcher, made by `make pin` from internal/release/launcher.sh: do not edit.\n# It runs the almagest binary of this plugin's version, 11.0.0. When that binary is not\n# installed yet, it downloads it once from the plugin's own GitHub release, checks its\n# sha256 against the checksums below, which the plugin pins, and installs it under\n# ~/.almagest/bin/. It writes nowhere else, and needs no sudo.\n#   ALMAGEST_BIN          runs that binary instead; nothing is downloaded.\n#   ALMAGEST_HOME         the machine folder, ~/.almagest by default.\n#   ALMAGEST_NO_DOWNLOAD  set to 1, it never downloads.\nversion='11.0.0'\nchecksums='391c05b3ed2f8e07c47d2c0986658a7db0ad1312aa0425a3fbe8519a3dad16ee  almagest-11.0.0-darwin-amd64\n97efcae63b453242f032fcda142cb8e42d2a72dd538184ec3f3754015aae1b89  almagest-11.0.0-darwin-arm64\n68cf733ddfcae38c9e07fbcaf1143febd890895d5c533e61ec62905361384827  almagest-11.0.0-linux-amd64\n16a48485e57c6a798caabf469934d11224466a87d8de839ab16665ac87b78827  almagest-11.0.0-linux-arm64'\n\nmissing() {\n\twhy=$1\n\tshift\n\tif [ \"$1\" = hook ]; then\n\t\t# A hook never breaks a session; the session start says what is missing.\n\t\tif [ \"$2\" = session-start ]; then\n\t\t\techo \"almagest: the almagest tools and hooks are off: $why.\"\n\t\tfi\n\t\tcat >/dev/null\n\t\texit 0\n\tfi\n\techo \"almagest: $why.\" >&2\n\texit 1\n}\n\nif [ -n \"$ALMAGEST_BIN\" ]; then\n\tif [ -x \"$ALMAGEST_BIN\" ]; then\n\t\texec \"$ALMAGEST_BIN\" \"$@\"\n\tfi\n\tmissing \"ALMAGEST_BIN names $ALMAGEST_BIN, which is no executable file\" \"$@\"\nfi\nhome=$ALMAGEST_HOME\nif [ -z \"$home\" ]; then\n\thome=$HOME/.almagest\nfi\nbin=$home/bin/$version/almagest\nif [ -x \"$bin\" ]; then\n\texec \"$bin\" \"$@\"\nfi\nif [ \"$ALMAGEST_NO_DOWNLOAD\" = 1 ]; then\n\tmissing \"almagest $version is not installed at $bin, and ALMAGEST_NO_DOWNLOAD is 1\" \"$@\"\nfi\n\ncase $(uname -s) in\nDarwin) os=darwin ;;\nLinux) os=linux ;;\n*) missing \"almagest has no release for $(uname -s)\" \"$@\" ;;\nesac\ncase $(uname -m) in\narm64 | aarch64) arch=arm64 ;;\nx86_64 | amd64) arch=amd64 ;;\n*) missing \"almagest has no release for $(uname -m)\" \"$@\" ;;\nesac\nasset=almagest-$version-$os-$arch\nwant=$(printf '%s\\n' \"$checksums\" | awk -v a=\"$asset\" '$2 == a { print $1 }')\nif [ -z \"$want\" ]; then\n\tmissing \"this plugin pins no almagest $version for $os-$arch; set ALMAGEST_BIN to a binary of your own\" \"$@\"\nfi\nif ! command -v curl >/dev/null 2>&1; then\n\tmissing \"curl is not installed, so almagest $version cannot be downloaded\" \"$@\"\nfi\nbase=$ALMAGEST_RELEASE_BASE\nproto==https\nif [ -z \"$base\" ]; then\n\tbase=https://github.com/nathanaday/almagest/releases/download\nelse\n\t# Only tests set the base. The checksums still decide what installs.\n\tproto=all\nfi\nurl=$base/$version/$asset\nmkdir -p \"$home/bin/$version\" || missing \"cannot make $home/bin/$version\" \"$@\"\ntmp=$home/bin/$version/.download.$$\ntrap 'rm -f \"$tmp\" \"$home/bin/.link.$$\"' EXIT HUP INT TERM\nif ! curl -fsSL --proto \"$proto\" --retry 2 -o \"$tmp\" \"$url\"; then\n\tmissing \"the download of $url failed\" \"$@\"\nfi\nif command -v shasum >/dev/null 2>&1; then\n\tgot=$(shasum -a 256 \"$tmp\" | awk '{ print $1 }')\nelse\n\tgot=$(sha256sum \"$tmp\" | awk '{ print $1 }')\nfi\nif [ \"$got\" != \"$want\" ]; then\n\tmissing \"the download of $url has sha256 $got, not the $want that this plugin pins, so nothing was installed\" \"$@\"\nfi\nchmod 755 \"$tmp\" && mv -f \"$tmp\" \"$bin\" || missing \"cannot install $bin\" \"$@\"\n# ~/.almagest/bin/almagest names the binary last installed, for the Obsidian plugin and a shell.\nln -s \"$version/almagest\" \"$home/bin/.link.$$\" && mv -f \"$home/bin/.link.$$\" \"$home/bin/almagest\"\nline=\"$(date -u +%Y-%m-%dT%H:%M:%SZ) installed almagest $version ($os-$arch) at $bin, sha256 $got, from $url\"\necho \"$line\" >>\"$home/install.log\"\necho \"almagest: $line\" >&2\nexec \"$bin\" \"$@\"\n",
+        "almagest",
+        "mcp"
       ],
-      "env_vars": ["ALMAGEST_BIN", "ALMAGEST_HOME", "ALMAGEST_VAULT"]
+      "env_vars": [
+        "ALMAGEST_BIN",
+        "ALMAGEST_HOME",
+        "ALMAGEST_VAULT",
+        "ALMAGEST_NO_DOWNLOAD"
+      ]
     }
   },
   "interface": {
@@ -21,8 +31,13 @@
     "longDescription": "Keep what you know and what your agents do in one Obsidian vault, with a reviewed change for every wiki edit and a session document for every agent session.",
     "developerName": "nathanaday",
     "category": "Productivity",
-    "capabilities": ["Read", "Write"],
+    "capabilities": [
+      "Read",
+      "Write"
+    ],
     "websiteURL": "https://github.com/nathanaday/almagest",
-    "defaultPrompt": ["Use the almagest skill to orient me in this vault."]
+    "defaultPrompt": [
+      "Use the almagest skill to orient me in this vault."
+    ]
   }
 }

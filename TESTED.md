@@ -21,6 +21,7 @@ row or change a level each time you test a setup.
 | ---------- | ---------------------- | -------- | ----------- | ------- | ----- |
 | 2026-10-01 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1 | 8.1.1 |
 | 2026-10-04 | macOS (Darwin 25.6.0)  | 1.13.7   | 2.1.287     | 0.155.1, 0.160.0 | 8.1.1 at `a623068` |
+| 2026-10-07 | macOS (Darwin 25.6.0)  | 1.14.4   | —           | —       | 11.0.0 (Go suite, launcher, release build) |
 
 ## Agent preferences
 
@@ -59,6 +60,22 @@ then, with `CODEX_HOME` set to an empty folder, run `codex plugin marketplace ad
 and `codex plugin add almagest@nathanaday-almagest`. Copy the binary to
 `<scratch home>/.almagest/bin/`, and run `doctor` with `env -i HOME=<scratch home>
 PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder>`.
+
+## The launcher and the release (2026-10-07)
+
+`bin/almagest` and the Codex server entry run the same launcher (`internal/release`).
+
+| Case | Level | Result |
+| ---- | ----- | ------ |
+| `ALMAGEST_BIN` first; one that is not executable fails with the reason | Unit | both forms, no PATH lookup |
+| The installed binary of the plugin's version, under `ALMAGEST_HOME` or `~/.almagest` | Unit | runs it, not an older version |
+| No binary and `ALMAGEST_NO_DOWNLOAD=1`; a platform the plugin does not pin | Unit | fails with the reason |
+| A download whose sha256 matches | Unit | installs, links `bin/almagest`, writes `install.log` |
+| A download whose sha256 differs | Unit | installs nothing, leaves no file and no link |
+| A hook with no binary | Unit | `session-start` says why and passes; other hooks pass quietly |
+| The pinned 11.0.0 launcher installs the real 11.0.0 binary from the release folder `make pin` built (`file://`) | Live (macOS arm64) | sha256 matches, `version --json` prints 11.0.0 and protocol 1, the second run uses the installed copy |
+| `make release` twice, and from a copy in another folder with another module cache | Live (macOS arm64) | the same checksums |
+| The release workflow's build on Linux matches the checksums of a macOS `make pin` | None | the first tag shows it |
 
 ## The Obsidian plugin
 

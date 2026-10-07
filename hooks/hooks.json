@@ -6,7 +6,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook session-start",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook session-start",
             "timeout": 20
           }
         ]
@@ -17,7 +17,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook prompt",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook prompt",
             "timeout": 10
           }
         ]
@@ -29,7 +29,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook guard",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook guard",
             "timeout": 10
           }
         ]
@@ -41,7 +41,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook touched",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook touched",
             "timeout": 15
           }
         ]
@@ -52,7 +52,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook notify",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook notify",
             "timeout": 10
           }
         ]
@@ -63,7 +63,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook stop",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook stop",
             "timeout": 10
           }
         ]
@@ -74,7 +74,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook subagent-start",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook subagent-start",
             "timeout": 10
           }
         ]
@@ -85,7 +85,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook subagent-stop",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook subagent-stop",
             "timeout": 10
           }
         ]
@@ -96,7 +96,7 @@
         "hooks": [
           {
             "type": "command",
-            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/scripts/almagest hook session-end",
+            "command": "\"${CLAUDE_PLUGIN_ROOT}\"/bin/almagest hook session-end",
             "timeout": 3
           }
         ]

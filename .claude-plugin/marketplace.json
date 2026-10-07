@@ -6,14 +6,18 @@
   },
   "metadata": {
     "description": "Almagest: one Obsidian vault for the wiki, the sessions, and the changes of your work.",
-    "version": "10.4.1"
+    "version": "11.0.0"
   },
   "plugins": [
     {
       "name": "almagest",
-      "source": "./",
+      "source": {
+        "source": "github",
+        "repo": "nathanaday/almagest",
+        "ref": "11.0.0"
+      },
       "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, backed by the almagest binary.",
-      "version": "10.4.1",
+      "version": "11.0.0",
       "category": "productivity"
     }
   ]

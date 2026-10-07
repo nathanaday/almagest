@@ -16,6 +16,7 @@ import (
 	"github.com/nathanaday/almagest/internal/doc"
 	"github.com/nathanaday/almagest/internal/hooks"
 	"github.com/nathanaday/almagest/internal/mcpserver"
+	"github.com/nathanaday/almagest/internal/release"
 	"github.com/nathanaday/almagest/internal/sessions"
 )
 
@@ -252,6 +253,17 @@ func TestOneVersion(t *testing.T) {
 		return m.Version
 	}
 	v := version(".claude-plugin/plugin.json")
+	// The launcher pins the binary of this version, for every platform a release builds.
+	sums, err := release.ParseChecksums(read(t, release.ChecksumsFile))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if missing := release.Missing(v, sums); len(missing) > 0 {
+		t.Errorf("%s names no checksum for %v; run make pin", release.ChecksumsFile, missing)
+	}
+	if read(t, "bin/almagest") != release.Launcher(v, read(t, release.ChecksumsFile)) {
+		t.Error("bin/almagest is not the launcher of this version and its checksums; run make pin")
+	}
 	if got := version(".codex-plugin/plugin.json"); got != v {
 		t.Errorf("the Codex plugin is %s, the Claude plugin %s", got, v)
 	}
@@ -259,6 +271,11 @@ func TestOneVersion(t *testing.T) {
 		Plugins []struct {
 			Name    string `json:"name"`
 			Version string `json:"version"`
+			Source  struct {
+				Source string `json:"source"`
+				Repo   string `json:"repo"`
+				Ref    string `json:"ref"`
+			} `json:"source"`
 		} `json:"plugins"`
 	}
 	json.Unmarshal([]byte(read(t, ".claude-plugin/marketplace.json")), &market)
@@ -268,6 +285,11 @@ func TestOneVersion(t *testing.T) {
 			found = true
 			if p.Version != v {
 				t.Errorf("the marketplace lists %s, the plugin is %s", p.Version, v)
+			}
+			// A user installs the release tag, whose GitHub release holds the pinned binaries,
+			// never a commit between releases.
+			if p.Source.Source != "github" || p.Source.Repo != "nathanaday/almagest" || p.Source.Ref != v {
+				t.Errorf("the marketplace entry must pin github nathanaday/almagest at the tag %s: %+v", v, p.Source)
 			}
 		}
 	}

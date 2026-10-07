@@ -2,8 +2,11 @@ package cli
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -42,9 +45,9 @@ func (c *CLI) setupCmd(argv []string) error {
 		return err
 	}
 	self, _ = filepath.EvalSymlinks(self)
-	target := h.BinPath()
+	target := h.VersionBin(Version)
 	if real, _ := filepath.EvalSymlinks(target); real != self {
-		if err := copyFile(self, target); err != nil {
+		if _, err := h.InstallBinary(self, Version); err != nil {
 			return fmt.Errorf("install the binary at %s: %w", target, err)
 		}
 		fmt.Fprintf(c.Out, "binary   installed at %s\n", target)
@@ -114,21 +117,6 @@ func (c *CLI) setupCmd(argv []string) error {
 	return nil
 }
 
-func copyFile(from, to string) error {
-	data, err := os.ReadFile(from)
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(to), 0o755); err != nil {
-		return err
-	}
-	tmp := to + ".tmp"
-	if err := os.WriteFile(tmp, data, 0o755); err != nil {
-		return err
-	}
-	return os.Rename(tmp, to)
-}
-
 // doctorCmd checks the binary, the plugins, git, the machine file, and every vault.
 func (c *CLI) doctorCmd(argv []string) int {
 	h := c.home()
@@ -143,7 +131,10 @@ func (c *CLI) doctorCmd(argv []string) int {
 	}
 	note := func(what, detail string) { fmt.Fprintf(c.Out, "--   %-16s %s\n", what, detail) }
 	self, _ := os.Executable()
-	line(true, "binary", fmt.Sprintf("%s at %s", Version, self))
+	line(true, "binary", fmt.Sprintf("%s at %s%s", Version, self, fileSum(self)))
+	if dir := filepath.Dir(h.LinkPath()); !onPath(dir) {
+		note("path", fmt.Sprintf("to run almagest in a shell, add %s to PATH in your shell profile: export PATH=\"%s:$PATH\"", vault.Shorten(dir), dir))
+	}
 	if gitx.Available() {
 		out, _ := exec.Command("git", "--version").Output()
 		line(true, "git", strings.TrimSpace(string(out)))
@@ -219,6 +210,30 @@ func (c *CLI) doctorCmd(argv []string) int {
 		return 1
 	}
 	return 0
+}
+
+// fileSum is ", sha256 <hex>" for a file, the hash its release's checksums.txt lists, or "".
+func fileSum(file string) string {
+	f, err := os.Open(file)
+	if err != nil {
+		return ""
+	}
+	defer f.Close()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, f); err != nil {
+		return ""
+	}
+	return ", sha256 " + hex.EncodeToString(sum.Sum(nil))
+}
+
+// onPath reports whether dir is a folder of PATH.
+func onPath(dir string) bool {
+	for _, p := range filepath.SplitList(os.Getenv("PATH")) {
+		if filepath.Clean(p) == filepath.Clean(dir) {
+			return true
+		}
+	}
+	return false
 }
 
 // serverCheck starts the plugin's MCP server as the host runs it, and compares its tools

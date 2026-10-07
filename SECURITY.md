@@ -196,15 +196,37 @@ that writes the file.
 
 ### A different program runs in place of the binary
 
-The wrapper script, the Codex server entry, and the Obsidian plugin never search `PATH` for
-the binary.
+The launcher (`bin/almagest`, and the same script in the Codex server entry) and the
+Obsidian plugin never search `PATH` for the binary.
 
-- The wrapper and the Codex entry run the first executable of `$ALMAGEST_BIN`,
-  `$ALMAGEST_HOME/bin/almagest` (default `~/.almagest/bin/almagest`), and
-  `~/go/bin/almagest`.
-- The Obsidian plugin runs its `binaryPath` setting when it is set. Otherwise it runs the
-  first of `~/.almagest/bin/almagest` and `~/go/bin/almagest` that exists. It does
-  not read `ALMAGEST_BIN` or `ALMAGEST_HOME`.
+- The launcher runs `$ALMAGEST_BIN` when it is set, else
+  `$ALMAGEST_HOME/bin/<version>/almagest` (default `~/.almagest/bin/<version>/almagest`),
+  the binary of the plugin's own version.
+- The Obsidian plugin runs its `binaryPath` setting when it is set, else
+  `~/.almagest/bin/almagest`, the link the launcher keeps. It does not read
+  `ALMAGEST_BIN` or `ALMAGEST_HOME`.
+
+### The launcher downloads a binary
+
+When the binary of the plugin's version is missing, the launcher downloads it from this
+repository's GitHub release of that version, over HTTPS only (`curl --proto =https`).
+
+- It installs the file only when its sha256 matches the checksum the plugin pins, inline
+  in the launcher and in `release/checksums.txt`. The checksum comes with the plugin you
+  chose to install, from the same commit, so a changed release file, a changed URL, or a
+  machine in the middle cannot change what runs.
+- The release workflow builds the binaries from the tagged commit and publishes them only
+  when their bytes match the checksums that commit pins. It attests each file's
+  provenance (`gh attestation verify`).
+- It writes only under `~/.almagest/bin/` and to `~/.almagest/install.log`, which records
+  each install: the time, the version, the path, the sha256, and the URL. It runs no
+  `sudo` and edits no shell profile.
+- `ALMAGEST_BIN` runs a binary of your own, and `ALMAGEST_NO_DOWNLOAD=1` turns the
+  download off. `ALMAGEST_RELEASE_BASE` changes where it downloads from, for the tests;
+  the checksum check still applies.
+- The macOS binaries are not signed or notarized yet. `curl` sets no quarantine flag, so
+  Gatekeeper does not check them; the checksum and the attestation are what vouch for
+  them.
 
 ### Vault text runs as code in Obsidian
 

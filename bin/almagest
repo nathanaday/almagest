@@ -1,0 +1,96 @@
+#!/bin/sh
+# The almagest launcher, made by `make pin` from internal/release/launcher.sh: do not edit.
+# It runs the almagest binary of this plugin's version, 11.0.0. When that binary is not
+# installed yet, it downloads it once from the plugin's own GitHub release, checks its
+# sha256 against the checksums below, which the plugin pins, and installs it under
+# ~/.almagest/bin/. It writes nowhere else, and needs no sudo.
+#   ALMAGEST_BIN          runs that binary instead; nothing is downloaded.
+#   ALMAGEST_HOME         the machine folder, ~/.almagest by default.
+#   ALMAGEST_NO_DOWNLOAD  set to 1, it never downloads.
+version='11.0.0'
+checksums='391c05b3ed2f8e07c47d2c0986658a7db0ad1312aa0425a3fbe8519a3dad16ee  almagest-11.0.0-darwin-amd64
+97efcae63b453242f032fcda142cb8e42d2a72dd538184ec3f3754015aae1b89  almagest-11.0.0-darwin-arm64
+68cf733ddfcae38c9e07fbcaf1143febd890895d5c533e61ec62905361384827  almagest-11.0.0-linux-amd64
+16a48485e57c6a798caabf469934d11224466a87d8de839ab16665ac87b78827  almagest-11.0.0-linux-arm64'
+
+missing() {
+	why=$1
+	shift
+	if [ "$1" = hook ]; then
+		# A hook never breaks a session; the session start says what is missing.
+		if [ "$2" = session-start ]; then
+			echo "almagest: the almagest tools and hooks are off: $why."
+		fi
+		cat >/dev/null
+		exit 0
+	fi
+	echo "almagest: $why." >&2
+	exit 1
+}
+
+if [ -n "$ALMAGEST_BIN" ]; then
+	if [ -x "$ALMAGEST_BIN" ]; then
+		exec "$ALMAGEST_BIN" "$@"
+	fi
+	missing "ALMAGEST_BIN names $ALMAGEST_BIN, which is no executable file" "$@"
+fi
+home=$ALMAGEST_HOME
+if [ -z "$home" ]; then
+	home=$HOME/.almagest
+fi
+bin=$home/bin/$version/almagest
+if [ -x "$bin" ]; then
+	exec "$bin" "$@"
+fi
+if [ "$ALMAGEST_NO_DOWNLOAD" = 1 ]; then
+	missing "almagest $version is not installed at $bin, and ALMAGEST_NO_DOWNLOAD is 1" "$@"
+fi
+
+case $(uname -s) in
+Darwin) os=darwin ;;
+Linux) os=linux ;;
+*) missing "almagest has no release for $(uname -s)" "$@" ;;
+esac
+case $(uname -m) in
+arm64 | aarch64) arch=arm64 ;;
+x86_64 | amd64) arch=amd64 ;;
+*) missing "almagest has no release for $(uname -m)" "$@" ;;
+esac
+asset=almagest-$version-$os-$arch
+want=$(printf '%s\n' "$checksums" | awk -v a="$asset" '$2 == a { print $1 }')
+if [ -z "$want" ]; then
+	missing "this plugin pins no almagest $version for $os-$arch; set ALMAGEST_BIN to a binary of your own" "$@"
+fi
+if ! command -v curl >/dev/null 2>&1; then
+	missing "curl is not installed, so almagest $version cannot be downloaded" "$@"
+fi
+base=$ALMAGEST_RELEASE_BASE
+proto==https
+if [ -z "$base" ]; then
+	base=https://github.com/nathanaday/almagest/releases/download
+else
+	# Only tests set the base. The checksums still decide what installs.
+	proto=all
+fi
+url=$base/$version/$asset
+mkdir -p "$home/bin/$version" || missing "cannot make $home/bin/$version" "$@"
+tmp=$home/bin/$version/.download.$$
+trap 'rm -f "$tmp" "$home/bin/.link.$$"' EXIT HUP INT TERM
+if ! curl -fsSL --proto "$proto" --retry 2 -o "$tmp" "$url"; then
+	missing "the download of $url failed" "$@"
+fi
+if command -v shasum >/dev/null 2>&1; then
+	got=$(shasum -a 256 "$tmp" | awk '{ print $1 }')
+else
+	got=$(sha256sum "$tmp" | awk '{ print $1 }')
+fi
+if [ "$got" != "$want" ]; then
+	missing "the download of $url has sha256 $got, not the $want that this plugin pins, so nothing was installed" "$@"
+fi
+chmod 755 "$tmp" && mv -f "$tmp" "$bin" || missing "cannot install $bin" "$@"
+# ~/.almagest/bin/almagest names the binary last installed, for the Obsidian plugin and a shell.
+ln -s "$version/almagest" "$home/bin/.link.$$" && mv -f "$home/bin/.link.$$" "$home/bin/almagest"
+line="$(date -u +%Y-%m-%dT%H:%M:%SZ) installed almagest $version ($os-$arch) at $bin, sha256 $got, from $url"
+echo "$line" >>"$home/install.log"
+echo "almagest: $line" >&2
+exec "$bin" "$@"
