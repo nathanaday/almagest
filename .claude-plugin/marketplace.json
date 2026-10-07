@@ -12,8 +12,8 @@
     {
       "name": "almagest",
       "source": {
-        "source": "github",
-        "repo": "nathanaday/almagest",
+        "source": "url",
+        "url": "https://github.com/nathanaday/almagest.git",
         "ref": "11.1.0"
       },
       "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, backed by the almagest binary.",
