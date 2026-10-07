@@ -46,7 +46,7 @@ func renamed(rel string) (string, bool) {
 
 // pathRef matches a 9.0 folder where a path stands as a path: right after [[, ![[, ](,
 // or a quote, with its slash, or alone between quotes (a Base's inFolder).
-var pathRef = regexp.MustCompile(`(\[\[|\]\(|"|')(wiki/documents|wiki/assets|wiki|inbox|views/tags|views)(/|"|')`)
+var pathRef = regexp.MustCompile(`(\[\[|\]\(<?(?:\./)?|"|')(wiki/documents|wiki/assets|wiki|inbox|views/tags|views)(/|"|')`)
 
 // rewritePaths points the path references of one text at the 10.0 folders. With quoted
 // false, only links count: a quoted path in a note's prose is a record of what was.
@@ -54,7 +54,7 @@ func rewritePaths(s string, quoted bool) string {
 	return pathRef.ReplaceAllStringFunc(s, func(m string) string {
 		parts := pathRef.FindStringSubmatch(m)
 		open, dir, close := parts[1], parts[2], parts[3]
-		link := open == "[[" || open == "]("
+		link := strings.HasPrefix(open, "[[") || strings.HasPrefix(open, "](")
 		switch {
 		case !quoted && !link:
 			return m
@@ -105,6 +105,11 @@ func rewriteRefs(ext, s string) string {
 // source's origin inbox becomes ingest; and Atlas.md takes the layout of 10.0.
 func build10(v *vault.Vault, report *Report) (*plan, error) {
 	p := &plan{}
+	for _, dir := range []string{vault.Journals, vault.Checkout, vault.Trash} {
+		if st, err := os.Stat(v.Abs(dir)); err == nil && st.IsDir() {
+			report.Warnings = append(report.Warnings, fmt.Sprintf("the folder %s/ exists and takes Atlas's meaning from 10.0: %s", dir, folderMeaning[dir]))
+		}
+	}
 	taken := map[string]bool{}
 	for _, dir := range []string{legacyWiki, legacyInbox} {
 		err := walkFiles(v, dir, func(rel string) error {
@@ -158,8 +163,9 @@ func build10(v *vault.Vault, report *Report) (*plan, error) {
 			return nil
 		}
 		ext := strings.ToLower(path.Ext(rel))
-		if gone[rel] || (ext != ".md" && ext != ".canvas" && ext != ".base") || rel == legacyAssets || strings.HasPrefix(rel, legacyAssets+"/") {
-			// A captured original stays as it was captured; its hash names it.
+		if gone[rel] || (ext != ".md" && ext != ".canvas" && ext != ".base") || rel == legacyAssets || strings.HasPrefix(rel, legacyAssets+"/") || strings.HasPrefix(rel, legacyInbox+"/") {
+			// A captured original stays as it was captured, its hash names it; a file
+			// that waits in the inbox is one too, before its capture.
 			return nil
 		}
 		data, err := os.ReadFile(abs)
@@ -184,7 +190,24 @@ func build10(v *vault.Vault, report *Report) (*plan, error) {
 	if err != nil {
 		return nil, err
 	}
+	// Obsidian's bookmarks name files by path.
+	if data, err := v.Read(bookmarks); err == nil {
+		if content := rewritePaths(string(data), true); content != string(data) {
+			p.edits = append(p.edits, edit{bookmarks, content})
+			report.Edited = append(report.Edited, bookmarks)
+		}
+	}
 	return p, nil
+}
+
+// bookmarks is Obsidian's list of bookmarked files.
+const bookmarks = ".obsidian/bookmarks.json"
+
+// folderMeaning says what each folder that 10.0 claims holds from now on.
+var folderMeaning = map[string]string{
+	vault.Journals: "your journals, which no agent edits and which Atlas publishes only when you press Publish",
+	vault.Checkout: "the librarian's checkouts, which only the checkout tool writes",
+	vault.Trash:    "what safe delete removed, which Atlas never reads",
 }
 
 // retype gives a note the fields of 10.0: the vault document its layout, and a source

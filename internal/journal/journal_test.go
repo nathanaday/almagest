@@ -23,6 +23,13 @@ func TestNames(t *testing.T) {
 	}
 }
 
+func TestTheHistoryBaseQuotesTheVolume(t *testing.T) {
+	note := journal.HistoryNote(`Nathan's "notes"`)
+	if !strings.Contains(note, `    - 'volume == "Nathan''s \"notes\""'`) {
+		t.Fatalf("the Base:\n%s", note)
+	}
+}
+
 func TestPublish(t *testing.T) {
 	tv := testvault.New(t)
 	tv.Write("journals/cs566-notes/Week 1.md", "---\nmood: good\n---\nGradient descent finally clicked.\n")
@@ -35,6 +42,9 @@ func TestPublish(t *testing.T) {
 	}
 	if _, err := journal.Publish(tv.V, "empty", tv.Clock); err == nil || !strings.Contains(err.Error(), "holds no note") {
 		t.Fatalf("an empty volume: %v", err)
+	}
+	if _, err := journal.Publish(tv.V, ".", tv.Clock); err == nil {
+		t.Fatal("the journals folder itself")
 	}
 	if _, err := journal.Publish(tv.V, "../scratchpad", tv.Clock); err == nil {
 		t.Fatal("a path out of journals/")
@@ -61,7 +71,7 @@ func TestPublish(t *testing.T) {
 	if original != want {
 		t.Fatalf("the edition's text:\n%s\nwant:\n%s", original, want)
 	}
-	history := tv.Read("journals/cs566-notes/Publication history.md")
+	history := tv.Read("journals/cs566-notes/Journal · cs566-notes.md")
 	if !strings.HasPrefix(history, journal.HistoryNotice) || !strings.Contains(history, `'volume == "cs566-notes"'`) {
 		t.Fatalf("the history:\n%s", history)
 	}

@@ -225,6 +225,9 @@ func nine(t *testing.T) *testvault.T {
 	tv.Write(vault.WikiView+"/My note.md", "mine\n")
 	tv.Write(vault.AppJSON, `{"attachmentFolderPath": "wiki/assets", "userIgnoreFilters": ["views/"], "promptDelete": false}`+"\n")
 	tv.Write(vault.Originals+"/doc-snap01.md", snapshot9)
+	tv.Write(vault.Ingest+"/Export.md", inbox9)
+	tv.Write(".obsidian/bookmarks.json", `{"items":[{"type":"file","path":"wiki/documents/Stack.md"}]}`+"\n")
+	tv.Write("trash/old.md", "mine\n")
 	tv.Write("scratchpad/Record.md", record9)
 	return older(t, tv)
 }
@@ -232,8 +235,11 @@ func nine(t *testing.T) *testvault.T {
 // snapshot9 is a captured original that quotes paths: it stays as it was captured.
 const snapshot9 = "var TAG_FOLDER = \"views/tags/\";\nsee [[wiki/documents/X]]\n"
 
+// inbox9 waits in the inbox: it is captured as it is, so its links stay.
+const inbox9 = "An export: [Page](wiki/Page.md) and [[wiki/documents/Other]].\n"
+
 // record9 is a note whose prose and code quote paths, beside a link and a base block.
-const record9 = "The sync moved it to 'inbox/Meeting notes.md', as \"views/x.md\" said. See [[wiki/documents/X|X]] and `[[wiki/documents/Y]]`.\n\n```go\nroot := \"wiki/documents\"\n```\n\n```base\nfilters:\n  and:\n    - file.inFolder(\"wiki/documents\")\n```\n"
+const record9 = "The sync moved it to 'inbox/Meeting notes.md', as \"views/x.md\" said. See [[wiki/documents/X|X]], [a](<wiki/assets/a b.png>), [b](./wiki/assets/b.png), and `[[wiki/documents/Y]]`.\n\n```go\nroot := \"wiki/documents\"\n```\n\n```base\nfilters:\n  and:\n    - file.inFolder(\"wiki/documents\")\n```\n"
 
 const nineTopic = "## Definition\n\nThe stack, as drawn: ![[wiki/assets/diagram.png]], and as a [file](wiki/assets/diagram.png). Agents read `wiki/documents` and inbox/ notes.\n"
 
@@ -269,9 +275,18 @@ func TestMigrationFrom9(t *testing.T) {
 	if got := tv.Read(vault.Originals + "/doc-snap01.md"); got != snapshot9 {
 		t.Errorf("a captured original changed:\n%s", got)
 	}
-	want := strings.Replace(strings.Replace(record9, "[[wiki/documents/X|X]]", "[[source-core/documents/X|X]]", 1), `file.inFolder("wiki/documents")`, `file.inFolder("source-core/documents")`, 1)
+	want := strings.NewReplacer("[[wiki/documents/X|X]]", "[[source-core/documents/X|X]]", `file.inFolder("wiki/documents")`, `file.inFolder("source-core/documents")`, "(<wiki/assets/a b.png>)", "(<source-core/originals/a b.png>)", "(./wiki/assets/b.png)", "(./source-core/originals/b.png)").Replace(record9)
 	if got := tv.Read("scratchpad/Record.md"); got != want {
 		t.Errorf("the record:\n%s\nwant:\n%s", got, want)
+	}
+	if got := tv.Read(vault.Ingest + "/Export.md"); got != inbox9 {
+		t.Errorf("a file waiting in the inbox changed:\n%s", got)
+	}
+	if got := tv.Read(".obsidian/bookmarks.json"); !strings.Contains(got, `"path":"source-core/documents/Stack.md"`) {
+		t.Errorf("the bookmarks:\n%s", got)
+	}
+	if !strings.Contains(strings.Join(report.Warnings, " "), "the folder trash/ exists") {
+		t.Errorf("no warning for a trash/ folder that existed: %v", report.Warnings)
 	}
 	if got := tv.Read("Reading.base"); !strings.Contains(got, `file.inFolder("source-core/documents")`) {
 		t.Errorf("the Base:\n%s", got)
@@ -333,6 +348,11 @@ func TestMigrationRefuses(t *testing.T) {
 		}
 		if !tv.V.Exists("wiki/documents/Filter alarms.md") {
 			t.Fatal("the refused migration moved a file")
+		}
+		for _, dir := range []string{"source-core", "ingest", "wiki-view", "journals"} {
+			if tv.V.Exists(dir) {
+				t.Errorf("the refused migration made %s/", dir)
+			}
 		}
 		tv.Clean()
 	})

@@ -38,9 +38,15 @@ the CLI command `wikify start|mark`, the skill `wiki-wikify`; the "Wikify a docu
 section of the strategy note, which the user's improvements note calls "Review Doc").
 Code copies a note of the user's into `scratchpad/`. The agent matches the copy's
 subjects against the wiki and writes marks into it with one `wikify mark` call. The
-plugin shows each mark as a bubble: Accept and Ignore for a link, Create and Ignore for
-a new subject. Create starts a work document of kind `draft`, in which wiki-edit
+plugin shows each mark as a bubble: Accept and Ignore for a link (Ignore only once its
+document is gone), Create and Ignore for a new subject. Create starts a work document of kind `draft`, in which wiki-edit
 proposes the topic. The copy never enters the wiki by itself.
+
+10.4.1 fixed the findings of a review of 10.x: code's notes in `checkout/` and
+`journals/` take reserved titles, a snapshot recovers a stopped apply first, only the
+user undoes the user's own acts, safe delete and wikify read a path in another case as
+the file on disk, and the migration covers more link forms, bookmarks, and folders that
+exist before it.
 
 Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
 editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
@@ -110,8 +116,11 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The migration rewrites a path only where it stands as a path.** `rewriteRefs`
   (`v10.go`) changes an old folder only right after `[[`, `![[`, `](`, or a quote, with
   its slash; alone between quotes it changes only `wiki/documents` and `wiki/assets`
-  (a Base's `inFolder`). Prose that names a folder stays as written. It reads every
-  `.md`, `.canvas`, and `.base` file outside the dot folders, `trash/`, and `wiki-view/`. A note of `views/` that opens with
+  (a Base's `inFolder`); a markdown link counts in its other forms too (`](<wiki/…`,
+  `](./wiki/…`). Prose that names a folder stays as written. It reads every `.md`,
+  `.canvas`, and `.base` file outside the dot folders, `trash/`, and `wiki-view/`, except
+  the originals and the files that wait in `inbox/`, which stay as they were captured or
+  dropped. It rewrites the paths of `.obsidian/bookmarks.json`. A note of `views/` that opens with
   `views.Notice` is deleted, since code writes it again; any other file there moves to
   `ingest/` and is reported as a stray.
 - **"inbox" became "ingest" wherever a user or an agent sees it:** the folder, the status
@@ -130,7 +139,10 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A topic's `## Origin` is a plain section.** Promote wrote it from a stub's idea; 9.0
   has no promote, and the section stays the user's text.
 - **`vault migrate` refuses a vault that has the 10.0 layout already**, and the guard
-  refuses it from an agent's shell.
+  refuses it from an agent's shell. `Run` checks the vault before the write starts, so a
+  refused migration makes no 10.0 folder. A `journals/`, `checkout/`, or `trash/` that
+  exists before the migration gets a warning: from 10.0 Atlas gives it a meaning. The
+  exclude line `/views/` goes after the commit, so a failed migration keeps it.
 - **Packages:** the design's context package is `internal/brief`, since `context` is a
   standard Go package. `internal/derive` writes the code-owned parts of sources,
   repositories, and topics (lead callouts, the `atlas-repo` block, git facts).
@@ -238,13 +250,17 @@ The design pages are the spec. When the code departs from them, the reason is be
   sessions) do not count: they name what they touched and keep the name after a delete. With backlinks it moves nothing and exits 2 (`exitError`), after it prints
   them (JSON `{"trash": {"path", "backlinks", "moved"}}`). A knowledge document with
   none leaves through a change ("Delete <title>", one remove) that it applies at once
-  with no gate, so the record and undo are a change's; any other file moves in a commit
-  `trash: <path>`. It refuses `Atlas.md`, `.obsidian/`, `.claude/`, `.atlas/`,
+  with no gate, so the record and undo are a change's; an apply that fails rejects the
+  change, so no proposal of it stays. Any other file moves in a commit `trash: <path>`.
+  A path in another case meets the rules of the file on disk (`Vault.Spelled`). The
+  palette offers "Resolve with an agent" only for a knowledge document that knowledge
+  documents link; a link in any other file is the user's to fix, and the agent's
+  message then says to propose no remove. It refuses `Atlas.md`, `.obsidian/`, `.claude/`, `.atlas/`,
   `changes/`, `sessions/`, `wiki-view/`, `trash/`, a shipped Base, a folder, and a path
   outside the vault. The index skips `trash/`, and the guard refuses agent edits in it.
 - **A journal volume is a folder directly under `journals/`** (`journal.Volumes`). Its
-  notes are every `.md` file under it, in path order, except its `Publication
-  history.md`; dot files, dot folders, and symbolic links are skipped. `journal.Name`
+  notes are every `.md` file under it, in path order, except its history note,
+  `Journal · <folder>.md`; dot files, dot folders, and symbolic links are skipped. `journal.Name`
   turns the folder name into the volume's name: `-` and `_` become spaces, a word of
   letters and digits is upper case, any other word starts with a capital (`cs566-notes`
   → `CS566 Notes`).
@@ -260,12 +276,20 @@ The design pages are the spec. When the code departs from them, the reason is be
   `locator: journals/<volume>`, and the code fields `volume`, `edition` (the date), and
   `journal_hash`. The title is `User Journal <Name> - <D Month YYYY> Edition`; capture
   numbers a second edition of one day (" (2)"). The tags of the latest edition carry
-  forward, with `NewTags` set. One commit holds the source, its original in
+  forward, with `NewTags` set. Publish refuses a folder name that is not clean (`.`,
+  `..`, a slash). One commit holds the source, its original in
   `source-core/originals/`, and the publication history. The lead callout says
   "Captured <date> from the journal `<volume>`".
+- **Code's notes take reserved titles.** A note that code writes beside the user's files
+  takes a title with a prefix of `vault.ReservedPrefixes` (`Tag · `, `View · `,
+  `Checkout · `, `Journal · `), which no document takes (proposals, captures, and lint
+  refuse it). So a link to the note names one file: the ledger is
+  `checkout/Checkout · Ledger.md`, a reading list `Checkout · <folder name>.md`, and a
+  volume's history `Journal · <folder>.md`.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
-  reach the wiki, and an inline Base of the sources with that `volume` (file.name,
+  reach the wiki, and an inline Base of the sources with that `volume` (the folder name
+  quoted for the Base's filter; file.name,
   edition, measure, status). Publish writes it in its commit. A full `vault sync` (not
   the views-only sync) writes it for a volume that has an edition and lacks the note
   (`WriteMissingHistories`), and commits nothing; the next snapshot keeps it.
@@ -311,15 +335,18 @@ The design pages are the spec. When the code departs from them, the reason is be
   original is gone or whose `BaseHash` differs from `checkout_base`, and names it in
   `skipped`. It proposes one change, "Return <folder>", with no `session`, so only the
   user applies it (Approve, or `change apply` in a terminal). It sets `returned` in the
-  reading list and writes the ledger in a commit of its own. A checkout is returned
+  reading list and writes the ledger in a commit of its own. When that commit fails
+  after the change is proposed, Return returns the change with a `warning`, not an
+  error, so the user sees the change; the palette shows the warning. A checkout is returned
   while its return change (`return_change`) is proposed or applied, and a second return
   is refused then; a rejected, superseded, or undone return change frees it. The
   change's title is "Return <name>" (the folder without its date). With no edited copy it
   changes nothing and returns an error that says so. Return carries the body only; an
   edit of a copy's frontmatter does not return.
-- **The reading list and the ledger are code's.** `make` writes `Reading list.md`
-  (`request`, `checked_out`, `documents`, `returned`; a callout, `## Request`,
-  `## Reading order`, `## Notes`) and `checkout/Ledger.md`, a table of every checkout,
+- **The reading list and the ledger are code's.** `make` writes the reading list,
+  `Checkout · <folder name>.md` (`request`, `checked_out`, `documents`, `returned`; a
+  callout, `## Request`, `## Reading order`, `## Notes`), and the ledger,
+  `checkout/Checkout · Ledger.md`, a table of every checkout,
   newest first, written again at each make and return from the reading lists
   (`checkout.List`). The guard refuses agent edits under `checkout/`; a read-only agent
   may call `checkout` `candidates` and `list`.
@@ -355,7 +382,11 @@ The design pages are the spec. When the code departs from them, the reason is be
   `scratchpad/`), so only `wikify mark` writes its marks.
 - **Wikify commits nothing.** The copy is the user's scratch: the next quiet snapshot
   keeps it, as it keeps any hand edit, and the plugin's Accept and Ignore edit the copy
-  as the user does.
+  as the user does. `Start` and `Place` hold the vault lock while they read and write.
+- **A link mark can go stale.** Its document may be deleted or renamed after the mark.
+  The plugin resolves the title as Obsidian does (`getFirstLinkpathDest`); a title that
+  names no note gives the bubble the state `gone`, with Ignore only, and the bulk Accept
+  leaves such marks and counts them in its notice.
 - **A work document may be a `draft`.** `change start --kind draft` starts the document
   that wiki-edit fills with the one topic that Create asked for; its default title is
   "Draft a topic". The schema's change `kind` and the search's kinds list `draft`.
@@ -368,8 +399,9 @@ The design pages are the spec. When the code departs from them, the reason is be
   edit as one snapshot (`core.Snapshot`, `vault.CommitSnapshot`). `vault snapshot` is CLI
   only, not an MCP action, and takes the lock without waiting (`LockWithin(0)`): when a
   write holds it, the command fails at once and the plugin tries again after the next
-  quiet period. The plugin shows no notice for a failed snapshot. Every write still
-  commits a snapshot first. The skills tell agents never to report the vault's git
+  quiet period. The plugin shows no notice for a failed snapshot. `core.Snapshot` runs
+  `vault.Recover` first, so an apply that a crash stopped is put back, not committed as
+  a hand edit. Every write still commits a snapshot first. The skills tell agents never to report the vault's git
   state.
 - **The Obsidian plugin touches only what it owns.** It adds custom views, ribbon
   buttons, commands, in-document widgets (code block processors), and CSS for its own
@@ -395,10 +427,13 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Shell writes reach the record, not the guard.** The touched hook adds a repository to the session's `repositories` when a Bash
   command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or names
   it. The skills tell the agent to change files with Edit and Write.
-- **The shell runs neither the apply command of `change`, `vault migrate`, `vault
-  trash`, `journal publish`, nor `atlas-obsidian hook`.** The guard refuses them, in
-  every folder: three skip the gate, `journal publish` is the user's decision (CLI only,
-  no MCP action; the plugin's Publish runs it), and `hook` forges a user's turn.
+- **The shell runs neither the apply nor the undo command of `change`, `vault
+  migrate`, `vault trash`, `journal publish`, nor `atlas-obsidian hook`.** The guard
+  refuses them, in every folder: four skip the gate or undo the user's act, `journal
+  publish` is the user's decision (CLI only, no MCP action; the plugin's Publish runs
+  it), and `hook` forges a user's turn. The `change` tool's `undo` refuses a change with
+  no `session`: safe delete, Return, and a terminal's proposal are the user's own acts,
+  so only the user undoes them, in a terminal.
   `journal list` passes. It is no sandbox; a shell can still write any file. To
   try one by hand from a session, type the command with `!`. `shellCommands`
   (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes

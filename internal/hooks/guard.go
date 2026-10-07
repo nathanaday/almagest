@@ -128,6 +128,8 @@ func commandRefusal(words []string) string {
 			return "apply a change with the change tool after the user's yes; the user can also press Approve in the change document in Obsidian, or run the command with !"
 		case rest[0] == "config" && (slices.Contains(rest[1:], "set") || slices.Contains(rest[1:], "unset")) && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
 			return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
+		case rest[0] == "change" && slices.Contains(rest[1:], "undo"):
+			return "undo a change with the change tool, which leaves the user's own acts (safe delete, Return) to the user"
 		case rest[0] == "journal" && slices.Contains(rest[1:], "publish"):
 			return "a journal is published when the user decides: ask the user to press Publish in the Atlas palette"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "trash"):

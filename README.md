@@ -228,10 +228,11 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
   wikified copies of your notes (see [Wikify a note](#wikify-a-note-experimental)).
 - `journals/`: your own writing, one volume per folder. No agent edits it. See
   [Journals](#journals).
-- `journals/<volume>/Publication history.md`: the editions of a volume, which code
-  writes at each publish.
+- `journals/<volume>/Journal · <volume>.md`: the publication history of a volume, which
+  code writes at each publish.
 - `sessions/` and `changes/`: the session and change documents.
-- `checkout/`: the librarian's checkouts, one folder each, and `checkout/Ledger.md`.
+- `checkout/`: the librarian's checkouts, one folder each, and the ledger,
+  `checkout/Checkout · Ledger.md`.
   Code writes it, and you read and edit the copies. No agent edits it. See
   [Checkouts](#checkouts).
 - `trash/`: what safe delete and a change's remove took out, under
@@ -240,7 +241,8 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
 - `threads/`, in a vault that the 9.0 migration moved: the thread and chord documents of
   8.x.
 - `.obsidian/app.json`: `vault init` sends new attachments to `source-core/originals/`
-  (unless you chose a folder) and keeps `wiki-view/` out of Obsidian's graph and search.
+  (unless you chose a folder) and keeps `wiki-view/` and `trash/` out of Obsidian's
+  graph and search.
   It keeps every other key.
 - `.obsidian/plugins/atlas/`: the Obsidian plugin.
 - `.claude/settings.local.json`: the linked repositories, for Claude Code.
@@ -348,8 +350,9 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   primary`, `volume`, `edition` (the date), and `journal_hash`. It keeps the tags of the
   volume's latest edition. Every edition stays in `source-core/originals/`, and topics
   cite the edition, not the notes.
-- **Publication history.** Each publish writes `Publication history.md` at the volume's
-  root: a table of the volume's editions. Code owns the note; an edit there is lost at
+- **Publication history.** Each publish writes `Journal · <volume>.md` at the volume's
+  root: a table of the volume's editions. No document can take a title that begins with
+  "Journal · ", so a link to the note names one file. Code owns the note; an edit there is lost at
   the next publish.
 - **Changes to publish.** A volume has changes when its notes differ from its latest
   edition, or when it has notes and no edition. The date alone does not count as a
@@ -377,10 +380,10 @@ reading order, and checks out a copy of each for you to read and mark up.
   wiki still names one file, the original. A link to another document of the checkout
   points at that document's copy; every other link points at the wiki. Edit the copies
   as you like. No agent edits `checkout/`.
-- **The reading list.** `Reading list.md` holds your request, the documents in reading
+- **The reading list.** `Checkout · <folder>.md` holds your request, the documents in reading
   order with one line each on why they are there, and the agent's notes on what it left
   out.
-- **The ledger.** `checkout/Ledger.md` lists every checkout, newest first: the date, the
+- **The ledger.** `checkout/Checkout · Ledger.md` lists every checkout, newest first: the date, the
   request, the count of documents, the count of edited copies, and the date of its
   return. Code writes it again at each checkout and each return, so an edit there is
   lost.
@@ -408,7 +411,7 @@ a change.
   `{{link:<Title>|<phrase>}}` where the phrase names a document of the wiki, and
   `{{new:<Title>|<phrase>}}` where it names a subject worth a topic. Each mark replaces
   the first mention of its phrase, as whole words and in any case, outside the
-  frontmatter, headings, code, links, URLs, and other marks. The agent marks a few new
+  frontmatter, headings, table rows, code, links, URLs, and other marks. The agent marks a few new
   subjects at most, and never marks a phrase inside a quote of another person's words.
   Atlas commits nothing; the next quiet snapshot keeps the copy.
 - **The bubbles.** The plugin shows each mark as a bubble: the phrase, then `→ Title`
@@ -421,7 +424,10 @@ a change.
     the topic and proposes it into that document. You approve it as any change.
   - **Link** appears on a new subject once its topic exists, and turns the mark into a
     link.
-  - The command "Accept every link mark in this note" accepts every link at once.
+  - A link whose document is gone (deleted or renamed since the mark) shows "no note"
+    and offers Ignore only.
+  - The command "Accept every link mark in this note" accepts every link whose document
+    exists, at once.
 
 ### The Obsidian plugin
 
@@ -437,9 +443,13 @@ The vault works without the plugin. With it, Obsidian adds:
     starts a repair work document and an agent that proposes the repairs into it.
   - **Safe delete this file** runs `atlas-obsidian vault trash` on the open file. When
     no file links it, the file moves to `trash/`; a topic, a source, or a repository
-    leaves through a change that applies at once, so `change undo` brings it back. When files
-    link it, nothing moves, and a list of the links offers **Resolve with an agent**:
-    the agent points each link elsewhere and proposes the remove.
+    leaves through a change that applies at once, so `change undo` in a terminal brings
+    it back; an agent cannot undo it. When files link it, nothing moves, and a list
+    names the links. For a knowledge document that documents link, the list offers
+    **Resolve with an agent**: the agent points each link in a document elsewhere and
+    proposes the remove. A link in your own notes (the scratchpad, `journals/`,
+    `checkout/`, `threads/`, and the like) is yours to fix; while one stays, the agent
+    proposes no remove, and you run Safe delete again after you fix it.
   - **Publish** next to a journal volume (marked when the volume has changes) runs
     `atlas-obsidian journal publish`, then starts a work document and an agent that
     absorbs the edition. See [Journals](#journals).

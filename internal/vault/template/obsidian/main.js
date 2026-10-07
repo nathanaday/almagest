@@ -1213,7 +1213,6 @@ var import_obsidian5 = require("obsidian");
 
 // src/checkoutstate.ts
 var CHECKOUT = "checkout";
-var READING_LIST = "Reading list";
 function checkouts(list) {
   return (list ?? []).filter((c) => typeof c.folder === "string" && c.folder !== "").map((c) => ({
     folder: c.folder,
@@ -1236,7 +1235,7 @@ function day(stamp) {
   return stamp.slice(0, 10);
 }
 function readingListPath(c) {
-  return `${c.folder}/${READING_LIST}.md`;
+  return `${c.folder}/Checkout \xB7 ${folderName(c.folder)}.md`;
 }
 function folderName(folder) {
   return folder.slice(folder.lastIndexOf("/") + 1);
@@ -1277,11 +1276,16 @@ function publishMessage(edition, doc) {
 function checkoutMessage(request) {
   return `/atlas-obsidian:wiki-checkout Check out the material on: ${oneLine(request)}`;
 }
-function resolveMessage(target, backlinks) {
-  const names = backlinks.slice(0, MAX_NAMED).map((b) => `[[${b.title}]]`);
-  const more = backlinks.length - names.length;
+function named(list) {
+  const names = list.slice(0, MAX_NAMED).map((b) => `[[${b.title}]]`);
+  const more = list.length - names.length;
   if (more > 0) names.push(`${more} more`);
-  return `/atlas-obsidian:wiki-edit Remove [[${target.title}]] (${target.path}), which ${names.join(", ")} ${backlinks.length === 1 ? "links" : "link"}: point each backlink elsewhere, or drop it, then propose a remove.`;
+  return names.join(", ");
+}
+function resolveMessage(target, backlinks, yours = []) {
+  const head = `/atlas-obsidian:wiki-edit Remove [[${target.title}]] (${target.path}), which ${named(backlinks)} ${backlinks.length === 1 ? "links" : "link"}: point each backlink elsewhere, or drop it`;
+  if (yours.length === 0) return `${head}, then propose a remove.`;
+  return `${head}. ${named(yours)} ${yours.length === 1 ? "is" : "are"} the user's to fix, so leave ${yours.length === 1 ? "it" : "them"} and propose no remove; the user runs Safe delete again.`;
 }
 function draftMessage(title, note, doc) {
   return `/atlas-obsidian:wiki-edit Draft a topic titled ${title} from [[${note}]] and what the wiki holds; give it a why. ${report(doc, "into it")}`;
@@ -1302,6 +1306,7 @@ async function returnCheckout(plugin, c) {
   const { returned } = await plugin.atlas([CHECKOUT, "return", c.folder]);
   const line = skippedLine(returned.skipped);
   if (line) new import_obsidian5.Notice(`Atlas: ${line}`, 15e3);
+  if (returned.warning) new import_obsidian5.Notice(`Atlas: ${returned.warning}`, 15e3);
   if (returned.change?.ref) await plugin.openWhenSeen(returned.change.ref.path, true);
 }
 var CheckoutModal = class extends import_obsidian5.Modal {
@@ -1426,11 +1431,21 @@ function lineCounter(text) {
 function decide(text, m, decision2) {
   return text.slice(0, m.from) + replacement(m, decision2) + text.slice(m.to);
 }
-function acceptAll(text) {
-  const marks = findMarks(text).filter((m) => m.kind === "link");
+function linkMarks(text, resolves) {
+  const links = findMarks(text).filter((m) => m.kind === "link");
+  const take = links.filter((m) => resolves(m.title));
+  return { take, gone: links.length - take.length };
+}
+function acceptAll(text, resolves = () => true) {
+  const { take, gone } = linkMarks(text, resolves);
   let out = text;
-  for (const m of [...marks].reverse()) out = decide(out, m, "accept");
-  return { text: out, count: marks.length };
+  for (const m of [...take].reverse()) out = decide(out, m, "accept");
+  return { text: out, count: take.length, gone };
+}
+function acceptedLine(count, gone) {
+  const left = gone === 0 ? "" : ` ${gone === 1 ? "1 names" : `${gone} name`} no note now; Ignore ${gone === 1 ? "it" : "them"} or fix the title.`;
+  if (count === 0) return gone === 0 ? "Atlas: this note holds no link mark." : `Atlas: no link mark to accept.${left}`;
+  return `Atlas: accepted ${count === 1 ? "1 link mark" : `${count} link marks`}.${left}`;
 }
 function isWikified(path) {
   const name = path.slice(path.lastIndexOf("/") + 1);
@@ -1495,7 +1510,11 @@ function lintSummary(r, max = 8) {
 }
 function trashOutcome(r) {
   const backlinks = r.backlinks ?? [];
-  if (backlinks.length > 0) return { kind: "linked", path: r.path, title: noteTitle(r.path), backlinks };
+  if (backlinks.length > 0) {
+    const yours = backlinks.filter((b) => !isDocumentPath(b.path));
+    const agent = isDocumentPath(r.path) && yours.length < backlinks.length;
+    return { kind: "linked", path: r.path, title: noteTitle(r.path), backlinks, yours, agent };
+  }
   if (!r.moved) return { kind: "error", line: `${r.path} did not move, and nothing links it.` };
   const through = r.change?.title ? ` The change ${r.change.title} records it.` : "";
   return { kind: "moved", line: `Moved ${r.path} to ${r.moved}.${through}` };
@@ -1895,12 +1914,11 @@ var PaletteView = class extends import_obsidian7.ItemView {
     const out = await this.plugin.atlas(["vault", "trash", arg], [2]);
     const outcome = trashOutcome(out.trash);
     if (outcome.kind === "linked") {
-      new BacklinksModal(
-        this.app,
-        outcome,
-        (path) => void this.openPath(path, false),
-        () => void this.act("trash", () => this.plugin.runAgent(resolveMessage(outcome, outcome.backlinks), `Agent \xB7 Remove ${outcome.title}`, "remove"))
-      ).open();
+      const agent = () => {
+        const docs = outcome.backlinks.filter((b) => !outcome.yours.includes(b));
+        void this.act("trash", () => this.plugin.runAgent(resolveMessage(outcome, docs, outcome.yours), `Agent \xB7 Remove ${outcome.title}`, "remove"));
+      };
+      new BacklinksModal(this.app, outcome, (path) => void this.openPath(path, false), outcome.agent ? agent : null).open();
       return;
     }
     new import_obsidian7.Notice(`Atlas: ${outcome.line}`, outcome.kind === "error" ? 1e4 : 6e3);
@@ -1931,8 +1949,13 @@ var BacklinksModal = class extends import_obsidian7.Modal {
     const el = this.contentEl;
     el.addClass("atlas-backlinks");
     el.createEl("p", {
-      text: `${plural2(outcome.backlinks.length, "document links", "documents link")} ${outcome.path}, so safe delete moved nothing. Point each link elsewhere, or drop it; then the file can go to trash/.`
+      text: `${plural2(outcome.backlinks.length, "file links", "files link")} ${outcome.path}, so safe delete moved nothing. Point each link elsewhere, or drop it; then the file can go to trash/.`
     });
+    if (outcome.yours.length > 0) {
+      el.createEl("p", {
+        text: `The links in your own notes are yours to fix: an agent edits knowledge documents only.`
+      });
+    }
     const ul = el.createEl("ul");
     for (const b of outcome.backlinks) {
       const li = ul.createEl("li");
@@ -1943,14 +1966,17 @@ var BacklinksModal = class extends import_obsidian7.Modal {
         this.close();
         this.show(b.path);
       };
-      if (b.type) li.createSpan({ cls: "atlas-backlinks-type", text: ` ${b.kind || b.type}` });
+      if (outcome.yours.includes(b)) li.createSpan({ cls: "atlas-backlinks-type", text: " yours to fix" });
+      else if (b.type) li.createSpan({ cls: "atlas-backlinks-type", text: ` ${b.kind || b.type}` });
     }
     const buttons = el.createDiv({ cls: "atlas-backlinks-buttons" });
     buttons.createEl("button", { text: "Close" }).onclick = () => this.close();
+    const resolve = this.resolve;
+    if (!resolve) return;
     const go = buttons.createEl("button", { cls: "mod-cta", text: "Resolve with an agent" });
     go.onclick = () => {
       this.close();
-      this.resolve();
+      resolve();
     };
   }
   onClose() {
@@ -2116,11 +2142,15 @@ var Wikify = class {
     for (const fn of this.listeners) fn();
   }
   state(mark, sourcePath) {
-    if (mark.kind === "link") return { kind: "link" };
-    if (this.plugin.app.metadataCache.getFirstLinkpathDest(mark.title, sourcePath)) return { kind: "ready" };
+    const found = this.resolves(mark.title, sourcePath);
+    if (mark.kind === "link") return { kind: found ? "link" : "gone" };
+    if (found) return { kind: "ready" };
     const path = this.draftOf(mark.title);
     if (path !== null) return { kind: "drafting", path };
     return { kind: "new" };
+  }
+  resolves(title, sourcePath) {
+    return !!this.plugin.app.metadataCache.getFirstLinkpathDest(title, sourcePath);
   }
   /** The draft work document of a title that runs or waits, "" while Create starts it, or null. */
   draftOf(title) {
@@ -2165,24 +2195,31 @@ var Wikify = class {
   openDraft(path) {
     if (path) void this.plugin.openWhenSeen(path, true);
   }
-  /** Accept on every link mark of a wikified note: through the editor when it shows the note, else on disk. */
+  /**
+   * Accept on every link mark of a wikified note whose title names a note: through the
+   * editor when it shows the note, else on disk.
+   */
   async acceptAll(file) {
     const { workspace, vault } = this.plugin.app;
+    const resolves = (title) => this.resolves(title, file.path);
     let count = 0;
+    let gone = 0;
     const view = workspace.getActiveViewOfType(import_obsidian9.MarkdownView);
     if (view?.file?.path === file.path && view.getMode() === "source") {
       const editor = view.editor;
-      const marks = findMarks(editor.getValue()).filter((m) => m.kind === "link");
-      count = marks.length;
-      if (count > 0) editor.transaction({ changes: marks.map((m) => ({ from: editor.offsetToPos(m.from), to: editor.offsetToPos(m.to), text: linkFor(m) })) });
+      const { take, gone: left } = linkMarks(editor.getValue(), resolves);
+      count = take.length;
+      gone = left;
+      if (count > 0) editor.transaction({ changes: take.map((m) => ({ from: editor.offsetToPos(m.from), to: editor.offsetToPos(m.to), text: linkFor(m) })) });
     } else {
       await vault.process(file, (text) => {
-        const out = acceptAll(text);
+        const out = acceptAll(text, resolves);
         count = out.count;
+        gone = out.gone;
         return out.text;
       });
     }
-    new import_obsidian9.Notice(count > 0 ? `Atlas: accepted ${count === 1 ? "1 link mark" : `${count} link marks`}.` : "Atlas: this note holds no link mark.");
+    new import_obsidian9.Notice(acceptedLine(count, gone));
   }
   /**
    * Wikify this note: the binary copies the note into the scratchpad, the copy opens, and
@@ -2219,6 +2256,9 @@ function drawBubble(el, w, mark, state, decide2, sourcePath) {
   switch (state.kind) {
     case "link":
       button("Accept", () => decide2("accept"), true);
+      break;
+    case "gone":
+      el.createSpan({ cls: "atlas-mark-gone", text: "no note", attr: { title: `No note is titled ${mark.title} now.` } });
       break;
     case "new":
       button("Create", () => void w.create(mark.title, sourcePath), true);

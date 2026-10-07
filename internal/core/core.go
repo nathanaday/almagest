@@ -387,6 +387,11 @@ func Snapshot(v *vault.Vault) (string, int, error) {
 	if err := v.Git().CheckIdle(); err != nil {
 		return "", 0, err
 	}
+	// An apply a crash stopped is put back first, so the snapshot never records its
+	// half-written documents as hand edits.
+	if err := vault.Recover(v); err != nil {
+		return "", 0, err
+	}
 	entries, err := v.Git().Status()
 	if err != nil || len(entries) == 0 {
 		return "", 0, err

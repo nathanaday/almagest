@@ -9,7 +9,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/nathanaday/atlas-obsidian/internal/change"
 	"github.com/nathanaday/atlas-obsidian/internal/core"
+	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
@@ -97,6 +99,34 @@ func TestSnapshotCommitsTheHandEdits(t *testing.T) {
 	if sha, _, err := core.Snapshot(tv.V); err != nil || sha == "" {
 		t.Fatalf("the snapshot after the write: %q %v", sha, err)
 	}
+}
+
+// A snapshot after a crashed apply puts the apply back first, so it never records the
+// half-written documents as hand edits.
+func TestASnapshotRecoversACrashedApplyFirst(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nOld.\n")
+	tv.Commit()
+	before := tv.Read(vault.DocPath("Alpha"))
+	body := "## Definition\n\nNew.\n"
+	pv, err := change.Propose(tv.V, change.Plan{Title: "Rewrite Alpha", Writes: []change.Write{{Op: "modify", ID: "Alpha", Body: &body}}}, tv.Tick(time.Minute))
+	if err != nil {
+		t.Fatal(err)
+	}
+	// The state an apply leaves when it stops before its commit: the change says
+	// applied and lists its paths, and the document holds the new text.
+	tv.Write(pv.Ref.Path, doc.SetFields(tv.Read(pv.Ref.Path), []doc.Field{{Key: "status", Value: "applied"}, {Key: "paths", Value: []string{vault.DocPath("Alpha")}}}))
+	tv.Write(vault.DocPath("Alpha"), strings.Replace(before, "Old.", "New.", 1))
+	if _, _, err := core.Snapshot(tv.V); err != nil {
+		t.Fatal(err)
+	}
+	if got := tv.Read(vault.DocPath("Alpha")); got != before {
+		t.Fatalf("the snapshot kept the half-applied text:\n%s", got)
+	}
+	if got := doc.Parse("", []byte(tv.Read(pv.Ref.Path))); got.Str("status") != "proposed" || got.Front.Has("paths") {
+		t.Fatalf("the change after the recovery:\n%s", got.Content)
+	}
+	tv.Clean()
 }
 
 func TestSyncEndsASessionWhoseAgentIsGone(t *testing.T) {

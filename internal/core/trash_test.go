@@ -20,6 +20,11 @@ func TestSafeDelete(t *testing.T) {
 	tv.Commit()
 	now := testvault.Now.Add(time.Hour)
 
+	if tv.V.Exists("ATLAS.md") { // a disk that folds case
+		if res, err := core.Trash(tv.V, "source-core/documents/linked.md", now); err != nil || res.Moved != "" || len(res.Backlinks) != 1 {
+			t.Fatalf("a linked topic in another case: %+v %v", res, err)
+		}
+	}
 	res, err := core.Trash(tv.V, vault.DocPath("Linked"), now)
 	if err != nil || res.Moved != "" || len(res.Backlinks) != 1 || res.Backlinks[0].Path != "journals/cs566/Week 1.md" {
 		t.Fatalf("a linked topic: %+v %v", res, err)
@@ -47,7 +52,7 @@ func TestSafeDelete(t *testing.T) {
 	}
 	tv.Clean()
 
-	for _, rel := range []string{"Atlas.md", "sessions/Sessions.base", "changes/Changes.base", res.Moved, "wiki-view/View · Home.md", "../outside.md", "nowhere.md"} {
+	for _, rel := range []string{"Atlas.md", "atlas.md", "Changes/Changes.base", "sessions/Sessions.base", "changes/Changes.base", res.Moved, "wiki-view/View · Home.md", "../outside.md", "nowhere.md"} {
 		if _, err := core.Trash(tv.V, rel, now); err == nil {
 			t.Errorf("%s was taken", rel)
 		}

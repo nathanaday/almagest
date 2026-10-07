@@ -29,7 +29,7 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 		}
 	}
 	var app map[string]any
-	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") {
+	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "trash/") {
 		t.Fatalf("app settings %v %v", app, err)
 	}
 	if log := tv.Log(); len(log) != 1 || log[0] != "setup: Work" {

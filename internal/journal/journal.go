@@ -23,8 +23,10 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
-// History is the note code writes at the root of a volume: its editions.
-const History = "Publication history"
+// HistoryPrefix begins the title of the note code writes at the root of a volume, its
+// publication history: "Journal · <volume>". The prefix is reserved, so no document
+// takes the title, and each volume's folder name keeps it unique.
+const HistoryPrefix = "Journal · "
 
 // HistoryNotice opens the publication history: code writes it again at each publish.
 const HistoryNotice = "> [!atlas] Written by Atlas at each publish. Edits here are lost at the next one."
@@ -139,7 +141,7 @@ func notesOf(v *vault.Vault, folder string) ([]string, error) {
 }
 
 func historyPath(folder string) string {
-	return path.Join(vault.Journals, folder, History+".md")
+	return path.Join(vault.Journals, folder, HistoryPrefix+folder+".md")
 }
 
 // text is a volume's notes as one markdown text, one section per note, and the hash of
@@ -181,7 +183,7 @@ func Publish(v *vault.Vault, folder string, now time.Time) (*Published, error) {
 		return nil, err
 	}
 	folder = strings.Trim(strings.TrimPrefix(filepath.ToSlash(folder), vault.Journals+"/"), "/")
-	if folder == "" || strings.Contains(folder, "/") {
+	if folder == "" || strings.Contains(folder, "/") || folder == "." || folder == ".." || path.Clean(folder) != folder {
 		return nil, fmt.Errorf("%q: name a volume, a folder directly under %s/", folder, vault.Journals)
 	}
 	notes, err := notesOf(v, folder)
@@ -228,8 +230,16 @@ func Publish(v *vault.Vault, folder string, now time.Time) (*Published, error) {
 func HistoryNote(folder string) string {
 	return HistoryNotice + "\n\n" +
 		"Each edition is a copy of this volume, captured as a source when you pressed Publish. The wiki cites the edition; this volume stays yours.\n\n" +
-		"```base\nfilters:\n  and:\n    - file.inFolder(\"" + vault.Documents + "\")\n    - 'type == \"source\"'\n    - 'volume == \"" + folder + "\"'\n" +
+		"```base\nfilters:\n  and:\n    - file.inFolder(\"" + vault.Documents + "\")\n    - 'type == \"source\"'\n    - 'volume == " + baseString(folder) + "'\n" +
 		"views:\n  - type: table\n    name: Editions\n    order:\n      - file.name\n      - edition\n      - measure\n      - status\n    sort:\n      - property: edition\n        direction: DESC\n```\n"
+}
+
+// baseString is a folder name as a string of a Base expression inside a YAML single-quoted
+// scalar: the expression's quotes and backslashes escaped, then YAML's single quote
+// doubled.
+func baseString(s string) string {
+	s = `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
+	return strings.ReplaceAll(s, "'", "''")
 }
 
 // WriteMissingHistories writes the publication history of each volume that has an

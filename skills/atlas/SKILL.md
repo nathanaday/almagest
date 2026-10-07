@@ -102,8 +102,8 @@ goes in `ingest/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
 ## Journals
 
 `journals/` holds the user's own writing. A volume is a folder directly under
-`journals/`. Its notes are every `.md` file under it, except its `Publication
-history.md`, which code writes.
+`journals/`. Its notes are every `.md` file under it, except its publication
+history, `Journal · <folder>.md`, which code writes.
 
 - **"Publish my journal."** Publish is the user's act. Tell the user to press Publish
   next to the volume in the Journals section of the Atlas palette, or to type

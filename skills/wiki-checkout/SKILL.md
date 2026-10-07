@@ -53,9 +53,9 @@ Tools: `checkout` (candidates, make, list, return), and Read. References:
      you stopped, and a gap the wiki has.
 
    Code writes `checkout/<date> <name>/` in one commit: a copy of each document as
-   `<Title> (checkout).md`, `Reading list.md`, and `checkout/Ledger.md`. A link between
-   two documents of the checkout points at the copy; every other link points at the
-   wiki.
+   `<Title> (checkout).md`, the reading list `Checkout · <folder>.md`, and the ledger
+   `checkout/Checkout · Ledger.md`. A link between two documents of the checkout points
+   at the copy; every other link points at the wiki.
 
 ## Return
 
@@ -84,7 +84,8 @@ decides in the change document (Approve or Cancel). Never apply it: the change n
 session, so the `change` tool refuses your apply.
 
 End with one or two lines that name the reading list as a link
-(`[[checkout/<folder>/Reading list]]`) and the count of documents.
+(`[[checkout/<folder>/Checkout · <folder>]]`, as `make` returns it in `reading_list`)
+and the count of documents.
 
 ## Hand off
 

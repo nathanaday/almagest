@@ -68,7 +68,9 @@ press Approve in the change document and apply it yourself.
   It moves nothing while a file links the one you delete. A topic, a source, or a
   repository leaves through a change that the command applies at once as your own
   action, so the change records it and `change undo` brings it back. Any other file
-  moves to `trash/` in a commit of its own.
+  moves to `trash/` in a commit of its own. The `change` tool refuses an agent's undo of
+  a change that names no session: your safe delete, your Return, and a change proposed
+  from a terminal. You undo those in a terminal.
 - `atlas-obsidian journal publish` is your act too; the Obsidian plugin's Publish runs
   it as you. It captures a journal volume as a pending source, an edition. In the
   volume it writes only the publication history, and changes no note. The agent then absorbs the edition through a change, and the
@@ -139,6 +141,7 @@ It refuses a command that runs one of these, as `atlas-obsidian` or under the ol
 `atlas`:
 
 - `change … apply`, which applies a change without the gate;
+- `change … undo`, which takes back a change, your own act among them;
 - `hook`, which sends the binary a fake hook event, for example a fake prompt from you;
 - `vault … migrate`, which rewrites the whole vault;
 - `vault … trash`, your safe delete, which applies a remove without the gate;

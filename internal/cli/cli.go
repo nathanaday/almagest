@@ -891,6 +891,9 @@ func (c *CLI) checkoutCmd(argv []string) error {
 			for _, s := range r.Skipped {
 				fmt.Fprintf(w, "  left out: %s\n", s)
 			}
+			if r.Warning != "" {
+				fmt.Fprintf(w, "warning: %s\n", r.Warning)
+			}
 		})
 	}
 	return fmt.Errorf("checkout takes list, candidates, make, or return, not %q", a.arg(0))

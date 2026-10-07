@@ -10,6 +10,27 @@ import (
 
 const draft = "---\ntags: [draft]\n---\n# Notes on gradient descent\n\nGradient descent needs a learning rate. See `gradient descent` in code, and [[Optimizers|gradient descent tools]].\n\nThe learning rate schedule matters, and momentum helps. Gradient descent again.\n\n```\ngradient descent in a fence\n```\n"
 
+// A case-folded match may be longer or shorter than the phrase: the mark takes the
+// match as the note writes it.
+func TestAMarkTakesTheMatchNotThePhrasesLength(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Write("Notes.md", "Water boils at 373 \u212Aelvin.\n")
+	tv.Commit()
+	rel, err := wikify.Start(tv.V, "notes.md")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := wikify.Place(tv.Index(), rel, []wikify.Mark{{Phrase: "kelvin", New: "Kelvin scale"}}); err != nil {
+		t.Fatal(err)
+	}
+	if got := tv.Read(rel); got != "Water boils at 373 {{new:Kelvin scale|\u212Aelvin}}.\n" {
+		t.Fatalf("the note: %q", got)
+	}
+	if _, err := wikify.Start(tv.V, "Source-Core/documents/X.md"); err == nil {
+		t.Fatal("a document of the wiki in another case")
+	}
+}
+
 func TestStartCopiesIntoTheScratchpad(t *testing.T) {
 	tv := testvault.New(t)
 	tv.Write("Notes.md", draft)

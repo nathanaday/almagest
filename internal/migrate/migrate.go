@@ -120,6 +120,13 @@ func Plan(v *vault.Vault) (*Report, error) {
 
 // Run migrates a vault in one commit, then writes the views.
 func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
+	// A vault the migration does not take is refused before anything touches it: the
+	// write's start makes the 10.0 folders.
+	if pre, err := vault.Open(v.Root); err == nil {
+		if err := check(pre); err != nil {
+			return nil, err
+		}
+	}
 	tx, err := vault.BeginAsIs(v, func() error { return vault.Recover(v) })
 	if err != nil {
 		return nil, err
@@ -159,9 +166,6 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 		prune(fresh.Abs(dir))
 	}
 	if fresh, err = vault.Open(v.Root); err != nil {
-		return nil, err
-	}
-	if err := fresh.Git().Unexclude("/" + legacyViews + "/"); err != nil {
 		return nil, err
 	}
 	if err := fresh.EnsureFolders(); err != nil {
@@ -207,6 +211,11 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 		return nil, err
 	}
 	report.Commit = sha
+	// The old views folder is gone with the commit; its exclude line goes now, so a failed
+	// migration leaves the 9.0 views excluded.
+	if err := fresh.Git().Unexclude("/" + legacyViews + "/"); err != nil {
+		report.Warnings = append(report.Warnings, "the line /views/ stays in .git/info/exclude: "+err.Error())
+	}
 	if idx, err = vault.Load(fresh); err != nil {
 		return report, err
 	}

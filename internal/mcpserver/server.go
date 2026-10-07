@@ -276,6 +276,13 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 	case "reject":
 		return done(change.Reject(v, in.ID, in.Reason, now))
 	case "undo":
+		idx, err := vault.Load(v)
+		if err != nil {
+			return nil, nil, err
+		}
+		if d, err := idx.ResolveType(in.ID, "change"); err == nil && d.Str("session") == "" {
+			return nil, nil, fmt.Errorf("%s was the user's own act (safe delete, Return, or a change from a terminal), so only the user undoes it: with atlas-obsidian change undo in a terminal", vault.Title(d))
+		}
 		return done(change.Undo(v, in.ID, now))
 	}
 	return nil, nil, fmt.Errorf("change takes action show, start, progress, propose, apply, reject, or undo, not %q", in.Action)

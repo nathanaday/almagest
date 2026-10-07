@@ -74,7 +74,7 @@ var (
 )
 
 // Reserved title prefixes belong to the view notes; no document takes one.
-var ReservedPrefixes = []string{"Tag · ", "View · "}
+var ReservedPrefixes = []string{"Tag · ", "View · ", "Checkout · ", "Journal · "}
 
 // ReservedTitle reports whether a title begins with a prefix the views own.
 func ReservedTitle(title string) bool {
@@ -350,6 +350,17 @@ func (v *Vault) OnDisk(rel string) string {
 		}
 	}
 	return rel
+}
+
+// Spelled is rel as the disk spells each of its parts, which may differ from rel in case
+// or Unicode form on a disk that folds them. A part that does not exist keeps its own
+// spelling.
+func (v *Vault) Spelled(rel string) string {
+	out := ""
+	for _, p := range strings.Split(rel, "/") {
+		out = v.OnDisk(path.Join(out, p))
+	}
+	return out
 }
 
 // Git is the vault's repository.

@@ -7,7 +7,8 @@ description: "Change knowledge that exists: rewrite, rename, merge, split, remov
 
 Every change to knowledge that exists goes through one change document. Renames,
 removes, and retags keep every link and tag true, because code rewrites them in the
-same commit. A remove moves the document to `trash/`; undo moves it back.
+same commit. A remove moves the document to `trash/`; undo moves it back. You may undo
+only a change of a session: the user undoes the user's own acts (safe delete, Return).
 
 Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../atlas/references/changes.md),
 [pages.md](../atlas/references/pages.md).
@@ -40,24 +41,28 @@ Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../atlas/re
 
 ## Safe delete with backlinks
 
-The palette's "Resolve with an agent" message names a document that the user wants to
-delete, and that other files link: "Remove [[<title>]] …: point each backlink elsewhere,
-or drop it, then propose a remove".
+The palette's "Resolve with an agent" message names a knowledge document that the user
+wants to delete, and the documents that link it: "Remove [[<title>]] …: point each
+backlink elsewhere, or drop it, then propose a remove". The palette offers it only when
+documents link the target. When files of the user's link it too, the message names
+them: "[[<note>]] is the user's to fix, so leave it and propose no remove".
 
 1. Find the backlinks. The message names at most ten ("4 more"), so also `search`
    the title and grep the vault for `[[<title>`.
-2. For a knowledge document, build one plan:
+2. Build one plan:
    - when another document covers its subject, a `remove` with `redirect` set to it;
      code points the links there, but not in `scratchpad/`, `threads/`, `journals/`,
      or `checkout/`;
    - otherwise, a `modify` of each linking knowledge document that points the link to
      another document or drops it, then a `remove`.
-3. A link in `journals/` or `checkout/` is the user's: name the file, and ask the user
-   to change it. A checked-out copy links its original in `checkout_of`.
-4. For a file that is not a knowledge document (a note, an original), no change removes
-   it. Point the links of knowledge documents elsewhere in a change, then tell the user
-   to run Safe delete again. A source's original in `source-core/originals/` leaves only
-   with its source.
+3. A link outside the knowledge documents is the user's: in `scratchpad/`,
+   `threads/`, `journals/`, `checkout/`, or any other note. Do not edit it. When the
+   message names such a file, or you find one, propose the `modify` writes only, with
+   no `remove`, and tell the user which files to fix before Safe delete runs again. A
+   checked-out copy links its original in `checkout_of`.
+4. A file that is not a knowledge document (a note, an original) never comes to you
+   from the palette, and no change removes it. A source's original in
+   `source-core/originals/` leaves only with its source.
 
 ## Draft a topic from a wikified note
 

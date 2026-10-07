@@ -81,7 +81,7 @@ func TestMakeAndReturn(t *testing.T) {
 	if !strings.Contains(list, "1. [["+folder+"/Reinforcement learning (checkout)|Reinforcement learning]] · the map\n2. ") {
 		t.Fatalf("the reading list:\n%s", list)
 	}
-	if ledger := tv.Read("checkout/Ledger.md"); !strings.Contains(ledger, "| 3 | 0 | no |") {
+	if ledger := tv.Read("checkout/Checkout · Ledger.md"); !strings.Contains(ledger, "| 3 | 0 | no |") {
 		t.Fatalf("the ledger:\n%s", ledger)
 	}
 	if _, err := checkout.Make(tv.V, checkout.Order{Request: "x", Name: "Y", Documents: []checkout.Pick{{ID: "Q-learning"}, {ID: "Q learning"}}}, now); err == nil {
@@ -104,6 +104,7 @@ func TestMakeAndReturn(t *testing.T) {
 	tv.Write(pgPath, strings.Replace(pg, "on the policy, unlike", "on the policy itself, unlike", 1))
 	qPath := folder + "/Q-learning (checkout).md"
 	tv.Write(qPath, tv.Read(qPath)+"\nMy note on Q-learning.\n")
+	tv.Write(pgPath, strings.Replace(tv.Read(pgPath), "on the policy itself, unlike", "on the policy itself (see [[Reinforcement learning (checkout)|RL]]), unlike", 1))
 	tv.Write(vault.DocPath("Q-learning"), strings.Replace(tv.Read(vault.DocPath("Q-learning")), "learns values", "learns action values", 1))
 	tv.Commit()
 	if e := checkout.List(tv.V)[0]; e.Edited != 2 {
@@ -124,7 +125,7 @@ func TestMakeAndReturn(t *testing.T) {
 		t.Fatal(err)
 	}
 	got := tv.Read(vault.DocPath("Policy gradient"))
-	if !strings.Contains(got, "on the policy itself, unlike [[Q-learning|Q learning]].") || strings.Contains(got, "checkout") {
+	if !strings.Contains(got, "on the policy itself (see [[Reinforcement learning|RL]]), unlike [[Q-learning|Q learning]].") || strings.Contains(got, "checkout") {
 		t.Fatalf("the returned topic:\n%s", got)
 	}
 	if rl := doc.Parse("", []byte(tv.Read(m.ReadingList))); rl.Str("returned") == "" {

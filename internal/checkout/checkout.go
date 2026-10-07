@@ -23,12 +23,18 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
-// Names in a checkout's folder.
+// Ledger is the note of every checkout, in checkout/. Its prefix is reserved, so no
+// document takes the title.
 const (
-	ReadingList = "Reading list"
-	Ledger      = "Ledger"
-	copySuffix  = " (checkout)"
+	Ledger     = "Checkout · Ledger"
+	copySuffix = " (checkout)"
 )
+
+// ReadingList is the path of a checkout's reading list: "Checkout · <folder name>", a
+// title no document can take and no other checkout holds.
+func ReadingList(folder string) string {
+	return path.Join(folder, "Checkout · "+path.Base(folder)+".md")
+}
 
 // Bounds of a candidate list.
 const (
@@ -255,7 +261,7 @@ func Make(v *vault.Vault, o Order, now time.Time) (_ *Made, err error) {
 			copyOf[links.Key(a)] = path.Join(folder, vault.Title(d)+copySuffix)
 		}
 	}
-	out := &Made{Folder: folder, ReadingList: path.Join(folder, ReadingList+".md"), Copies: []string{}}
+	out := &Made{Folder: folder, ReadingList: ReadingList(folder), Copies: []string{}}
 	stamp := vault.Stamp(now)
 	var list strings.Builder
 	for i, d := range docs {
@@ -326,7 +332,9 @@ func toCopies(text string, copyOf map[string]string) string {
 func toWiki(text, folder string) string {
 	return relink(text, func(l links.Link) (links.Link, bool) {
 		dir, file := path.Split(l.Target)
-		if strings.TrimSuffix(dir, "/") != folder || !strings.HasSuffix(file, copySuffix) {
+		// The link code wrote names the copy by its path; one the user wrote in Obsidian
+		// may name it by its file name alone.
+		if (dir != "" && strings.TrimSuffix(dir, "/") != folder) || !strings.HasSuffix(file, copySuffix) {
 			return l, false
 		}
 		l.Target = strings.TrimSuffix(file, copySuffix)
@@ -372,7 +380,7 @@ func List(v *vault.Vault) []Entry {
 			continue
 		}
 		folder := path.Join(vault.Checkout, e.Name())
-		data, err := v.Read(path.Join(folder, ReadingList+".md"))
+		data, err := v.Read(ReadingList(folder))
 		if err != nil {
 			continue
 		}
@@ -457,7 +465,7 @@ func readCopies(v *vault.Vault, folder string) ([]aCopy, error) {
 	return out, nil
 }
 
-// writeLedger writes checkout/Ledger.md from the reading lists. The folder being made
+// writeLedger writes the ledger from the reading lists. The folder being made
 // counts, though the index has not read it.
 func writeLedger(v *vault.Vault, tx *vault.Tx, _ string) error {
 	var b strings.Builder
@@ -469,7 +477,7 @@ func writeLedger(v *vault.Vault, tx *vault.Tx, _ string) error {
 			returned = vault.Day(e.Returned)
 		}
 		req := strings.ReplaceAll(e.Request, "|", "\\|")
-		fmt.Fprintf(&b, "| %s | [[%s/%s\\|%s]] | %d | %d | %s |\n", e.Date, e.Folder, ReadingList, req, e.Documents, e.Edited, returned)
+		fmt.Fprintf(&b, "| %s | [[%s\\|%s]] | %d | %d | %s |\n", e.Date, strings.TrimSuffix(ReadingList(e.Folder), ".md"), req, e.Documents, e.Edited, returned)
 	}
 	return tx.Write(path.Join(vault.Checkout, Ledger+".md"), []byte(b.String()))
 }
@@ -478,6 +486,8 @@ func writeLedger(v *vault.Vault, tx *vault.Tx, _ string) error {
 type Returned struct {
 	Change  *change.Preview `json:"change,omitempty"`
 	Skipped []string        `json:"skipped"`
+	// Warning says what went wrong after the change was proposed.
+	Warning string `json:"warning,omitempty"`
 }
 
 // Return turns the edited copies of a checkout into one proposed change of their
@@ -498,7 +508,7 @@ func Return(v *vault.Vault, key string, now time.Time) (*Returned, error) {
 	}
 	// A return proposes against each original as it was checked out. While that change
 	// is proposed or applied, the checkout is returned; a cancelled or undone one frees it.
-	if data, err := v.Read(path.Join(folder, ReadingList+".md")); err == nil {
+	if data, err := v.Read(ReadingList(folder)); err == nil {
 		if when := returned(v, doc.Parse("", data)); when != "" {
 			return nil, fmt.Errorf("%s was returned %s; check the documents out again to edit them further", folder, vault.Day(when))
 		}
@@ -532,13 +542,15 @@ func Return(v *vault.Vault, key string, now time.Time) (*Returned, error) {
 		}
 		return out, errors.New("no copy of " + folder + " was edited; there is nothing to return")
 	}
-	pv, err := change.Propose(v, change.Plan{Title: "Return " + name, Notes: "The edits made in the checkout [[" + path.Join(folder, ReadingList) + "|" + path.Base(folder) + "]].", Writes: writes}, now)
+	pv, err := change.Propose(v, change.Plan{Title: "Return " + name, Notes: "The edits made in the checkout [[" + strings.TrimSuffix(ReadingList(folder), ".md") + "|" + path.Base(folder) + "]].", Writes: writes}, now)
 	if err != nil {
 		return out, err
 	}
 	out.Change = pv
 	if err := markReturned(v, folder, pv.Ref.ID, now); err != nil {
-		return out, err
+		// The change exists; the user decides it in its document. Saying so beats an
+		// error that hides it.
+		out.Warning = "the change is proposed, but the checkout is not marked returned: " + err.Error()
 	}
 	return out, nil
 }
@@ -550,7 +562,7 @@ func markReturned(v *vault.Vault, folder, changeID string, now time.Time) (err e
 		return err
 	}
 	defer tx.End(&err)
-	rel := path.Join(folder, ReadingList+".md")
+	rel := ReadingList(folder)
 	data, err := v.Read(rel)
 	if err != nil {
 		return err

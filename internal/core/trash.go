@@ -36,6 +36,9 @@ func Trash(v *vault.Vault, name string, now time.Time) (*Trashed, error) {
 	if err := v.Contain(rel); err != nil {
 		return nil, err
 	}
+	// The rules and the index name the file as the disk does; a path in another case
+	// meets the same rules.
+	rel = v.Spelled(rel)
 	if why := trashRefusal(rel); why != "" {
 		return nil, fmt.Errorf("%s %s", rel, why)
 	}
@@ -71,7 +74,10 @@ func Trash(v *vault.Vault, name string, now time.Time) (*Trashed, error) {
 		if err != nil {
 			return nil, err
 		}
-		if pv, err = change.Apply(v, pv.Ref.ID, now, nil); err != nil {
+		id := pv.Ref.ID
+		if pv, err = change.Apply(v, id, now, nil); err != nil {
+			// The delete stops whole: no proposal of it stays behind.
+			change.Reject(v, id, "safe delete stopped: "+err.Error(), now)
 			return nil, err
 		}
 		for _, w := range pv.Writes {
@@ -109,18 +115,21 @@ func trashFile(v *vault.Vault, rel string, now time.Time) (_ string, err error) 
 // trashRefusal says why safe delete does not take a path, or "".
 func trashRefusal(rel string) string {
 	top, _, _ := strings.Cut(rel, "/")
+	is := func(names ...string) bool {
+		return slices.ContainsFunc(names, func(n string) bool { return strings.EqualFold(top, n) })
+	}
 	switch {
-	case rel == vault.Marker:
+	case strings.EqualFold(rel, vault.Marker):
 		return "is the vault's own document"
-	case top == vault.Obsidian || top == ".claude" || top == ".atlas":
+	case is(vault.Obsidian, ".claude", ".atlas"):
 		return "is a setting of the vault, not a note"
-	case top == vault.Changes || top == vault.Sessions:
+	case is(vault.Changes, vault.Sessions):
 		return "is a record that code keeps"
-	case top == vault.WikiView:
+	case is(vault.WikiView):
 		return "is a view, which code writes again from the documents"
-	case top == vault.Trash:
+	case is(vault.Trash):
 		return "is in the trash already; empty the trash to delete it"
-	case slices.Contains(shippedBases(), rel):
+	case slices.ContainsFunc(shippedBases(), func(b string) bool { return strings.EqualFold(b, rel) }):
 		return "is a Base that Atlas ships"
 	}
 	return ""

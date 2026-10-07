@@ -142,6 +142,7 @@ func TestGuardProtectsTheVault(t *testing.T) {
 		{"a shell change apply", bash(bin + " change apply X"), true},
 		{"a shell safe delete", bash(bin + " vault trash Notes.md"), true},
 		{"a shell publish", bash(bin + " journal publish cs566"), true},
+		{"a shell undo", bash(bin + " change undo chg-aaaaaa"), true},
 		{"a shell journal list", bash(bin + " journal list"), false},
 		{"a shell snapshot", bash(bin + " vault snapshot"), false},
 		{"a shell change apply with the 6.2 name", bash("~/.atlas/bin/atlas change apply X"), true},

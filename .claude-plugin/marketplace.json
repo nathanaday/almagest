@@ -6,14 +6,14 @@
   },
   "metadata": {
     "description": "Atlas: one Obsidian vault for the wiki, the sessions, and the changes of your work.",
-    "version": "10.4.0"
+    "version": "10.4.1"
   },
   "plugins": [
     {
       "name": "atlas-obsidian",
       "source": "./",
       "description": "One Obsidian vault for the wiki, the sessions, and the changes of your work, backed by the atlas-obsidian binary.",
-      "version": "10.4.0",
+      "version": "10.4.1",
       "category": "productivity"
     }
   ]

@@ -11,6 +11,7 @@ import (
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
+	"github.com/nathanaday/atlas-obsidian/internal/core"
 	"github.com/nathanaday/atlas-obsidian/internal/doc"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
 	"github.com/nathanaday/atlas-obsidian/internal/testvault"
@@ -117,6 +118,7 @@ func TestEveryToolAndAction(t *testing.T) {
 	c.call("checkout", map[string]any{"action": "make"}, true)
 	c.call("checkout", map[string]any{"action": "lend"}, true)
 	c.call("wikify", map[string]any{"action": "start", "note": "Nowhere.md"}, true)
+
 	c.call("wikify", map[string]any{"action": "mark", "note": "Notes.md", "marks": []any{map[string]any{"phrase": "x", "new": "X"}}}, true)
 	for _, gone := range []string{"thread", "chord"} {
 		if _, err := c.sess.CallTool(context.Background(), &mcp.CallToolParams{Name: gone, Arguments: map[string]any{}}); err == nil || !strings.Contains(err.Error(), "unknown tool") {
@@ -274,5 +276,23 @@ func TestTheServerTakesTheVaultFromAtlasVault(t *testing.T) {
 	}
 	if _, msg := connectWith("/no/such/vault").call("search", map[string]any{"text": "second vault"}, true); !strings.Contains(msg, "ATLAS_VAULT=/no/such/vault") {
 		t.Fatalf("a bad ATLAS_VAULT: %s", msg)
+	}
+}
+
+// An agent cannot undo the user's own act, such as a safe delete.
+func TestAnAgentCannotUndoTheUsersOwnAct(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("topic", "Old", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
+	tv.Commit()
+	res, err := core.Trash(tv.V, vault.DocPath("Old"), tv.Clock)
+	if err != nil || res.Change == nil {
+		t.Fatalf("the safe delete: %+v %v", res, err)
+	}
+	c := connect(t, tv, tv.V.Root)
+	if _, msg := c.call("change", map[string]any{"action": "undo", "id": res.Change.ID}, true); !strings.Contains(msg, "only the user undoes it") {
+		t.Fatalf("an agent's undo of a safe delete: %s", msg)
+	}
+	if tv.V.Exists(vault.DocPath("Old")) {
+		t.Fatal("the undo ran")
 	}
 }

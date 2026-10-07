@@ -34,11 +34,13 @@ func Start(v *vault.Vault, name string) (string, error) {
 	if err := v.Contain(rel); err != nil {
 		return "", err
 	}
+	rel = v.Spelled(rel)
 	top, _, _ := strings.Cut(rel, "/")
+	refused := func(n string) bool { return strings.EqualFold(top, n) }
 	switch {
 	case !strings.HasSuffix(strings.ToLower(rel), ".md"):
 		return "", fmt.Errorf("%s is no markdown note", rel)
-	case top == "source-core" || top == vault.Changes || top == vault.Sessions || top == vault.WikiView || top == vault.Trash || top == vault.Obsidian || rel == vault.Marker:
+	case refused(vault.Core) || refused(vault.Changes) || refused(vault.Sessions) || refused(vault.WikiView) || refused(vault.Trash) || refused(vault.Obsidian) || strings.EqualFold(rel, vault.Marker):
 		return "", fmt.Errorf("%s is code's or the wiki's; wikify takes a note of yours", rel)
 	}
 	unlock, err := v.Lock()
@@ -132,12 +134,12 @@ func Place(idx *vault.Index, note string, marks []Mark) (*Marked, error) {
 		case phrase == "" || strings.ContainsAny(phrase, "|{}\n"):
 			return nil, fmt.Errorf("%q: a phrase is words of one line, with no | or braces", phrase)
 		}
-		at := find(body, phrase)
+		at, end := find(body, phrase)
 		if at < 0 {
 			out.Missing = append(out.Missing, phrase)
 			continue
 		}
-		body = body[:at] + Text(kind, title, body[at:at+len(phrase)]) + body[at+len(phrase):]
+		body = body[:at] + Text(kind, title, body[at:end]) + body[end:]
 		out.Placed = append(out.Placed, phrase)
 	}
 	content := body
@@ -173,10 +175,11 @@ func resolve(idx *vault.Index, m Mark) (string, string, error) {
 	return "new", fresh, nil
 }
 
-// find is the byte offset of the first mention of phrase in body, as whole words and
+// find is the byte span of the first mention of phrase in body (its length may differ
+// from the phrase's, as case folding may match a letter of another width), as whole words and
 // without regard to case, outside headings, table rows (a mark's | would split a cell),
 // code, comments, links, URLs, and marks; or -1.
-func find(body, phrase string) int {
+func find(body, phrase string) (int, int) {
 	masked := links.Mask(body)
 	for _, re := range []*regexp.Regexp{markText, mdLink, urlText, headingLn, tableRow} {
 		masked = re.ReplaceAllStringFunc(masked, spaces)
@@ -187,10 +190,10 @@ func find(body, phrase string) int {
 	re := regexp.MustCompile(`(?i)` + regexp.QuoteMeta(phrase))
 	for _, loc := range re.FindAllStringIndex(masked, -1) {
 		if wordEdge(masked, loc[0], true) && wordEdge(masked, loc[1], false) {
-			return loc[0]
+			return loc[0], loc[1]
 		}
 	}
-	return -1
+	return -1, -1
 }
 
 // wordEdge reports whether offset i starts (or ends) a whole word.

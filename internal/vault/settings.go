@@ -170,9 +170,9 @@ func NoteTitle(rel string) string {
 
 // ObsidianSettings sets the two app settings a vault needs in .obsidian/app.json, and
 // keeps every other key: new attachments go to source-core/originals, unless the user
-// chose a folder, and wiki-view/ is among the excluded files, so the views stay out of
-// the graph and search. The values 9.0 wrote (wiki/assets, views/) give way to these. It
-// reports whether it wrote.
+// chose a folder, and wiki-view/ and trash/ are among the excluded files, so the views
+// and what safe delete removed stay out of the graph and search. The values 9.0 wrote
+// (wiki/assets, views/) give way to these. It reports whether it wrote.
 func ObsidianSettings(v *Vault) (bool, error) {
 	const legacyAssets, legacyViews = "wiki/assets", "views"
 	file := v.Abs(AppJSON)
@@ -203,9 +203,12 @@ func ObsidianSettings(v *Vault) (bool, error) {
 		settings["userIgnoreFilters"] = filters
 		changed = true
 	}
-	if !slices.ContainsFunc(filters, is(WikiView)) {
-		settings["userIgnoreFilters"] = append(filters, WikiView+"/")
-		changed = true
+	for _, dir := range []string{WikiView, Trash} {
+		if !slices.ContainsFunc(filters, is(dir)) {
+			filters = append(filters, dir+"/")
+			settings["userIgnoreFilters"] = filters
+			changed = true
+		}
 	}
 	if !changed {
 		return false, nil

@@ -1,6 +1,6 @@
 {
   "name": "atlas-obsidian",
-  "version": "10.4.0",
+  "version": "10.4.1",
   "description": "One Obsidian vault holds the wiki, the sessions, and the changes of your work. Agents start in the vault, work in the linked repositories, and write what they learn into the wiki through changes you approve. Fourteen skills on three nouns (atlas, repo, wiki), three read-only agents, and hooks that keep the rules and a document for every session. Pairs with the atlas-obsidian binary, which serves the nine tools.",
   "author": {
     "name": "nathanaday",
