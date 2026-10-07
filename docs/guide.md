@@ -33,8 +33,8 @@ request to the skill that does it.
   `scratchpad/`.
 - "Start agent" in Obsidian opens a terminal with your agent in the vault. The agent
   preferences choose the agent and the terminal (see
-  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
-  the open sessions and the ones that closed in the last two hours, with Resume.
+  [Agent preferences](#agent-preferences)). The Agents page of the palette shows the
+  open sessions and the ones that closed in the last two hours, with Resume.
 - "Ingest my files." Files you dropped in `ingest/` become cited wiki pages. The agent
   writes each step in one work document in `changes/`, then proposes the pages into the
   same document. You decide once, at the end.
@@ -360,6 +360,8 @@ The vault works without the plugin. With it, Obsidian adds:
     it, and starts an agent that reports into it.
   - **Wiki health**: **Run wiki lint** lists the first findings, and **Repair with an
     agent** starts a repair work document and an agent that proposes the repairs into it.
+    **Sync the vault** writes the views and the statuses again (the command "Sync the
+    vault" does the same).
   - **Journals**: each volume, marked "changed" when it has writing to publish.
     **Publish** runs `almagest journal publish`, then starts a work document and an agent
     that absorbs the edition. See [Journals](#journals).
@@ -367,8 +369,10 @@ The vault works without the plugin. With it, Obsidian adds:
     **Return** next to a checkout runs `almagest checkout return` and opens the change;
     it is on when a copy is edited and the checkout is not returned. See
     [Checkouts](#checkouts).
-  - **Agents**: the agents Almagest started and still work, **Start an agent**, and the
-    sessions pane.
+  - **Agents**: **Start an agent**, the agents Almagest started that still work, and the
+    agent sessions of the vault: the open ones, each with its state and its last progress
+    line, then the ones that closed in the last two hours, with **Resume**. A session
+    that needs you counts on the home row.
   - **This note**: **Wikify this note** (experimental) copies the open note to
     `scratchpad/`, opens the copy, and starts an agent that marks it (see
     [Wikify a note](#wikify-a-note-experimental)). **Safe delete this note**
@@ -392,10 +396,6 @@ The vault works without the plugin. With it, Obsidian adds:
 - **Quiet snapshots.** After two minutes with no file change, the plugin commits your
   edits to the vault's git history. Set the period in the Almagest settings; 0 turns it
   off. Every Almagest write also commits your edits first, so you need not commit by hand.
-- **The tag navigator** in the left sidebar (the command "Open the tag navigator"), which narrows the documents one tag at a
-  time.
-- **The sessions pane** in the right sidebar, with Resume, and the **Start agent**
-  command.
 - **The repository panel** in each repository document: the branch, the head, and the
   uncommitted files of the linked repository.
 - Colors and icons for the callouts of Almagest documents.

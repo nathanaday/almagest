@@ -85,8 +85,8 @@ you. Empty `trash/` yourself when you like.
 ### A light touch on Obsidian
 
 Installing Almagest does not change how your Obsidian looks or behaves. It adds its own
-callouts, widgets inside its documents, ribbon buttons, and panes of its own: the
-palette, a tag navigator, and a sessions pane. With the Duet plugin, the agents work in
+callouts, widgets inside its documents, and one pane of its own, the palette, with one
+ribbon button. With the Duet plugin, the agents work in
 Obsidian beside you; without it, they start in your terminal.
 
 ## Quickstart

@@ -43,7 +43,7 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A session records its agent's process and conversation.** The hooks walk up from
   their own process to the nearest `claude` or `codex` and keep its id in `pid`, and keep
   `transcript_path` in `transcript`. A sync ends a live session whose process is gone,
-  and the sessions pane shows a session as open only while its process runs. Resume
+  and the palette shows a session as open only while its process runs. Resume
   reads the conversation's first `cwd` and its config folder from the transcript, and
   finds the transcript of an older session by its id under `~/.claude*/projects/`.
 - **Resume names a config folder only when it is not `~/.claude`.** Claude Code keys its
@@ -494,7 +494,7 @@ plugin at the build under test: set `binaryPath` in the plugin's settings.
 Verified with Codex 0.155.1 in a scratch `CODEX_HOME` (2026-10-04): the plugin's server
 entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.md).
 
-Verified live in Obsidian (TESTED.md): Start agent, Resume from the sessions pane, and the
+Verified live in Obsidian (TESTED.md): Start agent, Resume from the palette, and the
 settings tab.
 
 Verified by script in a separate Obsidian: `obsidian-almagest`'s end-to-end suite builds
