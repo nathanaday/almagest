@@ -589,8 +589,10 @@ claude -p --continue "yes" --plugin-dir …     # the user's answer at a gate
 Work happens on `preview`. `main` takes changes only through a pull request from
 `preview` whose checks pass (a ruleset on GitHub), so `main` is always a release or a
 change that leaves the released binary as it is. The marketplace entry pins the plugin to
-its release tag (`source: github`, `ref`); Codex's local entry takes `main`, which is safe
-for that reason.
+its release tag (`source: url`, `url` over HTTPS, `ref`); Codex's local entry takes
+`main`, which is safe for that reason. Not `source: github`: Claude Code 2.1.293 clones it
+over SSH at `plugin update`, with no fallback to HTTPS as at `install`, so a user with no
+GitHub SSH key cannot update.
 
 To release X.Y.Z:
 

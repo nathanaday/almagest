@@ -273,7 +273,7 @@ func TestOneVersion(t *testing.T) {
 			Version string `json:"version"`
 			Source  struct {
 				Source string `json:"source"`
-				Repo   string `json:"repo"`
+				URL    string `json:"url"`
 				Ref    string `json:"ref"`
 			} `json:"source"`
 		} `json:"plugins"`
@@ -287,9 +287,11 @@ func TestOneVersion(t *testing.T) {
 				t.Errorf("the marketplace lists %s, the plugin is %s", p.Version, v)
 			}
 			// A user installs the release tag, whose GitHub release holds the pinned binaries,
-			// never a commit between releases.
-			if p.Source.Source != "github" || p.Source.Repo != "nathanaday/almagest" || p.Source.Ref != v {
-				t.Errorf("the marketplace entry must pin github nathanaday/almagest at the tag %s: %+v", v, p.Source)
+			// never a commit between releases. The source is a git URL over HTTPS: Claude Code
+			// clones a "github" source over SSH at an update (2.1.293), which fails for a user
+			// with no GitHub SSH key.
+			if p.Source.Source != "url" || p.Source.URL != "https://github.com/nathanaday/almagest.git" || p.Source.Ref != v {
+				t.Errorf("the marketplace entry must pin https://github.com/nathanaday/almagest.git at the tag %s: %+v", v, p.Source)
 			}
 		}
 	}
