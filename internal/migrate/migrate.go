@@ -230,7 +230,7 @@ func build(v *vault.Vault, r *Report) (*plan, error) {
 		}
 		after := rewriteRefs(ext, string(data))
 		if ext == ".md" {
-			after = shelf.relink(rel, after)
+			after = checkout.Rehash(string(data), shelf.relink(rel, after))
 		}
 		if vault.IsMarker(rel) {
 			after = doc.SetField(after, "layout", vault.Layout)

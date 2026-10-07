@@ -140,7 +140,8 @@ func TestMakeAndReturn(t *testing.T) {
 	if !strings.Contains(tv.Read(returned+"/Q-learning (checkout).md"), "My note on Q-learning.") {
 		t.Fatal("the left-out copy lost its edit")
 	}
-	if l := checkout.List(tv.V); len(l) != 1 || l[0].Status != "returned" || l[0].Folder != returned || l[0].Name != "RL" {
+	// The move of its links edits no copy: the two the user edited count, and the third does not.
+	if l := checkout.List(tv.V); len(l) != 1 || l[0].Status != "returned" || l[0].Folder != returned || l[0].Name != "RL" || l[0].Edited != 2 {
 		t.Fatalf("the list after the return: %+v", l)
 	}
 	if !strings.Contains(tv.Read(r.Change.Ref.Path), "[["+returned+"/_index|") {

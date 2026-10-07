@@ -356,6 +356,17 @@ func toWiki(text, folder string) string {
 	})
 }
 
+// Rehash keeps a copy that the user did not edit unedited after code changed its text,
+// such as its links at a move: when before's body is the body as checked out, after takes
+// its body's hash. An edited copy, or a note that is no copy, comes back as after.
+func Rehash(before, after string) string {
+	b, a := aCopy{d: doc.Parse("", []byte(before))}, aCopy{d: doc.Parse("", []byte(after))}
+	if before == after || b.d.Str("checkout_id") == "" || b.edited() {
+		return after
+	}
+	return doc.SetField(after, "checkout_hash", doc.ContentHash(a.body()))
+}
+
 // MoveLinks points every link to the path from, or into the folder from, at the same
 // place under to.
 func MoveLinks(text, from, to string) string {
@@ -642,7 +653,7 @@ func moveReturned(v *vault.Vault, folder, dest, changeID string, now time.Time) 
 		if err != nil {
 			return err
 		}
-		content := MoveLinks(string(data), folder, dest)
+		content := Rehash(string(data), MoveLinks(string(data), folder, dest))
 		if to == IndexPath(dest) {
 			content = doc.SetFields(content, []doc.Field{{Key: "status", Value: StatusReturned}, {Key: "returned", Value: vault.Stamp(now)}, {Key: "return_change", Value: changeID}})
 		}
