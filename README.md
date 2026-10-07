@@ -6,37 +6,28 @@
 
 > *Art by Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
 
-**Build a wiki with your coding agent, then actually read it, learn from it, and use it.**
+---
 
-Almagest turns an Obsidian vault into a knowledge base that Claude Code or Codex builds
-with you. The agent ingests your papers, notes, and code into a stable, cited wiki. The
-vault is laid out for you, the person who reads it, and every edit waits for your yes.
+# Build an LLM wiki you can actually use
 
-Status: early, in active development. macOS and Linux.
+**Why Almagest?**
 
-## Why Almagest
+_Another LLM second brain plugin? Another Karpathy wiki? Another Obsidian knowledge graph?_
 
-There are many LLM-wiki and second-brain projects. Most make it easy to build the wiki.
-But the result is structured for the LLM, and it soon overwhelms the person who owns it.
-You have built a large knowledge base, and the graph looks great. Now what?
+I know...
 
-Almagest is about the human side: understanding and working with what you built.
+There are thousands of LLM-wiki and second-brain projects, and most of them are pretty good. You can painlessly transform mountains of notes, documents, voice memos, and entire codebases into a gorgeous fabric of markdown documents, and all the wiki links work, and your obsidian knowledge graph has never been bigger. My LLM's seemed to enjoy it, but I found the end result overwhelming. I could not navigate, read, or orientate myself in my own knowledge base.
 
-- **A wiki you can read.** What you read lives in `wiki-view/`: a home page, a timeline,
-  a library, and a navigation page for each tag. What Almagest keeps for itself (the
-  documents the agent maintains, the session records, and the trash) lives in `tool/`,
-  which you need not open.
-- **A librarian.** Ask for the material on a subject, and an agent pulls together the
-  pages that serve your question, in reading order, for you to read and mark up.
-- **Your own words, kept.** Your journals are yours. Agents read them and never change
-  them, and an ingest never rewrites them. You publish a journal into the wiki when you
-  choose, and the wiki cites it by name and date.
-- **A vault that never feels fragile.** Agents generate many documents. Each edit to the
-  wiki arrives as a change you approve or cancel. Safe delete moves a file to `tool/trash/`
-  only when nothing links it, so nothing is lost by accident.
-- **One tool, done well.** Build the wiki, query it, and enjoy using it.
+Before I made Almagest, I spent more time building my knowledge base and admiring its complexity, and less time doing meaningful work with it.
+
+So yes, Almagest is another LLM wiki. But it's designed for the human side as well.
 
 ## Features
+
+### A view for Humans and a structure for Agents
+
+- The tool builds your `wiki-view`: a home page, timeline, library, and a navigation page for each tag.
+- All raw sources, change logs, etc., live under `tool/` which you don't need to open
 
 ### The tool palette
 
