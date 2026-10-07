@@ -38,6 +38,9 @@ Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
    callouts, the Approve and Cancel buttons in each change document, the Almagest palette
    (Ingest, Wiki lint, Journals, Checkouts, the agent sessions, and Safe delete), the
    repository panel, and quiet snapshots of the user's edits.
+   Recommend Duet too (obsidian://show-plugin?id=duet), and say it is optional: with
+   Duet, the agents that the palette starts work in a note of the vault; without it,
+   they start in a new terminal. The setting "Agent conversations" chooses.
 
 ## Gate
 

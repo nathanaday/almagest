@@ -1,6 +1,6 @@
 # Almagest
 
-![Ptolemy's geometric model](https://upload.wikimedia.org/wikipedia/commons/7/7b/Bartolomeu_Velho_1568.jpg)
+<img src="docs/Bartolomeu_Velho_1568.jpg" alt="Geocentric model of the universe" width="480">
 
 *Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
 
