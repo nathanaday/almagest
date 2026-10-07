@@ -228,11 +228,14 @@ func (s *Server) sourceTool(ctx context.Context, req *mcp.CallToolRequest, in So
 
 // ChangeIn is the change tool's input.
 type ChangeIn struct {
-	Action     string         `json:"action,omitempty" jsonschema:"show (the default), propose, apply, reject, or undo"`
+	Action     string         `json:"action,omitempty" jsonschema:"show (the default), start, progress, propose, apply, reject, or undo"`
 	Vault      string         `json:"vault,omitempty" jsonschema:"the vault, by path or by name from ~/.atlas/config.json; the session's vault when empty"`
-	ID         string         `json:"id,omitempty" jsonschema:"show, apply, reject, undo: the change (id or title)"`
+	ID         string         `json:"id,omitempty" jsonschema:"show, apply, reject, undo: the change (id or title); progress: the work document; propose: the running work document to fill, if the work started with start"`
+	Kind       string         `json:"kind,omitempty" jsonschema:"start: ingest or repair"`
+	Files      []string       `json:"files,omitempty" jsonschema:"start, kind ingest: the names of the files in ingest/ the work takes"`
+	Text       string         `json:"text,omitempty" jsonschema:"progress: the step just done, in one line"`
 	Reason     string         `json:"reason,omitempty" jsonschema:"reject: why, in one line"`
-	Title      string         `json:"title,omitempty" jsonschema:"propose: a short name; the file name and the commit subject"`
+	Title      string         `json:"title,omitempty" jsonschema:"propose, start: a short name; the file name and the commit subject"`
 	Notes      string         `json:"notes,omitempty" jsonschema:"propose: what the change does and why, and each skipped subject with its reason"`
 	Absorbs    []string       `json:"absorbs,omitempty" jsonschema:"propose: ids of the sources the change absorbs into the wiki"`
 	Supersedes string         `json:"supersedes,omitempty" jsonschema:"propose: a proposed change this one replaces"`
@@ -261,7 +264,11 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 		pv, err := change.Show(idx, in.ID)
 		return nil, pv, err
 	case "propose":
-		return done(change.Propose(v, change.Plan{Title: in.Title, Notes: in.Notes, Absorbs: in.Absorbs, Supersedes: in.Supersedes, NewTags: in.NewTags, Writes: in.Writes}, now))
+		return done(change.Propose(v, change.Plan{ID: in.ID, Title: in.Title, Notes: in.Notes, Absorbs: in.Absorbs, Supersedes: in.Supersedes, NewTags: in.NewTags, Writes: in.Writes}, now))
+	case "start":
+		return done(change.Start(v, change.StartIn{Title: in.Title, Kind: in.Kind, Files: in.Files}, now))
+	case "progress":
+		return done(change.Progress(v, in.ID, in.Text, now))
 	case "apply":
 		return done(change.Apply(v, in.ID, now, sessions.UserAnswered(v)))
 	case "reject":
@@ -269,7 +276,7 @@ func (s *Server) changeTool(ctx context.Context, req *mcp.CallToolRequest, in Ch
 	case "undo":
 		return done(change.Undo(v, in.ID, now))
 	}
-	return nil, nil, fmt.Errorf("change takes action show, propose, apply, reject, or undo, not %q", in.Action)
+	return nil, nil, fmt.Errorf("change takes action show, start, progress, propose, apply, reject, or undo, not %q", in.Action)
 }
 
 // LintIn is the lint tool's input.
@@ -303,7 +310,7 @@ func (s *Server) MCP() *mcp.Server {
 	mcp.AddTool(server, &mcp.Tool{Name: "source",
 		Description: "capture brings files from ingest/, pasted text, or a snapshot of a linked repository into source-core/documents as sources, with the originals in source-core/originals, as one commit (a source is pending until a change absorbs it); chunks splits any document for reading; read returns one chunk as a Text Blob (a PDF chunk names the file and pages to Read)."}, safe("source", s.sourceTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "change",
-		Description: "The only way knowledge changes: sources, repositories, and topics. propose validates a Wiki Change Plan (create, modify, rename, remove, confirm, retag) and writes a change document (no commit) for the user to review; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, safe("change", s.changeTool))
+		Description: "The only way knowledge changes: sources, repositories, and topics. start opens a work document (a running change for an ingest or a repair) that the user watches; progress adds one line of what was done to it; propose validates a Wiki Change Plan (create, modify, rename, remove, confirm, retag) and writes a change document, or fills the running one named by id (no commit), for the user to review; a remove moves the document to trash/; apply reads it again and makes one commit, only after the user's yes; reject records why; undo restores the change's paths; show previews one."}, safe("change", s.changeTool))
 	mcp.AddTool(server, &mcp.Tool{Name: "lint", Annotations: readOnly(),
 		Description: "The health check over every typed document, optionally the documents under tags: schema, duplicate titles, dead links, tag pages, repository paths, misplaced, untyped, and archived files; orphans, uncited and stale topics; near-duplicate tags, repositories behind, old pending sources and proposals. Each finding names its fix. Reads only."}, safe("lint", s.lintTool))
 	return server

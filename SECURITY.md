@@ -60,6 +60,15 @@ press Approve in the change document and apply it yourself.
   Obsidian. Approve runs that same command as you. Cancel runs `atlas-obsidian change
   reject`. A change that `atlas-obsidian change propose` writes from a terminal names no
   session, so only these two apply it.
+- A work document (a change with status `running`) holds no writes, and apply refuses
+  any change that is not proposed. The agent proposes into it later, and the gate above holds for that
+  proposal. Cancel on a running document rejects it, and the `change` tool then refuses
+  the agent's progress and proposal.
+- `atlas-obsidian vault trash` is your safe delete; the Obsidian plugin runs it as you.
+  It moves nothing while a file links the one you delete. A topic, a source, or a
+  repository leaves through a change that the command applies at once as your own
+  action, so the change records it and `change undo` brings it back. Any other file
+  moves to `trash/` in a commit of its own.
 
 ### An agent edits files that code owns
 
@@ -74,6 +83,7 @@ edit of:
 - `source-core/originals/`, and any other folder under `source-core/`.
 - `changes/` and `wiki-view/`, which code writes.
 - `journals/`: your own writing. No agent edits a file there.
+- `trash/`: what safe delete and a change's remove took out. You empty it.
 - `Atlas.md`, a `.base` file, and `.claude/settings.local.json`.
 - `sessions/`, except the Description, Progress, and Summary sections of the agent's own
   session document.
@@ -108,6 +118,7 @@ It refuses a command that runs one of these, as `atlas-obsidian` or under the ol
 - `change … apply`, which applies a change without the gate;
 - `hook`, which sends the binary a fake hook event, for example a fake prompt from you;
 - `vault … migrate`, which rewrites the whole vault;
+- `vault … trash`, your safe delete, which applies a remove without the gate;
 - `config set` or `config unset` of `terminal_command` or `agent_commands`, the commands
   that Atlas runs.
 
@@ -143,6 +154,8 @@ that writes the file.
   link out of the vault. Recovery removes files through `os.Root`, which refuses a path
   outside the vault.
 - Undo takes its paths from git history, not from frontmatter.
+- A change's remove deletes no file. Apply moves the document to
+  `trash/<date>/<its path>` and records that path for recovery; undo moves it back.
 - Before Atlas uses a title as a file name, it removes path separators, leading dots, and
   the characters that break a wikilink (`[ ] # ^`). Atlas builds a session file name from
   the date and a hex id.

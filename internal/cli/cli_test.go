@@ -361,3 +361,31 @@ func TestConfigHintsGlobalOnlyWhenNoVaultWasNamed(t *testing.T) {
 		t.Fatalf("an ATLAS_VAULT of spaces counts as unset, as vault.Select reads it: exit %d %s %s", code, out, errOut)
 	}
 }
+
+func TestWorkDocumentsAndSafeDeleteFromTheShell(t *testing.T) {
+	tv := testvault.New(t)
+	r := run{t: t, tv: tv}
+	tv.Write("ingest/paper.pdf", "%PDF")
+	tv.Doc("topic", "Kept", map[string]any{"kind": "concept"}, "")
+	tv.Write("Notes.md", "See [[Kept]].\n")
+	tv.Commit()
+	var started struct {
+		Ref struct{ ID, Path string } `json:"ref"`
+	}
+	if err := json.Unmarshal([]byte(r.ok("", "change", "start", "--kind", "ingest", "--file", "paper.pdf", "--json")), &started); err != nil || started.Ref.ID == "" {
+		t.Fatalf("start: %v %+v", err, started)
+	}
+	if out := r.ok("", "change", "progress", started.Ref.ID, "captured", "paper.pdf"); !strings.Contains(out, "running") {
+		t.Fatalf("progress:\n%s", out)
+	}
+	if !strings.Contains(tv.Read(started.Ref.Path), " captured paper.pdf\n") {
+		t.Fatalf("the progress line:\n%s", tv.Read(started.Ref.Path))
+	}
+	code, out, errOut := r.atlas("", "vault", "trash", vault.DocPath("Kept"))
+	if code != 2 || !strings.Contains(out, "Notes.md") || !strings.Contains(errOut, "links it") {
+		t.Fatalf("a linked topic: %d %s %s", code, out, errOut)
+	}
+	if out := r.ok("", "vault", "trash", "Notes.md"); !strings.Contains(out, "Moved Notes.md to trash/") {
+		t.Fatalf("a note:\n%s", out)
+	}
+}

@@ -30,8 +30,10 @@ const MaxWrites = 100
 
 // Plan is the model's proposal: the Wiki Change Plan.
 type Plan struct {
-	Title      string   `json:"title" jsonschema:"a short name: the file name of the change document and the commit subject"`
-	Notes      string   `json:"notes,omitempty" jsonschema:"what the change does and why, and every skipped subject with its reason; becomes the Notes section"`
+	Title string `json:"title" jsonschema:"a short name: the file name of the change document and the commit subject"`
+	Notes string `json:"notes,omitempty" jsonschema:"what the change does and why, and every skipped subject with its reason; becomes the Notes section"`
+	// ID names a running change, which the plan fills in place of a new document.
+	ID         string   `json:"id,omitempty" jsonschema:"the running change (a work document from change start) this plan fills; empty: a new change document"`
 	Absorbs    []string `json:"absorbs,omitempty" jsonschema:"ids of the sources this change absorbs into the wiki"`
 	Supersedes string   `json:"supersedes,omitempty" jsonschema:"a proposed change this one replaces"`
 	NewTags    bool     `json:"new_tags,omitempty" jsonschema:"allow tags no document holds, in tagging: known; set it only after the user agreed"`
@@ -51,6 +53,7 @@ type Write struct {
 	Body     *string        `json:"body,omitempty" jsonschema:"create, modify: the body below the lead callout; modify replaces the body only when given"`
 	From     string         `json:"from,omitempty" jsonschema:"retag: the tag to rename, with every tag below it"`
 	To       string         `json:"to,omitempty" jsonschema:"retag: the new tag; an existing tag merges"`
+	Why      string         `json:"why,omitempty" jsonschema:"one line: why this write, for the change's summary"`
 }
 
 // Ops a plan takes.
@@ -78,6 +81,8 @@ type op struct {
 	From, To  string // retag
 	Files     int    // retag: the files it rewrites
 	Rewrite   bool   // a modify the link or tag rewrite pass made
+	Why       string // the plan's reason for the write, for the summary
+	Trash     string // remove: where apply moves the document
 }
 
 // writesContent reports whether the op writes a whole file.
@@ -332,6 +337,11 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 	for i, w := range p.Writes {
 		if strings.ToLower(strings.TrimSpace(w.Op)) == OpCreate {
 			ops[i] = c.create(w)
+		}
+	}
+	for i, w := range p.Writes {
+		if ops[i] != nil {
+			ops[i].Why = doc.OneLine(strings.TrimSpace(w.Why), 160)
 		}
 	}
 	for i, w := range p.Writes {

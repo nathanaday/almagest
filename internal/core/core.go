@@ -51,9 +51,10 @@ type SessionLists struct {
 	Idle    []vault.Ref `json:"idle"`
 }
 
-// ChangeLists are the changes that wait, and the last applied.
+// ChangeLists are the changes that wait, the work that runs, and the last applied.
 type ChangeLists struct {
 	Proposed []vault.Ref `json:"proposed"`
+	Running  []vault.Ref `json:"running"`
 	Recent   []vault.Ref `json:"recent"`
 }
 
@@ -66,16 +67,18 @@ type IngestItem struct {
 
 // Status is the state of the vault in one read.
 type Status struct {
-	Vault     VaultInfo         `json:"vault"`
-	Documents map[string]int    `json:"documents"`
-	Topics    TopicCounts       `json:"topics"`
-	Tags      []TagCount        `json:"tags"`
-	Sessions  SessionLists      `json:"sessions"`
-	Ingest    []IngestItem      `json:"ingest"`
-	Pending   []vault.Ref       `json:"pending"`
-	Changes   ChangeLists       `json:"changes"`
-	Problems  int               `json:"problems"`
-	Versions  map[string]string `json:"versions,omitempty"`
+	Vault     VaultInfo      `json:"vault"`
+	Documents map[string]int `json:"documents"`
+	Topics    TopicCounts    `json:"topics"`
+	Tags      []TagCount     `json:"tags"`
+	Sessions  SessionLists   `json:"sessions"`
+	Ingest    []IngestItem   `json:"ingest"`
+	Pending   []vault.Ref    `json:"pending"`
+	Changes   ChangeLists    `json:"changes"`
+	// Trash counts the files in trash/.
+	Trash    int               `json:"trash"`
+	Problems int               `json:"problems"`
+	Versions map[string]string `json:"versions,omitempty"`
 }
 
 // Recent is how many applied changes the status lists.
@@ -92,7 +95,8 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 		Sessions:  SessionLists{Running: []vault.Ref{}, Waiting: []vault.Ref{}, Idle: []vault.Ref{}},
 		Ingest:    Ingest(v),
 		Pending:   idx.Refs(idx.PendingDocs()),
-		Changes:   ChangeLists{Proposed: []vault.Ref{}, Recent: []vault.Ref{}},
+		Changes:   ChangeLists{Proposed: []vault.Ref{}, Running: []vault.Ref{}, Recent: []vault.Ref{}},
+		Trash:     countFiles(v.Abs(vault.Trash)),
 	}
 	for _, t := range schema.DocumentTypes {
 		st.Documents[t] = 0
@@ -118,8 +122,11 @@ func StatusOf(idx *vault.Index, now time.Time) *Status {
 				st.Sessions.Idle = append(st.Sessions.Idle, ref)
 			}
 		case "change":
-			if d.Str("status") == "proposed" {
+			switch d.Str("status") {
+			case "proposed":
 				st.Changes.Proposed = append(st.Changes.Proposed, idx.Ref(d))
+			case "running":
+				st.Changes.Running = append(st.Changes.Running, idx.Ref(d))
 			}
 		}
 		if schema.IsDocument(d.Type()) {
@@ -173,6 +180,18 @@ func Ingest(v *vault.Vault) []IngestItem {
 		return nil
 	})
 	return out
+}
+
+// countFiles counts the files under root, but .DS_Store.
+func countFiles(root string) int {
+	n := 0
+	filepath.WalkDir(root, func(_ string, e fs.DirEntry, err error) error {
+		if err == nil && !e.IsDir() && e.Name() != ".DS_Store" {
+			n++
+		}
+		return nil
+	})
+	return n
 }
 
 func humanSize(n int64) string {

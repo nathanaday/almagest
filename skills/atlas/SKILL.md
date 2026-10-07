@@ -52,6 +52,25 @@ Tools: `vault`, `search`, `context`. References:
 A question can turn into work. When the user then asks for a change to a repository, do
 the work.
 
+## Messages from the palette
+
+The Atlas palette in Obsidian starts an agent with one of three messages. Each one names
+its skill, and two name a work document:
+
+| The message | Skill |
+|---|---|
+| `/atlas-obsidian:wiki-ingest Ingest the files of ingest/ … Your work document is [[…]] (<id>) …` | [wiki-ingest](../wiki-ingest/SKILL.md) |
+| `/atlas-obsidian:wiki-review …` with a repair work document | [wiki-review](../wiki-review/SKILL.md), its Repair path |
+| `/atlas-obsidian:wiki-edit Remove [[<title>]] …: point each backlink elsewhere …` | [wiki-edit](../wiki-edit/SKILL.md), its Safe delete path |
+
+The user decides in the document (Approve or Cancel), so these tasks do not stop for a
+yes before they propose. Ask the user only for a real edge case that the skill names.
+
+## The end of a task
+
+End each task with one or two lines: what was done, and the change or work document as
+a link. The documents hold the details; do not repeat them in the chat.
+
 ## Work in a repository
 
 1. Read what `context` returned for the repository in step 3: follow its `instructions`
@@ -75,7 +94,8 @@ goes in `ingest/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
 ## Status
 
 `vault` status gives the state of the vault. Say what waits for the user first: the
-proposed changes and the sessions that wait. Then the files in `ingest/`, the sources
+proposed changes and the sessions that wait. Then the running work documents
+(`changes.running`), the files in `ingest/`, the sources
 pending for the wiki, and the lint problems, each with the skill that handles it. The
 opening context names each repository that is behind its description
 ([repo-ingest](../repo-ingest/SKILL.md)).
@@ -86,6 +106,9 @@ opening context names each repository that is behind its description
   user's hand edits as quiet snapshots, and every write tool commits a snapshot first.
 - `journals/` holds the user's own writing. Read it when the request needs it; never
   edit a file there. The guard refuses every agent edit under `journals/`.
+- `trash/` holds what the user deleted. Never read or edit it, and never run
+  `atlas-obsidian vault trash`: safe delete is the user's action. The guard refuses
+  every agent edit under `trash/`.
 
 ## Gate
 

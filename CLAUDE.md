@@ -9,12 +9,16 @@ say.
 `source-core/documents/`, `wiki/assets/` became `source-core/originals/`, `inbox/` became
 `ingest/`, and `views/` became `wiki-view/` (tag views in `wiki-view/nav/`). It added
 `journals/`, the user's own writing, and reserved `checkout/` and `trash/` for later
-releases. It removed `@atlas` mentions and every patch the Obsidian plugin made on
+releases (10.1 uses `trash/`). It removed `@atlas` mentions and every patch the Obsidian plugin made on
 Obsidian's own interface: file explorer badges, graph colors, view folders, the change
 bar, and mention marks. A widget inside the change document replaced the change bar. The
 plan is `scratchpad/Atlas 10 Strategy.md` in the SoftwareProjects vault.
 `atlas-obsidian vault migrate` takes a 9.0 or 8.x vault to 10.0 in one commit
 (`internal/migrate`: `v9.go` is the step from 8.x, `v10.go` the step from 9.0).
+
+10.1.0 added the tool palette (a custom view in the right sidebar), the work document,
+the change Summary, and safe delete with `trash/`. The contract is the phase 1 section
+of the same strategy note.
 
 Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
 editor, and Atlas does not copy its code. Two copies would bind two Yjs hubs to one
@@ -177,10 +181,48 @@ The design pages are the spec. When the code departs from them, the reason is be
   `supersedes`. A live session without a prompt gets the plain "wait for the yes".
 - **The change widget holds no data.** Every change document that code writes holds an
   empty `atlas-change` block right after its lead callout (`change.Widget`). The plugin
-  draws it from the note's frontmatter: Approve and Cancel while `proposed`, a line for
-  `applying`, and the result for `applied`, `rejected`, `superseded`, and `undone`.
+  draws it from the note's frontmatter: the kind, the last progress line, and Cancel
+  while `running`; Approve and Cancel while `proposed`; a line for `applying`, and the result for `applied`, `rejected`, `superseded`, and `undone`.
   Approve saves the open note, then runs `change apply`; Cancel runs `change reject`,
   and an empty reason becomes "cancelled in Obsidian". The body stays the record.
+- **A work document is a change that starts before its writes.** `change start` (MCP
+  action `start`) writes a change with status `running`, a `kind` (`ingest` or
+  `repair`), `files` (the names in `ingest/`, each checked by `Vault.IngestFile`), and
+  the sections Files, Progress, Notes, Absorbed, and Writes. It commits nothing, and the
+  touched hook links it to the session as it does a proposal. `change progress` adds
+  `- HH:MM text` under `## Progress`, cut to 200 characters (`MaxProgress`). `propose`
+  with `id` (`Plan.ID`) writes the plan into that document: it keeps `created`, `kind`,
+  `files`, `session`, `## Files`, and `## Progress`, and sets `proposed`. Progress and a
+  proposal into a change that is not running refuse (`running`); a rejected one says
+  "the user cancelled <title> (<reason>); stop the work", which the skills obey at once.
+  `reject` takes a running change too: the widget's Cancel. Apply still takes only a
+  proposed change.
+- **Every proposed change has a `## Summary`**, which code writes below the widget from
+  the plan: one line per write, with the write's optional `why` (`Write.Why`, cut to
+  160 characters). It links only the documents the change leaves in place: a removed
+  title and the old title of a rename are plain text. Lint skips dead links in a change
+  that is neither `proposed` nor `running`, since such a record may name a document a
+  later change removed. Every change document carries `cssclasses: [atlas-change]`
+  (`change.CSSClass`), and the lead callout comes from the frontmatter (`leadFor`).
+- **A remove moves the document to `trash/`.** Apply picks the place with
+  `vault.TrashPath` (`trash/<date>/<vault path>`, with " (2)" before the extension when
+  the place is taken) and lists it in `paths`, so recovery and undo cover it: undo puts
+  the document back and takes the trash copy away. The preview's write carries the
+  place in `trash`.
+- **Safe delete is the user's** (`core.Trash`, `vault trash PATH`, CLI only; the plugin
+  runs it). `Index.Backlinks` counts every typed document, note, and misplaced document,
+  and the markdown kept as link targets only (the scratchpad, `threads/`, `journals/`,
+  `checkout/`), by frontmatter links and body links. The records (changes and
+  sessions) do not count: they name what they touched and keep the name after a delete. With backlinks it moves nothing and exits 2 (`exitError`), after it prints
+  them (JSON `{"trash": {"path", "backlinks", "moved"}}`). A knowledge document with
+  none leaves through a change ("Delete <title>", one remove) that it applies at once
+  with no gate, so the record and undo are a change's; any other file moves in a commit
+  `trash: <path>`. It refuses `Atlas.md`, `.obsidian/`, `.claude/`, `.atlas/`,
+  `changes/`, `sessions/`, `wiki-view/`, `trash/`, a shipped Base, a folder, and a path
+  outside the vault. The index skips `trash/`, and the guard refuses agent edits in it.
+- **Status shows the work and the trash.** `vault --json` adds `changes.running` (the
+  running work documents) and `trash` (the count of files under `trash/`, `.DS_Store`
+  aside). Home lists each running work document with what waits.
 - **The plugin commits hand edits as quiet snapshots.** After `snapshotQuietSeconds`
   (default 120; 0 turns it off) with no create, modify, delete, or rename outside the
   config folder and `wiki-view/`, it runs `vault snapshot`, which commits every hand
@@ -192,10 +234,10 @@ The design pages are the spec. When the code departs from them, the reason is be
   state.
 - **The Obsidian plugin touches only what it owns.** It adds custom views, ribbon
   buttons, commands, in-document widgets (code block processors), and CSS for its own
-  callouts and widgets. It patches no pane of Obsidian's own and styles none. Two parts
-  sit outside that list: a status bar item with the count of waiting sessions, and the
-  `tagClick` setting (off by default), whose click listener on the document opens a
-  clicked `#tag` in the navigator.
+  callouts and widgets. It patches no pane of Obsidian's own and styles none. 10.1
+  removed its last two exceptions, the status bar item and the `#tag` click listener;
+  the palette shows what the status bar showed. A change note's `cssclasses` value
+  (`atlas-change`) styles the note itself, so the widget's class is `atlas-change-card`.
 - **Times carry seconds.** `proposed` and `last_prompt` are `2006-01-02T15:04:05`. With
   minutes, a yes typed in the minute of the proposal would not open the gate.
 - **The gate counts only the user's turns.** A host sends a subagent's hand-back and a
@@ -214,9 +256,9 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Shell writes reach the record, not the guard.** The touched hook adds a repository to the session's `repositories` when a Bash
   command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or names
   it. The skills tell the agent to change files with Edit and Write.
-- **The shell runs neither the apply command of `change`, `vault migrate`, nor
-  `atlas-obsidian hook`.** The guard refuses them, in every folder: two skip the gate,
-  the other forges a user's turn. It is no sandbox; a shell can still write any file. To
+- **The shell runs neither the apply command of `change`, `vault migrate`, `vault
+  trash`, nor `atlas-obsidian hook`.** The guard refuses them, in every folder: three
+  skip the gate, the other forges a user's turn. It is no sandbox; a shell can still write any file. To
   try one by hand from a session, type the command with `!`. `shellCommands`
   (`internal/hooks/shell.go`) reads the line as bash and zsh do: quotes, `$'…'` escapes
   (`\x{…}` too), backslashes and backslash-newlines, brace lists and ranges,

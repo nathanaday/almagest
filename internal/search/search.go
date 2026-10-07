@@ -36,9 +36,9 @@ const (
 type Query struct {
 	Text       string   `json:"text,omitempty" jsonschema:"free text; may be empty when the filters say enough"`
 	Types      []string `json:"types,omitempty" jsonschema:"document types: source, repository, topic; or session, change. Empty: the three document types"`
-	Kinds      []string `json:"kinds,omitempty" jsonschema:"topic kinds: concept, entity, policy, overview"`
+	Kinds      []string `json:"kinds,omitempty" jsonschema:"kinds by type: topic: concept, entity, policy, overview; change: ingest, repair"`
 	Tags       []string `json:"tags,omitempty" jsonschema:"a document must hold every one of these tags, or a tag below it"`
-	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep, by type: source: pending, absorbed; topic: draft, stable, contested, deprecated; session: running, waiting, idle, ended, lost; change: proposed, applying, applied, rejected, superseded, undone"`
+	Status     []string `json:"status,omitempty" jsonschema:"the statuses to keep, by type: source: pending, absorbed; topic: draft, stable, contested, deprecated; session: running, waiting, idle, ended, lost; change: running, proposed, applying, applied, rejected, superseded, undone"`
 	Repository string   `json:"repository,omitempty" jsonschema:"only documents that name this repository or hold its tag, by id or title"`
 	Limit      int      `json:"limit,omitempty" jsonschema:"at most this many hits; 20 when 0"`
 }

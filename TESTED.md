@@ -92,7 +92,7 @@ PATH=/usr/local/bin:/usr/bin:/bin CODEX_HOME=… CLAUDE_CONFIG_DIR=<empty folder
 ## Obsidian end-to-end tests
 
 Date: 2026-10-06. Obsidian 1.14.4 (the app update, over the 1.8.7 installer), macOS
-(Darwin 25.6.0), Go 1.24.2, Node 22.14.0. Atlas 10.0.0: the working tree over `fbf8e52`.
+(Darwin 25.6.0), Go 1.24.2, Node 22.14.0. Atlas 10.1.0: the working tree over `0bf49a6`.
 
 `cd obsidian && npm run test:obsidian` builds the plugin, builds `atlas-obsidian` from
 this checkout into a temporary folder, and runs `test/obsidian/plugin.test.ts`. Each test
@@ -101,7 +101,7 @@ harness copies `obsidian/dist` over the plugin that `vault init` installs, and s
 `binaryPath` to the built binary. Then it starts a separate Obsidian with a temporary
 profile (`--user-data-dir`) and drives it with Playwright over the DevTools protocol. The
 user's Obsidian, `~/.atlas`, and vaults stay as they are. `npm test` does not need
-Obsidian. The suite takes 24 to 26 seconds. It passed three runs in a row.
+Obsidian. The suite takes 40 to 44 seconds. It passed three runs in a row.
 
 | Test | What it proves |
 | ---- | -------------- |
@@ -112,10 +112,19 @@ Obsidian. The suite takes 24 to 26 seconds. It passed three runs in a row.
 | Cancels a change | In reading view, Cancel opens the modal. The reason typed there goes into `reason`, the status becomes `rejected`, and no topic file is written. The widget shows "Rejected: <reason>". |
 | Quiet snapshots | With `snapshotQuietSeconds: 2`, a note is created and then changed through `app.vault`. One second after each edit, git holds no snapshot, so each edit starts the quiet period again. Then one commit "snapshot: N files edited by hand" holds the last text, and the tree is clean. In some runs the `vault sync --views` that the same edit starts holds the lock; the snapshot then runs again after the next quiet period, as designed. |
 | Offers the migration | In a vault with `layout: 5`, the notice names the 9.0 layout. "Show the migration" opens the dry run in the modal. Migrate sets `layout: 6` and commits `layout: migrate to 10.0`. |
+| Opens the palette | The ribbon has one button named "Atlas". The command "Open the Atlas palette" opens the palette in the right sidebar. With two files in `ingest/`, the Ingest row says "2 files", the list names both files, and the button says "Ingest 2 files". The status bar holds no Atlas item. |
+| Ingest without Duet | The terminal setting is `custom`, with a command that writes the command it gets to a file, so no terminal opens. Ingest runs `change start`: one running work document of kind `ingest` with the file in `files`. Obsidian opens that document. The notice says that Duet runs the agents in Obsidian. The command is `cd '<vault>' && claude '<message>'`, with the ingest message that names the document's title and id. The palette lists the running work. |
+| Ingest through Duet's API | A stand-in for Duet's API (version 1) records each call. Ingest calls `newConversation` once, with the ingest message, the title "Agent · <document title>", and `loadUserSetup: true`, and shows no notice about Duet. The palette lists the conversation under Running; the end of its turn takes it off. |
+| Running work document | `change start --kind repair` from the CLI. In live preview, the widget shows Running, the kind, "The agent starts.", and Cancel only. The note has the cssclass `atlas-change`, and the lead callout is hidden. After two `change progress` calls, the widget shows the last one with its time. Cancel with no reason sets `status: rejected` and `reason: cancelled in Obsidian`, and the widget shows the result. |
+| Safe delete, no backlinks | Safe delete of the open `scratchpad/` note moves it to `trash/<date>/scratchpad/`, in the commit `trash: <path>`. The notice names both paths, and the palette's Trash row says "1 file". |
+| Safe delete, backlinks | A topic that another topic links stays where it is, and no `trash/` folder appears. The modal "Beta stays" lists the backlinks. "Resolve with an agent" (Duet absent) starts the agent in the terminal stand-in with the wiki-edit message, which names the topic, its path, and `[[Alpha]]`. |
 
 Found with these tests (harness only, not Atlas): Obsidian ignores SIGTERM for about one
 second after it starts, so the harness kills Obsidian when it deletes the profile. It uses
-SIGTERM only for a restart, which must keep the profile. A large vault (6,000 notes still
+SIGTERM only for a restart, which must keep the profile. A `vault sync --views` that the
+plugin started can still write in the vault after Obsidian stops, so the harness retries
+the delete of the test folder. The same sync may commit a snapshot after a trash commit,
+so the safe delete test reads the commit of the moved path, not the last commit. A large vault (6,000 notes still
 in the index queue at load) still gave the right layout notice.
 
 ## How to test a setup

@@ -86,6 +86,20 @@ func ReservedTitle(title string) bool {
 	return false
 }
 
+// TrashPath is where the trash keeps a file of the vault removed now: under the day, at
+// its vault path, with a number before the extension when that place is taken on disk or
+// in taken, which it marks.
+func TrashPath(v *Vault, rel string, now time.Time, taken map[string]bool) string {
+	ext := path.Ext(rel)
+	base := Trash + "/" + Date(now) + "/" + strings.TrimSuffix(rel, ext)
+	out := base + ext
+	for n := 2; v.Exists(out) || taken[strings.ToLower(out)]; n++ {
+		out = fmt.Sprintf("%s (%d)%s", base, n, ext)
+	}
+	taken[strings.ToLower(out)] = true
+	return out
+}
+
 // DocPath is where a document with a title lives.
 func DocPath(title string) string { return Documents + "/" + title + ".md" }
 

@@ -130,6 +130,18 @@ func TestEveryToolAndAction(t *testing.T) {
 		t.Fatalf("propose %v", pv)
 	}
 	c.call("change", map[string]any{"id": id}, false)
+	work, _ := c.call("change", map[string]any{"action": "start", "kind": "repair", "title": "Repair links"}, false)
+	workID := dig(work, "ref", "id").(string)
+	if dig(work, "status") != "running" {
+		t.Fatalf("start %v", work)
+	}
+	if p, _ := c.call("change", map[string]any{"action": "progress", "id": workID, "text": "read the lint findings"}, false); dig(p, "status") != "running" {
+		t.Fatalf("progress %v", p)
+	}
+	c.call("change", map[string]any{"action": "reject", "id": workID, "reason": "not now"}, false)
+	if _, msg := c.call("change", map[string]any{"action": "progress", "id": workID, "text": "more"}, true); !strings.Contains(msg, "stop the work") {
+		t.Fatalf("progress after cancel: %s", msg)
+	}
 	// The model's apply waits for the user of the session that proposed the change, even
 	// from outside the vault and by another name for the change.
 	path := dig(pv, "ref", "path").(string)

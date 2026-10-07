@@ -126,6 +126,8 @@ func commandRefusal(words []string) string {
 			return "apply a change with the change tool after the user's yes; the user can also press Approve in the change document in Obsidian, or run the command with !"
 		case rest[0] == "config" && (slices.Contains(rest[1:], "set") || slices.Contains(rest[1:], "unset")) && slices.ContainsFunc(rest[1:], func(w string) bool { return w == "terminal_command" || strings.HasPrefix(w, "agent_commands") }):
 			return "terminal_command and agent_commands are the commands Atlas runs, so only the user sets them: in the Atlas settings in Obsidian, or by typing the command with !"
+		case rest[0] == "vault" && slices.Contains(rest[1:], "trash"):
+			return "safe delete is the user's act: it applies a remove at once, with no yes; propose a remove with the change tool, or ask the user to press Safe delete in the Atlas palette"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
 			return "the migration rewrites the whole vault, so only the user runs it: ask the user to type atlas-obsidian vault migrate, or run it with !"
 		}
@@ -194,6 +196,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " lists the linked repositories; vault sync keeps it"
 	case under(vault.Sessions):
 		return sessionRefusal(v, in, f, rel)
+	case under(vault.Trash):
+		return rel + " is in the trash, which holds what the user deleted; the user empties it"
 	case under(vault.Journals):
 		return rel + " is in a journal, the user's own writing, which no agent changes; a journal reaches the wiki when the user publishes it"
 	}

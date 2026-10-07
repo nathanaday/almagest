@@ -6,9 +6,11 @@ description: "The health of the wiki. Quick: the deterministic checks of lint, r
 # wiki-review
 
 Lint finds what code can check. Deep review sends readers for what it cannot. This
-skill writes nothing; each finding names the skill that fixes it.
+skill writes nothing; each finding names the skill that fixes it. The one exception is
+the repair path: the palette in Obsidian starts a repair work document, and this skill
+proposes the repairs into it.
 
-Tools: `lint`, `vault`. Agents: [wiki-audit](../../agents/wiki-audit.md).
+Tools: `lint`, `vault`, `change` (progress, propose, on the repair path). Agents: [wiki-audit](../../agents/wiki-audit.md).
 
 ## Procedure
 
@@ -38,9 +40,29 @@ Tools: `lint`, `vault`. Agents: [wiki-audit](../../agents/wiki-audit.md).
    - `archived` → the user moves the file into `threads/`: a thread document of
      Atlas 8.x, which 9.0 does not read.
 
+## Repair
+
+The palette's "Repair with an agent" message names a repair work document: "Your work
+document is [[…]] (<id>)".
+
+1. Call `lint`. Report the counts with `change` `action: progress` ("lint: 2 errors,
+   5 warnings; 6 findings a change repairs").
+2. Take every finding a change repairs (the knowledge findings and `tag-near` of step
+   4), and build one plan with the procedure of [wiki-edit](../wiki-edit/SKILL.md), with
+   a `why` on every write. Do not stop to ask which findings to repair. List in the
+   plan's `notes` the findings that need another skill or the user, each with its fix.
+   Report "drafted N writes".
+3. Propose with `change` `action: propose` and `id` set to the work document.
+4. When no finding is one a change repairs, end the work document with `change`
+   `action: reject` and the reason ("lint found nothing a change repairs").
+
+When `progress` or `propose` refuses with "the user cancelled …; stop the work", stop at
+once and say in one line that the user cancelled the repair.
+
 ## Gate
 
-None. The skill writes nothing.
+None, except on the repair path: the gate of [wiki-edit](../wiki-edit/SKILL.md). End
+each task with one or two lines; on the repair path, name the work document.
 
 ## Hand off
 

@@ -227,6 +227,8 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
 - `scratchpad/`: your notes, and the ideas you ask an agent to note for later.
 - `journals/`: your own writing. No agent edits it.
 - `sessions/` and `changes/`: the session and change documents.
+- `trash/`: what safe delete and a change's remove took out, under
+  `trash/<date>/<old path>`. Git keeps it. Empty it yourself.
 - `wiki-view/`: the notes that code writes for reading. Each sync writes them again.
 - `threads/`, in a vault that the 9.0 migration moved: the thread and chord documents of
   8.x.
@@ -242,8 +244,8 @@ Besides `source-core/documents/`, Atlas writes these files and folders in a vaul
   shares it; see [SECURITY.md](SECURITY.md).
 
 Search and lint skip `scratchpad/`, `journals/`, and `threads/`, but a link to a note
-there still resolves. Atlas also reserves `checkout/` and `trash/`; search and lint skip
-both.
+there still resolves. Atlas skips `trash/` entirely, and reserves `checkout/` for a later
+release.
 
 ## Usage
 
@@ -268,11 +270,21 @@ request.
   preferences choose the agent and the terminal (see
   [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
   the open sessions and the ones that closed in the last two hours, with Resume.
-- "Ingest my files." Files you dropped in `ingest/` become cited wiki pages.
-- "What waits for me?" The agent lists the proposed changes, the files in `ingest/`, and
-  the sources that wait for the wiki.
+- "Ingest my files." Files you dropped in `ingest/` become cited wiki pages. The agent
+  writes each step in one work document in `changes/`, then proposes the pages into the
+  same document. You decide once, at the end.
+- "What waits for me?" The agent lists the proposed changes, the running work
+  documents, the files in `ingest/`, and the sources that wait for the wiki.
+- The Atlas palette in Obsidian starts an ingest, a wiki lint, or a safe delete with one
+  button. See [The Obsidian plugin](#the-obsidian-plugin).
 - "What do we know about my cs513 self-driving project?" The agent searches the
   documents that hold both tags.
+
+A **work document** is a change document that starts before the agent knows its writes.
+Its status is `running`. The agent adds one line under `## Progress` for each step
+(captured, extracted 9 of 12 chunks, matched, drafted), then proposes its writes into it.
+A proposed change opens with a `## Summary`: one line per write, with the reason. Cancel
+on a running document stops the agent.
 
 The same actions work from a shell:
 
@@ -280,6 +292,9 @@ The same actions work from a shell:
 atlas-obsidian vault                      # the state of the vault
 atlas-obsidian search "remote update" --tag work/p3
 atlas-obsidian change show chg-r8m3tb     # a proposed change
+atlas-obsidian change start --kind ingest --file paper.pdf   # a work document for an ingest
+atlas-obsidian change progress chg-r8m3tb "captured 1 source"  # a step, in one line
+atlas-obsidian vault trash scratchpad/Draft.md   # safe delete; exits 2 when files link it
 atlas-obsidian lint                       # the health check
 atlas-obsidian vault snapshot             # commit your hand edits now
 ```
@@ -293,9 +308,27 @@ under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
 
 The vault works without the plugin. With it, Obsidian adds:
 
+- **The Atlas palette** in the right sidebar (the Atlas ribbon button, or the command
+  "Open the Atlas palette"). It shows the proposed changes, the running work documents,
+  the files in `ingest/`, the pending sources, the live sessions, the files in `trash/`,
+  and the lint problems. Its actions:
+  - **Ingest** starts a work document for the files in `ingest/`, opens it, and starts
+    an agent that reports into it.
+  - **Wiki lint** runs `lint` and lists the first findings. **Repair with an agent**
+    starts a repair work document and an agent that proposes the repairs into it.
+  - **Safe delete this file** runs `atlas-obsidian vault trash` on the open file. When
+    no file links it, the file moves to `trash/`; a topic, a source, or a repository
+    leaves through a change that applies at once, so `change undo` brings it back. When files
+    link it, nothing moves, and a list of the links offers **Resolve with an agent**:
+    the agent points each link elsewhere and proposes the remove.
+
+  The palette starts an agent through the Duet plugin. Without Duet, it starts your
+  agent in a terminal (see [Agent preferences](#agent-preferences)) with the same
+  message.
 - **Approve and Cancel** in each change document. Approve applies the change, as
   `atlas-obsidian change apply` does in a terminal. Cancel asks for an optional reason
-  and rejects the change. After the decision, the document shows the result.
+  and rejects the change. After the decision, the document shows the result. A running
+  work document shows its kind, its last progress line, and Cancel.
 - **Quiet snapshots.** After two minutes with no file change, the plugin commits your
   edits to the vault's git history. Set the period in the Atlas settings; 0 turns it
   off. Every Atlas write also commits your edits first, so you need not commit by hand.

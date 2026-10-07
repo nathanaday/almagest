@@ -216,7 +216,9 @@ var Types = []*Type{
 		Field{Name: "transcript", Kind: Text, Owner: Code},
 	), Sections: []string{"Description", "Progress", "Summary", "Subagents"}},
 	{Name: "change", Prefix: "chg", Family: Record, Folder: "changes", Fields: record(
-		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"proposed", "applying", "applied", "rejected", "superseded", "undone"}},
+		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"running", "proposed", "applying", "applied", "rejected", "superseded", "undone"}},
+		Field{Name: "kind", Kind: Enum, Owner: Code, Values: []string{"ingest", "repair"}},
+		Field{Name: "files", Kind: List, Owner: Code},
 		Field{Name: "absorbs", Kind: Links, Owner: Code},
 		Field{Name: "proposed", Kind: Time, Owner: Code},
 		Field{Name: "session", Kind: Link, Owner: Code, Targets: []string{"session"}},
@@ -226,7 +228,7 @@ var Types = []*Type{
 		Field{Name: "supersedes", Kind: Link, Owner: Code, Targets: []string{"change"}},
 		Field{Name: "reason", Kind: Text, Owner: Code},
 		Field{Name: "paths", Kind: List, Owner: Code},
-	), Sections: []string{"Notes", "Absorbed", "Writes"}},
+	), Sections: []string{"Summary", "Files", "Progress", "Notes", "Absorbed", "Writes"}},
 }
 
 var byName = func() map[string]*Type {

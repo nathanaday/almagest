@@ -182,10 +182,13 @@ func (r *renderer) home() string {
 	for _, d := range idx.Documents() {
 		counts[d.Type()]++
 	}
-	var proposed, waiting, live []*doc.Doc
+	var proposed, running, waiting, live []*doc.Doc
 	for _, c := range idx.Of("change") {
-		if c.Str("status") == "proposed" {
+		switch c.Str("status") {
+		case "proposed":
 			proposed = append(proposed, c)
+		case "running":
+			running = append(running, c)
 		}
 	}
 	for _, s := range idx.Of("session") {
@@ -210,6 +213,9 @@ func (r *renderer) home() string {
 	var wait []string
 	for _, c := range proposed {
 		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · proposed change · "+c.Str("counts"))
+	}
+	for _, c := range running {
+		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · "+cmp.Or(c.Str("kind"), "work")+" running")
 	}
 	for _, s := range waiting {
 		wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))

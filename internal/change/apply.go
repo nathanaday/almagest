@@ -1,6 +1,7 @@
 package change
 
 import (
+	"cmp"
 	"errors"
 	"fmt"
 	"io/fs"
@@ -50,6 +51,8 @@ type WriteLine struct {
 	Path  string   `json:"path,omitempty"`
 	Lines string   `json:"lines,omitempty"`
 	Note  string   `json:"note,omitempty"`
+	// Trash is where a remove puts the document.
+	Trash string `json:"trash,omitempty"`
 }
 
 // Propose validates a plan and writes its change document. It commits nothing; the next
@@ -71,13 +74,24 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 	if err != nil {
 		return nil, err
 	}
+	var work *doc.Doc
+	if strings.TrimSpace(plan.ID) != "" {
+		if work, err = running(idx, plan.ID); err != nil {
+			return nil, err
+		}
+	}
 	p, err := validate(idx, plan, now)
 	if err != nil {
 		return nil, err
 	}
-	id := doc.NewID("chg", func(s string) bool { return idx.ByID(s) != nil })
-	rel := freePath(idx, now, p.Title)
-	content := renderDocument(p, id, now)
+	var id, rel string
+	if work != nil {
+		id, rel = work.ID(), work.Path
+	} else {
+		id = doc.NewID("chg", func(s string) bool { return idx.ByID(s) != nil })
+		rel = freePath(idx, now, p.Title)
+	}
+	content := renderDocument(p, id, now, work, current(idx))
 	if err := v.Write(rel, []byte(content)); err != nil {
 		return nil, err
 	}
@@ -96,6 +110,123 @@ func Propose(v *vault.Vault, plan Plan, now time.Time) (*Preview, error) {
 		return nil, readBack(v, rel)
 	}
 	return preview(idx, d, p.Ops, outsideRefs(idx, p.Outside), p.Warnings, current(idx)), nil
+}
+
+// running resolves a work document that is still running, or says why it is not.
+func running(idx *vault.Index, key string) (*doc.Doc, error) {
+	d, err := idx.ResolveType(key, "change")
+	if err != nil {
+		return nil, err
+	}
+	switch s := d.Str("status"); s {
+	case Running:
+		return d, nil
+	case Rejected:
+		return nil, fmt.Errorf("the user cancelled %s (%s); stop the work", vault.Title(d), cmp.Or(d.Str("reason"), "no reason given"))
+	default:
+		return nil, fmt.Errorf("%s is %s, not running; a work document takes progress and a proposal only while it runs", vault.Title(d), s)
+	}
+}
+
+// StartIn is what a work document starts with.
+type StartIn struct {
+	Title string   `json:"title,omitempty" jsonschema:"the work's short name; the file name of its document"`
+	Kind  string   `json:"kind,omitempty" jsonschema:"ingest or repair"`
+	Files []string `json:"files,omitempty" jsonschema:"ingest: the names of the files in ingest/ the work takes"`
+}
+
+// Start writes a work document: a change that runs, with no writes yet, so the user
+// watches one document from the first step to the decision. It commits nothing.
+func Start(v *vault.Vault, in StartIn, now time.Time) (*Preview, error) {
+	if err := v.CheckLayout(); err != nil {
+		return nil, err
+	}
+	now = now.Truncate(time.Second)
+	kind := strings.ToLower(strings.TrimSpace(in.Kind))
+	if kind != KindIngest && kind != KindRepair {
+		return nil, fmt.Errorf("kind %q: a work document is an %s or a %s", in.Kind, KindIngest, KindRepair)
+	}
+	var files []string
+	for _, f := range in.Files {
+		rel, err := v.IngestFile(f)
+		if err != nil {
+			return nil, err
+		}
+		files = append(files, strings.TrimPrefix(rel, vault.Ingest+"/"))
+	}
+	title := doc.CleanTitle(in.Title)
+	if title == "" {
+		switch {
+		case kind == KindRepair:
+			title = "Repair the wiki"
+		case len(files) == 1:
+			title = "Ingest " + doc.CleanTitle(doc.TitleOf(files[0]))
+		default:
+			title = fmt.Sprintf("Ingest %d files", len(files))
+		}
+	}
+	if err := doc.CheckTitle(title); err != nil {
+		return nil, fmt.Errorf("title: %w", err)
+	}
+	unlock, err := v.Lock()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	if err := vault.Recover(v); err != nil {
+		return nil, err
+	}
+	idx, err := vault.Load(v)
+	if err != nil {
+		return nil, err
+	}
+	id := doc.NewID("chg", func(s string) bool { return idx.ByID(s) != nil })
+	rel := freePath(idx, now, title)
+	if err := v.Write(rel, []byte(renderWork(id, kind, files, now))); err != nil {
+		return nil, err
+	}
+	if idx, err = vault.Load(v); err != nil {
+		return nil, err
+	}
+	if idx.ByPath(rel) == nil {
+		return nil, readBack(v, rel)
+	}
+	return Show(idx, id)
+}
+
+// MaxProgress bounds one progress line.
+const MaxProgress = 200
+
+// Progress adds one dated line under a running work document's Progress. It commits
+// nothing.
+func Progress(v *vault.Vault, key, text string, now time.Time) (*Preview, error) {
+	line := doc.OneLine(strings.TrimSpace(text), MaxProgress)
+	if line == "" {
+		return nil, errors.New("progress needs the step, in one line")
+	}
+	unlock, err := v.Lock()
+	if err != nil {
+		return nil, err
+	}
+	defer unlock()
+	idx, err := vault.Load(v)
+	if err != nil {
+		return nil, err
+	}
+	d, err := running(idx, key)
+	if err != nil {
+		return nil, err
+	}
+	front, body, _ := doc.Split(d.Content)
+	body = doc.AppendSection(body, "Progress", "- "+now.Format(vault.ClockFormat)+" "+line)
+	content := doc.SetField(doc.Join(front, body), "updated", vault.Stamp(now))
+	if err := v.Write(d.Path, []byte(content)); err != nil {
+		return nil, err
+	}
+	if idx, err = vault.Load(v); err != nil {
+		return nil, err
+	}
+	return Show(idx, d.ID())
 }
 
 // readBack is the error of a change document the index cannot find after its write.
@@ -212,8 +343,10 @@ func preview(idx *vault.Index, d *doc.Doc, ops []*op, outside []vault.Ref, warni
 				w.Note = "rewrite"
 			}
 		case OpRemove:
+			w.Note = "to trash"
+			w.Trash = o.Trash
 			if r := idx.ByID(o.Redirect); r != nil {
-				w.Note = "links go to " + vault.Title(r)
+				w.Note += "; links go to " + vault.Title(r)
 			}
 		case OpConfirm:
 			w.Note = "refreshed, no edit"
@@ -394,13 +527,18 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 	}
 	derived := describedWrites(idx, p, now)
 	before := repoPaths(idx)
-	lines := preview(idx, d, p.Ops, nil, nil, current(idx)).Writes
-
-	// Record every path the apply may write, so a crash can put them back.
+	// Record every path the apply may write, so a crash can put them back. A removed
+	// document goes to the trash, under the day of the apply.
 	var paths []string
+	taken := map[string]bool{}
 	for _, o := range p.Ops {
 		paths = append(paths, o.Path, o.finalPath())
+		if o.Kind == OpRemove {
+			o.Trash = vault.TrashPath(v, o.Path, now, taken)
+			paths = append(paths, o.Trash)
+		}
 	}
+	lines := preview(idx, d, p.Ops, nil, nil, current(idx)).Writes
 	for _, rw := range p.Outside {
 		paths = append(paths, rw.Path)
 	}
@@ -732,7 +870,7 @@ func writeOps(tx *vault.Tx, idx *vault.Index, p *planned, derived map[string]str
 				}
 			}
 		case OpRemove:
-			if err := tx.Remove(o.Path); err != nil {
+			if err := tx.Move(o.Path, o.Trash); err != nil {
 				return err
 			}
 		case OpConfirm:
@@ -819,8 +957,8 @@ func Reject(v *vault.Vault, key, reason string, now time.Time) (*Preview, error)
 	if err != nil {
 		return nil, err
 	}
-	if s := d.Str("status"); s != Proposed {
-		return nil, fmt.Errorf("%s is %s; only a proposed change can be rejected", vault.Title(d), s)
+	if s := d.Str("status"); s != Proposed && s != Running {
+		return nil, fmt.Errorf("%s is %s; only a proposed or running change can be rejected", vault.Title(d), s)
 	}
 	content := setStatus(d.Content, Rejected, doc.Field{Key: "reason", Value: strings.TrimSpace(reason)}, doc.Field{Key: "updated", Value: vault.Stamp(now)})
 	if err := v.Write(d.Path, []byte(content)); err != nil {

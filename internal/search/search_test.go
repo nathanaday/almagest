@@ -125,7 +125,7 @@ func TestTheSearchHintsFollowTheSchema(t *testing.T) {
 		}
 		return out
 	}
-	kinds := map[string][]string{"topic": strings.Split(strings.TrimPrefix(hint("Kinds"), "topic kinds: "), ", ")}
+	kinds := byType(strings.TrimPrefix(hint("Kinds"), "kinds by type: "))
 	statuses := byType(strings.TrimPrefix(hint("Status"), "the statuses to keep, by type: "))
 	for want, got := range map[string]map[string][]string{"kind": kinds, "status": statuses} {
 		have := values(want)

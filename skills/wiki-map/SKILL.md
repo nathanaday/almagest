@@ -48,12 +48,14 @@ Tools: `context`, `search`, `match`, `change`. Agents:
 6. Send [wiki-draft](../../agents/wiki-draft.md) with the pairs when there are more than
    eight groups, at most eight per worker.
 7. Build one change for the tag: `change` with `action: propose`, `title` ("Map
-   #work/p3"), and `notes` with each decision and its reason.
+   #work/p3"), `notes` with each decision and its reason as four lists (the overview,
+   the widenings, the bridges, and the renames), and a `why` on every write.
 
 ## Gate
 
-Propose, then show the preview as four lists: the overview, the widenings, the bridges,
-and the renames. Wait for the yes, then apply. The change tool refuses apply in the same
+Propose, then end the turn with one or two lines: the change document as a link, and
+each new tag. The document's Summary and Notes hold the decisions. Wait for the yes,
+then apply, or let the user decide in the document. The change tool refuses apply in the same
 turn as the proposal.
 
 ## Hand off

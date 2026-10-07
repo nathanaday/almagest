@@ -273,6 +273,50 @@ func (idx *Index) ResolveType(key string, types ...string) (*doc.Doc, error) {
 	return nil, fmt.Errorf("%s is a %s, not a %s", Title(d), d.Type(), strings.Join(types, " or "))
 }
 
+// Backlinks lists the files that link to rel: every typed document and note, and the
+// markdown kept as link targets only (the scratchpad, the thread archive, the journals,
+// the checkouts), whose links Obsidian follows as well. The records do not count: a
+// change or a session names what it touched, and keeps the name after a delete.
+func (idx *Index) Backlinks(rel string) []string {
+	var out []string
+	check := func(d *doc.Doc) {
+		if d.Path == rel || d.Type() == "change" || d.Type() == "session" {
+			return
+		}
+		var targets []string
+		if d.Front != nil {
+			for _, k := range d.Front.Keys() {
+				for _, v := range d.Front.List(k) {
+					if doc.IsLink(v) {
+						targets = append(targets, doc.LinkTarget(v))
+					}
+				}
+			}
+		}
+		for _, l := range links.Find(Readable(d)) {
+			targets = append(targets, l.Target)
+		}
+		for _, t := range targets {
+			if slices.Contains(idx.LinkPaths(t), rel) {
+				out = append(out, d.Path)
+				return
+			}
+		}
+	}
+	for _, d := range append(append(append([]*doc.Doc{}, idx.Docs...), idx.Notes...), idx.Misplaced...) {
+		check(d)
+	}
+	for _, f := range idx.Files {
+		if strings.HasSuffix(strings.ToLower(f), ".md") && Unread(f) {
+			if data, err := idx.V.Read(f); err == nil {
+				check(doc.Parse(f, data))
+			}
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // LinkPaths lists the files a link target names, the way Obsidian resolves it: a path
 // from the vault's root, else a markdown file by its title, else any file by its name.
 func (idx *Index) LinkPaths(target string) []string {

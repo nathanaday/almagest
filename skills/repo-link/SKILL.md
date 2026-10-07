@@ -41,7 +41,7 @@ Tools: `context`, `search`, `vault`, `change`. References:
    as an absolute path or with `~/`. Code fills `remote`, `branch`, `head`, and the
    live status block.
 7. Build one plan: a create per repository, `{op: create, type: repository, title,
-   fields: {description, tags, aliases, defines, path}, body}`. Set `new_tags: true`
+   fields: {description, tags, aliases, defines, path}, body, why}`. Set `new_tags: true`
    on the plan only after the user agreed to the new tags.
 
 ## Gate

@@ -6,6 +6,7 @@ package cli
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -76,7 +77,7 @@ No --json: setup, open, doctor, version, help, hook, mcp.
 
 // commands are the usage of each command, in the order help lists them.
 var commands = []struct{ name, usage string }{
-	{"vault", `  atlas-obsidian vault [status] | sync [--views] | snapshot | migrate [--dry-run]
+	{"vault", `  atlas-obsidian vault [status] | sync [--views] | snapshot | trash PATH | migrate [--dry-run]
                        | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
 `},
 	{"search", `  atlas-obsidian search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
@@ -90,7 +91,8 @@ var commands = []struct{ name, usage string }{
   atlas-obsidian source chunks DOC
   atlas-obsidian source read DOC CHUNK
 `},
-	{"change", `  atlas-obsidian change propose FILE.json | show ID | apply ID | reject ID --reason R | undo ID
+	{"change", `  atlas-obsidian change propose FILE.json [--id ID] | show ID | apply ID | reject ID --reason R | undo ID
+                        | start --kind ingest|repair [--title T] [--file NAME]... | progress ID TEXT...
 `},
 	{"lint", `  atlas-obsidian lint [--tag T]...
 `},
@@ -205,6 +207,10 @@ func (c *CLI) Run(argv []string) int {
 	}
 	if err != nil {
 		fmt.Fprintln(c.Err, "atlas: "+err.Error())
+		var coded exitError
+		if errors.As(err, &coded) {
+			return coded.code
+		}
 		return 1
 	}
 	return 0
@@ -414,6 +420,25 @@ func (c *CLI) vaultCmd(argv []string) error {
 			}
 			fmt.Fprintf(w, "Committed %s as a snapshot, %s.\n", count(n, "hand edit", "hand edits"), short(sha))
 		})
+	case "trash":
+		v, err := c.open(a)
+		if err != nil {
+			return err
+		}
+		res, err := core.Trash(v, a.arg(1), now)
+		if err != nil {
+			return err
+		}
+		if res.Moved != "" {
+			c.views(v, now)
+		}
+		if err := c.emit(a, map[string]any{"trash": res}, func(w io.Writer) { printTrash(w, res) }); err != nil {
+			return err
+		}
+		if len(res.Backlinks) > 0 {
+			return exitError{code: 2, err: fmt.Errorf("%s stays: %s; point them elsewhere first", res.Path, count(len(res.Backlinks), "document links it", "documents link it"))}
+		}
+		return nil
 	case "migrate":
 		v, err := c.open(a)
 		if err != nil {
@@ -432,8 +457,30 @@ func (c *CLI) vaultCmd(argv []string) error {
 		}
 		return c.emit(a, r, func(w io.Writer) { printMigration(w, r, true) })
 	}
-	return fmt.Errorf("vault takes status, init, sync, snapshot, or migrate, not %q", a.arg(0))
+	return fmt.Errorf("vault takes status, init, sync, snapshot, trash, or migrate, not %q", a.arg(0))
 }
+
+func printTrash(w io.Writer, r *core.Trashed) {
+	if len(r.Backlinks) > 0 {
+		fmt.Fprintf(w, "%s stays: these link it.\n", r.Path)
+		for _, b := range r.Backlinks {
+			fmt.Fprintf(w, "  %s\n", b.Path)
+		}
+		return
+	}
+	fmt.Fprintf(w, "Moved %s to %s.\n", r.Path, r.Moved)
+	if r.Change != nil {
+		fmt.Fprintf(w, "  through the change %s (%s)\n", r.Change.Title, r.Change.ID)
+	}
+}
+
+// exitError is an error with its own exit code.
+type exitError struct {
+	code int
+	err  error
+}
+
+func (e exitError) Error() string { return e.err.Error() }
 
 func printMigration(w io.Writer, r *migrate.Report, done bool) {
 	if done {
@@ -702,7 +749,14 @@ func (c *CLI) changeCmd(argv []string) error {
 		if err := c.readJSON(a.arg(1), &plan); err != nil {
 			return fmt.Errorf("the plan: %w", err)
 		}
+		if id := a.get("id"); id != "" {
+			plan.ID = id
+		}
 		pv, err = change.Propose(v, plan, now)
+	case "start":
+		pv, err = change.Start(v, change.StartIn{Title: a.get("title"), Kind: a.get("kind"), Files: a.list("file")}, now)
+	case "progress":
+		pv, err = change.Progress(v, a.arg(1), strings.Join(a.pos[min(2, len(a.pos)):], " "), now)
 	case "show", "":
 		idx, lerr := vault.Load(v)
 		if lerr != nil {
@@ -716,7 +770,7 @@ func (c *CLI) changeCmd(argv []string) error {
 	case "undo":
 		pv, err = change.Undo(v, a.arg(1), now)
 	default:
-		return fmt.Errorf("change takes propose, show, apply, reject, or undo, not %q", a.arg(0))
+		return fmt.Errorf("change takes propose, start, progress, show, apply, reject, or undo, not %q", a.arg(0))
 	}
 	if err != nil {
 		return err

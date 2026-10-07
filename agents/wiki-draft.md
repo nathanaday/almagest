@@ -18,8 +18,8 @@ being absorbed, their tags, and the tag vocabulary with the vault's `tagging` mo
 ```json
 {
   "writes": [
-    {"op": "create", "type": "topic", "kind": "concept", "title": "…", "fields": {"description": "…", "tags": ["…"], "aliases": [], "status": "stable", "sources": ["doc-…"]}, "body": "## Definition\n…"},
-    {"op": "modify", "id": "doc-…", "base": "…", "fields": {"sources": ["…"]}, "body": "…the whole new body…"}
+    {"op": "create", "why": "one line", "type": "topic", "kind": "concept", "title": "…", "fields": {"description": "…", "tags": ["…"], "aliases": [], "status": "stable", "sources": ["doc-…"]}, "body": "## Definition\n…"},
+    {"op": "modify", "why": "one line", "id": "doc-…", "base": "…", "fields": {"sources": ["…"]}, "body": "…the whole new body…"}
   ],
   "skipped": [{"subject": "…", "reason": "one line"}],
   "new_tags": [],
@@ -57,6 +57,8 @@ subject is lost without a reason.
   Sources), entity (What it is, Facts, Related, Sources), policy (`strength`; Rule, Why,
   Applies when, Exceptions, Sources). The kind of an entity (a person, a tool, a
   component) is a tag.
+- Give every write a `why`: one line that says why the wiki needs it ("the paper's
+  method; no topic explains it"). The change's Summary shows it to the user.
 - Give `description` one good sentence: search and match find the topic by it.
 - Cite every claim with its document and locator: `[[DINOv2]], p. 4`. Keep the
   source's statements apart from your synthesis. Never invent a quotation, a page

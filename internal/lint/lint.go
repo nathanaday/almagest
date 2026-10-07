@@ -328,8 +328,18 @@ func docLinks(d *doc.Doc) []string {
 }
 
 func (r *run) deadLinks(d *doc.Doc) {
+	// A change that ran its course is a record: a link it holds may name a document a
+	// later change removed.
+	if d.Type() == "change" && d.Str("status") != "proposed" && d.Str("status") != "running" {
+		return
+	}
+	text := vault.Readable(d)
+	if d.Type() == "change" {
+		// The Summary links what the change writes, which exists once it applies.
+		text = doc.RemoveSection(text, "Summary")
+	}
 	seen := map[string]bool{}
-	for _, l := range links.Find(vault.Readable(d)) {
+	for _, l := range links.Find(text) {
 		if l.Target == "" || seen[l.Target] {
 			continue
 		}

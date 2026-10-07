@@ -8,7 +8,8 @@ description: "Absorb sources into the wiki through one pipeline: chunk, extract,
 A source is pending until an applied change absorbs it. This skill drains pending
 sources: it cuts each into chunks, sends a worker to extract what each chunk says,
 matches the subjects against the wiki in code, sends drafters to decide and write, and
-proposes one change the user reviews.
+proposes one change the user reviews. When wiki-ingest hands it a work document, every
+step goes into that document, and the change fills it.
 
 Tools: `vault`, `source` (chunks, read), `match`, `change`. Agents:
 [wiki-extract](../../agents/wiki-extract.md), [wiki-draft](../../agents/wiki-draft.md).
@@ -20,7 +21,10 @@ References: [changes.md](../atlas/references/changes.md),
 1. **Sources.** Take the ids given, or the `pending` list from `vault`. One change holds
    at most about ten sources or forty chunks; more is several changes, one after another.
    From the same `vault` call, keep the tag list (every tag with its count), the
-   `tagging` mode, and the vault's description.
+   `tagging` mode, and the vault's description. With a work document id, report each
+   step below with `change` `action: progress`, one line each: "extracted 9 of 12
+   chunks", "matched 31 subjects: 12 hits, 4 near, 15 new", "drafted 14 writes in 3
+   slices".
 2. **Chunks.** Call `source` with `action: chunks` and `doc` for each source.
 3. **Extract.** Send one [wiki-extract](../../agents/wiki-extract.md) per chunk, in waves
    of at most eight. Give each the source id, the chunk index, the source's tags, the
@@ -44,17 +48,26 @@ References: [changes.md](../atlas/references/changes.md),
    - `new_tags: true` when a write adds a tag that no document holds, and the user
      agreed to it in `tagging: known` mode;
    - `title`: a short name ("Ingest the DINOv2 paper"); `notes`: what the change does,
-     and every skipped subject with its reason.
+     the triage lines from wiki-ingest, the coverage (every chunk read, any chunk
+     partial), and every skipped subject with its reason;
+   - a `why` on every write: one line that says why the change makes it.
    Past 25 new topics, keep the ones the most claims support and list the rest in the
    notes for a later run.
-9. **Propose** the change: `change` with `action: propose`.
+9. **Propose** the change: `change` with `action: propose`, and `id` set to the work
+   document when one runs. When the sources make several changes, the first fills the
+   work document and the others are new change documents.
+
+When `progress` or `propose` refuses with "the user cancelled …; stop the work", stop at
+once: send no more workers, and say in one line that the user cancelled the work.
 
 ## Gate
 
-Show the Change Preview and link the change document, so the user can read the topics
-in Obsidian and edit one before the yes. Say the coverage: every chunk read, any chunk
-partial, the subjects skipped, and each new tag. Wait for the yes, then apply. The
-change tool refuses apply in the same turn as the proposal.
+End the turn with one or two lines: the change document as a link, the count of writes,
+and each new tag. The document's Summary and Notes hold the rest; do not repeat them in
+the chat. The user decides once, in the document (Approve or Cancel), or with a yes in
+the chat. On a yes in the chat, apply. The change tool refuses apply in the same turn as
+the proposal. A change the user approves or cancels in Obsidian needs nothing more from
+you.
 
 A change with no writes (the sources held nothing new) needs no yes. Apply it and say
 so in one line: the sources are no longer pending.

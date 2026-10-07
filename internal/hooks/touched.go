@@ -56,7 +56,7 @@ func Touched(r io.Reader, env Env) error {
 					}
 				}
 			}
-		case atlasTool(in.ToolName) == "change" && in.tool().Action == "propose" && !failed(decodeAll(in.ToolResponse)):
+		case atlasTool(in.ToolName) == "change" && (in.tool().Action == "propose" || in.tool().Action == "start") && !failed(decodeAll(in.ToolResponse)):
 			ref := findObject(decodeAll(in.ToolResponse), "ref")
 			title, _ := ref["title"].(string)
 			p, _ := ref["path"].(string)

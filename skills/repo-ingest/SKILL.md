@@ -48,8 +48,8 @@ References: [changes.md](../atlas/references/changes.md),
 6. Build one plan: the drafted writes, and a modify of the repository document with
    `## What it is`, `## How it is built`, `## Layout`, `## Components` (links to the
    component entities, one line each), and `## Instructions`. `absorbs` names the
-   snapshot. In `tagging: known`, ask before a tag that no document holds, and set
-   `new_tags: true` after the yes.
+   snapshot. Give every write a `why`. In `tagging: known`, ask before a tag that no
+   document holds, and set `new_tags: true` after the yes.
 7. List the TODO, FIXME, and roadmap items. They are work, not knowledge, so they
    never become topics.
 
