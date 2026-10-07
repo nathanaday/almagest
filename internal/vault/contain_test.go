@@ -175,22 +175,19 @@ func TestVaultWriteRefusesAPathThroughALinkOut(t *testing.T) {
 	}
 }
 
-func TestThePluginInstallsThroughALinkedObsidianFolder(t *testing.T) {
+func TestTheSettingsWriteThroughALinkedObsidianFolder(t *testing.T) {
 	tv := testvault.New(t)
 	shared := filepath.Join(t.TempDir(), "shared-obsidian")
 	if err := os.Rename(tv.V.Abs(".obsidian"), shared); err != nil {
 		t.Fatal(err)
 	}
 	link(t, shared, tv.V.Abs(".obsidian"))
-	os.RemoveAll(filepath.Join(shared, "plugins"))
-	if _, err := vault.InstallPlugin(tv.V); err != nil {
-		t.Fatalf("install through a linked .obsidian: %v", err)
+	os.Remove(filepath.Join(shared, "app.json"))
+	if _, err := vault.ObsidianSettings(tv.V); err != nil {
+		t.Fatalf("settings through a linked .obsidian: %v", err)
 	}
-	if _, err := os.Stat(filepath.Join(shared, "plugins", "atlas", "manifest.json")); err != nil {
-		t.Fatal("the plugin is not in the shared folder")
-	}
-	if _, err := tv.V.WriteMachineIfChanged("source-core/documents/x.md", []byte("x\n")); err == nil {
-		t.Fatal("the machine writer took a document path")
+	if _, err := os.Stat(filepath.Join(shared, "app.json")); err != nil {
+		t.Fatal("the settings are not in the shared folder")
 	}
 }
 

@@ -23,7 +23,7 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 	if strings.Contains(tv.Read(vault.Marker), "wikify") {
 		t.Fatalf("Atlas.md names wikify:\n%s", tv.Read(vault.Marker))
 	}
-	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/plugins/atlas/manifest.json", ".obsidian/app.json", "source-core/documents", "source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
+	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/app.json", "source-core/documents", "source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
 		if !v.Exists(rel) {
 			t.Errorf("missing %s", rel)
 		}

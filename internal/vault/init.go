@@ -4,7 +4,6 @@ import (
 	"embed"
 	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
@@ -18,9 +17,6 @@ import (
 
 //go:embed template
 var templates embed.FS
-
-// PluginFiles are the Obsidian plugin's files, as init installs them.
-var PluginFiles = []string{"manifest.json", "main.js", "styles.css"}
 
 // InitOptions are the answers of onboarding.
 type InitOptions struct {
@@ -157,41 +153,7 @@ func writeLayout(v *Vault, name, description, tagging, context string, now time.
 	} else if wrote {
 		written = append(written, AppJSON)
 	}
-	plugin, err := InstallPlugin(v)
-	if err != nil {
-		return nil, err
-	}
-	return append(written, plugin...), nil
-}
-
-// InstallPlugin copies the Obsidian plugin this binary carries into the vault, and
-// returns the paths it wrote. The user turns the plugin on once in Obsidian.
-func InstallPlugin(v *Vault) ([]string, error) {
-	var written []string
-	for _, f := range PluginFiles {
-		data, err := templates.ReadFile("template/obsidian/" + f)
-		if err != nil {
-			return nil, err
-		}
-		rel := path.Join(PluginDir, f)
-		wrote, err := v.WriteMachineIfChanged(rel, data)
-		if err != nil {
-			return nil, err
-		}
-		if wrote {
-			written = append(written, rel)
-		}
-	}
 	return written, nil
-}
-
-// PluginVersion is the version of the Obsidian plugin this binary carries.
-func PluginVersion() string {
-	data, err := fs.ReadFile(templates, "template/obsidian/manifest.json")
-	if err != nil {
-		return ""
-	}
-	return manifestVersion(data)
 }
 
 // InstalledPluginVersion is the version of the Obsidian plugin in the vault, or "".

@@ -103,12 +103,13 @@ func (c *CLI) setupCmd(argv []string) error {
 	fmt.Fprintln(c.Out, "")
 	fmt.Fprintln(c.Out, "Next:")
 	if made != "" {
-		fmt.Fprintf(c.Out, "  atlas-obsidian open --register --vault %s, and turn on the Atlas plugin in Obsidian\n", shellArg(made))
+		fmt.Fprintf(c.Out, "  atlas-obsidian open --register --vault %s\n", shellArg(made))
 	} else {
 		fmt.Fprintf(c.Out, "  start %s in an empty folder and say \"set up atlas\": the atlas-onboard skill makes the vault\n", agent)
 		fmt.Fprintln(c.Out, "  or: atlas-obsidian vault init --path ~/notes/work --name Work --tagging open --description \"...\"")
-		fmt.Fprintln(c.Out, "  then: atlas-obsidian open --register --vault ~/notes/work, and turn on the Atlas plugin in Obsidian")
+		fmt.Fprintln(c.Out, "  then: atlas-obsidian open --register --vault ~/notes/work")
 	}
+	fmt.Fprintf(c.Out, "  optional: the Atlas plugin for Obsidian, from its community plugins: %s\n", vault.PluginLink)
 	fmt.Fprintln(c.Out, "  atlas-obsidian doctor checks every part")
 	return nil
 }
@@ -186,7 +187,6 @@ func (c *CLI) doctorCmd(argv []string) int {
 		return 1
 	}
 	line(true, "config", fmt.Sprintf("%s lists %d vaults", h.ConfigPath(), len(cfg.Vaults)))
-	bundled := vault.PluginVersion()
 	for _, root := range cfg.Paths() {
 		v, err := vault.Open(root)
 		if err != nil {
@@ -210,12 +210,8 @@ func (c *CLI) doctorCmd(argv []string) int {
 			detail += fmt.Sprintf(" · %d errors (atlas-obsidian lint)", f.Counts[lint.Error])
 			ok = false
 		}
-		switch installed := v.InstalledPluginVersion(); {
-		case installed == "":
-			detail += " · no Obsidian plugin"
-		case installed != bundled:
-			detail += fmt.Sprintf(" · Obsidian plugin %s, the binary carries %s (atlas-obsidian open --update-plugin --vault %s)", installed, bundled, shellArg(vault.Shorten(v.Root)))
-			ok = false
+		if installed := v.InstalledPluginVersion(); installed != "" {
+			detail += " · Obsidian plugin " + installed
 		}
 		line(ok, "vault "+v.Name(), detail)
 	}
@@ -295,16 +291,12 @@ func sameSet(a, b []string) bool {
 // know is added to its registry with --register, which restarts Obsidian on macOS.
 func (c *CLI) openCmd(argv []string) error {
 	a := parse(argv, "register", "update-plugin")
+	if err := a.removed("update-plugin", "Obsidian installs and updates the Atlas plugin from its community plugins: "+vault.PluginLink); err != nil {
+		return err
+	}
 	v, err := c.open(a)
 	if err != nil {
 		return err
-	}
-	if a.has("update-plugin") {
-		wrote, err := vault.InstallPlugin(v)
-		if err != nil {
-			return err
-		}
-		fmt.Fprintf(c.Out, "Obsidian plugin: %d files updated; reload Obsidian to use them.\n", len(wrote))
 	}
 	target := v.Root
 	if key := a.arg(0); key != "" {

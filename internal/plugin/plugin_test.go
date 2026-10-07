@@ -17,7 +17,6 @@ import (
 	"github.com/nathanaday/atlas-obsidian/internal/hooks"
 	"github.com/nathanaday/atlas-obsidian/internal/mcpserver"
 	"github.com/nathanaday/atlas-obsidian/internal/sessions"
-	"github.com/nathanaday/atlas-obsidian/internal/vault"
 )
 
 // root is the plugin's folder: the repository root.
@@ -255,22 +254,6 @@ func TestOneVersion(t *testing.T) {
 	v := version(".claude-plugin/plugin.json")
 	if got := version(".codex-plugin/plugin.json"); got != v {
 		t.Errorf("the Codex plugin is %s, the Claude plugin %s", got, v)
-	}
-	if got := vault.PluginVersion(); got != v {
-		t.Errorf("the Obsidian plugin the binary carries is %s, the agent plugin %s", got, v)
-	}
-	if got := version("obsidian/manifest.json"); got != v {
-		t.Errorf("the Obsidian plugin's source is %s, the agent plugin %s", got, v)
-	}
-	if got := version("obsidian/package.json"); got != v {
-		t.Errorf("the Obsidian plugin's package is %s, the agent plugin %s", got, v)
-	}
-	built, err := os.ReadFile(filepath.Join(root, "obsidian/dist/main.js"))
-	if err == nil {
-		carried, _ := vault.Template("obsidian/main.js")
-		if string(built) != string(carried) {
-			t.Error("the binary carries an older Obsidian plugin than obsidian/dist; run make obsidian")
-		}
 	}
 	var market struct {
 		Plugins []struct {

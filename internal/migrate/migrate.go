@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path"
 	"path/filepath"
 	"strings"
 	"time"
@@ -48,7 +47,6 @@ type Report struct {
 	Removed  []string `json:"removed"`
 	Warnings []string `json:"warnings"`
 	Commit   string   `json:"commit,omitempty"`
-	Plugin   string   `json:"plugin,omitempty"`
 	// Strays are the notes of the user's that the migration or its views step found in
 	// a views folder and moved to ingest/.
 	Strays   []vault.Moved `json:"strays,omitempty"`
@@ -171,28 +169,14 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	if err := fresh.EnsureFolders(); err != nil {
 		return nil, err
 	}
-	// The files the next steps write are kept too, so a failed commit puts them back.
-	machine := []string{vault.AppJSON}
-	for _, f := range vault.PluginFiles {
-		machine = append(machine, path.Join(vault.PluginDir, f))
-	}
-	if err := tx.Keep(machine...); err != nil {
+	// The settings file the next step writes is kept too, so a failed commit puts it back.
+	if err := tx.Keep(vault.AppJSON); err != nil {
 		return nil, err
 	}
 	if _, err := vault.ObsidianSettings(fresh); err != nil {
 		return nil, err
 	}
-	// An older plugin cannot read the new layout, so the vault gets the one this binary carries.
-	if fresh.InstalledPluginVersion() != "" {
-		wrote, err := vault.InstallPlugin(fresh)
-		if err != nil {
-			return nil, err
-		}
-		if len(wrote) > 0 {
-			report.Plugin = vault.PluginVersion()
-		}
-	}
-	tx.Settle(machine...)
+	tx.Settle(vault.AppJSON)
 	if err := vault.UpgradeBases(fresh, tx.Write); err != nil {
 		return nil, fmt.Errorf("migrate: %w", err)
 	}

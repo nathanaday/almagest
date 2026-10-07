@@ -122,7 +122,7 @@ var commands = []struct{ name, usage string }{
 `},
 	{"version", `  atlas-obsidian version
 `},
-	{"open", `  atlas-obsidian open [DOC] [--register] [--update-plugin]
+	{"open", `  atlas-obsidian open [DOC] [--register]
 `},
 	{"help", `  atlas-obsidian help | COMMAND --help
 `},
@@ -397,7 +397,7 @@ func (c *CLI) vaultCmd(argv []string) error {
 			return err
 		}
 		return c.emit(a, map[string]any{"status": st}, func(w io.Writer) {
-			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas-obsidian open --register --vault %s) and turn on the Atlas plugin under Community plugins.\n", st.Vault.Name, st.Vault.Path, shellArg(st.Vault.Path))
+			fmt.Fprintf(w, "Vault %s is ready at %s.\nOpen it in Obsidian (atlas-obsidian open --register --vault %s). For the palette and the widgets, install Atlas from Obsidian's community plugins: %s\n", st.Vault.Name, st.Vault.Path, shellArg(st.Vault.Path), vault.PluginLink)
 		})
 	case "sync":
 		v, err := c.open(a)
@@ -527,9 +527,6 @@ func printMigration(w io.Writer, r *migrate.Report, done bool) {
 	}
 	for _, x := range r.Warnings {
 		fmt.Fprintf(w, "  warning: %s\n", x)
-	}
-	if r.Plugin != "" {
-		fmt.Fprintf(w, "Obsidian plugin: updated to %s; reload Obsidian to use it.\n", r.Plugin)
 	}
 	for _, m := range r.Strays {
 		fmt.Fprintln(w, core.StrayLine(m))

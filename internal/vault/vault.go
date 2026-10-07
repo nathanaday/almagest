@@ -46,7 +46,10 @@ const (
 	Settings  = ".claude/settings.local.json"
 	Obsidian  = ".obsidian"
 	PluginDir = ".obsidian/plugins/atlas"
-	AppJSON   = ".obsidian/app.json"
+	// PluginLink opens the Obsidian plugin in Obsidian's community plugins, where the user
+	// installs it. No tool installs it in a vault.
+	PluginLink = "obsidian://show-plugin?id=atlas"
+	AppJSON    = ".obsidian/app.json"
 )
 
 // Layout is the layout version this binary reads and writes, kept in Atlas.md's layout
@@ -389,20 +392,6 @@ func (v *Vault) Write(rel string, content []byte) error {
 func (v *Vault) WriteIfChanged(rel string, content []byte) (bool, error) {
 	if err := v.Contain(rel); err != nil {
 		return false, err
-	}
-	if have, err := v.Read(rel); err == nil && string(have) == string(content) {
-		return false, nil
-	}
-	return true, writeAtomic(v.Abs(rel), content)
-}
-
-// WriteMachineIfChanged is the one unchecked writer: it serves only the fixed machine
-// paths under .obsidian/ and .claude/, which a user may link to a shared folder outside
-// the vault on purpose.
-func (v *Vault) WriteMachineIfChanged(rel string, content []byte) (bool, error) {
-	top, _, _ := strings.Cut(rel, "/")
-	if top != Obsidian && top != ".claude" {
-		return false, fmt.Errorf("%q is no machine path; only .obsidian/ and .claude/ take an unchecked write", rel)
 	}
 	if have, err := v.Read(rel); err == nil && string(have) == string(content) {
 		return false, nil
