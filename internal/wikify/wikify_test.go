@@ -16,7 +16,7 @@ func TestAMarkTakesTheMatchNotThePhrasesLength(t *testing.T) {
 	tv := testvault.New(t)
 	tv.Write("Notes.md", "Water boils at 373 \u212Aelvin.\n")
 	tv.Commit()
-	rel, err := wikify.Start(tv.V, "notes.md")
+	rel, err := wikify.Start(tv.V, "Notes.md")
 	if err != nil {
 		t.Fatal(err)
 	}
