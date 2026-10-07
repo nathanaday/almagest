@@ -68,7 +68,7 @@ func materialOf(v *vault.Vault, d *doc.Doc) (*material, error) {
 			return nil, err
 		}
 		defer assets.Close()
-		// The root refuses a link that leads out of source-core/originals.
+		// The root refuses a link that leads out of tool/source-core/originals.
 		if _, err := assets.Stat(file); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			return nil, fmt.Errorf("%s: the captured file %s leads out of %s/ (%v)", vault.Title(d), file, vault.Originals, err)
 		}

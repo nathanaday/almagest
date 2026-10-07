@@ -3,94 +3,23 @@
 Almagest: the Go module `github.com/nathanaday/almagest` (binary `almagest`) and the
 agent plugin `almagest` in the repository's own marketplace. The Obsidian plugin lives in
 its own repository, `obsidian-almagest` (`~/projects/software/obsidian-almagest`), and
-reaches users only through Obsidian's community plugins. Read `README.md` first. This
-file holds what the code and the README do not say.
+reaches users only through Obsidian's community plugins. Read `README.md` and
+`docs/guide.md` first. This file holds what the code and those do not say.
 
-11.0.0 (layout 7) renamed the project from Atlas (`atlas-obsidian`) to Almagest, and split
-the Obsidian plugin into its own repository. "Atlas" had hundreds of namesakes among
-Obsidian plugins, LLM tools, and knowledge bases. The plan is `scratchpad/Distribution
-and Rename Plan.md` in the SoftwareProjects vault. No tool writes the Obsidian plugin into
-a vault any more: the community directory forbids a plugin that installs or updates
-itself. The step from 10.0 (`internal/migrate/v11.go`) renames what code owns in a vault:
-`Atlas.md` becomes `Almagest.md`, the `atlas-change` and `atlas-repo` blocks, the
-`atlas-change` cssclass, and the `[!atlas]` callouts of checkouts and publication
-histories take the new name, and `.atlas/` becomes `.almagest/`. The user's own prose,
-code examples, and callouts stay as written. The binary still reads what history and the
-machine hold from before: a vault whose document is `Atlas.md` (`vault.LegacyMarker`;
-the guard protects it, and only the migration writes it), the `Atlas-Change` trailers of
-old commits (`vault.ChangeCommit`, for undo and recovery), `~/.atlas/config.json` (the
-first `Home.Load` copies it), and the old binary names, which the guard's shell rule
-refuses. The migration also holds `.git/atlas.lock`, the older binary's lock.
+- **The binary** serves the MCP tools (`internal/mcpserver`), the hooks
+  (`internal/hooks`), and the CLI (`internal/cli`). The vault, its index, and the write
+  transaction are `internal/vault`; changes are `internal/change`.
+- **The agent plugin** is the skills, the read-only agents, the hooks, and the launcher
+  (`bin/almagest`), which installs the binary of the plugin's own version from the
+  GitHub release, checked against the sha256 it pins (`release/checksums.txt`).
+- **The Obsidian plugin** runs the CLI for every read and write. Duet
+  (`~/projects/software/obsidian-duet`) hosts the agents in the editor when it is on;
+  Almagest starts them through Duet's API and does not copy its code.
 
-11.0 also changed how the binary reaches a machine. The user installs the agent plugin
-and nothing else: its launcher, `bin/almagest`, installs the binary of the plugin's own
-version from the GitHub release, checked against the sha256 that the plugin pins
-(`release/checksums.txt`). The release workflow publishes a binary only when a build of
-the tag has those bytes. The marketplace entry pins the plugin to the release tag.
-
-10.0.0 (layout 6) renamed the vault's folders: `wiki/documents/` became
-`source-core/documents/`, `wiki/assets/` became `source-core/originals/`, `inbox/` became
-`ingest/`, and `views/` became `wiki-view/` (tag views in `wiki-view/nav/`). It added
-`journals/`, the user's own writing, and reserved `checkout/` and `trash/` for later
-releases (10.1 uses `trash/`, 10.3 `checkout/`). It removed `@atlas` mentions and every patch the Obsidian plugin made on
-Obsidian's own interface: file explorer badges, graph colors, view folders, the change
-bar, and mention marks. A widget inside the change document replaced the change bar. The
-plan is `scratchpad/Almagest 10 Strategy.md` in the SoftwareProjects vault.
-`almagest vault migrate` takes a 9.0 or 8.x vault to 10.0 in one commit
-(`internal/migrate`: `v9.go` is the step from 8.x, `v10.go` the step from 9.0).
-
-10.1.0 added the tool palette (a custom view in the right sidebar), the work document,
-the change Summary, and safe delete with `trash/`. The contract is the phase 1 section
-of the same strategy note.
-
-10.2.0 added journal publishing (`internal/journal`, the "Journals" section of the
-strategy note). A journal is where the user's own thoughts and writing live, safe from
-any change an ingest makes. Agents read it and never edit it (the guard, since 10.0).
-The user's Publish copies one volume into one source, an edition, and the normal sync
-absorbs that source: topics cite the edition, never the notes.
-
-10.3.0 added the librarian checkout (`internal/checkout`, the MCP tool and CLI command
-`checkout`, the skill `wiki-checkout`; the "Librarian checkout" section of the strategy
-note). Code ranks a bounded list of candidates for a request. The agent chooses the
-documents that serve it, in reading order, and code copies them into
-`checkout/<date> <name>/` with a reading list and the ledger. The user reads and edits
-the copies, and Return proposes the edits as one change of the originals.
-
-10.4.0 added wikify, which is experimental (`internal/wikify`, the MCP tool `wikify`,
-the CLI command `wikify start|mark`, the skill `wiki-wikify`; the "Wikify a document"
-section of the strategy note, which the user's improvements note calls "Review Doc").
-Code copies a note of the user's into `scratchpad/`. The agent matches the copy's
-subjects against the wiki and writes marks into it with one `wikify mark` call. The
-plugin shows each mark as a bubble: Accept and Ignore for a link (Ignore only once its
-document is gone), Create and Ignore for a new subject. Create starts a work document of kind `draft`, in which wiki-edit
-proposes the topic. The copy never enters the wiki by itself.
-
-10.4.1 fixed the findings of a review of 10.x: code's notes in `checkout/` and
-`journals/` take reserved titles, a snapshot recovers a stopped apply first, only the
-user undoes the user's own acts, safe delete and wikify read a path in another case as
-the file on disk, and the migration covers more link forms, bookmarks, and folders that
-exist before it.
-
-Decided for 10.x: Duet (`~/projects/software/obsidian-duet`) hosts the agents in the
-editor, and Almagest does not copy its code. Two copies would bind two Yjs hubs to one
-editor and both wrap `Vault.modify`. From 10.1 on, Almagest starts an agent through Duet's
-API for other plugins (Duet 0.3.0: `app.plugins.getPlugin("duet")?.api`, with
-`newConversation`, `conversationStatus`, and `onTurnEnd`). Almagest 10.0 does not call it
-yet. Duet's mentions replace the `@atlas` mentions.
-
-9.0.0 removed threads and chords, which 8.0.0 had put in place of the plans of 7.x. They
-are a standalone reference project now, obsidian-threads (`~/projects/software/obsidian-threads`),
-and the tag `threads-final` is the last commit that has them. Almagest keeps the knowledge
-base: sources, repositories, topics, tags, views, sessions, and changes. The 8.x step of
-the migration moves the thread documents and the chord canvases to `threads/`
-unchanged, and the documents that stay lose the fields and sections that served threads.
-A vault older than 8.0 migrates with 8.1.1 first.
-
-7.0.0 replaced the scope tree of 6.x with tags. Every document lies flat in one folder
-(`source-core/documents/` since 10.0), and code writes the views.
-6.0.0 replaced the first design (5.x: one `atlas/<name>/` project folder in every
-repository, and a terminal view). Nothing reads a 5.x file. The 5.x code is on the `v1`
-branch and the `v1-final` tag.
+The plans behind the features are notes in the SoftwareProjects vault:
+`scratchpad/Almagest 10 Strategy.md` (the palette, work documents, safe delete,
+journals, checkouts, wikify) and `scratchpad/Distribution and Rename Plan.md` (the
+release, the launcher, and the Obsidian plugin's repository).
 
 ## Sources of truth
 
@@ -103,8 +32,24 @@ branch and the `v1-final` tag.
 
 The design pages are the spec. When the code departs from them, the reason is below.
 
-## Where the build departs from the design, and why
+## Design decisions
 
+- **`tool/` holds what Almagest keeps for itself** (layout 8): `tool/source-core/`,
+  `tool/sessions/`, and `tool/trash/`. The root holds what the user uses: `wiki-view/`,
+  `journals/`, `ingest/`, `changes/`, `checkout/`, and `scratchpad/`. Every folder name
+  is a constant in `internal/vault/vault.go`; `internal/schema` repeats two, since it
+  cannot import `vault`. A folder check uses `vault.InFolder`, never the first path part.
+- **Only the user migrates a vault.** `vault migrate` (`internal/migrate`) takes layout 7
+  (`vault.LayoutBeforeTool`, the 11.0 layout) to 8 in one commit: it moves the three
+  folders and rewrites a path only in a link, a Base, a `base` block, a canvas,
+  `bookmarks.json`, and `app.json`. A closing fence must be as long as its opener, so the
+  writes that a change document fences in five backticks keep their history. It does
+  not refuse a pending change: a change names documents by id, and its base ignores the
+  code sections that a sync rewrites. The guard refuses the command to an agent. In a
+  vault of another layout, no hook writes (so no session record lands in a folder the
+  layout lacks), the opening context names the fix, and the guard refuses every agent
+  edit, since its rules name this layout's folders. `vault.CheckLayout` names the
+  migration for layout 7 (`ErrMigrate`) and the update for any other (`ErrLayout`).
 - **The setting is `tagging`, not `tags`.** `Almagest.md` holds `tagging: open | known`,
   and `vault init` takes `tagging`. `tags` is Obsidian's own property.
 - **A change's base ignores what code derives** (`change.BaseHash`): code-owned fields,
@@ -114,9 +59,16 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A session records its agent's process and conversation.** The hooks walk up from
   their own process to the nearest `claude` or `codex` and keep its id in `pid`, and keep
   `transcript_path` in `transcript`. A sync ends a live session whose process is gone,
-  and the sessions pane shows a session as open only while its process runs. Resume
+  and the palette shows a session as open only while its process runs. Resume
   reads the conversation's first `cwd` and its config folder from the transcript, and
   finds the transcript of an older session by its id under `~/.claude*/projects/`.
+- **A session links its Duet conversation.** Duet writes the Claude Code session's id in
+  its conversation note (`duet: conversation`, `session: <id>`), and the hooks keep the
+  same id in `harness_id`. Each sync, the quick one too, sets the code-owned
+  `conversation` link of every session whose id a note names, and drops one whose note
+  is gone (`sessions.LinkConversations`); the lead callout shows it. Duet writes the id
+  after the session starts, so the first sync after that links it. The Obsidian plugin
+  opens the conversation from a session's thread when the link resolves.
 - **Resume names a config folder only when it is not `~/.claude`.** Claude Code keys its
   login to the folder it was told: `CLAUDE_CONFIG_DIR=~/.claude claude` reports "Not
   logged in" on a machine logged in through the default. Verified 2026-10-01 on 2.1.286.
@@ -124,48 +76,15 @@ The design pages are the spec. When the code departs from them, the reason is be
   (`preferences`) and `<vault>/.almagest/config.json` (`almagest.vault-config.v1`); the vault
   wins per key (`vault.Merge`). Both decode strictly, so a typo is an error. The plugin
   reads and writes them only through `almagest config --json`, never the files.
-  The plugin settings of 8.0.2 (`agentCommand`, `terminal`, `terminalCommand`)
-  move into the vault file once, and stay in `data.json` until the move succeeds.
+  
 - **A terminal launch fails where no one sees it** (osascript and `open` exit after the
   spawn), so `openTerminal` checks for the app first. `scripts/probe-launch.mjs` of `obsidian-almagest`
   opens a real terminal with a probe; record each result in TESTED.md.
 - **A tag page that does not hold its tag's parent is a warning.** No document is lost
   by it; lint names the fix.
-- **The 8.x step of the migration warns about a live session, and does not refuse.** An
-  8.x agent in it still calls the thread tool, which 9.0 does not have. The migration
-  refuses while a change is proposed, and when a file exists at a path it moves one to.
-  The dry run of an 8.x vault lists the 8.x step only, since the 9.0 step reads what the
-  first one moves.
-- **The migration rewrites a path only where it stands as a path.** `rewriteRefs`
-  (`v10.go`) changes an old folder only right after `[[`, `![[`, `](`, or a quote, with
-  its slash; alone between quotes it changes only `wiki/documents` and `wiki/assets`
-  (a Base's `inFolder`); a markdown link counts in its other forms too (`](<wiki/…`,
-  `](./wiki/…`). Prose that names a folder stays as written. It reads every `.md`,
-  `.canvas`, and `.base` file outside the dot folders, `trash/`, and `wiki-view/`, except
-  the originals and the files that wait in `inbox/`, which stay as they were captured or
-  dropped. It rewrites the paths of `.obsidian/bookmarks.json`. A note of `views/` that opens with
-  `views.Notice` is deleted, since code writes it again; any other file there moves to
-  `ingest/` and is reported as a stray.
-- **"inbox" became "ingest" wherever a user or an agent sees it:** the folder, the status
-  key `ingest`, `source capture --ingest` (`--inbox` is refused with a message), the
-  source tool's `ingest` input, and `origin: ingest`. The JSON key `moved_from_views`
-  became `moved_from_wiki_view`.
-- **`threads/` is an archive Almagest does not read.** The index keeps its files as link
-  targets, as it does the scratchpad's (`vault.Unread`), so a topic's link to an archived
-  spec is no dead link. A rename does not rewrite the links inside it, as it does not in
-  the scratchpad. The guard does not judge edits there, and lint does not lint it. A
-  note of an archived type left in `source-core/documents` is the lint error `archived`.
 - **`journals/` is the user's.** The guard refuses every agent edit under it. The index
-  keeps its notes as link targets only (`vault.Unread`, with the scratchpad, `threads/`,
-  and `checkout/`), so search, lint, a rename's link rewrite, and a retag skip them. The
-  index skips `wiki-view/` and `trash/` entirely.
-- **A topic's `## Origin` is a plain section.** Promote wrote it from a stub's idea; 9.0
-  has no promote, and the section stays the user's text.
-- **`vault migrate` refuses a vault that has the 10.0 layout already**, and the guard
-  refuses it from an agent's shell. `Run` checks the vault before the write starts, so a
-  refused migration makes no 10.0 folder. A `journals/`, `checkout/`, or `trash/` that
-  exists before the migration gets a warning: from 10.0 Almagest gives it a meaning. The
-  exclude line `/views/` goes after the commit, so a failed migration keeps it.
+  keeps its notes as link targets only (`vault.Unread`, with the scratchpad and `checkout/`), so search, lint, a rename's link rewrite, and a retag skip them. The
+  index skips `wiki-view/` and `tool/trash/` entirely.
 - **Packages:** the design's context package is `internal/brief`, since `context` is a
   standard Go package. `internal/derive` writes the code-owned parts of sources,
   repositories, and topics (lead callouts, the `almagest-repo` block, git facts).
@@ -192,11 +111,9 @@ The design pages are the spec. When the code departs from them, the reason is be
   keep. Every write defers `tx.End(&err)`: a failure before the commit rolls back and the
   error says so, like a failed `Commit`: "the vault is back as it was", or the paths it
   could not put back. A path saved since the write wrote it (Obsidian, an agent's Edit)
-  stays as saved, and the message names it; `Tx.Settle` records what a git checkout (undo)
-  or the migration left at its kept paths, so their later saves count too. Rollback
+  stays as saved, and the message names it; `Tx.Settle` records what a git checkout (undo) left at its kept paths, so their later saves count too. Rollback
   unstages once the commit staged the paths, or once `Tx.Indexed` said a git checkout did
-  (undo). The migration keeps every
-  path it touches and commits with `Tx.CommitAll`.
+  (undo). 
 - **`writeAtomic` syncs** the file before the rename and the folder after it. On macOS
   that is `F_FULLFSYNC`, about 0.2 s for a write. `writeAtomicIf` runs a check
   after the sync, right before the rename.
@@ -208,13 +125,12 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The views sync never deletes a user's note.** A `.md` file in `wiki-view/` that no
   view stands for and that lacks `views.Notice` moves to `ingest/` under a free name, and
   every write says so: `moved_from_wiki_view` in the result of the source and change
-  tools and in the JSON of each CLI write (with a line on stderr), `strays` in a sync and
-  in the migration's report, and a notice in the plugin.
+  tools and in the JSON of each CLI write (with a line on stderr), `strays` in a sync, and a notice in the plugin.
 - **Every path built from input is contained.** `Vault.Contain` refuses an absolute or
   unclean path, `..`, `.git` in any case, a name over 255 bytes, and a path whose folders
   or final link resolve outside the vault. `Vault.Write`, `WriteIfChanged`, and `Remove`
   run it by default, so a caller cannot forget it; `vault.Tx` checks before it marks a
-  path, and the moves of the misplaced-file sync and of the migration check both paths.
+  path, and the moves of the misplaced-file sync check both paths.
   The one unchecked writer, `WriteMachineIfChanged`, takes only fixed paths under
   `.obsidian/` and `.claude/`, so a user who links `.obsidian` to a shared folder keeps a
   working vault; `settings.go` and `prefs.go` write their machine files with
@@ -261,15 +177,14 @@ The design pages are the spec. When the code departs from them, the reason is be
   that is neither `proposed` nor `running`, since such a record may name a document a
   later change removed. Every change document carries `cssclasses: [almagest-change]`
   (`change.CSSClass`), and the lead callout comes from the frontmatter (`leadFor`).
-- **A remove moves the document to `trash/`.** Apply picks the place with
-  `vault.TrashPath` (`trash/<date>/<vault path>`, with " (2)" before the extension when
+- **A remove moves the document to `tool/trash/`.** Apply picks the place with
+  `vault.TrashPath` (`tool/trash/<date>/<vault path>`, with " (2)" before the extension when
   the place is taken) and lists it in `paths`, so recovery and undo cover it: undo puts
   the document back and takes the trash copy away. The preview's write carries the
   place in `trash`.
 - **Safe delete is the user's** (`core.Trash`, `vault trash PATH`, CLI only; the plugin
   runs it). `Index.Backlinks` counts every typed document, note, and misplaced document,
-  and the markdown kept as link targets only (the scratchpad, `threads/`, `journals/`,
-  `checkout/`), by frontmatter links and body links. The records (changes and
+  and the markdown kept as link targets only (the scratchpad, `journals/`, `checkout/`), by frontmatter links and body links. The records (changes and
   sessions) do not count: they name what they touched and keep the name after a delete. With backlinks it moves nothing and exits 2 (`exitError`), after it prints
   them (JSON `{"trash": {"path", "backlinks", "moved"}}`). A knowledge document with
   none leaves through a change ("Delete <title>", one remove) that it applies at once
@@ -279,8 +194,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   palette offers "Resolve with an agent" only for a knowledge document that knowledge
   documents link; a link in any other file is the user's to fix, and the agent's
   message then says to propose no remove. It refuses `Almagest.md`, `.obsidian/`, `.claude/`, `.almagest/`,
-  `changes/`, `sessions/`, `wiki-view/`, `trash/`, a shipped Base, a folder, and a path
-  outside the vault. The index skips `trash/`, and the guard refuses agent edits in it.
+  `changes/`, `tool/sessions/`, `wiki-view/`, `tool/trash/`, a shipped Base, a folder, and a path
+  outside the vault. The index skips `tool/trash/`, and the guard refuses agent edits in it.
 - **A journal volume is a folder directly under `journals/`** (`journal.Volumes`). Its
   notes are every `.md` file under it, in path order, except its history note,
   `Journal · <folder>.md`; dot files, dot folders, and symbolic links are skipped. `journal.Name`
@@ -301,14 +216,14 @@ The design pages are the spec. When the code departs from them, the reason is be
   numbers a second edition of one day (" (2)"). The tags of the latest edition carry
   forward, with `NewTags` set. Publish refuses a folder name that is not clean (`.`,
   `..`, a slash). One commit holds the source, its original in
-  `source-core/originals/`, and the publication history. The lead callout says
+  `tool/source-core/originals/`, and the publication history. The lead callout says
   "Captured <date> from the journal `<volume>`".
 - **Code's notes take reserved titles.** A note that code writes beside the user's files
   takes a title with a prefix of `vault.ReservedPrefixes` (`Tag · `, `View · `,
   `Checkout · `, `Journal · `), which no document takes (proposals, captures, and lint
   refuse it). So a link to the note names one file: the ledger is
-  `checkout/Checkout · Ledger.md`, a reading list `Checkout · <folder name>.md`, and a
-  volume's history `Journal · <folder>.md`.
+  `checkout/Checkout · Ledger.md`, and a volume's history `Journal · <folder>.md`. A
+  checkout's index is `_index.md` in its folder, which a link names by its path.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
   reach the wiki, and an inline Base of the sources with that `volume` (the folder name
@@ -357,32 +272,39 @@ The design pages are the spec. When the code departs from them, the reason is be
   `checkout_base`, why "edited in the checkout <name>". It leaves out a copy whose
   original is gone or whose `BaseHash` differs from `checkout_base`, and names it in
   `skipped`. It proposes one change, "Return <folder>", with no `session`, so only the
-  user applies it (Approve, or `change apply` in a terminal). It sets `returned` in the
-  reading list and writes the ledger in a commit of its own. When that commit fails
-  after the change is proposed, Return returns the change with a `warning`, not an
-  error, so the user sees the change; the palette shows the warning. A checkout is returned
-  while its return change (`return_change`) is proposed or applied, and a second return
-  is refused then; a rejected, superseded, or undone return change frees it. The
-  change's title is "Return <name>" (the folder without its date). With no edited copy it
-  changes nothing and returns an error that says so. Return carries the body only; an
-  edit of a copy's frontmatter does not return.
-- **The reading list and the ledger are code's.** `make` writes the reading list,
-  `Checkout · <folder name>.md` (`request`, `checked_out`, `documents`, `returned`; a
-  callout, `## Request`, `## Reading order`, `## Notes`), and the ledger,
-  `checkout/Checkout · Ledger.md`, a table of every checkout,
-  newest first, written again at each make and return from the reading lists
-  (`checkout.List`). The guard refuses agent edits under `checkout/`; a read-only agent
-  may call `checkout` `candidates` and `list`.
+  user applies it (Approve, or `change apply` in a terminal).
+- **Return moves the checkout out of `checkout/`, and loses nothing.** After the
+  proposal (or with no edited copy, at once), `moveReturned` moves every file of the
+  folder, the user's own files too, to `tool/returned/<folder>/` (" (2)" when taken),
+  points the links that name the folder at the new place (`MoveLinks`), sets `status:
+  returned`, `returned`, and `return_change` in the index, and writes the ledger, in one
+  commit. `checkout/` then holds only what is out, and the palette counts only that. A
+  checkout returns once; a returned one is checked out again to work on further, and
+  cancelling its change leaves it returned, with the edits in its copies. When the move
+  fails after the change is proposed, Return returns the change with a `warning`, not an
+  error, so the user sees the change. A skipped copy no longer stops a return: its edits
+  stay in the returned copy. The change's title is "Return <name>" (the folder without
+  its date). Return carries the body only; an edit of a copy's frontmatter does not
+  return. `tool/returned/` is unread like `checkout/` (`vault.Unread`), and the guard
+  refuses agent edits there.
+- **The index and the ledger are code's.** `make` writes the index, `_index.md` (`name`,
+  `request`, `checked_out`, `documents`, `status`, `returned`, `return_change`; a `#
+  <name>` heading, a callout, `## Request`, `## Reading order`, `## Notes`). The ledger,
+  `checkout/Checkout · Ledger.md`, is a Base of every `_index` in `checkout/` and
+  `tool/returned/` (`checkout.LedgerNote`); code writes it when it is missing or
+  another. The 11.0 migration turns each reading list, `Checkout · <folder>.md`, into
+  the index and moves a returned checkout. The guard refuses agent edits under
+  `checkout/`; a read-only agent may call `checkout` `candidates` and `list`.
 - **Status names the checkouts.** `vault --json` adds `checkouts`, the entries of
-  `checkout list`: per checkout `folder`, `request`, `date`, `documents`, `edited` (the
-  count of edited copies), and `returned`.
+  `checkout list`, out and returned: per checkout `folder`, `name`, `request`, `date`,
+  `documents`, `edited` (the count of edited copies), `status`, and `returned`.
 - **A wikified copy lies in `scratchpad/`, not beside its note.** `wikify.Start` writes
   `scratchpad/<name> · wikified.md` (`wikify.Suffix`), and `<name> · wikified (2).md`
   when that name is taken. The strategy note put the copy beside the note, but a copy
   of a journal note there would join the volume's next edition, since an edition holds
   every `.md` file under the volume. Start never changes the original. It refuses a
-  file that is not markdown, `Almagest.md`, and a note under `source-core/`, `changes/`,
-  `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`; a note in `journals/` passes.
+  file that is not markdown, `Almagest.md`, and a note under `tool/source-core/`, `changes/`,
+  `tool/sessions/`, `wiki-view/`, `tool/trash/`, or `.obsidian/`; a note in `journals/` passes.
 - **A mark is inline text**: `{{link:<Title>|<phrase>}}` where the phrase names a
   document, `{{new:<Title>|<phrase>}}` where it names a subject worth a topic
   (`wikify.Text`). The plugin parses this syntax; change it in both places.
@@ -414,7 +336,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   that wiki-edit fills with the one topic that Create asked for; its default title is
   "Draft a topic". The schema's change `kind` and the search's kinds list `draft`.
 - **Status shows the work and the trash.** `vault --json` adds `changes.running` (the
-  running work documents) and `trash` (the count of files under `trash/`, `.DS_Store`
+  running work documents) and `trash` (the count of files under `tool/trash/`, `.DS_Store`
   aside). Home lists each running work document with what waits.
 - **The plugin commits hand edits as quiet snapshots.** After `snapshotQuietSeconds`
   (default 120; 0 turns it off) with no create, modify, delete, or rename outside the
@@ -442,14 +364,12 @@ The design pages are the spec. When the code departs from them, the reason is be
   change that waits for the user is a `systemMessage`, because the user acts on it.
 - **The description follows the section.** Every hook event copies the first line of
   `## Description` into `description`, whatever tool wrote it.
-- **An edit in a linked repository needs no ceremony.** 8.x refused it without a started
-  thread with an open task; the user found that it blocked everyday work. The guard
+- **An edit in a linked repository needs no ceremony.** A rule that asked for one blocked everyday work. The guard
   judges only files inside a vault, by the vault above the file.
 - **Shell writes reach the record, not the guard.** The touched hook adds a repository to the session's `repositories` when a Bash
   command with a write mark (a redirect, `sed -i`, `git commit`, …) runs in it or names
   it. The skills tell the agent to change files with Edit and Write.
-- **The shell runs neither the apply nor the undo command of `change`, `vault
-  migrate`, `vault trash`, `journal publish`, nor `almagest hook`.** The guard
+- **The shell runs neither the apply nor the undo command of `change`, `vault trash`, `journal publish`, nor `almagest hook`.** The guard
   refuses them, in every folder: four skip the gate or undo the user's act, `journal
   publish` is the user's decision (CLI only, no MCP action; the plugin's Publish runs
   it), and `hook` forges a user's turn. The `change` tool's `undo` refuses a change with
@@ -468,8 +388,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   elsewhere a commit message or a grep pattern that names a refused subcommand is text,
   and a refusal of quoted text says why it counted. Brace expansion stops past 256
   words, counted before it expands. The binary's name compares without case, and
-  options drop out; an option's value stays, so `apply` and `migrate` count anywhere
-  after their subcommand. A word built at run time (a variable, `$(…)`, a glob, xargs)
+  options drop out; an option's value stays, so `apply` and `trash` count anywhere after their subcommand. A word built at run time (a variable, `$(…)`, a glob, xargs)
   is out of its reach. `config set` and `config unset` of `terminal_command` or
   `agent_commands` are refused too.
 - **The guard takes the vault above the file**, not the vault of the session's folder,
@@ -516,13 +435,6 @@ The design pages are the spec. When the code departs from them, the reason is be
   temporary `.almagest-*` files), so
   init edits no file of the user's. `EnsureFolders` rewrites the entries on every write,
   and untracks an excluded file that an older vault tracked, in a commit of its own.
-- **A Base that equals a shipped copy upgrades in a commit of its own.** `Begin` writes
-  the current copy after the snapshot and before the write, and commits it alone
-  (`layout: upgrade <paths>`, `CommitOnly`), so no snapshot calls it a hand edit and no
-  undo counts it. A refused commit puts the old copy back and the write goes on; the
-  upgrade commit stays when the write then fails. A sync does not upgrade. Each shipped
-  copy lives in `template/old/` (6.5), `template/old/7.0/` (7.x), and
-  `template/old/8.1/` (8.x).
 - **Titles also drop `[ ] # ^`**, which break a wikilink, `→`, which splits the old and
   new titles of a change heading, and control characters. A title the caller gives holds
   at most 150 bytes (`doc.CheckTitle`), so the titles code derives from it fit a file
@@ -534,9 +446,6 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Match merges the hits of one kind on one document** (`mergeHits`), so one drafter
   writes that document. A near or a new subject is never merged, and neither are two
   subjects of different kinds that hit one document.
-- **The guard refuses the old binary names too.** 6.0 to 6.2 shipped the binary as
-  `atlas`, and 6.3 to 10.4 as `atlas-obsidian`. An older install may still hold one, and
-  it reads the same vaults, so the guard's shell rule refuses all three names.
 - **The launcher runs the binary of the plugin's own version.** `bin/almagest` (made by
   `make pin` from `internal/release/launcher.sh`) holds the version and the pinned
   checksums inline. It runs `$ALMAGEST_BIN` when set, else
@@ -615,7 +524,7 @@ plugin at the build under test: set `binaryPath` in the plugin's settings.
 Verified with Codex 0.155.1 in a scratch `CODEX_HOME` (2026-10-04): the plugin's server
 entry, its start in a vault, and `doctor`'s server and hook trust lines (TESTED.md).
 
-Verified live in Obsidian (TESTED.md): Start agent, Resume from the sessions pane, and the
+Verified live in Obsidian (TESTED.md): Start agent, Resume from the palette, and the
 settings tab.
 
 Verified by script in a separate Obsidian: `obsidian-almagest`'s end-to-end suite builds
@@ -639,9 +548,6 @@ repository panel.
   without git.
 - Prose in skills, docs, and messages follows the user's global writing guide.
 
-To try the migration on a copy of a real vault, copy the vault, then run
-`ALMAGEST_MIGRATE_COPY=<copy> go test ./internal/migrate/ -run TestMigrateACopy -v`. It
-prints the report and every lint finding.
 
 ## Build, test, and try
 
@@ -651,7 +557,18 @@ make install      # ~/.almagest/bin/<version>/almagest and the link, as the laun
 make test
 make release      # build/release: each platform's binary and checksums.txt
 make pin          # make release, then release/checksums.txt and the launcher
+make preview VAULT=~/Vaults/SoftwareProjects   # this checkout on this machine, to try it
+make preview-off  # back to the release plugin and its binary
 ```
+
+`make preview` (`scripts/preview.sh`) installs the working tree as it would ship, as
+version `<plugin version>-preview.<commit>` (`.dirty` with uncommitted edits): the binary
+under `~/.almagest/bin/`, with the link; the agent plugin, from a copy of the checkout in
+a local marketplace, `almagest-preview`, with the release plugin turned off (two plugins
+named almagest would serve the tools and run the hooks twice); and, with `VAULT` or
+`ALMAGEST_PREVIEW_VAULT`, Almagest for Obsidian built from `../obsidian-almagest` (or
+`OBSIDIAN_SRC`) in that vault. `CLAUDE_CONFIG_DIR` picks the Claude Code account. Then
+start a new session, and in Obsidian run "Reload app without saving".
 
 The binary, both plugin manifests, the marketplace entry and its `ref`, and the
 launcher share one version; the `internal/plugin` tests fail when they drift. `make test`

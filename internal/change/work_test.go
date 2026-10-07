@@ -115,7 +115,7 @@ func TestARemoveGoesToTheTrash(t *testing.T) {
 		t.Fatalf("the summary:\n%s", got)
 	}
 	applied := apply(t, tv, pv.Ref.ID)
-	trash := "trash/" + vault.Date(tv.Clock) + "/" + vault.DocPath("Old idea")
+	trash := "tool/trash/" + vault.Date(tv.Clock) + "/" + vault.DocPath("Old idea")
 	if applied.Writes[0].Trash != trash || tv.V.Exists(vault.DocPath("Old idea")) || tv.Read(trash) != before {
 		t.Fatalf("the remove: %+v", applied.Writes)
 	}

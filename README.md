@@ -1,42 +1,40 @@
 # Almagest
 
-**Build a wiki with your coding agent, then actually read it, learn from it, and use it.**
+<img src="docs/Bartolomeu_Velho_1568.jpg" alt="Geocentric model of the universe" width="480">
 
-Almagest turns an Obsidian vault into a knowledge base that Claude Code or Codex builds
-with you. The agent ingests your papers, notes, and code into a stable, cited wiki. The
-vault is laid out for you, the person who reads it, and every edit waits for your yes.
+> *Ptolemy proposed a geometric model of the universe in his 2nd century work **Almagest***
 
-Status: early, in active development. macOS and Linux.
+> *Art by Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
 
-## Why Almagest
+---
 
-There are many LLM-wiki and second-brain projects. Most make it easy to build the wiki.
-But the result is structured for the LLM, and it soon overwhelms the person who owns it.
-You have built a large knowledge base, and the graph looks great. Now what?
+# Build an LLM wiki you can actually use
 
-Almagest is about the human side: understanding and working with what you built.
+**Why Almagest?**
 
-- **A wiki you can read.** The documents the agent maintains live in `source-core/`.
-  What you read lives in `wiki-view/`: a home page, a timeline, a library, and a
-  navigation page for each tag.
-- **A librarian.** Ask for the material on a subject, and an agent pulls together the
-  pages that serve your question, in reading order, for you to read and mark up.
-- **Your own words, kept.** Your journals are yours. Agents read them and never change
-  them, and an ingest never rewrites them. You publish a journal into the wiki when you
-  choose, and the wiki cites it by name and date.
-- **A vault that never feels fragile.** Agents generate many documents. Each edit to the
-  wiki arrives as a change you approve or cancel. Safe delete moves a file to `trash/`
-  only when nothing links it, so nothing is lost by accident.
-- **One tool, done well.** Build the wiki, query it, and enjoy using it.
+_Another LLM second brain plugin? Another Karpathy wiki? Another Obsidian knowledge graph?_
+
+I know...
+
+There are thousands of LLM-wiki and second-brain projects, and most of them are pretty good. You can painlessly transform mountains of notes, documents, voice memos, and entire codebases into a gorgeous fabric of markdown documents, and all the wiki links work, and your obsidian knowledge graph has never been bigger. My LLM's seemed to enjoy it, but I found the end result overwhelming. I could not navigate, read, or orientate myself in my own knowledge base.
+
+Before I made Almagest, I spent more time building my knowledge base and admiring its complexity, and less time doing meaningful work with it.
+
+So yes, Almagest is another LLM wiki. But it's designed for the human side as well.
 
 ## Features
 
+### A view for Humans and a structure for Agents
+
+- The tool builds your `wiki-view`: a home page, timeline, library, and a navigation page for each tag.
+- All raw sources, change logs, etc., live under `tool/` which you don't need to open
+
 ### The tool palette
 
-One pane in Obsidian for everything Almagest does: Ingest, Wiki lint, Checkout, Publish,
-Wikify, and Safe delete. It also shows what waits for you: the changes to approve, the
-files to ingest, the journals with unpublished writing, and the checkouts with edits to
-return.
+One pane in Obsidian that leads to everything Almagest does. Its home lists the areas
+(Changes, Ingest, Wiki health, Journals, Library, Agents, and This note), each with one
+line on where it stands and a count when something waits for you. Select one to open its
+page, with its numbers, its actions, and its lists.
 
 ### Ingest: a stable, accurate wiki
 
@@ -62,8 +60,9 @@ vault, and each volume keeps a publication history.
 
 Ask to "check out all the material on reinforcement learning". The librarian finds the
 relevant pages, follows their links only as far as they stay relevant, and puts copies
-of them in `checkout/` with a reading list. Read and mark up the copies. Return proposes
-your edits to the originals as one change, and a ledger lists every checkout.
+of them in `checkout/` with an index in reading order. Read and mark up the copies.
+Return proposes your edits to the originals as one change, and keeps the checkout in
+`tool/returned/` as you left it. A ledger lists every checkout.
 
 ### Wikify a note (experimental)
 
@@ -74,16 +73,17 @@ scratchpad, and it never enters the wiki by itself.
 
 ### Safe delete
 
-Not sure whether you can delete a page? Safe delete moves it to `trash/` when nothing
+Not sure whether you can delete a page? Safe delete moves it to `tool/trash/` when nothing
 links it. When something does, it shows the links, and an agent can repoint them for
-you. Empty `trash/` yourself when you like.
+you. Empty `tool/trash/` yourself when you like.
 
 ### A light touch on Obsidian
 
-Installing Almagest does not change how your Obsidian looks or behaves. It adds its own
-callouts, widgets inside its documents, ribbon buttons, and panes of its own: the
-palette, a tag navigator, and a sessions pane. With the Duet plugin, the agents work in
-Obsidian beside you; without it, they start in your terminal.
+Installing Almagest does not change how your Obsidian behaves. It adds its own callouts,
+widgets inside its documents, and one pane of its own, the palette, with one ribbon button.
+In the file explorer it colors the folders you use: `wiki-view/` in cyan, `journals/` and
+`ingest/` in purple, and `tool/` dimmed (a setting turns this off). With the Duet plugin,
+the agents work in Obsidian beside you; without it, they start in your terminal.
 
 ## Quickstart
 

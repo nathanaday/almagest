@@ -169,12 +169,11 @@ func NoteTitle(rel string) string {
 }
 
 // ObsidianSettings sets the two app settings a vault needs in .obsidian/app.json, and
-// keeps every other key: new attachments go to source-core/originals, unless the user
-// chose a folder, and wiki-view/ and trash/ are among the excluded files, so the views
-// and what safe delete removed stay out of the graph and search. The values 9.0 wrote
-// (wiki/assets, views/) give way to these. It reports whether it wrote.
+// keeps every other key: new attachments go to tool/source-core/originals, unless the user
+// chose a folder, and wiki-view/ and tool/trash/ are among the excluded files, so the views
+// and what safe delete removed stay out of the graph and search. It reports whether it
+// wrote.
 func ObsidianSettings(v *Vault) (bool, error) {
-	const legacyAssets, legacyViews = "wiki/assets", "views"
 	file := v.Abs(AppJSON)
 	settings := map[string]any{}
 	data, err := os.ReadFile(file)
@@ -187,7 +186,7 @@ func ObsidianSettings(v *Vault) (bool, error) {
 		return false, err
 	}
 	changed := false
-	if a, _ := settings["attachmentFolderPath"].(string); a == "" || a == "/" || a == "./" || a == legacyAssets {
+	if a, _ := settings["attachmentFolderPath"].(string); a == "" || a == "/" || a == "./" {
 		settings["attachmentFolderPath"] = Originals
 		changed = true
 	}
@@ -197,11 +196,6 @@ func ObsidianSettings(v *Vault) (bool, error) {
 	}
 	is := func(name string) func(any) bool {
 		return func(x any) bool { s, _ := x.(string); return strings.TrimSuffix(s, "/") == name }
-	}
-	if slices.ContainsFunc(filters, is(legacyViews)) {
-		filters = slices.DeleteFunc(filters, is(legacyViews))
-		settings["userIgnoreFilters"] = filters
-		changed = true
 	}
 	for _, dir := range []string{WikiView, Trash} {
 		if !slices.ContainsFunc(filters, is(dir)) {

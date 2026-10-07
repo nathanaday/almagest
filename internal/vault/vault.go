@@ -23,21 +23,18 @@ import (
 
 // The layout, relative to the vault.
 const (
-	Marker = "Almagest.md"
-	// LegacyMarker is the vault document of the releases before 11.0, when the project
-	// was named Atlas. The migration to layout 7 renames it.
-	LegacyMarker = "Atlas.md"
-	Ingest       = "ingest"
-	Scratchpad   = "scratchpad"
-	Sessions     = "sessions"
-	Changes      = "changes"
-	// Threads holds the thread documents and chord canvases of 8.x, which the 9.0
-	// migration moved out of the documents and chords/. Almagest reads none of it.
-	Threads = "threads"
+	Marker     = "Almagest.md"
+	Ingest     = "ingest"
+	Scratchpad = "scratchpad"
+	Changes    = "changes"
+	// Tool holds what Almagest keeps for itself, which the user need not open: the store
+	// of the wiki, the session records, the trash, and the returned checkouts.
+	Tool     = "tool"
+	Sessions = "tool/sessions"
 	// Core is the store of the wiki: the documents, and the originals they describe.
-	Core      = "source-core"
-	Documents = "source-core/documents"
-	Originals = "source-core/originals"
+	Core      = "tool/source-core"
+	Documents = "tool/source-core/documents"
+	Originals = "tool/source-core/originals"
 	// WikiView is the reading layer that code writes from the documents.
 	WikiView = "wiki-view"
 	// Journals holds the user's own writing, one volume per folder; agents never change it.
@@ -45,33 +42,25 @@ const (
 	// Checkout holds the librarian's copies of documents, and its ledger.
 	Checkout = "checkout"
 	// Trash holds what safe delete removed; the user empties it.
-	Trash     = "trash"
+	Trash = "tool/trash"
+	// Returned holds the checkouts the user returned, as they were, with what the user wrote in them.
+	Returned  = "tool/returned"
 	Settings  = ".claude/settings.local.json"
 	Obsidian  = ".obsidian"
 	PluginDir = ".obsidian/plugins/almagest"
-	// LegacyPluginDir is the Obsidian plugin of the releases before 11.0, which runs the
-	// older binary. The user removes it in Obsidian.
-	LegacyPluginDir = ".obsidian/plugins/atlas"
 	// PluginLink opens the Obsidian plugin in Obsidian's community plugins, where the user
 	// installs it. No tool installs it in a vault.
 	PluginLink = "obsidian://show-plugin?id=almagest"
 	AppJSON    = ".obsidian/app.json"
 )
 
-// Layout is the layout version this binary reads and writes, kept in Almagest.md's layout
-// field: 7 is 11.0, the rename to Almagest; 6 is 10.0; 5 is 9.0; 4 is the threads and
-// chords of 8.x. Only the migrate command writes a vault of an older layout, and only
-// from 4, 5, or 6.
-const (
-	Layout        = 7
-	Layout10      = 6
-	LayoutKB      = 5
-	LayoutThreads = 4
-)
+// Layout is the version of the vault's layout that this binary reads and writes, kept in
+// Almagest.md's layout field.
+const Layout = 8
 
 // Folders are the folders every vault has. EnsureFolders makes the ones a clone left
 // out, because git keeps no empty folder. Checkout and Trash appear when first used.
-var Folders = []string{Ingest, Scratchpad, Sessions, Changes, Core, Documents, Originals, WikiView, Journals}
+var Folders = []string{Ingest, Scratchpad, Changes, Tool, Sessions, Core, Documents, Originals, WikiView, Journals}
 
 // Excluded are the patterns kept out of the vault's history on each machine: the views,
 // which code derives; the harness settings, which hold this machine's paths; and the
@@ -123,35 +112,28 @@ type Vault struct {
 // ErrNoVault is returned when no vault holds a folder.
 var ErrNoVault = errors.New("no vault")
 
-// Open reads the vault at root. The folder must hold an Almagest.md of type vault, or
-// the Atlas.md of an earlier release, which only the migration then takes.
+// Open reads the vault at root. The folder must hold an Almagest.md of type vault.
 func Open(root string) (*Vault, error) {
 	abs, err := filepath.Abs(root)
 	if err != nil {
 		return nil, err
 	}
-	marker := Marker
-	data, err := os.ReadFile(filepath.Join(abs, marker))
+	data, err := os.ReadFile(filepath.Join(abs, Marker))
 	if err != nil {
-		marker = LegacyMarker
-		if data, err = os.ReadFile(filepath.Join(abs, marker)); err != nil {
-			return nil, fmt.Errorf("%s: %w: no %s", abs, ErrNoVault, Marker)
-		}
+		return nil, fmt.Errorf("%s: %w: no %s", abs, ErrNoVault, Marker)
 	}
-	d := doc.Parse(marker, data)
+	d := doc.Parse(Marker, data)
 	if d.FrontErr != nil {
-		return nil, fmt.Errorf("%s: %w", filepath.Join(abs, marker), d.FrontErr)
+		return nil, fmt.Errorf("%s: %w", filepath.Join(abs, Marker), d.FrontErr)
 	}
 	if d.Type() != "vault" {
-		return nil, fmt.Errorf("%s: %w: %s is not of type vault", abs, ErrNoVault, marker)
+		return nil, fmt.Errorf("%s: %w: %s is not of type vault", abs, ErrNoVault, Marker)
 	}
 	return &Vault{Root: abs, Doc: d}, nil
 }
 
-// IsMarker reports whether rel names a vault document, of this release or an earlier one.
-func IsMarker(rel string) bool {
-	return strings.EqualFold(rel, Marker) || strings.EqualFold(rel, LegacyMarker)
-}
+// IsMarker reports whether rel names the vault document, in any case.
+func IsMarker(rel string) bool { return strings.EqualFold(rel, Marker) }
 
 // ID is the vault's id.
 func (v *Vault) ID() string { return v.Doc.ID() }
@@ -176,19 +158,29 @@ func (v *Vault) Tagging() string {
 	return "open"
 }
 
-// LayoutVersion is the layout the vault document records; a vault without the field is
-// a vault of the 6.x layouts.
+// LayoutVersion is the layout the vault document records.
 func (v *Vault) LayoutVersion() int { return v.Doc.Front.Int("layout") }
 
-// ErrLegacy is the refusal of every write on a vault of an older layout.
-var ErrLegacy = errors.New("this vault has the layout of an earlier release; run `almagest vault migrate --dry-run` to see what moves, then `almagest vault migrate` (type it yourself, or with ! in a session)")
+// LayoutBeforeTool is the layout before tool/ held sessions/, source-core/, and trash/;
+// almagest vault migrate takes a vault of it to Layout.
+const LayoutBeforeTool = 7
 
-// CheckLayout refuses a vault whose layout this binary does not write.
+// ErrLayout is the refusal of a vault whose layout this binary does not read.
+var ErrLayout = errors.New("this vault's layout is not the one this almagest reads; update the almagest plugin (claude plugin update almagest@nathanaday-almagest), then start a new session")
+
+// ErrMigrate is the refusal of a vault that keeps sessions/, source-core/, and trash/ at its
+// root. Only the user migrates it: the guard refuses the command to an agent.
+var ErrMigrate = errors.New("this vault keeps sessions/, source-core/, and trash/ at its root, and this almagest keeps them in tool/; the user runs almagest vault migrate in the vault, which moves them in one commit, then starts a new session")
+
+// CheckLayout refuses a vault of another layout than this binary's.
 func (v *Vault) CheckLayout() error {
-	if v.LayoutVersion() < Layout {
-		return ErrLegacy
+	switch v.LayoutVersion() {
+	case Layout:
+		return nil
+	case LayoutBeforeTool:
+		return fmt.Errorf("%w (vault layout %d, almagest reads %d)", ErrMigrate, v.LayoutVersion(), Layout)
 	}
-	return nil
+	return fmt.Errorf("%w (vault layout %d, almagest reads %d)", ErrLayout, v.LayoutVersion(), Layout)
 }
 
 // StaleHours is how long a live session may go without a hook event before it is lost.
@@ -294,6 +286,13 @@ func (v *Vault) linkOut(rel string) string {
 		}
 	}
 	return rel
+}
+
+// InFolder reports whether a vault-relative path is the folder dir or lies under it, in
+// any case.
+func InFolder(rel, dir string) bool {
+	key, d := strings.ToLower(rel), strings.ToLower(dir)
+	return key == d || strings.HasPrefix(key, d+"/")
 }
 
 // Local reports whether a vault-relative path names a document a change may write: a .md
@@ -485,7 +484,7 @@ func FindAbove(dir string) string {
 		return ""
 	}
 	for {
-		if isVaultDoc(filepath.Join(dir, Marker)) || isVaultDoc(filepath.Join(dir, LegacyMarker)) {
+		if isVaultDoc(filepath.Join(dir, Marker)) {
 			return dir
 		}
 		parent := filepath.Dir(dir)
@@ -625,7 +624,8 @@ func ReadFront(file string) (*doc.Front, error) {
 	}
 	defer fh.Close()
 	r := bufio.NewReader(fh)
-	first, err := r.ReadString('\n')
+	// A read error leaves first short of the opening line, which the check refuses.
+	first, _ := r.ReadString('\n')
 	if strings.TrimRight(first, "\r\n") != "---" {
 		return nil, errors.New("no frontmatter")
 	}
@@ -663,14 +663,6 @@ func Date(t time.Time) string { return t.Format(schema.DateFormat) }
 func Day(stamp string) string {
 	if t, ok := schema.ParseTime(stamp); ok {
 		return Date(t)
-	}
-	return stamp
-}
-
-// Minute is a stored time to the minute, or the stamp as given when it does not parse.
-func Minute(stamp string) string {
-	if t, ok := schema.ParseTime(stamp); ok {
-		return t.Format(MinuteFormat)
 	}
 	return stamp
 }

@@ -33,8 +33,8 @@ request to the skill that does it.
   `scratchpad/`.
 - "Start agent" in Obsidian opens a terminal with your agent in the vault. The agent
   preferences choose the agent and the terminal (see
-  [Agent preferences](#agent-preferences)). The sessions pane in the right sidebar shows
-  the open sessions and the ones that closed in the last two hours, with Resume.
+  [Agent preferences](#agent-preferences)). The Agents page of the palette shows the
+  open sessions and the ones that closed in the last two hours, with Resume.
 - "Ingest my files." Files you dropped in `ingest/` become cited wiki pages. The agent
   writes each step in one work document in `changes/`, then proposes the pages into the
   same document. You decide once, at the end.
@@ -75,7 +75,7 @@ almagest journal publish cs566-notes   # publish a volume as a new edition
 almagest checkout                   # the checkouts, newest first
 almagest checkout candidates "reinforcement learning" --tag ml   # the documents a request may need
 almagest checkout make order.json   # copy the documents an order names (request, name, documents, notes)
-almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits of the copies
+almagest checkout return "2026-10-06 Reinforcement learning"     # propose the edits, keep the checkout in tool/returned/
 almagest wikify start Drafts/Notes.md   # copy a note to scratchpad/Notes · wikified.md
 almagest wikify mark "scratchpad/Notes · wikified.md" marks.json   # write marks into the copy
 almagest lint                       # the health check
@@ -84,7 +84,7 @@ almagest vault snapshot             # commit your hand edits now
 
 In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
 Repositories, one timeline per month under `wiki-view/timeline/`, and one view per tag
-under `wiki-view/nav/`. `sessions/Sessions.base` shows what runs now, and
+under `wiki-view/nav/`. `tool/sessions/Sessions.base` shows what runs now, and
 `changes/Changes.base` lists the changes that wait for you.
 
 ## Install and update
@@ -142,6 +142,25 @@ claude plugin update almagest@nathanaday-almagest
 The next session installs the binary of the new version. The marketplace pins the
 plugin to its release tag, so you never get a commit between releases. Almagest for
 Obsidian updates through Obsidian's community plugins.
+
+**A vault from 11.0.** Almagest 11.0 kept `sessions/`, `source-core/`, and `trash/` at the
+vault's root; later releases keep them in `tool/`. An agent session in such a vault says
+so, and every Almagest command and agent edit there waits. Migrate the vault yourself,
+once, after you update the agent plugin:
+
+```bash
+almagest vault migrate --dry-run --vault ~/notes/work   # lists what moves; writes nothing
+almagest vault migrate --vault ~/notes/work
+```
+
+In a session, type `! almagest vault migrate`; in Obsidian, press **Migrate the vault** in
+the Almagest palette. An agent cannot run it. The migration
+commits your hand edits first, then moves every file of the three folders into `tool/`
+in one commit, and points the links, Bases, bookmarks, and Obsidian settings that name a
+moved path at its new place. It leaves prose, code, the captured originals, and the
+contents of the trash as they were. A change that waits for your answer still applies
+after it. Undo takes back no change applied before the migration, since its documents
+moved. Then update Almagest for Obsidian and start a new agent session.
 
 **A second Claude Code account.** Claude Code keeps each account's plugins in its config
 folder: `~/.claude`, or the folder that `CLAUDE_CONFIG_DIR` names. Install the plugin with
@@ -210,27 +229,34 @@ vault that `ALMAGEST_VAULT` names, else the vault above the working folder.
 
 ### Files in a vault
 
-Besides `source-core/documents/`, Almagest writes these files and folders in a vault:
+A vault keeps what you use at its root, and what Almagest keeps for itself in `tool/`,
+which you need not open. Almagest writes these files and folders:
 
 - `Almagest.md`, the vault's own document.
 - `ingest/`: files for the wiki to learn from.
-- `source-core/originals/`: the captured originals and your attachments.
+- `tool/source-core/documents/`: the documents of the wiki (topics, sources, and
+  repositories), which the agent maintains through changes.
+- `tool/source-core/originals/`: the captured originals and your attachments.
 - `scratchpad/`: your notes, the ideas you ask an agent to note for later, and the
   wikified copies of your notes (see [Wikify a note](#wikify-a-note-experimental)).
 - `journals/`: your own writing, one volume per folder. No agent edits it. See
   [Journals](#journals).
 - `journals/<volume>/Journal · <volume>.md`: the publication history of a volume, which
   code writes at each publish.
-- `sessions/` and `changes/`: the session and change documents.
-- `checkout/`: the librarian's checkouts, one folder each, and the ledger,
+- `changes/`: the change documents, which you read and approve.
+- `tool/sessions/`: one document per agent session. A session that runs in a Duet
+  conversation links the conversation's note, in its `conversation` property and its lead
+  callout.
+- `checkout/`: the librarian's checkouts that are out, one folder each, and the ledger,
   `checkout/Checkout · Ledger.md`.
+- `tool/returned/`: the checkouts you returned, as you left them.
   Code writes it, and you read and edit the copies. No agent edits it. See
   [Checkouts](#checkouts).
-- `trash/`: what safe delete and a change's remove took out, under
-  `trash/<date>/<old path>`. Git keeps it. Empty it yourself.
+- `tool/trash/`: what safe delete and a change's remove took out, under
+  `tool/trash/<date>/<old path>`. Git keeps it. Empty it yourself.
 - `wiki-view/`: the notes that code writes for reading. Each sync writes them again.
-- `.obsidian/app.json`: `vault init` sends new attachments to `source-core/originals/`
-  (unless you chose a folder) and keeps `wiki-view/` and `trash/` out of Obsidian's
+- `.obsidian/app.json`: `vault init` sends new attachments to `tool/source-core/originals/`
+  (unless you chose a folder) and keeps `wiki-view/` and `tool/trash/` out of Obsidian's
   graph and search.
   It keeps every other key.
 - `.obsidian/plugins/almagest/`: Almagest for Obsidian, when you install it from the
@@ -243,7 +269,7 @@ Besides `source-core/documents/`, Almagest writes these files and folders in a v
   shares it; see [SECURITY.md](../SECURITY.md).
 
 Search and lint skip `scratchpad/`, `journals/`, and `checkout/`, but a link
-to a note there still resolves. Almagest skips `trash/` entirely.
+to a note there still resolves. Almagest skips `tool/trash/` entirely.
 
 ## Journals
 
@@ -254,9 +280,9 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   are sections. The volume's notes are every `.md` file under the folder, except its
   publication history. The folder name gives the volume's name: `cs566-notes` reads
   "CS566 Notes".
-- **Publish.** Press Publish next to a volume in the palette, or run
-  `almagest journal publish <volume>`. Almagest copies the volume into one source,
-  an edition, in one commit. The palette then starts a work document and an agent that
+- **Publish.** Press Publish next to the volume on the palette's Journals page, or run
+  `almagest journal publish <volume>`. Almagest copies the volume into one source, an
+  edition, in one commit. The palette then starts a work document and an agent that
   absorbs the edition into the wiki; you approve its change as usual. Publish refuses a
   volume with no note, and a volume with no change since its latest edition. An agent
   cannot publish: the guard refuses the command from its shell.
@@ -265,7 +291,7 @@ an ingest never rewrites it. You decide when the wiki learns from it.
   day ends in " (2)". The edition holds each note under a heading with its path in the
   volume, without its frontmatter. Its fields are `origin: journal`, `authority:
   primary`, `volume`, `edition` (the date), and `journal_hash`. It keeps the tags of the
-  volume's latest edition. Every edition stays in `source-core/originals/`, and topics
+  volume's latest edition. Every edition stays in `tool/source-core/originals/`, and topics
   cite the edition, not the notes.
 - **Publication history.** Each publish writes `Journal · <volume>.md` at the volume's
   root: a table of the volume's editions. No document can take a title that begins with
@@ -289,27 +315,29 @@ reading order, and checks out a copy of each for you to read and mark up.
   stops following a branch where its documents stop serving it. It aims for a sitting
   or a week of reading, at most about 30 documents. When more serve, it asks you once
   to narrow the request. A checkout holds at most 60 documents.
-- **The folder.** `checkout/<date> <name>/` holds the copies and a reading list. Code
-  writes it in one commit. A second checkout with the same date and name ends in
+- **The folder.** `checkout/<date> <name>/` holds the copies and the checkout's index.
+  Code writes it in one commit. A second checkout with the same date and name ends in
   " (2)".
 - **The copies.** A copy is `<Title> (checkout).md`: the original's text below a callout
   that names the original. The copy takes its own name so that a `[[Title]]` link in the
   wiki still names one file, the original. A link to another document of the checkout
   points at that document's copy; every other link points at the wiki. Edit the copies
   as you like. No agent edits `checkout/`.
-- **The reading list.** `Checkout · <folder>.md` holds your request, the documents in reading
-  order with one line each on why they are there, and the agent's notes on what it left
-  out.
-- **The ledger.** `checkout/Checkout · Ledger.md` lists every checkout, newest first: the date, the
-  request, the count of documents, the count of edited copies, and the date of its
-  return. Code writes it again at each checkout and each return, so an edit there is
-  lost.
-- **Return.** Press Return next to the checkout in the palette, or run `almagest
-  checkout return <folder>`. Almagest proposes one change, "Return <folder>", with a modify
-  of each original whose copy you edited. The links to copies point at the originals
-  again. You decide in the change document, as for every change. Return skips a copy
-  whose original changed since the checkout, and names it; its edits stay in the copy.
-  Return carries a copy's text, not its frontmatter.
+- **The index.** `_index.md` in the folder holds the checkout's name, your request, when
+  you checked it out, its status (out or returned), the documents in reading order with
+  one line each on why they are there, and the agent's notes on what it left out.
+- **The ledger.** `checkout/Checkout · Ledger.md` is a Base of every checkout's index, out
+  and returned, newest first: the name, the date, the count of documents, the status,
+  and the date of its return. A row opens the checkout.
+- **Return.** Press Return next to the checkout on the palette's Library page, or run
+  `almagest checkout return <folder>`. When you edited copies, Almagest proposes one
+  change, "Return <name>", with a modify of each original whose copy you edited, and the
+  links to copies point at the originals again; you decide in the change document, as
+  for every change. Then the checkout moves, every file of it, to
+  `tool/returned/<folder>/`, so `checkout/` holds only what is out, and nothing you
+  wrote there is lost. A checkout with no edit just moves. Return skips a copy whose
+  original changed since the checkout, and names it; its edits stay in the returned
+  copy. Return carries a copy's text, not its frontmatter.
 
 ## Wikify a note (experimental)
 
@@ -317,12 +345,12 @@ Wikify shows what the wiki knows in a note of yours, and which of its subjects t
 lacks. It works on a copy, and nothing enters the wiki until you create a topic through
 a change.
 
-- **The copy.** Press Wikify this note in the palette, or ask an agent to wikify a
-  note. `wikify start` copies the note to `scratchpad/<name> · wikified.md` (with
+- **The copy.** Press Wikify this note on the palette's This note page, or ask an agent to
+  wikify a note. `wikify start` copies the note to `scratchpad/<name> · wikified.md` (with
   " (2)" when that name is taken). The original stays as it is. The copy lies in
   `scratchpad/`, so a copy of a journal note never joins the volume's edition. Wikify
   refuses a file that is not markdown, `Almagest.md`, and the folders that code writes:
-  `source-core/`, `changes/`, `sessions/`, `wiki-view/`, `trash/`, and `.obsidian/`.
+  `tool/source-core/`, `changes/`, `tool/sessions/`, `wiki-view/`, `tool/trash/`, and `.obsidian/`.
 - **The marks.** The agent (the `wiki-wikify` skill) matches the note's subjects
   against the wiki, then calls `wikify mark` once. A mark is inline text:
   `{{link:<Title>|<phrase>}}` where the phrase names a document of the wiki, and
@@ -351,37 +379,51 @@ a change.
 The vault works without the plugin. With it, Obsidian adds:
 
 - **The Almagest palette** in the right sidebar (the Almagest ribbon button, or the command
-  "Open the tool palette"). It shows the proposed changes, the running work documents,
-  the files in `ingest/`, the pending sources, the live sessions, the files in `trash/`,
-  the journal volumes, the checkouts, and the lint problems. Its actions:
-  - **Ingest** starts a work document for the files in `ingest/`, opens it, and starts
-    an agent that reports into it.
-  - **Wiki lint** runs `lint` and lists the first findings. **Repair with an agent**
-    starts a repair work document and an agent that proposes the repairs into it.
-  - **Safe delete this file** runs `almagest vault trash` on the open file. When
-    no file links it, the file moves to `trash/`; a topic, a source, or a repository
-    leaves through a change that applies at once, so `change undo` in a terminal brings
-    it back; an agent cannot undo it. When files link it, nothing moves, and a list
-    names the links. For a knowledge document that documents link, the list offers
-    **Resolve with an agent**: the agent points each link in a document elsewhere and
-    proposes the remove. A link in your own notes (the scratchpad, `journals/`,
-    `checkout/`, and the like) is yours to fix; while one stays, the agent
-    proposes no remove, and you run Safe delete again after you fix it.
-  - **Publish** next to a journal volume (marked when the volume has changes) runs
-    `almagest journal publish`, then starts a work document and an agent that
-    absorbs the edition. See [Journals](#journals).
-  - **Checkout** asks for your request and starts an agent that checks out the
-    material on it.
-  - **Return** next to a checkout runs `almagest checkout return` and opens the
-    change. It is on when a copy is edited and the checkout is not returned. See
+  "Open the tool palette"). Its home lists the areas of Almagest, each with one line on
+  where it stands and a count when something waits for you. Select an area to open its
+  page: what it is, its numbers, its actions, and its lists.
+  - **Changes**: the changes to review, and the running work documents with their last
+    step.
+  - **Ingest**: the files in `ingest/`. **Ingest** starts a work document for them, opens
+    it, and starts an agent that reports into it.
+  - **Wiki health**: **Run wiki lint** lists the first findings, and **Repair with an
+    agent** starts a repair work document and an agent that proposes the repairs into it.
+    **Sync the vault** writes the views and the statuses again (the command "Sync the
+    vault" does the same).
+  - **Journals**: each volume, marked "changed" when it has writing to publish.
+    **Publish** runs `almagest journal publish`, then starts a work document and an agent
+    that absorbs the edition. See [Journals](#journals).
+  - **Library**: **Check out material** asks for your request and starts the librarian.
+    It lists the checkouts that are out. **Return** next to one returns it in one click:
+    it proposes the edits of the copies as one change, when there are any, and moves the
+    checkout to `tool/returned/`, and a notice says how it went. The ledger lists every
+    checkout. See
     [Checkouts](#checkouts).
-  - **Wikify this note** (experimental) copies the open note to `scratchpad/`, opens
-    the copy, and starts an agent that marks it. See
-    [Wikify a note](#wikify-a-note-experimental).
+  - **Agents**: **Start an agent**, the agents Almagest started that still work, and the
+    agent sessions of the vault as message threads: the open ones, each with its state
+    and its last progress line, then the ones that closed in the last two hours, folded
+    away, with **Resume**. A thread opens the session's Duet conversation when it runs in
+    one, else the session's document. A session that needs you counts on the home row.
+  - **This note**: **Wikify this note** (experimental) copies the open note to
+    `scratchpad/`, opens the copy, and starts an agent that marks it (see
+    [Wikify a note](#wikify-a-note-experimental)). **Safe delete this note**
+    runs `almagest vault trash` on it. When nothing links it, it moves to `tool/trash/`; a
+    topic, a source, or a repository leaves through a change that applies at once, so
+    `change undo` in a terminal brings it back, and no agent can undo it. When files link
+    it, nothing moves, and a list names the links. For a knowledge document that
+    documents link, the list offers **Resolve with an agent**: the agent points each link
+    in a document elsewhere and proposes the remove. A link in your own notes (the
+    scratchpad, `journals/`, `checkout/`, and the like) is yours to fix; while one stays,
+    the agent proposes no remove, and you run Safe delete again after you fix it.
 
-  The palette starts an agent through the Duet plugin. Without Duet, it starts your
-  agent in a terminal (see [Agent preferences](#agent-preferences)) with the same
-  message.
+  The setting **Agent conversations** chooses where an agent works: **Duet
+  (recommended)**, in a conversation note of the vault through the Duet plugin, or
+  **Terminal (configurable)**, in a new terminal with the agent and terminal settings of
+  Almagest. Every feature works with either. While Duet is the choice but is not installed
+  or not on, agents start in a terminal, the settings name what Duet needs, and a tip
+  recommends Duet at the top of `Almagest.md` and in each new terminal. The plugin draws
+  the tip in `Almagest.md` and never writes it into the file. Choose Terminal, and the tip
+  goes away. Resume of a closed terminal session always opens a terminal.
 - **Wikify bubbles** in a wikified copy: Accept, Ignore, Create, and Link on each mark.
 - **Approve and Cancel** in each change document. Approve applies the change, as
   `almagest change apply` does in a terminal. Cancel asks for an optional reason
@@ -390,13 +432,16 @@ The vault works without the plugin. With it, Obsidian adds:
 - **Quiet snapshots.** After two minutes with no file change, the plugin commits your
   edits to the vault's git history. Set the period in the Almagest settings; 0 turns it
   off. Every Almagest write also commits your edits first, so you need not commit by hand.
-- **The tag navigator** in the left sidebar (the command "Open the tag navigator"), which narrows the documents one tag at a
-  time.
-- **The sessions pane** in the right sidebar, with Resume, and the **Start agent**
-  command.
 - **The repository panel** in each repository document: the branch, the head, and the
   uncommitted files of the linked repository.
 - Colors and icons for the callouts of Almagest documents.
+- **Folder colors** in the file explorer: what you read (`wiki-view/`) in cyan, what you
+  write and add (`journals/`, `ingest/`) in purple, and what Almagest keeps for itself
+  (`tool/`) dimmed. The setting "Color Almagest's folders" turns them off.
+- **Migrate an 11.0 vault.** In a vault that keeps `sessions/`, `source-core/`, and
+  `trash/` at its root, a notice and the palette offer the migration: the palette shows
+  how many files move and change, and **Migrate the vault** runs `almagest vault migrate`,
+  which moves them into `tool/` in one commit. See [Update](#update).
 - A sync of the views a few seconds after you edit a note.
 
 ## Settings
@@ -467,5 +512,4 @@ These rules hold everywhere in Almagest:
   `internal/release` (the launcher's template and `make pin`), and
   `.github/workflows/release.yml`.
 - The Obsidian plugin is in its own repository, `obsidian-almagest`.
-- `v7-design/`: the design pages of 7.0, kept for reference.
 - Notes for agents that work on this code: [CLAUDE.md](../CLAUDE.md).

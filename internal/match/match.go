@@ -204,8 +204,7 @@ func matchItems(idx *vault.Index, maps []ItemMap, pages []*doc.Doc) (*Map, error
 	for i := range parent {
 		parent[i] = i
 	}
-	var find func(int) int
-	find = func(i int) int {
+	find := func(i int) int {
 		for parent[i] != i {
 			parent[i] = parent[parent[i]]
 			i = parent[i]

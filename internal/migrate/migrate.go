@@ -1,32 +1,47 @@
-// Package migrate moves a vault of an earlier layout to the layout of 11.0 in one commit,
-// in up to three steps. The step from 8.x (v9.go) moves the thread documents and the chord
-// canvases to threads/, and takes the fields and sections that served threads out of the
-// documents that stay. The step from 9.0 (v10.go) renames the folders: wiki/ becomes
-// source-core/, inbox/ becomes ingest/, and views/ becomes wiki-view/, and the paths that
-// links and Bases name follow. The step from 10.0 (v11.go) renames what code owns from
-// Atlas to Almagest. An older vault takes every step after its own. A vault older than
-// 8.0 migrates with 8.1.1 first. Plan computes the move and writes nothing; Run writes it.
+// Package migrate moves a vault of the layout before tool/ (layout 7) to the current
+// layout in one commit: sessions/, source-core/, and trash/ go into tool/, and the paths
+// that links and Bases name follow. Plan computes the move and writes nothing; Run writes
+// it. Only the user runs it: the guard refuses the command to an agent.
 package migrate
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io/fs"
 	"os"
+	"path"
 	"path/filepath"
+	"regexp"
+	"slices"
+	"sort"
 	"strings"
 	"time"
 
+	"github.com/nathanaday/almagest/internal/checkout"
 	"github.com/nathanaday/almagest/internal/derive"
+	"github.com/nathanaday/almagest/internal/doc"
 	"github.com/nathanaday/almagest/internal/lint"
 	"github.com/nathanaday/almagest/internal/vault"
 	"github.com/nathanaday/almagest/internal/views"
 )
 
 // Trailer marks the migration's commit.
-const Trailer = "Almagest-Migrate: 11.0"
+const Trailer = "Almagest-Migrate"
 
-// Move is one file the migration moves as it is.
+// The folders that tool/ takes, as layout 7 named them.
+const (
+	oldSessions = "sessions"
+	oldCore     = "source-core"
+	oldTrash    = "trash"
+)
+
+var moved = map[string]string{oldSessions: vault.Sessions, oldCore: vault.Core, oldTrash: vault.Trash}
+
+// bookmarks is Obsidian's list of bookmarked files, which names them by path.
+const bookmarks = ".obsidian/bookmarks.json"
+
+// Move is one file the migration moves.
 type Move struct {
 	From string `json:"from"`
 	To   string `json:"to"`
@@ -35,180 +50,86 @@ type Move struct {
 // Report is what a migration does.
 type Report struct {
 	Vault string `json:"vault"`
-	// From is the layout the vault had: 8.x, 9.0, or 10.0.
-	From string `json:"from"`
-	// Moved are the files the migration moved: the thread documents and chord canvases
-	// of 8.x to threads/, and every file of the renamed folders.
+	From  int    `json:"from"`
+	To    int    `json:"to"`
 	Moved []Move `json:"moved"`
-	// Edited are the files whose text the migration changed: a field or a section of the
-	// threads left, or a path the file names followed a move. Each is named by its path
+	// Edited are the files whose links or Base filters named a moved path, by their path
 	// after the moves.
-	Edited []string `json:"edited"`
-	// Removed are the notes of the old views/, which code writes again in wiki-view/.
-	Removed  []string `json:"removed"`
+	Edited   []string `json:"edited"`
 	Warnings []string `json:"warnings"`
 	Commit   string   `json:"commit,omitempty"`
-	// Strays are the notes of the user's that the migration or its views step found in
-	// a views folder and moved to ingest/.
-	Strays   []vault.Moved `json:"strays,omitempty"`
-	Problems int           `json:"problems"`
+	Problems int      `json:"problems"`
 }
 
-// edit is a file's content after the migration, at its path after the moves.
-type edit struct {
-	path    string
-	content string
-}
-
-// plan is one step of the migration, in memory.
+// plan is the migration in memory: the moves, then the edits at their paths after them.
 type plan struct {
-	moves   []Move
-	edits   []edit
-	removes []string
+	moves []Move
+	edits map[string][]byte
 }
 
-func newReport(v *vault.Vault) *Report {
-	return &Report{Vault: v.Name(), Moved: []Move{}, Edited: []string{}, Removed: []string{}, Warnings: []string{}}
-}
-
-// check refuses a vault the migration does not take: one of the current layout, one
-// older than 8.0, and one with a change waiting for an answer.
+// check refuses a vault that the migration does not take.
 func check(v *vault.Vault) error {
-	switch layout := v.LayoutVersion(); {
-	case layout >= vault.Layout:
-		return errors.New("this vault has the 11.0 layout already; there is nothing to migrate")
-	case layout < vault.LayoutThreads:
-		return errors.New("this vault has the layout of 7.x or earlier; migrate it with release 8.1.1 first (the tag threads-final of this repository, when the project was Atlas), then with this release")
+	switch l := v.LayoutVersion(); l {
+	case vault.LayoutBeforeTool:
+		return nil
+	case vault.Layout:
+		return errors.New("this vault keeps sessions/, source-core/, and trash/ in tool/ already; there is nothing to migrate")
+	default:
+		return fmt.Errorf("this vault has layout %d, and the migration takes layout %d to %d: %w", l, vault.LayoutBeforeTool, vault.Layout, vault.ErrLayout)
 	}
-	var waiting []string
-	for _, c := range changes(v) {
-		if s := c.Str("status"); s == "proposed" || s == "applying" {
-			waiting = append(waiting, vault.Title(c))
-		}
-	}
-	if len(waiting) > 0 {
-		return fmt.Errorf("apply or reject these changes first, since the migration rewrites the documents they read: %s", strings.Join(waiting, ", "))
-	}
-	return nil
 }
 
-// Plan computes the migration of a vault and writes nothing. For an 8.x vault it lists
-// the first step only, since the second reads what the first moves; the report says so.
+// Plan computes the migration of a vault and writes nothing.
 func Plan(v *vault.Vault) (*Report, error) {
-	if fresh, err := vault.Open(v.Root); err == nil {
-		v = fresh
-	}
 	if err := check(v); err != nil {
 		return nil, err
 	}
-	report := newReport(v)
-	switch v.LayoutVersion() {
-	case vault.LayoutThreads:
-		report.From = "8.x"
-		if _, err := build9(v, report); err != nil {
-			return nil, err
-		}
-		report.Warnings = append(report.Warnings, "this lists the first step, from 8.x to 9.0; the same run then renames the folders of 10.0 (wiki/ to source-core/, inbox/ to ingest/, views/ to wiki-view/) and the names of 11.0 (Atlas.md to Almagest.md)")
-	case vault.LayoutKB:
-		report.From = "9.0"
-		if _, err := build10(v, report); err != nil {
-			return nil, err
-		}
-		report.Warnings = append(report.Warnings, "this lists the first step, from 9.0 to 10.0; the same run then renames what code owns from Atlas to Almagest (Atlas.md to Almagest.md, the change and repository blocks, .atlas/ to .almagest/)")
-	default:
-		report.From = "10.0"
-		if _, err := build11(v, report); err != nil {
-			return nil, err
-		}
+	r := newReport(v)
+	p, err := build(v, r)
+	if err != nil {
+		return nil, err
 	}
-	return report, nil
+	r.Moved = p.moves
+	return r, nil
 }
 
 // Run migrates a vault in one commit, then writes the views.
 func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
-	// A vault the migration does not take is refused before anything touches it: the
-	// write's start makes the 10.0 folders.
-	if pre, err := vault.Open(v.Root); err == nil {
-		if err := check(pre); err != nil {
-			return nil, err
-		}
+	// The write's start makes the folders of the current layout, so a vault the
+	// migration does not take is refused before anything touches it.
+	if err := check(v); err != nil {
+		return nil, err
 	}
-	tx, err := vault.BeginAsIs(v, func() error { return vault.Recover(v) })
+	r := newReport(v)
+	if mine := userFiles(v); len(mine) > 0 {
+		r.Warnings = append(r.Warnings, fmt.Sprintf("%s/ held %d %s of yours before the migration; they stay there, beside what Almagest keeps", vault.Tool, len(mine), doc.Plural(len(mine), "file", "files")))
+	}
+	tx, err := vault.Begin(v, func() error { return vault.Recover(v) })
 	if err != nil {
 		return nil, err
 	}
 	defer tx.End(&err)
+	p, err := build(v, r)
+	if err != nil {
+		return nil, err
+	}
+	for _, m := range p.moves {
+		if err := tx.Move(m.From, m.To); err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+	}
+	for _, rel := range sortedKeys(p.edits) {
+		if err := tx.Write(rel, p.edits[rel]); err != nil {
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+	}
+	r.Moved = p.moves
+	for dir := range moved {
+		prune(v.Abs(dir))
+	}
 	fresh, err := vault.Open(v.Root)
 	if err != nil {
 		return nil, err
-	}
-	if err := check(fresh); err != nil {
-		return nil, err
-	}
-	// An older binary holds the lock of its own name, so neither writes while the other does.
-	unlockLegacy, err := fresh.LockLegacy()
-	if err != nil {
-		return nil, err
-	}
-	defer unlockLegacy()
-	report := newReport(fresh)
-	report.From = map[int]string{vault.LayoutThreads: "8.x", vault.LayoutKB: "9.0"}[fresh.LayoutVersion()]
-	if report.From == "" {
-		report.From = "10.0"
-	}
-	if fresh.LayoutVersion() == vault.LayoutThreads {
-		report.From = "8.x"
-		p, err := build9(fresh, report)
-		if err != nil {
-			return nil, err
-		}
-		if err := p.execute(tx); err != nil {
-			return nil, err
-		}
-		prune(fresh.Abs(chords))
-		if fresh, err = vault.Open(v.Root); err != nil {
-			return nil, err
-		}
-	}
-	if fresh.LayoutVersion() == vault.LayoutKB {
-		p, err := build10(fresh, report)
-		if err != nil {
-			return nil, err
-		}
-		if err := p.execute(tx); err != nil {
-			return nil, err
-		}
-		for _, dir := range []string{legacyWiki, legacyInbox, legacyViews} {
-			prune(fresh.Abs(dir))
-		}
-		if fresh, err = vault.Open(v.Root); err != nil {
-			return nil, err
-		}
-	}
-	p, err := build11(fresh, report)
-	if err != nil {
-		return nil, err
-	}
-	if err := p.execute(tx); err != nil {
-		return nil, err
-	}
-	prune(fresh.Abs(legacyConfigDir))
-	if fresh, err = vault.Open(v.Root); err != nil {
-		return nil, err
-	}
-	if err := fresh.EnsureFolders(); err != nil {
-		return nil, err
-	}
-	// The settings file the next step writes is kept too, so a failed commit puts it back.
-	if err := tx.Keep(vault.AppJSON); err != nil {
-		return nil, err
-	}
-	if _, err := vault.ObsidianSettings(fresh); err != nil {
-		return nil, err
-	}
-	tx.Settle(vault.AppJSON)
-	if err := vault.UpgradeBases(fresh, tx.Write); err != nil {
-		return nil, fmt.Errorf("migrate: %w", err)
 	}
 	idx, err := vault.Load(fresh)
 	if err != nil {
@@ -220,64 +141,331 @@ func Run(v *vault.Vault, now time.Time) (_ *Report, err error) {
 	if beforeCommit != nil {
 		beforeCommit()
 	}
-	sha, err := tx.CommitAll("layout: migrate to 11.0\n\n" + Trailer + " from " + report.From)
+	sha, err := tx.Commit(fmt.Sprintf("layout: move sessions/, source-core/, and trash/ into %s/", vault.Tool), fmt.Sprintf("%s: %d to %d", Trailer, r.From, r.To))
 	if err != nil {
 		return nil, err
 	}
-	report.Commit = sha
-	// The old views folder is gone with the commit; its exclude line goes now, so a failed
-	// migration leaves the 9.0 views excluded.
-	if err := fresh.Git().Unexclude("/" + legacyViews + "/"); err != nil {
-		report.Warnings = append(report.Warnings, "the line /views/ stays in .git/info/exclude: "+err.Error())
-	}
+	r.Commit = sha
 	if idx, err = vault.Load(fresh); err != nil {
-		return report, err
+		return r, err
 	}
-	if _, strays, err := views.Write(idx, now); err == nil {
-		report.Strays = append(report.Strays, strays...)
-	}
+	views.Write(idx, now)
 	fresh.SyncSettings(nil)
 	if f, err := lint.Run(idx, lint.Options{Quick: true, Now: now}); err == nil {
-		report.Problems = f.Counts[lint.Error]
+		r.Problems = f.Counts[lint.Error]
 	}
-	return report, nil
+	return r, nil
 }
 
-// execute writes one step: every move, then every edit at its path after the moves, then
-// every remove. A path that is taken refuses the step before anything moves.
-func (p *plan) execute(tx *vault.Tx) error {
+func newReport(v *vault.Vault) *Report {
+	r := &Report{Vault: v.Name(), From: v.LayoutVersion(), To: vault.Layout, Moved: []Move{}, Edited: []string{}, Warnings: []string{}}
+	if applied, _ := filepath.Glob(v.Abs(vault.Changes + "/*/*.md")); slices.ContainsFunc(applied, func(f string) bool {
+		data, _ := os.ReadFile(f)
+		return strings.Contains(string(data), "\nstatus: applied\n")
+	}) {
+		r.Warnings = append(r.Warnings, "undo takes back no change applied before the migration, since its documents moved")
+	}
+	return r
+}
+
+// build computes the migration: every file of sessions/, source-core/, and trash/ moves
+// into tool/; each checkout takes its index, and a returned one moves to tool/returned/;
+// the links and Base filters that name a moved path follow; Obsidian's attachment folder,
+// excluded files, and bookmarks follow; the ledger becomes its Base; and Almagest.md takes
+// the current layout.
+func build(v *vault.Vault, r *Report) (*plan, error) {
+	p := &plan{edits: map[string][]byte{}}
+	for _, dir := range sortedKeys(moved) {
+		err := walkFiles(v, dir, func(rel string) error {
+			p.moves = append(p.moves, Move{From: rel, To: vault.Tool + "/" + rel})
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	shelf, err := checkouts(v, p)
+	if err != nil {
+		return nil, err
+	}
+	sort.Slice(p.moves, func(i, j int) bool { return p.moves[i].From < p.moves[j].From })
+	if err := claim(v, p.moves); err != nil {
+		return nil, err
+	}
+	dest := map[string]string{}
 	for _, m := range p.moves {
-		if err := tx.Move(m.From, m.To); err != nil {
-			return fmt.Errorf("migrate: %w", err)
-		}
+		dest[m.From] = m.To
 	}
-	for _, e := range p.edits {
-		if err := tx.Write(e.path, []byte(e.content)); err != nil {
-			return fmt.Errorf("migrate: %w", err)
+	edit := func(rel string, before, after []byte) {
+		if string(before) == string(after) {
+			return
 		}
-	}
-	for _, r := range p.removes {
-		if err := tx.Remove(r); err != nil {
-			return fmt.Errorf("migrate: %w", err)
+		at := rel
+		if to, ok := dest[rel]; ok {
+			at = to
 		}
+		p.edits[at] = after
+		r.Edited = append(r.Edited, at)
 	}
-	return nil
+	err = filepath.WalkDir(v.Root, func(abs string, e fs.DirEntry, err error) error {
+		if err != nil {
+			return nil
+		}
+		rel := v.Rel(abs)
+		if e.IsDir() {
+			// The views are written again; a captured original, the trash, and a file
+			// that waits in ingest/ stay as they were.
+			if abs != v.Root && (strings.HasPrefix(e.Name(), ".") || e.Name() == "node_modules" || slices.Contains([]string{vault.WikiView, vault.Ingest, oldTrash, vault.Trash, oldCore + "/originals", vault.Originals}, rel)) {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		ext := strings.ToLower(path.Ext(rel))
+		if ext != ".md" && ext != ".canvas" && ext != ".base" {
+			return nil
+		}
+		data, err := os.ReadFile(abs)
+		if err != nil {
+			return err
+		}
+		after := rewriteRefs(ext, string(data))
+		if ext == ".md" {
+			after = checkout.Rehash(string(data), shelf.relink(rel, after))
+		}
+		if vault.IsMarker(rel) {
+			after = doc.SetField(after, "layout", vault.Layout)
+		}
+		edit(rel, data, []byte(after))
+		return nil
+	})
+	if err != nil {
+		return nil, err
+	}
+	if ledger := path.Join(vault.Checkout, checkout.Ledger+".md"); v.Exists(ledger) {
+		data, _ := v.Read(ledger)
+		edit(ledger, data, []byte(checkout.LedgerNote))
+	}
+	if data, err := v.Read(bookmarks); err == nil {
+		edit(bookmarks, data, []byte(rewritePaths(string(data), true)))
+	}
+	if data, err := v.Read(vault.AppJSON); err == nil {
+		after, err := appSettings(data)
+		if err != nil {
+			return nil, err
+		}
+		edit(vault.AppJSON, data, after)
+	}
+	sort.Strings(r.Edited)
+	r.Edited = slices.Compact(r.Edited)
+	return p, nil
 }
 
-// claim refuses moves whose targets exist, or that share a target.
-func claim(v *vault.Vault, moves []Move) error {
-	to := map[string]string{}
-	for _, m := range moves {
-		key := strings.ToLower(m.To)
-		if other, ok := to[key]; ok {
-			return fmt.Errorf("%s and %s would both move to %s; rename one, then migrate", other, m.From, m.To)
+// shelf is how the checkouts of 11.0 change: each folder's place after the migration, and
+// each reading list's index.
+type shelf struct {
+	folders map[string]string // checkout folder → its folder now
+	indexes map[string]string // reading list → the checkout's index
+}
+
+// checkouts plans each checkout of 11.0: its reading list, "Checkout · <folder>.md",
+// becomes _index.md with the checkout's name and status, and a returned checkout moves,
+// every file of it, to tool/returned/. A folder with no reading list stays as it is.
+func checkouts(v *vault.Vault, p *plan) (*shelf, error) {
+	s := &shelf{folders: map[string]string{}, indexes: map[string]string{}}
+	entries, _ := os.ReadDir(v.Abs(vault.Checkout))
+	for _, e := range entries {
+		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+			continue
 		}
-		to[key] = m.From
+		folder := path.Join(vault.Checkout, e.Name())
+		list := path.Join(folder, "Checkout · "+e.Name()+".md")
+		data, err := v.Read(list)
+		if err != nil {
+			continue
+		}
+		dest := folder
+		if doc.Parse(list, data).Str("returned") != "" {
+			dest = path.Join(vault.Returned, e.Name())
+		}
+		s.folders[folder] = dest
+		s.indexes[list] = checkout.IndexPath(dest)
+		err = walkFiles(v, folder, func(rel string) error {
+			to := dest + strings.TrimPrefix(rel, folder)
+			if rel == list {
+				to = checkout.IndexPath(dest)
+			}
+			if to != rel {
+				p.moves = append(p.moves, Move{From: rel, To: to})
+			}
+			return nil
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+	return s, nil
+}
+
+// relink points the links of a note at the checkouts' places now, and gives a reading
+// list the fields of an index.
+func (s *shelf) relink(rel, text string) string {
+	for list, index := range s.indexes {
+		text = checkout.MoveLinks(text, strings.TrimSuffix(list, ".md"), strings.TrimSuffix(index, ".md"))
+		if rel == list {
+			folder := path.Dir(rel)
+			status := checkout.StatusOut
+			if s.folders[folder] != folder {
+				status = checkout.StatusReturned
+			}
+			text = doc.SetFields(text, []doc.Field{{Key: "name", Value: checkoutName(path.Base(folder))}, {Key: "status", Value: status}})
+		}
+	}
+	for from, to := range s.folders {
+		text = checkout.MoveLinks(text, from, to)
+	}
+	return text
+}
+
+// checkoutName is a checkout's name: its folder's, without the date.
+func checkoutName(base string) string {
+	if len(base) > 11 && base[4] == '-' && base[7] == '-' && base[10] == ' ' {
+		return base[11:]
+	}
+	return base
+}
+
+// pathRef matches a folder that tool/ takes where a path stands as a path: right after
+// [[, ![[, ](, or a quote, with its slash, or alone between quotes (a Base's inFolder).
+var pathRef = regexp.MustCompile(`(\[\[|\]\(<?(?:\./)?|"|')(source-core|sessions|trash)(/|"|')`)
+
+// rewritePaths points the path references of one text into tool/. With quoted false, only
+// links count: a quoted path in a note's prose is a record of what was.
+func rewritePaths(s string, quoted bool) string {
+	return pathRef.ReplaceAllStringFunc(s, func(m string) string {
+		parts := pathRef.FindStringSubmatch(m)
+		open, dir, close := parts[1], parts[2], parts[3]
+		link := strings.HasPrefix(open, "[[") || strings.HasPrefix(open, "](")
+		switch {
+		case !quoted && !link:
+			return m
+		case close != "/" && (link || close != open):
+			return m
+		}
+		return open + moved[dir] + close
+	})
+}
+
+// rewriteRefs points a file's path references into tool/. A canvas and a Base name paths
+// in quotes; a note names them in links, and in quotes only inside a base block. A note's
+// code, inline or fenced, stays as written.
+func rewriteRefs(ext, s string) string {
+	if ext != ".md" {
+		return rewritePaths(s, true)
+	}
+	lines := strings.Split(s, "\n")
+	// The open fence: its marks (``` or a longer run, or ~~~) and its info string. Only a
+	// line of at least as many of the same marks closes it, so the writes of a change
+	// document, fenced in five backticks, keep the blocks they hold.
+	marks, info := "", ""
+	for i, l := range lines {
+		t := strings.TrimSpace(l)
+		run := fenceRun(t)
+		switch {
+		case marks == "" && run != "":
+			marks, info = run, strings.TrimSpace(t[len(run):])
+			continue
+		case marks != "" && run != "" && run[0] == marks[0] && len(run) >= len(marks) && strings.TrimSpace(t[len(run):]) == "":
+			marks, info = "", ""
+			continue
+		case marks != "":
+			if info == "base" {
+				lines[i] = rewritePaths(l, true)
+			}
+			continue
+		}
+		spans := strings.Split(l, "`")
+		for j := 0; j < len(spans); j += 2 {
+			spans[j] = rewritePaths(spans[j], false)
+		}
+		lines[i] = strings.Join(spans, "`")
+	}
+	return strings.Join(lines, "\n")
+}
+
+// fenceRun is the run of three or more backticks or tildes that opens t, or "".
+func fenceRun(t string) string {
+	if !strings.HasPrefix(t, "```") && !strings.HasPrefix(t, "~~~") {
+		return ""
+	}
+	n := len(t) - len(strings.TrimLeft(t, t[:1]))
+	return t[:n]
+}
+
+// appSettings points Obsidian's attachment folder and excluded files into tool/, and
+// keeps every other key and the user's own choices.
+func appSettings(data []byte) ([]byte, error) {
+	settings := map[string]any{}
+	if err := json.Unmarshal(data, &settings); err != nil {
+		return nil, errors.New(vault.AppJSON + " is not valid JSON; fix it, then migrate")
+	}
+	changed := false
+	if a, _ := settings["attachmentFolderPath"].(string); strings.TrimSuffix(a, "/") == oldCore+"/originals" {
+		settings["attachmentFolderPath"] = vault.Originals
+		changed = true
+	}
+	if list, ok := settings["userIgnoreFilters"].([]any); ok {
+		for i, x := range list {
+			if s, _ := x.(string); strings.TrimSuffix(s, "/") == oldTrash {
+				list[i] = vault.Trash + "/"
+				changed = true
+			}
+		}
+	}
+	if !changed {
+		return data, nil
+	}
+	out, err := json.MarshalIndent(settings, "", "  ")
+	if err != nil {
+		return nil, err
+	}
+	return append(out, '\n'), nil
+}
+
+// claim refuses moves whose targets exist.
+func claim(v *vault.Vault, moves []Move) error {
+	for _, m := range moves {
 		if v.Exists(m.To) {
 			return fmt.Errorf("%s would move to %s, which exists; move that file away, then migrate", m.From, m.To)
 		}
 	}
 	return nil
+}
+
+// userFiles are the files in tool/ before the migration: the user's, since layout 7 has
+// no tool/.
+func userFiles(v *vault.Vault) []string {
+	var out []string
+	walkFiles(v, vault.Tool, func(rel string) error {
+		out = append(out, rel)
+		return nil
+	})
+	return out
+}
+
+// walkFiles calls fn with the vault path of every file under dir, but .DS_Store.
+func walkFiles(v *vault.Vault, dir string, fn func(rel string) error) error {
+	return filepath.WalkDir(v.Abs(dir), func(abs string, e fs.DirEntry, err error) error {
+		switch {
+		case err != nil:
+			if os.IsNotExist(err) {
+				return nil
+			}
+			return err
+		case e.IsDir() || e.Name() == ".DS_Store":
+			return nil
+		}
+		return fn(v.Rel(abs))
+	})
 }
 
 // prune removes the folders under root that the moves left empty, and root itself when
@@ -302,6 +490,15 @@ func prune(root string) {
 	for i := len(dirs) - 1; i >= 0; i-- {
 		os.Remove(dirs[i])
 	}
+}
+
+func sortedKeys[T any](m map[string]T) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // beforeCommit is a test hook that runs right before the migration's commit.

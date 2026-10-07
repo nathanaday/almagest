@@ -1,4 +1,4 @@
-// Package schema holds the document types: the three of source-core/documents (source,
+// Package schema holds the document types: the three of tool/source-core/documents (source,
 // repository, topic), the vault document, and the two records (session, change).
 // For each: its fields, the owner of each field, its kinds, and the sections of its body.
 // Every check of a document against its type reads these tables.
@@ -70,8 +70,8 @@ type Type struct {
 	Name   string
 	Prefix string
 	Family Family
-	// Folder is where the type's documents live: source-core/documents for the nine, a month
-	// folder of sessions/ or changes/ for the records, the root for the vault.
+	// Folder is where the type's documents live: tool/source-core/documents for the nine, a month
+	// folder of tool/sessions/ or changes/ for the records, the root for the vault.
 	Folder string
 	Fields []Field
 	// Kinds are the values of the kind field, for a type that has one.
@@ -108,13 +108,12 @@ func (t *Type) SectionsOf(kind string) []string {
 	return t.Sections
 }
 
-// Document reports whether the type lives in source-core/documents.
+// Document reports whether the type lives in tool/source-core/documents.
 func (t *Type) Document() bool {
 	return t.Family == Knowledge
 }
 
-// The prefix of every new document of source-core/documents. A document from a 6.x vault keeps
-// its old prefix, since an id never changes.
+// The prefix of the id of every document of tool/source-core/documents.
 const DocPrefix = "doc"
 
 // Kinds of the types that have one.
@@ -124,7 +123,7 @@ var (
 
 var topicStatus = []string{"draft", "stable", "contested", "deprecated"}
 
-// common are the fields every document of source-core/documents has, then the type's own.
+// common are the fields every document of tool/source-core/documents has, then the type's own.
 func common(extra ...Field) []Field {
 	return append([]Field{
 		{Name: "id", Kind: Text, Owner: Code, Required: true},
@@ -161,7 +160,7 @@ var Types = []*Type{
 		{Name: "stale_hours", Kind: Int},
 		{Name: "layout", Kind: Int, Owner: Code},
 	}},
-	{Name: "source", Prefix: DocPrefix, Family: Knowledge, Folder: "source-core/documents", Fields: common(
+	{Name: "source", Prefix: DocPrefix, Family: Knowledge, Folder: "tool/source-core/documents", Fields: common(
 		Field{Name: "authority", Kind: Enum, Values: []string{"official", "primary", "secondary", "community", "synthetic", "unknown"}},
 		Field{Name: "authors", Kind: List},
 		Field{Name: "published", Kind: Text},
@@ -177,7 +176,7 @@ var Types = []*Type{
 		Field{Name: "edition", Kind: Time, Owner: Code},
 		Field{Name: "journal_hash", Kind: Text, Owner: Code},
 	), Sections: []string{"Summary", "Structure", "Notes"}},
-	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "source-core/documents", Fields: common(
+	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "tool/source-core/documents", Fields: common(
 		Field{Name: "defines", Kind: Tag},
 		Field{Name: "path", Kind: Text},
 		Field{Name: "unlinked", Kind: Bool},
@@ -189,7 +188,7 @@ var Types = []*Type{
 		Field{Name: "behind", Kind: Int, Owner: Code},
 	), Sections: []string{"What it is", "How it is built", "Layout", "Components", "Instructions", "Knowledge", "Notes"},
 		CodeSections: []string{"Knowledge"}},
-	{Name: "topic", Prefix: DocPrefix, Family: Knowledge, Folder: "source-core/documents", Fields: common(
+	{Name: "topic", Prefix: DocPrefix, Family: Knowledge, Folder: "tool/source-core/documents", Fields: common(
 		Field{Name: "kind", Kind: Enum, Required: true, Values: TopicKinds},
 		Field{Name: "status", Kind: Enum, Values: topicStatus},
 		Field{Name: "sources", Kind: Links},
@@ -201,7 +200,7 @@ var Types = []*Type{
 		"policy":   {"Rule", "Why", "Applies when", "Exceptions", "Sources", "Origin", "Notes"},
 		"overview": {"Summary", "Context", "Map", "Related", "Sources", "Origin", "Notes"},
 	}, CodeSections: []string{"Map"}},
-	{Name: "session", Prefix: "ses", Family: Record, Folder: "sessions", Fields: record(
+	{Name: "session", Prefix: "ses", Family: Record, Folder: "tool/sessions", Fields: record(
 		Field{Name: "harness", Kind: Enum, Owner: Code, Values: []string{"claude", "codex"}},
 		Field{Name: "harness_id", Kind: Text, Owner: Code, Required: true},
 		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"running", "waiting", "idle", "ended", "lost"}},
@@ -217,6 +216,7 @@ var Types = []*Type{
 		Field{Name: "reminded", Kind: List, Owner: Code},
 		Field{Name: "pid", Kind: Int, Owner: Code},
 		Field{Name: "transcript", Kind: Text, Owner: Code},
+		Field{Name: "conversation", Kind: Link, Owner: Code},
 	), Sections: []string{"Description", "Progress", "Summary", "Subagents"}},
 	{Name: "change", Prefix: "chg", Family: Record, Folder: "changes", Fields: record(
 		Field{Name: "status", Kind: Enum, Owner: Code, Required: true, Values: []string{"running", "proposed", "applying", "applied", "rejected", "superseded", "undone"}},
@@ -245,17 +245,13 @@ var byName = func() map[string]*Type {
 // Get returns the type of that name, or nil.
 func Get(name string) *Type { return byName[name] }
 
-// DocumentTypes are the three types of source-core/documents.
+// DocumentTypes are the three types of tool/source-core/documents.
 var DocumentTypes = []string{"source", "repository", "topic"}
-
-// ArchivedTypes are the types of the thread documents that 8.x kept in source-core/documents and
-// the 9.0 migration moved to threads/.
-var ArchivedTypes = []string{"stub", "spec", "tasks", "verification", "chord", "event"}
 
 // Is reports whether name is a document type.
 func Is(name string) bool { return byName[name] != nil }
 
-// IsDocument reports whether name is one of the types of source-core/documents.
+// IsDocument reports whether name is one of the types of tool/source-core/documents.
 func IsDocument(name string) bool { return slices.Contains(DocumentTypes, name) }
 
 // AllKinds lists every kind of every type.

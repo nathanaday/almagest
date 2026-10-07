@@ -12,7 +12,6 @@ import (
 	"github.com/nathanaday/almagest/internal/cli"
 	"github.com/nathanaday/almagest/internal/testvault"
 	"github.com/nathanaday/almagest/internal/vault"
-	"github.com/nathanaday/almagest/internal/views"
 )
 
 type run struct {
@@ -111,9 +110,6 @@ func TestCommands(t *testing.T) {
 	if !tv.V.Exists("wiki-view/View · Home.md") {
 		t.Fatal("the views")
 	}
-	if code, _, errOut := r.almagest("", "vault", "migrate", "--dry-run"); code != 1 || !strings.Contains(errOut, "11.0 layout already") {
-		t.Fatalf("a 10.0 vault: %d %s", code, errOut)
-	}
 
 	code, _, errOut := r.almagest("", "change", "apply", "chg-zzzzzz")
 	if code != 1 || !strings.HasPrefix(errOut, "almagest: ") {
@@ -124,72 +120,10 @@ func TestCommands(t *testing.T) {
 	}
 }
 
-func TestThreadAndChordAreNoCommands(t *testing.T) {
-	tv := testvault.New(t)
-	r := run{t: t, tv: tv}
-	for _, args := range [][]string{{"thread"}, {"thread", "stub", "An idea."}, {"chord", "list"}} {
-		code, out, errOut := r.almagest("", args...)
-		if code != 1 || out != "" || errOut != "almagest: no command \""+args[0]+"\"; almagest help lists them\n" {
-			t.Fatalf("%v: exit %d %q %q", args, code, out, errOut)
-		}
-	}
-	if code, _, errOut := r.almagest("", "source", "capture", "--ingest", "x.md", "--resolves", "An idea"); code != 1 || !strings.Contains(errOut, "--resolves") {
-		t.Fatalf("capture with --resolves: exit %d %q", code, errOut)
-	}
-	for _, args := range [][]string{{"help"}, {"help", "thread"}} {
-		if out := r.ok("", args...); strings.Contains(out, "thread") || strings.Contains(out, "chord") || strings.Contains(out, "--resolves") {
-			t.Fatalf("%v names a removed command:\n%s", args, out)
-		}
-	}
-}
-
-func TestMigrateCommand(t *testing.T) {
-	tv := testvault.New(t)
-	r := run{t: t, tv: tv}
-	tv.Write("Almagest.md", strings.Replace(tv.Read("Almagest.md"), "layout: 7", "layout: 5", 1))
-	topic := "---\nid: doc-p3aaaa\ntype: topic\nkind: overview\ndescription: P3.\ncreated: 2026-09-03T10:00:00\nupdated: 2026-09-03T10:00:00\n---\n\n## Summary\n\nThe stack, as drawn: ![[wiki/assets/diagram.png]]. Agents read wiki/documents.\n"
-	tv.Write("wiki/documents/P3.md", topic)
-	tv.Write("wiki/assets/diagram.png", "png")
-	tv.Write("inbox/paper.pdf", "%PDF")
-	tv.Write("views/View · Home.md", views.Notice+"\n\nHome.\n")
-	tv.Write("views/My note.md", "mine\n")
-	tv.Commit()
-	out := r.ok("", "vault", "migrate", "--dry-run")
-	for _, want := range []string{"from the 9.0 layout to 10.0 would make these moves", "move  wiki/documents/ → source-core/documents/: 1 file", "move  wiki/assets/ → source-core/originals/: 1 file", "move  inbox/ → ingest/: 1 file", "move  views/ → ingest/: 1 file", "remove  1 view"} {
-		if !strings.Contains(out, want) {
-			t.Fatalf("dry run lacks %q:\n%s", want, out)
-		}
-	}
-	if !tv.V.Exists("wiki/documents/P3.md") || tv.V.Exists("source-core/documents/P3.md") {
-		t.Fatal("the dry run moved a file")
-	}
-	out = r.ok("", "vault", "migrate")
-	if !strings.Contains(out, "Migrated Work from the 9.0 layout to 10.0 in one commit") {
-		t.Fatalf("migrate:\n%s", out)
-	}
-	want := strings.Replace(topic, "![[wiki/assets/diagram.png]]", "![[source-core/originals/diagram.png]]", 1)
-	if got := tv.Read("source-core/documents/P3.md"); !strings.Contains(got, strings.TrimPrefix(want[strings.Index(want, "## Summary"):], "")) {
-		t.Fatalf("the topic:\n%s", got)
-	}
-	for _, rel := range []string{"source-core/originals/diagram.png", "ingest/paper.pdf", "ingest/My note.md"} {
-		if !tv.V.Exists(rel) {
-			t.Errorf("%s is missing", rel)
-		}
-	}
-	for _, rel := range []string{"wiki", "inbox", "views"} {
-		if tv.V.Exists(rel) {
-			t.Errorf("%s/ is still there", rel)
-		}
-	}
-	if !strings.Contains(tv.Read("Almagest.md"), "\nlayout: 7\n") || !tv.V.Exists("wiki-view/View · Home.md") {
-		t.Fatalf("Almagest.md or the views:\n%s", tv.Read("Almagest.md"))
-	}
-}
-
 func TestHookCommandReadsStdin(t *testing.T) {
 	tv := testvault.New(t)
 	r := run{t: t, tv: tv}
-	event := `{"session_id": "abcdef12-0000", "cwd": "` + tv.V.Root + `", "tool_name": "Write", "tool_input": {"file_path": "` + tv.V.Root + `/source-core/documents/X.md"}}`
+	event := `{"session_id": "abcdef12-0000", "cwd": "` + tv.V.Root + `", "tool_name": "Write", "tool_input": {"file_path": "` + tv.V.Root + `/tool/source-core/documents/X.md"}}`
 	if out := r.ok(event, "hook", "guard"); !strings.Contains(out, `"permissionDecision":"deny"`) {
 		t.Fatalf("guard:\n%s", out)
 	}
@@ -385,7 +319,7 @@ func TestWorkDocumentsAndSafeDeleteFromTheShell(t *testing.T) {
 	if code != 2 || !strings.Contains(out, "Notes.md") || !strings.Contains(errOut, "links it") {
 		t.Fatalf("a linked topic: %d %s %s", code, out, errOut)
 	}
-	if out := r.ok("", "vault", "trash", "Notes.md"); !strings.Contains(out, "Moved Notes.md to trash/") {
+	if out := r.ok("", "vault", "trash", "Notes.md"); !strings.Contains(out, "Moved Notes.md to tool/trash/") {
 		t.Fatalf("a note:\n%s", out)
 	}
 }

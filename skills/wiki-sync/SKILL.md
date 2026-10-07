@@ -77,7 +77,7 @@ these rules apply to it in addition to the procedure:
 - Where a topic quotes the user, quote the edition's wording exactly.
 - Never paraphrase the edition into a claim it does not make. Keep the user's opinion
   an opinion, and the user's question a question.
-- Never change a note in `journals/` or the edition's text in `source-core/originals/`.
+- Never change a note in `journals/` or the edition's text in `tool/source-core/originals/`.
   The source's modify in step 8 sets only `description`, `tags`, `## Summary`, and
   `## Structure` (one line per section), and keeps `authority: primary`.
 - Tell each extractor and each drafter that the source is a journal edition.

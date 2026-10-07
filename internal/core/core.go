@@ -77,7 +77,7 @@ type Status struct {
 	Ingest    []IngestItem   `json:"ingest"`
 	Pending   []vault.Ref    `json:"pending"`
 	Changes   ChangeLists    `json:"changes"`
-	// Trash counts the files in trash/.
+	// Trash counts the files in tool/trash/.
 	Trash int `json:"trash"`
 	// Journals are the journal volumes, each with its latest edition.
 	Journals []journal.Volume `json:"journals"`
@@ -290,6 +290,11 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 		return out, err
 	}
 	out.Knowledge = append(out.Knowledge, knowledge...)
+	linked, err := sessions.LinkConversations(idx)
+	if err != nil {
+		return out, err
+	}
+	out.Sessions = append(out.Sessions, linked...)
 	if !o.Views {
 		for _, s := range sessions.All(v) {
 			if !sessions.Live(s.Str("status")) {
@@ -323,7 +328,7 @@ func SyncLocked(v *vault.Vault, now time.Time, o SyncOptions) (*Synced, error) {
 }
 
 // FileByHand finishes a hand move: a typed document that lies anywhere else under
-// source-core/ goes back into source-core/documents, when its title is free there. It
+// tool/source-core/ goes back into tool/source-core/documents, when its title is free there. It
 // commits nothing; the next snapshot records the move. The caller holds the lock.
 func FileByHand(v *vault.Vault) ([]string, error) {
 	idx, err := vault.Load(v)

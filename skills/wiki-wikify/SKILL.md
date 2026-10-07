@@ -24,7 +24,7 @@ Tools: `wikify` (start, mark), `match`, and Read. References:
    note's path in the vault. Code copies the note to `scratchpad/<name> · wikified.md`
    (`<name> · wikified (2).md` when that name is taken) and returns the path in `copy`.
    Start refuses a file that is not markdown, `Almagest.md`, and a note under
-   `source-core/`, `changes/`, `sessions/`, `wiki-view/`, `trash/`, or `.obsidian/`. A
+   `tool/source-core/`, `changes/`, `tool/sessions/`, `wiki-view/`, `tool/trash/`, or `.obsidian/`. A
    note in `journals/` may be wikified; its copy lies in `scratchpad/`.
 2. **Read** the copy with Read.
 3. **Subjects.** List the subjects that the prose names, with the kinds of

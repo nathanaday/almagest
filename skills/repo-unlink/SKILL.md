@@ -25,7 +25,7 @@ Tools: `context`, `search`, `change`. References:
    `fields: {unlinked: true}`. Code empties `path`, drops the git facts, and turns the
    lead callout into `[!repository-missing]`. Add a remove for each topic the user chose
    to remove, with `redirect` to a document that covers its subject when one exists. A
-   remove moves the topic to `trash/`. Give every write a `why`. Never remove the
+   remove moves the topic to `tool/trash/`. Give every write a `why`. Never remove the
    repository document.
 
 ## Gate

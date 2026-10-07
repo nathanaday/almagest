@@ -21,7 +21,7 @@ func TestSafeDelete(t *testing.T) {
 	now := testvault.Now.Add(time.Hour)
 
 	if tv.V.Exists("ALMAGEST.md") { // a disk that folds case
-		if res, err := core.Trash(tv.V, "source-core/documents/linked.md", now); err != nil || res.Moved != "" || len(res.Backlinks) != 1 {
+		if res, err := core.Trash(tv.V, "tool/source-core/documents/linked.md", now); err != nil || res.Moved != "" || len(res.Backlinks) != 1 {
 			t.Fatalf("a linked topic in another case: %+v %v", res, err)
 		}
 	}
@@ -34,7 +34,7 @@ func TestSafeDelete(t *testing.T) {
 	}
 
 	res, err = core.Trash(tv.V, tv.V.Abs("scratchpad/Draft.md"), now)
-	want := "trash/" + vault.Date(now) + "/scratchpad/Draft.md"
+	want := "tool/trash/" + vault.Date(now) + "/scratchpad/Draft.md"
 	if err != nil || res.Moved != want || tv.Read(want) != "a draft\n" || tv.V.Exists("scratchpad/Draft.md") {
 		t.Fatalf("a note: %+v %v", res, err)
 	}
@@ -52,7 +52,9 @@ func TestSafeDelete(t *testing.T) {
 	}
 	tv.Clean()
 
-	for _, rel := range []string{"Almagest.md", "almagest.md", "Changes/Changes.base", "sessions/Sessions.base", "changes/Changes.base", res.Moved, "wiki-view/View · Home.md", "../outside.md", "nowhere.md"} {
+	// A record in a folder of tool/ is refused by its folder, not by its first part.
+	tv.Write("tool/sessions/2026-09/2026-09-27 0900 a1b2c3.md", "---\nid: ses-a1b2c3\ntype: session\n---\n")
+	for _, rel := range []string{"Almagest.md", "almagest.md", "Changes/Changes.base", "tool/sessions/Sessions.base", "tool/sessions/2026-09/2026-09-27 0900 a1b2c3.md", "Tool/Sessions/2026-09/2026-09-27 0900 a1b2c3.md", "changes/Changes.base", res.Moved, "wiki-view/View · Home.md", "../outside.md", "nowhere.md"} {
 		if _, err := core.Trash(tv.V, rel, now); err == nil {
 			t.Errorf("%s was taken", rel)
 		}

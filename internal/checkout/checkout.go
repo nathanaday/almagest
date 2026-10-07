@@ -1,6 +1,7 @@
 // Package checkout is the librarian's desk: it ranks the documents a request may need,
-// copies the chosen ones into a folder of checkout/ for the user to read and mark up, and
-// turns the edited copies back into one change. A copy takes the name "<Title>
+// copies the chosen ones into a folder of checkout/ for the user to read and mark up, and,
+// at the return, turns the edited copies back into one change and moves the checkout to
+// tool/returned/, where it stays as the user left it. A copy takes the name "<Title>
 // (checkout)", so no link of the wiki ever names it by accident.
 package checkout
 
@@ -23,18 +24,24 @@ import (
 	"github.com/nathanaday/almagest/internal/vault"
 )
 
-// Ledger is the note of every checkout, in checkout/. Its prefix is reserved, so no
-// document takes the title.
+// Ledger is the note of every checkout, in checkout/: a Base of the checkouts' indexes,
+// out and returned. Its prefix is reserved, so no document takes the title.
 const (
 	Ledger     = "Checkout · Ledger"
 	copySuffix = " (checkout)"
+	// IndexName is each checkout's own note: its name, request, dates, status, and
+	// reading order.
+	IndexName = "_index.md"
 )
 
-// ReadingList is the path of a checkout's reading list: "Checkout · <folder name>", a
-// title no document can take and no other checkout holds.
-func ReadingList(folder string) string {
-	return path.Join(folder, "Checkout · "+path.Base(folder)+".md")
-}
+// The status of a checkout: out in checkout/, or returned to tool/returned/.
+const (
+	StatusOut      = "out"
+	StatusReturned = "returned"
+)
+
+// IndexPath is the path of a checkout's index.
+func IndexPath(folder string) string { return path.Join(folder, IndexName) }
 
 // Bounds of a candidate list.
 const (
@@ -192,19 +199,19 @@ type Order struct {
 	Notes     string `json:"notes,omitempty" jsonschema:"make: what the reader should know: what was left out, and why"`
 }
 
-// Made is a checkout as made: its folder, its reading list, and its copies.
+// Made is a checkout as made: its folder, its index, and its copies.
 type Made struct {
-	Folder      string   `json:"folder"`
-	ReadingList string   `json:"reading_list"`
-	Copies      []string `json:"copies"`
-	Commit      string   `json:"commit,omitempty"`
+	Folder string   `json:"folder"`
+	Index  string   `json:"index"`
+	Copies []string `json:"copies"`
+	Commit string   `json:"commit,omitempty"`
 }
 
 // MaxDocuments bounds one checkout.
 const MaxDocuments = 60
 
-// Make copies the chosen documents into a new folder of checkout/, with a reading list,
-// and writes the ledger, in one commit.
+// Make copies the chosen documents into a new folder of checkout/, with its index, and
+// writes the ledger, in one commit.
 func Make(v *vault.Vault, o Order, now time.Time) (_ *Made, err error) {
 	if err := v.CheckLayout(); err != nil {
 		return nil, err
@@ -261,7 +268,7 @@ func Make(v *vault.Vault, o Order, now time.Time) (_ *Made, err error) {
 			copyOf[links.Key(a)] = path.Join(folder, vault.Title(d)+copySuffix)
 		}
 	}
-	out := &Made{Folder: folder, ReadingList: ReadingList(folder), Copies: []string{}}
+	out := &Made{Folder: folder, Index: IndexPath(folder), Copies: []string{}}
 	stamp := vault.Stamp(now)
 	var list strings.Builder
 	for i, d := range docs {
@@ -289,20 +296,24 @@ func Make(v *vault.Vault, o Order, now time.Time) (_ *Made, err error) {
 		list.WriteString("\n")
 	}
 	fields := []doc.Field{
+		{Key: "name", Value: name},
 		{Key: "request", Value: doc.OneLine(strings.TrimSpace(o.Request), 300)},
 		{Key: "checked_out", Value: stamp},
 		{Key: "documents", Value: len(docs)},
+		{Key: "status", Value: StatusOut},
 		{Key: "returned", Value: ""},
+		{Key: "return_change", Value: ""},
 	}
-	body := doc.Callout("almagest", "Checked out "+vault.Date(now), "The librarian's picks, in reading order. The copies are yours to read and edit.") +
+	body := "# " + name + "\n\n" +
+		doc.Callout("almagest", "Checked out "+vault.Date(now), "The librarian's picks, in reading order. The copies are yours to read and edit; Return proposes your edits to the wiki and keeps this checkout in tool/returned/.") +
 		"\n\n## Request\n\n" + strings.TrimSpace(o.Request) + "\n\n## Reading order\n\n" + list.String()
 	if notes := strings.TrimSpace(o.Notes); notes != "" {
 		body += "\n## Notes\n\n" + notes + "\n"
 	}
-	if err := tx.Write(out.ReadingList, []byte(doc.Render(fields, body))); err != nil {
+	if err := tx.Write(out.Index, []byte(doc.Render(fields, body))); err != nil {
 		return nil, err
 	}
-	if err := writeLedger(v, tx, folder); err != nil {
+	if err := writeLedger(tx); err != nil {
 		return nil, err
 	}
 	if out.Commit, err = tx.Commit("checkout: " + path.Base(folder)); err != nil {
@@ -345,6 +356,32 @@ func toWiki(text, folder string) string {
 	})
 }
 
+// Rehash keeps a copy that the user did not edit unedited after code changed its text,
+// such as its links at a move: when before's body is the body as checked out, after takes
+// its body's hash. An edited copy, or a note that is no copy, comes back as after.
+func Rehash(before, after string) string {
+	b, a := aCopy{d: doc.Parse("", []byte(before))}, aCopy{d: doc.Parse("", []byte(after))}
+	if before == after || b.d.Str("checkout_id") == "" || b.edited() {
+		return after
+	}
+	return doc.SetField(after, "checkout_hash", doc.ContentHash(a.body()))
+}
+
+// MoveLinks points every link to the path from, or into the folder from, at the same
+// place under to.
+func MoveLinks(text, from, to string) string {
+	if from == to {
+		return text
+	}
+	return relink(text, func(l links.Link) (links.Link, bool) {
+		if l.Target != from && !strings.HasPrefix(l.Target, from+"/") {
+			return l, false
+		}
+		l.Target = to + strings.TrimPrefix(l.Target, from)
+		return l, true
+	})
+}
+
 func relink(text string, fn func(links.Link) (links.Link, bool)) string {
 	var b strings.Builder
 	last := 0
@@ -361,63 +398,53 @@ func relink(text string, fn func(links.Link) (links.Link, bool)) string {
 	return b.String()
 }
 
-// Entry is one checkout as the ledger and the status show it.
+// Entry is one checkout as the status shows it.
 type Entry struct {
 	Folder    string `json:"folder"`
+	Name      string `json:"name"`
 	Request   string `json:"request"`
 	Date      string `json:"date"`
 	Documents int    `json:"documents"`
 	Edited    int    `json:"edited"`
-	Returned  string `json:"returned"`
+	// Status is out (in checkout/) or returned (in tool/returned/).
+	Status   string `json:"status"`
+	Returned string `json:"returned"`
 }
 
-// List reads every checkout, newest first.
+// List reads every checkout, out and returned, newest first.
 func List(v *vault.Vault) []Entry {
 	out := []Entry{}
-	entries, _ := os.ReadDir(v.Abs(vault.Checkout))
-	for _, e := range entries {
-		if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
-			continue
-		}
-		folder := path.Join(vault.Checkout, e.Name())
-		data, err := v.Read(ReadingList(folder))
-		if err != nil {
-			continue
-		}
-		rl := doc.Parse("", data)
-		copies, _ := readCopies(v, folder)
-		edited := 0
-		for _, c := range copies {
-			if c.edited() {
-				edited++
+	for _, dir := range []string{vault.Checkout, vault.Returned} {
+		entries, _ := os.ReadDir(v.Abs(dir))
+		for _, e := range entries {
+			if !e.IsDir() || strings.HasPrefix(e.Name(), ".") {
+				continue
 			}
+			folder := path.Join(dir, e.Name())
+			data, err := v.Read(IndexPath(folder))
+			if err != nil {
+				continue
+			}
+			index := doc.Parse("", data)
+			copies, _ := readCopies(v, folder)
+			edited := 0
+			for _, c := range copies {
+				if c.edited() {
+					edited++
+				}
+			}
+			status := StatusOut
+			if dir == vault.Returned {
+				status = StatusReturned
+			}
+			out = append(out, Entry{
+				Folder: folder, Name: cmp.Or(index.Str("name"), checkoutName(folder)), Request: index.Str("request"),
+				Date: vault.Day(index.Str("checked_out")), Documents: len(copies), Edited: edited, Status: status, Returned: index.Str("returned"),
+			})
 		}
-		out = append(out, Entry{Folder: folder, Request: rl.Str("request"), Date: vault.Day(rl.Str("checked_out")), Documents: len(copies), Edited: edited, Returned: returned(v, rl)})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return out[i].Folder > out[j].Folder })
+	sort.SliceStable(out, func(i, j int) bool { return path.Base(out[i].Folder) > path.Base(out[j].Folder) })
 	return out
-}
-
-// returned is when a checkout was returned, or "" when its return change is gone,
-// rejected, superseded, or undone, which frees the checkout to return again.
-func returned(v *vault.Vault, rl *doc.Doc) string {
-	when, id := rl.Str("returned"), rl.Str("return_change")
-	if when == "" || id == "" {
-		return when
-	}
-	files, _ := filepath.Glob(v.Abs(vault.Changes + "/*/*.md"))
-	for _, abs := range files {
-		f, err := vault.ReadFront(abs)
-		if err != nil || f.Str("id") != id {
-			continue
-		}
-		switch f.Str("status") {
-		case change.Proposed, change.Applying, change.Applied:
-			return when
-		}
-		return ""
-	}
-	return ""
 }
 
 // checkoutName is a checkout's name: its folder's, without the date.
@@ -465,59 +492,98 @@ func readCopies(v *vault.Vault, folder string) ([]aCopy, error) {
 	return out, nil
 }
 
-// writeLedger writes the ledger from the reading lists. The folder being made
-// counts, though the index has not read it.
-func writeLedger(v *vault.Vault, tx *vault.Tx, _ string) error {
-	var b strings.Builder
-	b.WriteString(doc.Callout("almagest", "Written by Almagest at each checkout and return", "Every checkout, newest first.") + "\n\n")
-	b.WriteString("| Checked out | Request | Documents | Edited | Returned |\n|---|---|---|---|---|\n")
-	for _, e := range List(v) {
-		returned := "no"
-		if e.Returned != "" {
-			returned = vault.Day(e.Returned)
-		}
-		req := strings.ReplaceAll(e.Request, "|", "\\|")
-		fmt.Fprintf(&b, "| %s | [[%s\\|%s]] | %d | %d | %s |\n", e.Date, strings.TrimSuffix(ReadingList(e.Folder), ".md"), req, e.Documents, e.Edited, returned)
-	}
-	return tx.Write(path.Join(vault.Checkout, Ledger+".md"), []byte(b.String()))
+// LedgerNote is the ledger's text: a Base of every checkout's index, out or returned,
+// newest first. Each row opens the checkout's index.
+var LedgerNote = doc.Callout("almagest", "Written by Almagest", "Every checkout: the ones out, in "+vault.Checkout+"/, and the ones returned, in "+vault.Returned+"/. Each row opens the checkout's index.") + `
+
+` + "```base" + `
+filters:
+  and:
+    - 'file.basename == "_index"'
+    - or:
+        - file.inFolder("` + vault.Checkout + `")
+        - file.inFolder("` + vault.Returned + `")
+formulas:
+  checkout: file.asLink(name)
+  out: date(checked_out)
+  back: if(returned, date(returned), "")
+properties:
+  formula.checkout:
+    displayName: Checkout
+  formula.out:
+    displayName: Checked out
+  note.documents:
+    displayName: Documents
+  note.status:
+    displayName: Status
+  formula.back:
+    displayName: Returned
+views:
+  - type: table
+    name: Every checkout
+    order:
+      - formula.checkout
+      - formula.out
+      - documents
+      - status
+      - formula.back
+    sort:
+      - property: checked_out
+        direction: DESC
+` + "```" + "\n"
+
+// writeLedger writes the ledger's Base, when it is missing or another.
+func writeLedger(tx *vault.Tx) error {
+	_, err := tx.WriteIfChanged(path.Join(vault.Checkout, Ledger+".md"), []byte(LedgerNote))
+	return err
 }
 
-// Returned is what a return proposed: the change, and the copies left out.
+// Returned is what a return did: the change it proposed of the edited copies, if any, the
+// copies it left out, and where the checkout went.
 type Returned struct {
-	Change  *change.Preview `json:"change,omitempty"`
-	Skipped []string        `json:"skipped"`
+	Change *change.Preview `json:"change,omitempty"`
+	// Folder and Index are the checkout's place in tool/returned/.
+	Folder  string   `json:"folder"`
+	Index   string   `json:"index"`
+	Skipped []string `json:"skipped"`
 	// Warning says what went wrong after the change was proposed.
 	Warning string `json:"warning,omitempty"`
 }
 
-// Return turns the edited copies of a checkout into one proposed change of their
+// Return closes a checkout. The edited copies become one proposed change of their
 // originals, with each copy's base, so a later edit of an original is a conflict, not a
-// loss. A copy whose original is gone or changed since is left out.
+// loss; a copy whose original is gone or changed since stays out of it, with its edits in
+// the copy. Then the checkout moves, every file of it, to tool/returned/, with its links,
+// its index marked returned, and the ledger, in one commit.
 func Return(v *vault.Vault, key string, now time.Time) (*Returned, error) {
 	folder := strings.Trim(path.Clean(strings.TrimPrefix(key, vault.Checkout+"/")), "/")
 	if folder == "" || folder == "." || strings.Contains(folder, "/") {
 		return nil, fmt.Errorf("%q: name a checkout, a folder of %s/", key, vault.Checkout)
 	}
+	base := folder
 	folder = path.Join(vault.Checkout, folder)
 	if err := v.Contain(folder); err != nil {
 		return nil, err
 	}
-	copies, err := readCopies(v, folder)
-	if err != nil {
+	if st, err := os.Stat(v.Abs(folder)); err != nil || !st.IsDir() {
+		if st, err := os.Stat(v.Abs(path.Join(vault.Returned, base))); err == nil && st.IsDir() {
+			return nil, fmt.Errorf("%s was returned already: it is in %s/; check the documents out again to work on them", base, vault.Returned)
+		}
 		return nil, fmt.Errorf("no checkout %s", folder)
 	}
-	// A return proposes against each original as it was checked out. While that change
-	// is proposed or applied, the checkout is returned; a cancelled or undone one frees it.
-	if data, err := v.Read(ReadingList(folder)); err == nil {
-		if when := returned(v, doc.Parse("", data)); when != "" {
-			return nil, fmt.Errorf("%s was returned %s; check the documents out again to edit them further", folder, vault.Day(when))
-		}
+	copies, err := readCopies(v, folder)
+	if err != nil {
+		return nil, err
 	}
 	idx, err := vault.Load(v)
 	if err != nil {
 		return nil, err
 	}
-	out := &Returned{Skipped: []string{}}
+	dest := path.Join(vault.Returned, base)
+	for n := 2; v.Exists(dest); n++ {
+		dest = path.Join(vault.Returned, fmt.Sprintf("%s (%d)", base, n))
+	}
+	out := &Returned{Folder: dest, Index: IndexPath(dest), Skipped: []string{}}
 	var writes []change.Write
 	name := checkoutName(folder)
 	for _, c := range copies {
@@ -527,53 +593,100 @@ func Return(v *vault.Vault, key string, now time.Time) (*Returned, error) {
 		orig := idx.ByID(c.d.Str("checkout_id"))
 		switch {
 		case orig == nil:
-			out.Skipped = append(out.Skipped, c.path+": its original is gone")
+			out.Skipped = append(out.Skipped, path.Base(c.path)+": its original is gone")
 			continue
 		case change.BaseHash(orig) != c.d.Str("checkout_base"):
-			out.Skipped = append(out.Skipped, c.path+": "+vault.Title(orig)+" changed since the checkout")
+			out.Skipped = append(out.Skipped, path.Base(c.path)+": "+vault.Title(orig)+" changed since the checkout")
 			continue
 		}
 		body := toWiki(c.body(), folder)
-		writes = append(writes, change.Write{Op: change.OpModify, ID: orig.ID(), Base: c.d.Str("checkout_base"), Body: &body, Why: "edited in the checkout " + cmp.Or(name, path.Base(folder))})
+		writes = append(writes, change.Write{Op: change.OpModify, ID: orig.ID(), Base: c.d.Str("checkout_base"), Body: &body, Why: "edited in the checkout " + cmp.Or(name, base)})
 	}
-	if len(writes) == 0 {
-		if len(out.Skipped) > 0 {
-			return out, fmt.Errorf("no edited copy can return: %s", strings.Join(out.Skipped, "; "))
+	changeID := ""
+	if len(writes) > 0 {
+		pv, err := change.Propose(v, change.Plan{Title: "Return " + name, Notes: "The edits made in the checkout [[" + strings.TrimSuffix(out.Index, ".md") + "|" + base + "]].", Writes: writes}, now)
+		if err != nil {
+			return out, err
 		}
-		return out, errors.New("no copy of " + folder + " was edited; there is nothing to return")
+		out.Change = pv
+		changeID = pv.Ref.ID
 	}
-	pv, err := change.Propose(v, change.Plan{Title: "Return " + name, Notes: "The edits made in the checkout [[" + strings.TrimSuffix(ReadingList(folder), ".md") + "|" + path.Base(folder) + "]].", Writes: writes}, now)
-	if err != nil {
-		return out, err
-	}
-	out.Change = pv
-	if err := markReturned(v, folder, pv.Ref.ID, now); err != nil {
+	if err := moveReturned(v, folder, dest, changeID, now); err != nil {
+		if out.Change == nil {
+			return out, err
+		}
 		// The change exists; the user decides it in its document. Saying so beats an
 		// error that hides it.
-		out.Warning = "the change is proposed, but the checkout is not marked returned: " + err.Error()
+		out.Warning = "the change is proposed, but the checkout stays in " + vault.Checkout + "/: " + err.Error()
+		out.Folder, out.Index = folder, IndexPath(folder)
 	}
 	return out, nil
 }
 
-// markReturned records the return in the reading list and the ledger, in a commit.
-func markReturned(v *vault.Vault, folder, changeID string, now time.Time) (err error) {
+// moveReturned moves every file of a checkout to dest, points the links that name the
+// checkout's folder at dest, marks the index returned, and writes the ledger, in a commit.
+func moveReturned(v *vault.Vault, folder, dest, changeID string, now time.Time) (err error) {
 	tx, err := vault.BeginWrite(v)
 	if err != nil {
 		return err
 	}
 	defer tx.End(&err)
-	rel := ReadingList(folder)
-	data, err := v.Read(rel)
+	var files []string
+	err = filepath.WalkDir(v.Abs(folder), func(abs string, e os.DirEntry, err error) error {
+		if err == nil && !e.IsDir() && e.Name() != ".DS_Store" {
+			files = append(files, v.Rel(abs))
+		}
+		return err
+	})
 	if err != nil {
 		return err
 	}
-	content := doc.SetFields(string(data), []doc.Field{{Key: "returned", Value: vault.Stamp(now)}, {Key: "return_change", Value: changeID}})
-	if err := tx.Write(rel, []byte(content)); err != nil {
-		return err
+	for _, rel := range files {
+		to := dest + strings.TrimPrefix(rel, folder)
+		if err := tx.Move(rel, to); err != nil {
+			return err
+		}
+		if !strings.HasSuffix(strings.ToLower(rel), ".md") {
+			continue
+		}
+		data, err := v.Read(to)
+		if err != nil {
+			return err
+		}
+		content := Rehash(string(data), MoveLinks(string(data), folder, dest))
+		if to == IndexPath(dest) {
+			content = doc.SetFields(content, []doc.Field{{Key: "status", Value: StatusReturned}, {Key: "returned", Value: vault.Stamp(now)}, {Key: "return_change", Value: changeID}})
+		}
+		if content != string(data) {
+			if err := tx.Write(to, []byte(content)); err != nil {
+				return err
+			}
+		}
 	}
-	if err := writeLedger(v, tx, folder); err != nil {
+	prune(v.Abs(folder))
+	if err := writeLedger(tx); err != nil {
 		return err
 	}
 	_, err = tx.Commit("checkout: return " + path.Base(folder))
 	return err
+}
+
+// prune removes the folders under root that the moves left empty, and root, deepest
+// first, with the .DS_Store files that Finder leaves. A folder that still holds a file
+// stays.
+func prune(root string) {
+	var dirs []string
+	filepath.WalkDir(root, func(p string, e os.DirEntry, err error) error {
+		switch {
+		case err != nil:
+		case e.IsDir():
+			dirs = append(dirs, p)
+		case e.Name() == ".DS_Store":
+			os.Remove(p)
+		}
+		return nil
+	})
+	for i := len(dirs) - 1; i >= 0; i-- {
+		os.Remove(dirs[i])
+	}
 }

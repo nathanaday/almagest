@@ -10,10 +10,6 @@ of request, finds the repository or the tags that the request names, and hands o
 request to change code in a linked repository goes to no other skill: this skill finds
 the repository and does the work.
 
-Threads and chords left Almagest in 9.0. They live in the standalone project
-obsidian-threads. The 9.0 migration moved the old thread documents to `threads/`, which
-Almagest does not read.
-
 Tools: `vault`, `search`, `context`. References:
 [conventions.md](references/conventions.md).
 
@@ -21,7 +17,10 @@ Tools: `vault`, `search`, `context`. References:
 
 1. Read the opening context: the vault, its repositories, the live sessions, the tags
    with their counts, and this session's document. Call `vault` when the context is
-   missing or the user asks for the state.
+   missing or the user asks for the state. When the context says that the vault waits
+   for `almagest vault migrate`, stop: tell the user to type `! almagest vault migrate`
+   in this session (you cannot run it), then to start a new session. Until then, every
+   tool and every edit in the vault refuses.
 2. Name the kind of request with the table below.
 3. When the request names work in a repository, find the repository: `search` with
    `types: [repository]` and the request's words, then `context` with `repository` set
@@ -106,7 +105,7 @@ goes in `ingest/`, for [wiki-ingest](../wiki-ingest/SKILL.md).
 history, `Journal · <folder>.md`, which code writes.
 
 - **"Publish my journal."** Publish is the user's act. Tell the user to press Publish
-  next to the volume in the Journals section of the Almagest palette, or to type
+  next to the volume on the Journals page of the Almagest palette, or to type
   `! almagest journal publish <volume>` in the session. Never run that command
   yourself: the guard refuses it from your shell. Publish captures the volume as one
   source, an edition. The palette then starts wiki-sync on the edition, with a work
@@ -124,8 +123,8 @@ proposed changes and the sessions that wait. Then the running work documents
 (`changes.running`), the files in `ingest/`, the sources
 pending for the wiki, the journal volumes with changes to publish (`journals` entries
 with `changed: true`; the user publishes them), the checkouts with edited copies that
-are not returned (`checkouts` entries with `edited` above 0 and `returned` empty; Return
-proposes their edits), and the lint problems, each with the
+are out (`checkouts` entries with `status: out` and `edited` above 0; Return proposes
+their edits), and the lint problems, each with the
 skill that handles it. The opening context names each repository that is behind its
 description ([repo-ingest](../repo-ingest/SKILL.md)), and each journal volume with
 changes to publish.
@@ -137,14 +136,15 @@ changes to publish.
 - `journals/` holds the user's own writing. Read it when the request needs it; never
   edit a file there, and never run `almagest journal publish`. The guard refuses
   every agent edit under `journals/`, and the publish command from your shell.
-- `checkout/` is the user's: the copies the librarian checked out, their reading lists,
-  and the ledger. Code writes it; the user reads and edits the copies. Never edit a file
-  there; the guard refuses every agent edit under `checkout/`.
+- `checkout/` is the user's: the copies the librarian checked out, each checkout's
+  `_index.md`, and the ledger. A returned checkout moves to `tool/returned/`, as the user
+  left it. Code writes them; the user reads and edits the copies. Never edit a file
+  there; the guard refuses every agent edit under `checkout/` and `tool/returned/`.
 - A wikified copy (`scratchpad/<name> · wikified.md`) is the user's scratch. Only
   `wikify mark` writes into it; never edit it with Edit or Write.
-- `trash/` holds what the user deleted. Never read or edit it, and never run
+- `tool/trash/` holds what the user deleted. Never read or edit it, and never run
   `almagest vault trash`: safe delete is the user's action. The guard refuses
-  every agent edit under `trash/`.
+  every agent edit under `tool/trash/`.
 
 ## Gate
 

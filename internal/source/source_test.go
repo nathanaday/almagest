@@ -26,8 +26,8 @@ func TestCaptureFromTheInbox(t *testing.T) {
 	if pdf.Measure != "31 pages" || len(pdf.Chunks) != 2 || pdf.Chunks[1].Locator != "pages 21-31" {
 		t.Fatalf("pdf %+v", pdf)
 	}
-	if pdf.Ref.Path != "source-core/documents/DINOv2.md" || !tv.V.Exists("source-core/originals/"+pdf.Ref.ID+".pdf") {
-		t.Fatalf("the source goes in source-core/documents: %s", pdf.Ref.Path)
+	if pdf.Ref.Path != "tool/source-core/documents/DINOv2.md" || !tv.V.Exists("tool/source-core/originals/"+pdf.Ref.ID+".pdf") {
+		t.Fatalf("the source goes in tool/source-core/documents: %s", pdf.Ref.Path)
 	}
 	page := tv.Read(pdf.Ref.Path)
 	for _, want := range []string{"origin: ingest", "authority: unknown", "media: pdf", "tags: [ml, paper]", "status: pending", "locator: DINOv2.pdf", "> [!source] PDF · 31 pages · unknown", "![[" + pdf.Ref.ID + ".pdf]]"} {
@@ -104,7 +104,7 @@ func TestCaptureARepositorySnapshot(t *testing.T) {
 	if !strings.Contains(page, "origin: repository") || !strings.Contains(page, "tags: [work/p3/p3-edge]") || !strings.Contains(page, "[["+c.Ref.ID+".md|Open the original (md)]]") {
 		t.Fatalf("page:\n%s", page)
 	}
-	report := tv.Read("source-core/originals/" + c.Ref.ID + ".md")
+	report := tv.Read("tool/source-core/originals/" + c.Ref.ID + ".md")
 	for _, want := range []string{"## Tree", "### go.mod", "### CLAUDE.md", "`main.go:2` // TODO: score boxes", "`docs/design.md`"} {
 		if !strings.Contains(report, want) {
 			t.Errorf("report lacks %q:\n%s", want, report)

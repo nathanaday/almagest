@@ -1,7 +1,7 @@
 // Package journal publishes the user's journals. A volume is a folder directly under
 // journals/; its notes are the user's own words, which no agent changes. Publish
 // captures the whole volume as one source, an edition, which the wiki then cites like
-// any source; every edition stays in source-core/originals.
+// any source; every edition stays in tool/source-core/originals.
 package journal
 
 import (

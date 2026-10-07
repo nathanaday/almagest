@@ -1,6 +1,6 @@
 filters:
   and:
-    - file.inFolder("sessions")
+    - file.inFolder("tool/sessions")
     - 'type == "session"'
 properties:
   file.name:

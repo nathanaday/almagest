@@ -1078,8 +1078,7 @@ func BaseHash(d *doc.Doc) string {
 	return doc.FileHash([]byte(b.String()))
 }
 
-// sameBase reports whether a recorded base is the document as it is now. A change
-// proposed by 7.x recorded the hash of the whole file.
+// sameBase reports whether a recorded base is the document as it is now.
 func sameBase(base string, d *doc.Doc) bool {
-	return doc.SameHash(base, BaseHash(d)) || doc.SameHash(base, doc.FileHash([]byte(d.Content)))
+	return doc.SameHash(base, BaseHash(d))
 }

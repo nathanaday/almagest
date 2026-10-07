@@ -1,4 +1,4 @@
 package migrate
 
-// SetBeforeCommit lets the tests of this folder act right before the migration commits.
+// SetBeforeCommit sets the hook that runs right before the migration's commit.
 func SetBeforeCommit(f func()) { beforeCommit = f }

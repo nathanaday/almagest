@@ -15,15 +15,9 @@ const EnvHome = "ALMAGEST_HOME"
 // ConfigSchema is the schema of the machine file.
 const ConfigSchema = "almagest.config.v1"
 
-// legacyConfigSchema is the schema of the machine file before 11.0, in ~/.atlas.
-const legacyConfigSchema = "atlas.config.v1"
-
-// Home is the machine folder: the config file, and the binary setup installs. Legacy is
-// the folder of the releases before 11.0 (~/.atlas), whose config the first Load copies;
-// it is empty when the environment names the folder.
+// Home is the machine folder: the config file, and the binaries.
 type Home struct {
-	Root   string
-	Legacy string
+	Root string
 }
 
 // HomeFrom resolves the machine folder from the environment.
@@ -38,11 +32,8 @@ func HomeFrom(env func(string) string) Home {
 	if err != nil {
 		return Home{Root: ".almagest"}
 	}
-	return Home{Root: filepath.Join(user, ".almagest"), Legacy: filepath.Join(user, ".atlas")}
+	return Home{Root: filepath.Join(user, ".almagest")}
 }
-
-// LegacyConfigPath is the machine file before 11.0.
-func (h Home) LegacyConfigPath() string { return filepath.Join(h.Legacy, "config.json") }
 
 // ConfigPath is the machine file.
 func (h Home) ConfigPath() string { return filepath.Join(h.Root, "config.json") }
@@ -95,7 +86,7 @@ type Config struct {
 func (h Home) Load() (*Config, error) {
 	data, err := os.ReadFile(h.ConfigPath())
 	if errors.Is(err, os.ErrNotExist) {
-		return h.importLegacy()
+		return &Config{Schema: ConfigSchema}, nil
 	}
 	if err != nil {
 		return nil, err
@@ -109,28 +100,6 @@ func (h Home) Load() (*Config, error) {
 	}
 	if err := c.Preferences.check(); err != nil {
 		return nil, fmt.Errorf("%s: %w", h.ConfigPath(), err)
-	}
-	return &c, nil
-}
-
-// importLegacy copies the machine file of a release before 11.0 into the new folder, so
-// the vaults and preferences carry over. The old file stays for the older binary.
-func (h Home) importLegacy() (*Config, error) {
-	empty := &Config{Schema: ConfigSchema}
-	if h.Legacy == "" {
-		return empty, nil
-	}
-	data, err := os.ReadFile(h.LegacyConfigPath())
-	if err != nil {
-		return empty, nil
-	}
-	var c Config
-	if err := decodeStrict(data, &c); err != nil || c.Schema != legacyConfigSchema || c.Preferences.check() != nil {
-		return empty, nil
-	}
-	c.Schema = ConfigSchema
-	if err := h.Save(&c); err != nil {
-		return nil, err
 	}
 	return &c, nil
 }

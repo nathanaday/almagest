@@ -1,5 +1,5 @@
 // Package source brings outside documents into the vault and reads any document in
-// chunks. Capture copies a file into source-core/originals/, never to be edited again, and writes
+// chunks. Capture copies a file into tool/source-core/originals/, never to be edited again, and writes
 // its source document; the source stays pending until a change absorbs it.
 package source
 
@@ -94,20 +94,13 @@ func Media(name string) string {
 	return "other"
 }
 
-// Capture brings the requested documents into the vault as one commit.
+// Capture brings the requested documents into the vault as one commit: each file becomes
+// an original in tool/source-core/originals and a pending source that names it. A file that
+// the vault holds already (the same sha256) is reported as a duplicate, and its ingest copy
+// goes.
 func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) {
-	n := 0
-	if len(req.Ingest) > 0 {
-		n++
-	}
-	if strings.TrimSpace(req.Text) != "" {
-		n++
-	}
-	if req.Repository != "" {
-		n++
-	}
-	if n != 1 {
-		return nil, errors.New("capture takes one of ingest, text, or repository")
+	if err := checkOneInput(req); err != nil {
+		return nil, err
 	}
 	now = now.Truncate(time.Second)
 	tx, err := vault.BeginWrite(v)
@@ -119,74 +112,13 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 	if err != nil {
 		return nil, err
 	}
-	tagList, err := tags.NormalizeAll(req.Tags)
+	tagList, err := checkTags(v, idx, req)
 	if err != nil {
 		return nil, err
 	}
-	for _, t := range tagList {
-		if v.Tagging() == "known" && !req.NewTags && !idx.TagExists(t) {
-			return nil, fmt.Errorf("the tag %q is new, and this vault uses known tags; use a tag that exists, or ask the user and call again with new_tags: true", t)
-		}
-	}
-	var items []item
-	switch {
-	case len(req.Ingest) > 0:
-		for _, name := range req.Ingest {
-			rel, err := v.IngestFile(name)
-			if err != nil {
-				return nil, err
-			}
-			st, err := os.Stat(v.Abs(rel))
-			if err != nil {
-				return nil, err
-			}
-			if st.Size() > MaxFileSize {
-				return nil, fmt.Errorf("ingest: %s is %d MB; capture takes files up to 200 MB", name, st.Size()>>20)
-			}
-			data, err := v.Read(rel)
-			if err != nil {
-				return nil, err
-			}
-			base := path.Base(rel)
-			ext := strings.ToLower(path.Ext(base))
-			// The name is the user's file's, so a long one is cut, not refused; room is left
-			// for the " (n)" that tells two captures of one name apart.
-			title := doc.CutTitle(doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), doc.MaxTitleBytes-len(" (99)"))
-			items = append(items, item{title: title, ext: ext, data: data, origin: "ingest", locator: base, ingest: rel, tags: tagList})
-		}
-	case strings.TrimSpace(req.Text) != "":
-		title := doc.CleanTitle(req.Title)
-		if title == "" {
-			return nil, errors.New("captured text needs a title")
-		}
-		if err := doc.CheckTitle(title); err != nil {
-			return nil, err
-		}
-		origin := "pasted"
-		if strings.HasPrefix(req.Locator, "http://") || strings.HasPrefix(req.Locator, "https://") {
-			origin = "url"
-		}
-		if req.Journal != nil {
-			origin = "journal"
-		}
-		items = append(items, item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: origin, locator: req.Locator, tags: tagList, journal: req.Journal})
-	default:
-		repo, err := idx.ResolveType(req.Repository, "repository")
-		if err != nil {
-			return nil, err
-		}
-		if repo.Front.Bool("unlinked") {
-			return nil, fmt.Errorf("%s is unlinked; there is no repository to snapshot", repo.Title())
-		}
-		snap, err := Snapshot(repo)
-		if err != nil {
-			return nil, err
-		}
-		tg := tagList
-		if def := repo.Str("defines"); def != "" && len(tg) == 0 {
-			tg = []string{def}
-		}
-		items = append(items, item{title: fmt.Sprintf("%s @ %s", vault.Title(repo), snap.Commit[:7]), ext: ".md", data: snap.Content, origin: "repository", locator: repo.ID() + "@" + snap.Commit, tags: tg})
+	items, err := itemsOf(v, idx, req, tagList)
+	if err != nil {
+		return nil, err
 	}
 	out := &Result{Captured: []Captured{}}
 	var titles, created []string
@@ -195,85 +127,19 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		sum := doc.FileHash(it.data)
 		if dup := bySHA(idx, sum); dup != nil {
 			out.Captured = append(out.Captured, Captured{Ref: idx.Ref(dup), SHA256: sum, Measure: dup.Str("measure"), Duplicate: dup.ID()})
-			if it.ingest != "" {
-				if err := tx.Remove(it.ingest); err != nil {
-					return nil, err
-				}
+		} else {
+			title, rel, err := writeSource(tx, idx, it, sum, taken, now)
+			if err != nil {
+				return nil, err
 			}
-			continue
-		}
-		id := doc.NewID(schema.DocPrefix, func(s string) bool { return idx.ByID(s) != nil || taken[s] })
-		taken[id] = true
-		if it.title == "" {
-			// A name of only characters a title cannot hold, such as "###.txt".
-			it.title = id
-		}
-		title := it.title
-		held := func(title string) bool {
-			if vault.ReservedTitle(title) {
-				return true
-			}
-			for _, p := range idx.TitleHolders(title) {
-				if p != it.ingest {
-					return true
-				}
-			}
-			return taken["t:"+strings.ToLower(title)] || v.Occupied(vault.DocPath(title))
-		}
-		for i := 2; held(title); i++ {
-			title = fmt.Sprintf("%s (%d)", it.title, i)
-		}
-		taken["t:"+strings.ToLower(title)] = true
-		file := id + it.ext
-		media := Media(file)
-		m := measure(media, it.data)
-		if err := tx.Write(path.Join(vault.Originals, file), it.data); err != nil {
-			return nil, err
-		}
-		stamp := vault.Stamp(now)
-		fields := []doc.Field{
-			{Key: "id", Value: id},
-			{Key: "type", Value: "source"},
-			{Key: "description", Value: "Captured, not yet ingested."},
-			{Key: "tags", Value: doc.NonNil(it.tags)},
-			{Key: "aliases", Value: []string{}},
-			{Key: "created", Value: stamp},
-			{Key: "updated", Value: stamp},
-			{Key: "refreshed", Value: stamp},
-			{Key: "authority", Value: "unknown"},
-			{Key: "status", Value: "pending"},
-			{Key: "file", Value: doc.Link(file)},
-			{Key: "media", Value: media},
-			{Key: "sha256", Value: sum},
-			{Key: "origin", Value: it.origin},
-			{Key: "locator", Value: it.locator},
-			{Key: "measure", Value: m.String()},
-			{Key: "captured", Value: stamp},
-		}
-		if j := it.journal; j != nil {
-			for i := range fields {
-				if fields[i].Key == "authority" {
-					fields[i].Value = "primary"
-				}
-			}
-			fields = append(fields, doc.Field{Key: "volume", Value: j.Volume}, doc.Field{Key: "edition", Value: j.Date}, doc.Field{Key: "journal_hash", Value: j.Hash})
-			for rel, content := range j.Also {
-				if err := tx.Write(rel, []byte(content)); err != nil {
-					return nil, err
-				}
-			}
-		}
-		rel := vault.DocPath(title)
-		if err := tx.Write(rel, []byte(doc.Render(fields, ""))); err != nil {
-			return nil, err
+			titles = append(titles, title)
+			created = append(created, rel)
 		}
 		if it.ingest != "" {
 			if err := tx.Remove(it.ingest); err != nil {
 				return nil, err
 			}
 		}
-		titles = append(titles, title)
-		created = append(created, rel)
 	}
 	if idx2, err := vault.Load(v); err == nil {
 		if _, err := derive.Sync(idx2, vault.NewGuard(idx2, tx).Write); err != nil {
@@ -284,13 +150,10 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 	if len(titles) == 0 {
 		subject = "capture: duplicates only"
 	}
-	sha, err := tx.Commit(subject)
-	if err != nil {
+	if out.Commit, err = tx.Commit(subject); err != nil {
 		return nil, err
 	}
-	out.Commit = sha
-	idx, err = vault.Load(v)
-	if err != nil {
+	if idx, err = vault.Load(v); err != nil {
 		return nil, err
 	}
 	for _, rel := range created {
@@ -302,6 +165,194 @@ func Capture(v *vault.Vault, req Request, now time.Time) (_ *Result, err error) 
 		out.Captured = append(out.Captured, Captured{Ref: idx.Ref(d), SHA256: d.Str("sha256"), Measure: d.Str("measure"), Chunks: chunks})
 	}
 	return out, nil
+}
+
+// checkOneInput refuses a request that names none, or more than one, of its inputs.
+func checkOneInput(req Request) error {
+	n := 0
+	for _, given := range []bool{len(req.Ingest) > 0, strings.TrimSpace(req.Text) != "", req.Repository != ""} {
+		if given {
+			n++
+		}
+	}
+	if n != 1 {
+		return errors.New("capture takes one of ingest, text, or repository")
+	}
+	return nil
+}
+
+// checkTags normalizes the request's tags, and refuses a new one in a vault of known tags
+// unless the request says the user agreed.
+func checkTags(v *vault.Vault, idx *vault.Index, req Request) ([]string, error) {
+	tagList, err := tags.NormalizeAll(req.Tags)
+	if err != nil {
+		return nil, err
+	}
+	for _, t := range tagList {
+		if v.Tagging() == "known" && !req.NewTags && !idx.TagExists(t) {
+			return nil, fmt.Errorf("the tag %q is new, and this vault uses known tags; use a tag that exists, or ask the user and call again with new_tags: true", t)
+		}
+	}
+	return tagList, nil
+}
+
+// itemsOf turns the request's one input into the files to capture.
+func itemsOf(v *vault.Vault, idx *vault.Index, req Request, tagList []string) ([]item, error) {
+	switch {
+	case len(req.Ingest) > 0:
+		return ingestItems(v, req.Ingest, tagList)
+	case strings.TrimSpace(req.Text) != "":
+		it, err := textItem(req, tagList)
+		return []item{it}, err
+	}
+	it, err := repositoryItem(idx, req.Repository, tagList)
+	return []item{it}, err
+}
+
+// ingestItems reads the named files of ingest/.
+func ingestItems(v *vault.Vault, names, tagList []string) ([]item, error) {
+	var items []item
+	for _, name := range names {
+		rel, err := v.IngestFile(name)
+		if err != nil {
+			return nil, err
+		}
+		st, err := os.Stat(v.Abs(rel))
+		if err != nil {
+			return nil, err
+		}
+		if st.Size() > MaxFileSize {
+			return nil, fmt.Errorf("ingest: %s is %d MB; capture takes files up to 200 MB", name, st.Size()>>20)
+		}
+		data, err := v.Read(rel)
+		if err != nil {
+			return nil, err
+		}
+		base := path.Base(rel)
+		// The name is the user's file's, so a long one is cut, not refused; room is left
+		// for the " (n)" that tells two captures of one name apart.
+		title := doc.CutTitle(doc.CleanTitle(strings.TrimSuffix(base, path.Ext(base))), doc.MaxTitleBytes-len(" (99)"))
+		items = append(items, item{title: title, ext: strings.ToLower(path.Ext(base)), data: data, origin: "ingest", locator: base, ingest: rel, tags: tagList})
+	}
+	return items, nil
+}
+
+// textItem is pasted text, a page from a URL, or a journal edition, as one markdown file.
+func textItem(req Request, tagList []string) (item, error) {
+	title := doc.CleanTitle(req.Title)
+	if title == "" {
+		return item{}, errors.New("captured text needs a title")
+	}
+	if err := doc.CheckTitle(title); err != nil {
+		return item{}, err
+	}
+	origin := "pasted"
+	if strings.HasPrefix(req.Locator, "http://") || strings.HasPrefix(req.Locator, "https://") {
+		origin = "url"
+	}
+	if req.Journal != nil {
+		origin = "journal"
+	}
+	return item{title: title, ext: ".md", data: []byte(strings.TrimSpace(req.Text) + "\n"), origin: origin, locator: req.Locator, tags: tagList, journal: req.Journal}, nil
+}
+
+// repositoryItem is a snapshot of a linked repository at its current commit. With no tag
+// asked for, it takes the tag the repository defines.
+func repositoryItem(idx *vault.Index, key string, tagList []string) (item, error) {
+	repo, err := idx.ResolveType(key, "repository")
+	if err != nil {
+		return item{}, err
+	}
+	if repo.Front.Bool("unlinked") {
+		return item{}, fmt.Errorf("%s is unlinked; there is no repository to snapshot", repo.Title())
+	}
+	snap, err := Snapshot(repo)
+	if err != nil {
+		return item{}, err
+	}
+	if def := repo.Str("defines"); def != "" && len(tagList) == 0 {
+		tagList = []string{def}
+	}
+	return item{title: fmt.Sprintf("%s @ %s", vault.Title(repo), snap.Commit[:7]), ext: ".md", data: snap.Content, origin: "repository", locator: repo.ID() + "@" + snap.Commit, tags: tagList}, nil
+}
+
+// writeSource writes one item's original and its source document, under a free title, and
+// returns the title and the document's path. taken holds the ids and titles of this
+// capture so far.
+func writeSource(tx *vault.Tx, idx *vault.Index, it item, sum string, taken map[string]bool, now time.Time) (string, string, error) {
+	v := idx.V
+	id := doc.NewID(schema.DocPrefix, func(s string) bool { return idx.ByID(s) != nil || taken[s] })
+	taken[id] = true
+	if it.title == "" {
+		// A name of only characters a title cannot hold, such as "###.txt".
+		it.title = id
+	}
+	held := func(title string) bool {
+		if vault.ReservedTitle(title) {
+			return true
+		}
+		for _, p := range idx.TitleHolders(title) {
+			if p != it.ingest {
+				return true
+			}
+		}
+		return taken["t:"+strings.ToLower(title)] || v.Occupied(vault.DocPath(title))
+	}
+	title := it.title
+	for i := 2; held(title); i++ {
+		title = fmt.Sprintf("%s (%d)", it.title, i)
+	}
+	taken["t:"+strings.ToLower(title)] = true
+	file := id + it.ext
+	if err := tx.Write(path.Join(vault.Originals, file), it.data); err != nil {
+		return "", "", err
+	}
+	if j := it.journal; j != nil {
+		for rel, content := range j.Also {
+			if err := tx.Write(rel, []byte(content)); err != nil {
+				return "", "", err
+			}
+		}
+	}
+	rel := vault.DocPath(title)
+	if err := tx.Write(rel, []byte(doc.Render(sourceFields(it, id, file, sum, now), ""))); err != nil {
+		return "", "", err
+	}
+	return title, rel, nil
+}
+
+// sourceFields are the frontmatter of a new source. A journal edition is a primary source,
+// and records its volume, its date, and the hash of its notes.
+func sourceFields(it item, id, file, sum string, now time.Time) []doc.Field {
+	stamp := vault.Stamp(now)
+	media := Media(file)
+	authority := "unknown"
+	if it.journal != nil {
+		authority = "primary"
+	}
+	fields := []doc.Field{
+		{Key: "id", Value: id},
+		{Key: "type", Value: "source"},
+		{Key: "description", Value: "Captured, not yet ingested."},
+		{Key: "tags", Value: doc.NonNil(it.tags)},
+		{Key: "aliases", Value: []string{}},
+		{Key: "created", Value: stamp},
+		{Key: "updated", Value: stamp},
+		{Key: "refreshed", Value: stamp},
+		{Key: "authority", Value: authority},
+		{Key: "status", Value: "pending"},
+		{Key: "file", Value: doc.Link(file)},
+		{Key: "media", Value: media},
+		{Key: "sha256", Value: sum},
+		{Key: "origin", Value: it.origin},
+		{Key: "locator", Value: it.locator},
+		{Key: "measure", Value: measure(media, it.data).String()},
+		{Key: "captured", Value: stamp},
+	}
+	if j := it.journal; j != nil {
+		fields = append(fields, doc.Field{Key: "volume", Value: j.Volume}, doc.Field{Key: "edition", Value: j.Date}, doc.Field{Key: "journal_hash", Value: j.Hash})
+	}
+	return fields
 }
 
 func bySHA(idx *vault.Index, sum string) *doc.Doc {

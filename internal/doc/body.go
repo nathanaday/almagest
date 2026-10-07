@@ -11,8 +11,6 @@ var OwnedLeads = map[string]bool{
 	"source": true, "repository": true, "repository-missing": true,
 	"concept": true, "entity": true, "policy": true, "overview": true,
 	"session": true, "change": true, "almagest": true,
-	// atlas is the code's callout of the releases before 11.0.
-	"atlas": true,
 }
 
 // Owned reports whether a callout type is code's in the lead.

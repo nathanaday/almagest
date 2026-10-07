@@ -72,8 +72,7 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		// Every rule judges the file as the disk names it, whatever case, Unicode form,
 		// or link the agent wrote.
 		f.Path = canonical(f.Path)
-		home := vault.HomeFrom(env.getenv)
-		if strings.EqualFold(f.Path, canonical(home.ConfigPath())) || (home.Legacy != "" && strings.EqualFold(f.Path, canonical(home.LegacyConfigPath()))) {
+		if strings.EqualFold(f.Path, canonical(vault.HomeFrom(env.getenv).ConfigPath())) {
 			return deny(w, f.Path+" holds the commands Almagest runs (terminal_command, agent_commands); the user changes it in the Almagest settings in Obsidian, or with almagest config")
 		}
 		// A file belongs to the vault above it, wherever the session runs.
@@ -85,6 +84,10 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 		if err != nil {
 			continue
 		}
+		// The rules name this layout's folders, so they cannot judge a vault of another.
+		if err := v.CheckLayout(); err != nil {
+			return deny(w, f.Path+" is in a vault that this almagest does not read yet: "+err.Error())
+		}
 		if reason := pathRefusal(v, in, f); reason != "" {
 			return deny(w, reason)
 		}
@@ -92,9 +95,8 @@ func Guard(r io.Reader, w io.Writer, env Env) error {
 	return nil
 }
 
-// binaryNames are the binary's name and the names it had before 11.0 (atlas-obsidian;
-// atlas in 6.0 to 6.2). An older install may still hold one, and it reads the same vaults.
-var binaryNames = []string{"almagest", "atlas-obsidian", "atlas"}
+// binaryName is the name of the binary that the shell rule looks for.
+const binaryName = "almagest"
 
 // almagestCommandRefusal is why a shell command may not run the almagest binary, or "":
 // a change apply, which would skip the gate, and a hook, which would forge an event.
@@ -115,7 +117,7 @@ func commandRefusal(words []string) string {
 	for i, word := range words {
 		// zsh runs =name as the path of name.
 		name := path.Base(strings.TrimPrefix(word, "="))
-		if !slices.ContainsFunc(binaryNames, func(n string) bool { return strings.EqualFold(n, name) }) {
+		if !strings.EqualFold(name, binaryName) {
 			continue
 		}
 		rest := positional(words[i+1:])
@@ -133,10 +135,10 @@ func commandRefusal(words []string) string {
 			return "undo a change with the change tool, which leaves the user's own acts (safe delete, Return) to the user"
 		case rest[0] == "journal" && slices.Contains(rest[1:], "publish"):
 			return "a journal is published when the user decides: ask the user to press Publish in the Almagest palette"
+		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
+			return "the migration moves the user's whole vault, so the user runs it: ask the user to type ! almagest vault migrate in this session, or to run it in a terminal"
 		case rest[0] == "vault" && slices.Contains(rest[1:], "trash"):
 			return "safe delete is the user's act: it applies a remove at once, with no yes; propose a remove with the change tool, or ask the user to press Safe delete in the Almagest palette"
-		case rest[0] == "vault" && slices.Contains(rest[1:], "migrate"):
-			return "the migration rewrites the whole vault, so only the user runs it: ask the user to type almagest vault migrate, or run it with !"
 		}
 	}
 	return ""
@@ -181,9 +183,9 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	is := func(name string) bool { return key == strings.ToLower(name) }
 	under := func(dir string) bool { return strings.HasPrefix(key, strings.ToLower(dir)+"/") }
 	switch {
-	case is(vault.VaultConfigFile) || is(vault.LegacyVaultConfigFile):
+	case is(vault.VaultConfigFile):
 		return rel + " holds the commands Almagest runs for this vault (terminal_command, agent_commands), which win over the machine's; the user changes it in the Almagest settings in Obsidian, or with almagest config"
-	case is(vault.PluginDir) || under(vault.PluginDir) || is(vault.LegacyPluginDir) || under(vault.LegacyPluginDir):
+	case is(vault.PluginDir) || under(vault.PluginDir):
 		return rel + " is the Almagest plugin, whose code and binaryPath decide what runs; the user installs it from Obsidian's community plugins and sets binaryPath in its settings"
 	case strings.EqualFold(path.Dir(rel), vault.Documents):
 		return documentRefusal(v, f, rel)
@@ -207,6 +209,8 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 		return rel + " is a wikified copy: its marks come from wikify mark, and the user accepts or ignores each one"
 	case under(vault.Checkout):
 		return rel + " is in checkout/, which the checkout tool writes; the user reads and edits the copies, and Return proposes their edits"
+	case under(vault.Returned):
+		return rel + " is a returned checkout, kept as the user left it; check the documents out again to work on them"
 	case under(vault.Trash):
 		return rel + " is in the trash, which holds what the user deleted; the user empties it"
 	case under(vault.Journals):
@@ -215,7 +219,7 @@ func pathRefusal(v *vault.Vault, in Input, f patchFile) string {
 	return ""
 }
 
-// documentRefusal keeps the documents of source-core/documents to their writers: a new file
+// documentRefusal keeps the documents of tool/source-core/documents to their writers: a new file
 // comes from a tool, and knowledge changes through a change.
 func documentRefusal(v *vault.Vault, f patchFile, rel string) string {
 	data, err := v.Read(rel)

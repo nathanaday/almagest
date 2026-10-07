@@ -30,7 +30,7 @@ func foldsUnicode(t *testing.T, dir string) bool {
 
 func TestACaptureBesideATitleInAnotherUnicodeFormTakesTheNextTitle(t *testing.T) {
 	tv := testvault.New(t)
-	if !foldsUnicode(t, tv.V.Abs("source-core/documents")) {
+	if !foldsUnicode(t, tv.V.Abs("tool/source-core/documents")) {
 		t.Skip("this file system keeps NFC and NFD names apart")
 	}
 	tv.Doc("topic", cafeNFC, map[string]any{"kind": "entity"}, "## What it is\n\nA café.\n")
@@ -38,7 +38,7 @@ func TestACaptureBesideATitleInAnotherUnicodeFormTakesTheNextTitle(t *testing.T)
 		t.Fatal(err)
 	}
 	tv.Commit()
-	topic := tv.Read("source-core/documents/" + cafeNFC + ".md")
+	topic := tv.Read("tool/source-core/documents/" + cafeNFC + ".md")
 	tv.Write("ingest/"+cafeNFD+".md", "# Notes\n\nFrom the café.\n")
 	res, err := source.Capture(tv.V, source.Request{Ingest: []string{cafeNFD + ".md"}}, at)
 	if err != nil {
@@ -47,7 +47,7 @@ func TestACaptureBesideATitleInAnotherUnicodeFormTakesTheNextTitle(t *testing.T)
 	if got := res.Captured[0].Ref.Title; got != cafeNFD+" (2)" {
 		t.Fatalf("the source took the title %q", got)
 	}
-	if tv.Read("source-core/documents/"+cafeNFC+".md") != topic {
+	if tv.Read("tool/source-core/documents/"+cafeNFC+".md") != topic {
 		t.Fatal("the topic changed")
 	}
 	tv.Clean()

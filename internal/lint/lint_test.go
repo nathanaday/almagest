@@ -55,7 +55,7 @@ func TestChecks(t *testing.T) {
 	tv.Doc("topic", "Defines wrong", map[string]any{"kind": "concept", "defines": "x"}, "")
 	tv.Doc("topic", "View · Mine", map[string]any{"kind": "concept"}, "")
 	tv.Write("scratchpad/Motion scoring.md", "a scratch note with the same title\n")
-	tv.Write("source-core/documents/Loose note.md", "no frontmatter\n")
+	tv.Write("tool/source-core/documents/Loose note.md", "no frontmatter\n")
 	tv.Write("notes/Stray.md", "---\nid: doc-stray1\ntype: topic\nkind: concept\ndescription: x\n---\n")
 	tv.Doc("topic", "Papers", map[string]any{"kind": "concept", "tags": []string{"paper", "papers"}}, "")
 	f := run(t, tv, lint.Options{})
@@ -118,21 +118,6 @@ func TestPendingAndStale(t *testing.T) {
 	}
 	if !has(f, "stale", "Idea", "changed after it was refreshed") {
 		t.Error("a topic older than what it cites is stale")
-	}
-}
-
-func TestArchivedTypeInDocuments(t *testing.T) {
-	tv := testvault.New(t)
-	tv.Doc("spec", "Score boxes · Spec", map[string]any{"thread": "[[Score boxes]]"}, "## Goal\n\nx\n")
-	f := run(t, tv, lint.Options{})
-	var got []lint.Finding
-	for _, x := range f.Findings {
-		if x.Doc.Title == "Score boxes · Spec" {
-			got = append(got, x)
-		}
-	}
-	if len(got) != 1 || got[0].Check != "archived" || got[0].Severity != lint.Error {
-		t.Fatalf("a spec in source-core/documents gives one archived error: %+v", got)
 	}
 }
 

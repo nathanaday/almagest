@@ -45,7 +45,7 @@ func TestCheck(t *testing.T) {
 	if !Get("source").Owned("sha256") || Get("topic").Owned("sources") || !Get("change").Owned("absorbs") || Get("topic").Owned("from") {
 		t.Fatal("owners")
 	}
-	if len(DocumentTypes) != 3 || IsDocument("stub") || IsDocument("session") || !IsDocument("topic") || len(ArchivedTypes) != 6 || Get("topic").SectionsOf("policy")[0] != "Rule" {
+	if len(DocumentTypes) != 3 || IsDocument("stub") || IsDocument("session") || !IsDocument("topic") || Get("topic").SectionsOf("policy")[0] != "Rule" {
 		t.Fatal("types")
 	}
 }

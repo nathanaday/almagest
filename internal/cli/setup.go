@@ -24,10 +24,7 @@ import (
 // setupCmd installs the binary under ~/.almagest/bin, adds the agent plugin to the host, and
 // makes a first vault when asked.
 func (c *CLI) setupCmd(argv []string) error {
-	a := parse(argv, "no-plugin", "allow-vault", "yes")
-	if err := a.removed("yes", "setup asks nothing; run it without --yes"); err != nil {
-		return err
-	}
+	a := parse(argv, "no-plugin", "allow-vault")
 	agent := a.get("agent")
 	if agent == "" {
 		agent = "claude"
@@ -190,8 +187,7 @@ func (c *CLI) doctorCmd(argv []string) int {
 			continue
 		}
 		if err := v.CheckLayout(); err != nil {
-			at := shellArg(vault.Shorten(v.Root))
-			line(false, "vault "+v.Name(), fmt.Sprintf("%s: %v. From another folder: almagest vault migrate --dry-run --vault %s, then almagest vault migrate --vault %s", vault.Shorten(v.Root), err, at, at))
+			line(false, "vault "+v.Name(), fmt.Sprintf("%s: %v", vault.Shorten(v.Root), err))
 			continue
 		}
 		f, _ := lint.Run(idx, lint.Options{Quick: true, Now: c.Now()})
@@ -305,10 +301,7 @@ func sameSet(a, b []string) bool {
 // openCmd opens the vault, or one of its documents, in Obsidian. A vault Obsidian does not
 // know is added to its registry with --register, which restarts Obsidian on macOS.
 func (c *CLI) openCmd(argv []string) error {
-	a := parse(argv, "register", "update-plugin")
-	if err := a.removed("update-plugin", "Obsidian installs and updates the Almagest plugin from its community plugins: "+vault.PluginLink); err != nil {
-		return err
-	}
+	a := parse(argv, "register")
 	v, err := c.open(a)
 	if err != nil {
 		return err

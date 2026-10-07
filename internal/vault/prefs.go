@@ -16,11 +16,6 @@ const VaultConfigSchema = "almagest.vault-config.v1"
 // VaultConfigFile is a vault's own config file, relative to its root.
 const VaultConfigFile = ".almagest/config.json"
 
-// LegacyVaultConfigFile is the vault's config before 11.0. The migration to layout 7
-// moves it to VaultConfigFile; until then the guard protects it, as an older binary
-// still runs what it names.
-const LegacyVaultConfigFile = ".atlas/config.json"
-
 // Agents are the harnesses Almagest starts.
 var Agents = []string{"claude", "codex"}
 

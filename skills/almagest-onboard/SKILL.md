@@ -36,8 +36,11 @@ Tools: `vault` init. Skills: [repo-link](../repo-link/SKILL.md).
    community plugins (obsidian://show-plugin?id=almagest).
    The vault works without the plugin. The plugin adds the colors and icons of the
    callouts, the Approve and Cancel buttons in each change document, the Almagest palette
-   (Ingest, Wiki lint, and Safe delete), the tag navigator, the sessions pane, the
+   (Ingest, Wiki lint, Journals, Checkouts, the agent sessions, and Safe delete), the
    repository panel, and quiet snapshots of the user's edits.
+   Recommend Duet too (obsidian://show-plugin?id=duet), and say it is optional: with
+   Duet, the agents that the palette starts work in a note of the vault; without it,
+   they start in a new terminal. The setting "Agent conversations" chooses.
 
 ## Gate
 

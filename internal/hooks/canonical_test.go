@@ -29,7 +29,7 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 	if err := os.MkdirAll(outside, 0o755); err != nil {
 		t.Fatal(err)
 	}
-	if err := os.Symlink(filepath.Join(root, "source-core", "documents"), filepath.Join(outside, "docs")); err != nil {
+	if err := os.Symlink(filepath.Join(root, "tool/source-core", "documents"), filepath.Join(outside, "docs")); err != nil {
 		t.Fatal(err)
 	}
 	cases := []struct {
@@ -43,7 +43,7 @@ func TestTheGuardJudgesThePathTheDiskNames(t *testing.T) {
 			name  string
 			event map[string]any
 		}{
-			{"a topic in another case", edit(root+"/Source-Core/documents/Alpha.md", "x")},
+			{"a topic in another case", edit(root+"/Tool/Source-Core/documents/Alpha.md", "x")},
 			{"Almagest.md in upper case", edit(root+"/ALMAGEST.md", "Work")},
 			{"a view in upper case", map[string]any{"tool_name": "Write", "tool_input": map[string]any{"file_path": root + "/WIKI-VIEW/x.md"}}},
 		}...)
@@ -63,7 +63,7 @@ func (f *fixture) own(summary string) (string, string) {
 	f.t.Helper()
 	f.run("session-start", map[string]any{})
 	f.run("subagent-start", map[string]any{"agent_id": "9f07d1aa", "agent_type": "almagest:wiki-extract"})
-	rel := "sessions/2026-09/2026-09-27 1432 a1b2c3.md"
+	rel := "tool/sessions/2026-09/2026-09-27 1432 a1b2c3.md"
 	line := "- wiki-extract · `9f07d1` · started 14:32"
 	content := f.tv.Read(rel)
 	if !strings.Contains(content, "## Summary\n\n## Subagents\n\n"+line) {
@@ -200,7 +200,7 @@ func TestAPatchMarkerWithWhitespaceIsJudged(t *testing.T) {
 	for name, body := range map[string]string{
 		"an insert into ## Subagents": " *** Update File: " + rel + "\n@@\n " + line + "\n+- forged · `000000`",
 		"the vault's config":          "\t*** Add File: .almagest/config.json\n+{}",
-		"a document deleted":          " *** Delete File: source-core/documents/Alpha.md",
+		"a document deleted":          " *** Delete File: tool/source-core/documents/Alpha.md",
 	} {
 		patch := map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n" + body + "\n*** End Patch"}}
 		if !denied(f.run("guard", patch)) {
@@ -251,7 +251,7 @@ func TestACodexMoveIsADeleteAndAnAdd(t *testing.T) {
 	own, line := f.own("A summary.")
 	f.tv.Doc("topic", "Alpha", map[string]any{"kind": "concept"}, "## Definition\n\nx\n")
 	f.tv.Commit()
-	topic := "source-core/documents/Alpha.md"
+	topic := "tool/source-core/documents/Alpha.md"
 	f.tv.Write("ingest/note.md", "A note.\n")
 	move := func(from, to, hunk string) map[string]any {
 		return map[string]any{"tool_name": "apply_patch", "tool_input": map[string]any{"command": "*** Begin Patch\n*** Update File: " + from + "\n*** Move to: " + to + "\n" + hunk + "*** End Patch"}}

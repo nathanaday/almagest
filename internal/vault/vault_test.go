@@ -9,7 +9,6 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/nathanaday/almagest/internal/doc"
 	"github.com/nathanaday/almagest/internal/testvault"
 	"github.com/nathanaday/almagest/internal/vault"
 )
@@ -23,13 +22,13 @@ func TestInitWritesTheLayoutAndOneCommit(t *testing.T) {
 	if strings.Contains(tv.Read(vault.Marker), "wikify") {
 		t.Fatalf("Almagest.md names wikify:\n%s", tv.Read(vault.Marker))
 	}
-	for _, rel := range []string{"sessions/Sessions.base", "changes/Changes.base", ".obsidian/app.json", "source-core/documents", "source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
+	for _, rel := range []string{"tool/sessions/Sessions.base", "changes/Changes.base", ".obsidian/app.json", "tool/source-core/documents", "tool/source-core/originals", "wiki-view", "ingest", "scratchpad", "journals"} {
 		if !v.Exists(rel) {
 			t.Errorf("missing %s", rel)
 		}
 	}
 	var app map[string]any
-	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "trash/") {
+	if err := json.Unmarshal([]byte(tv.Read(".obsidian/app.json")), &app); err != nil || app["attachmentFolderPath"] != "tool/source-core/originals" || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "wiki-view/") || !strings.Contains(fmt.Sprint(app["userIgnoreFilters"]), "tool/trash/") {
 		t.Fatalf("app settings %v %v", app, err)
 	}
 	if log := tv.Log(); len(log) != 1 || log[0] != "setup: Work" {
@@ -148,7 +147,7 @@ func TestIndexResolvesIdsTitlesAliasesAndTags(t *testing.T) {
 	if got := idx.TagChildren("school"); len(got) != 1 || got[0] != "school/cs513" {
 		t.Fatalf("children %v", got)
 	}
-	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "source-core/documents/Self-supervised learning.md" || ref.Kind != "concept" || len(ref.Tags) != 2 {
+	if ref := idx.Ref(d); ref.Title != "Self-supervised learning" || ref.Path != "tool/source-core/documents/Self-supervised learning.md" || ref.Kind != "concept" || len(ref.Tags) != 2 {
 		t.Fatalf("ref %+v", ref)
 	}
 }
@@ -185,37 +184,9 @@ func TestPendingFollowsAbsorbedHashes(t *testing.T) {
 		t.Fatalf("pending docs %v", got)
 	}
 	// A new file under the same source is pending again.
-	tv.Write("source-core/documents/DINOv2.md", strings.Replace(tv.Read("source-core/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
+	tv.Write("tool/source-core/documents/DINOv2.md", strings.Replace(tv.Read("tool/source-core/documents/DINOv2.md"), "3f9c1e2a7b8d44", "99887766554433", 1))
 	if idx := tv.Index(); !idx.Pending(idx.ByID(src)) {
 		t.Fatal("a source with a new hash is pending")
-	}
-}
-
-// The archive of threads/ resolves links, and holds no document.
-func TestTheThreadsArchiveHoldsLinkTargetsOnly(t *testing.T) {
-	tv := testvault.New(t)
-	tv.Write("threads/Fix alarms.md", "---\nid: doc-aaaaaa\ntype: stub\ndescription: x\n---\n\n## Idea\n\nx\n")
-	tv.Write("threads/Fix alarms · Spec.md", "---\nid: doc-bbbbbb\ntype: spec\nthread: \"[[Fix alarms]]\"\n---\n\n## Goal\n\nx\n")
-	tv.Doc("topic", "Alarms", map[string]any{"kind": "concept"}, "From [[Fix alarms]].\n")
-	idx := tv.Index()
-	for _, list := range [][]*doc.Doc{idx.Docs, idx.Notes, idx.Misplaced} {
-		for _, d := range list {
-			if strings.HasPrefix(d.Path, "threads/") {
-				t.Fatalf("the index holds %s", d.Path)
-			}
-		}
-	}
-	if idx.ByID("doc-aaaaaa") != nil {
-		t.Fatal("an archived stub is no document")
-	}
-	if got := idx.LinkPaths("Fix alarms"); len(got) != 1 || got[0] != "threads/Fix alarms.md" {
-		t.Fatalf("link paths %v", got)
-	}
-	if typ, err := idx.TypeOfLink("[[Fix alarms · Spec]]"); err != nil || typ != "file" {
-		t.Fatalf("an archived spec is a link target: %q %v", typ, err)
-	}
-	if !vault.Unread("threads/Fix alarms.md") || !vault.Unread("scratchpad/Draft.md") || vault.Unread("source-core/documents/Alarms.md") {
-		t.Fatal("unread")
 	}
 }
 
@@ -306,8 +277,8 @@ func TestSyncSettingsKeepsOtherKeys(t *testing.T) {
 
 func TestOpenNote(t *testing.T) {
 	tv := testvault.New(t)
-	tv.Write(".obsidian/workspace.json", `{"main":{"id":"a","type":"split","children":[{"id":"b","type":"tabs","children":[{"id":"leaf1","type":"leaf","state":{"type":"markdown","state":{"file":"source-core/documents/X.md"}}}]}]},"active":"leaf1","lastOpenFiles":["Other.md"]}`)
-	if got := tv.V.OpenNote(); got != "source-core/documents/X.md" {
+	tv.Write(".obsidian/workspace.json", `{"main":{"id":"a","type":"split","children":[{"id":"b","type":"tabs","children":[{"id":"leaf1","type":"leaf","state":{"type":"markdown","state":{"file":"tool/source-core/documents/X.md"}}}]}]},"active":"leaf1","lastOpenFiles":["Other.md"]}`)
+	if got := tv.V.OpenNote(); got != "tool/source-core/documents/X.md" {
 		t.Fatalf("open note %q", got)
 	}
 }
@@ -328,46 +299,5 @@ func TestSelectTakesTheNamedVaultThenAlmagestVaultThenTheFolder(t *testing.T) {
 	}
 	if _, err := vault.Select("", one.V.Root, one.Home, filepath.Join(t.TempDir(), "none")); err == nil || !strings.Contains(err.Error(), "ALMAGEST_VAULT=") {
 		t.Fatalf("a bad ALMAGEST_VAULT: %v", err)
-	}
-}
-
-// The commits of the releases before 11.0 name a change under the trailer Atlas-Change.
-func TestAChangeCommitIsFoundUnderTheOldTrailer(t *testing.T) {
-	tv := testvault.New(t)
-	tv.Write("notes.md", "x\n")
-	g := tv.V.Git()
-	if err := g.Add("notes.md"); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := g.Commit("change: Old\n\nAtlas-Change: chg-old001"); err != nil {
-		t.Fatal(err)
-	}
-	sha, err := vault.ChangeCommit(g, "chg-old001")
-	if err != nil || sha == "" {
-		t.Fatalf("the old trailer: %q %v", sha, err)
-	}
-}
-
-// The first Load copies the machine file of before 11.0, under the new schema, and keeps
-// the old one for the older binary.
-func TestTheMachineFileCarriesOverFromAtlas(t *testing.T) {
-	dir := t.TempDir()
-	h := vault.Home{Root: filepath.Join(dir, ".almagest"), Legacy: filepath.Join(dir, ".atlas")}
-	if err := os.MkdirAll(h.Legacy, 0o755); err != nil {
-		t.Fatal(err)
-	}
-	old := "{\"schema\": \"atlas.config.v1\", \"vaults\": [\"/v/one\"], \"preferences\": {}}\n"
-	if err := os.WriteFile(h.LegacyConfigPath(), []byte(old), 0o644); err != nil {
-		t.Fatal(err)
-	}
-	c, err := h.Load()
-	if err != nil || len(c.Vaults) != 1 || c.Vaults[0] != "/v/one" || c.Schema != vault.ConfigSchema {
-		t.Fatalf("the carried config: %+v %v", c, err)
-	}
-	if data, _ := os.ReadFile(h.ConfigPath()); !strings.Contains(string(data), vault.ConfigSchema) {
-		t.Fatalf("the new file: %s", data)
-	}
-	if data, _ := os.ReadFile(h.LegacyConfigPath()); string(data) != old {
-		t.Fatal("the old file changed")
 	}
 }
