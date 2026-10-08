@@ -2,7 +2,7 @@
 
 <img src="docs/Bartolomeu_Velho_1568.jpg" alt="Geocentric model of the universe" width="480">
 
-> *Ptolemy proposed a geometric model of the universe in his 2nd century work **Almagest***
+> *Ptolemy proposed a geocentric model of the universe in his 2nd century work **Almagest***
 
 > *Art by Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
 
@@ -12,15 +12,15 @@
 
 **Why Almagest?**
 
-_Another LLM second brain plugin? Another Karpathy wiki? Another Obsidian knowledge graph?_
+_Another day, another LLM second brain plugin on Github..._
 
-I know...
+It's true! 
 
-There are thousands of LLM-wiki and second-brain projects, and most of them are pretty good. You can painlessly transform mountains of notes, documents, voice memos, and entire codebases into a gorgeous fabric of markdown documents, and all the wiki links work, and your obsidian knowledge graph has never been bigger. My LLM's seemed to enjoy it, but I found the end result overwhelming. I could not navigate, read, or orientate myself in my own knowledge base.
+There are thousands of LLM-wiki and second-brain projects, and most of them are pretty good. You can painlessly transform mountains of notes, documents, and entire codebases into a fabric of markdown documents, where all the wiki links work, and your obsidian knowledge graph has never been bigger. It all works fine. My agents used it without issue. But I found the end result overwhelming. I could not navigate, read, or orientate myself in my own knowledge base.
 
-Before I made Almagest, I spent more time building my knowledge base and admiring its complexity, and less time doing meaningful work with it.
+Never has it been this easy to aggregate so much information into your own personal notes. But since you, the human, were not deeply involved in its creation, you can have all the notes in the world and still feel lost. 
 
-So yes, Almagest is another LLM wiki. But it's designed for the human side as well.
+Think of Almagest as the same LLM wiki concept that works great with Obsidian, with extra attention and polish for the human side. 
 
 ## Features
 
