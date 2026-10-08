@@ -1,48 +1,56 @@
+
 # Almagest
+
+*(al-ma-jest)*
 
 <img src="docs/Bartolomeu_Velho_1568.jpg" alt="Geocentric model of the universe" width="480">
 
-> *Ptolemy proposed a geocentric model of the universe in his 2nd century work **Almagest***
-
+> *Ptolemy presented the most complete geocentric model of the universe in his 2nd-century work **Almagest***
 > *Art by Bartolomeu Velho, 1568. Public domain. [Source](https://commons.wikimedia.org/w/index.php?curid=3672259)*
 
 ---
 
-# Build an LLM wiki you can actually use
+# Build a wiki for humans, not just LLMs
 
-**Why Almagest?**
+There are so many LLM wiki tools circulating the open source world, and basically all of them are good. As promised, they ingest information accurately, your knowledge base grows, and your agents are connecting dots while they work on projects of immense scale. 
 
-_Another day, another LLM second brain plugin on Github..._
+But there were drawbacks in my experiences with AI second brains since day one. Primarily, that I want to use my knowledge base too. I don't want to only bury information for my agents to retrieve later on out of thin air. My wiki would grow unbounded and I would never read from it, simply because it was overwhelming to navigate such a scale of information that these tools let us create.
 
-It's true! 
+### Almagest Guiding Principles
 
-There are thousands of LLM-wiki and second-brain projects, and most of them are pretty good. You can painlessly transform mountains of notes, documents, and entire codebases into a fabric of markdown documents, where all the wiki links work, and your obsidian knowledge graph has never been bigger. It all works fine. My agents used it without issue. But I found the end result overwhelming. I could not navigate, read, or orientate myself in my own knowledge base.
+1. Get your thoughts down in your own words with no friction, and never lose them
+2. Ingest your documents, repos, and sources with no friction, and never lose them
+3. Agents query the knowledge base automatically and efficiently
+4. You query the knowledge baes effortlessly and with joy
 
-Never has it been this easy to aggregate so much information into your own personal notes. But since you, the human, were not deeply involved in its creation, you can have all the notes in the world and still feel lost. 
+# Features
 
-Think of Almagest as the same LLM wiki concept that works great with Obsidian, with extra attention and polish for the human side. 
+### Claude / Codex MCP Plugin
 
-## Features
+All the tools you need to onboard, ingest, search, lint, checkout, and more, using natural language with your agents. 
 
-### A view for Humans and a structure for Agents
+Paired with the [Duet] plugin, which lets you start agent conversations within Obsidian, you never have to leave the vault to get your work done.
 
-- The tool builds your `wiki-view`: a home page, timeline, library, and a navigation page for each tag.
-- All raw sources, change logs, etc., live under `tool/` which you don't need to open
+### Wiki Ingest
 
-### The tool palette
+Drop papers, PDFs, or notes into `ingest/`, and press Ingest. Each ingest task becomes one
+document that you watch as it works. Change logs can be approved, canceled, edited, and questioned.
 
-One pane in Obsidian that leads to everything Almagest does. Its home lists the areas
-(Changes, Ingest, Wiki health, Journals, Library, Agents, and This note), each with one
-line on where it stands and a count when something waits for you. Select one to open its
-page, with its numbers, its actions, and its lists.
 
-### Ingest: a stable, accurate wiki
+### Approve / Reject Flow for all Agent Changes
 
-Drop papers, PDFs, or notes into `ingest/`, and press Ingest. Each ingest becomes one
-document that you watch as it works: each step appears as the agent takes it, then the
-pages it proposes, with one line on why. You read it, edit it if you like, and press
-Approve or Cancel. The new pages cite their sources, and a copy of each source stays in
-the vault.
+Any change to your knowledge base gets a dedicated "changes" page with a clear approve or deny path. You can also edit the change plan, or ask your agents for clarifications. This keeps your knowledge base under your control.
+
+
+
+### Wiki View for humans, Wiki Core for agents
+
+All raw sources, change logs, and llm doc live under the hood in a `tool/` directory. It's self-updating, but you don't have to look at it. This is where the MCP tools do fast information queries and where all new sources are ingested.
+
+The plugin constructs your `wiki-view` from these sources: a home age, timeline, library, and a navigation page for each tag. The user-interface can evolve over time with improvements with no impact to the core structure.
+
+
+### Repository Links
 
 Link your code repositories, and the agent writes a page for each. An agent started in
 the vault finds the repository you mean and works in it, and its session leaves a
@@ -50,42 +58,31 @@ record of what it did.
 
 ### Journals
 
-`journals/` holds your own writing, one volume per folder, such as `journals/cs566-notes/`.
-When you want the wiki to learn from a volume, press Publish. Almagest captures the whole
-volume as one edition, a source named like "User Journal CS566 Notes - 6 October 2026
-Edition", and the agent ingests it as it would any source. Every edition stays in the
-vault, and each volume keeps a publication history.
+A `journals/` area holds your own writing, organized by volumes. You are the contributor! Crucially, your journal does not move when its ingested. It stays there in `journals/`, even though its been integrated into your knowledge base.
 
-### The librarian
+When you want the wiki to learn from a volume, use the Publish action. Almagest captures the whole journal as one edition, then the agent ingests it as it would any source. Every edition stays in the vault, and each volume keeps a publication history. 
 
-Ask to "check out all the material on reinforcement learning". The librarian finds the
-relevant pages, follows their links only as far as they stay relevant, and puts copies
-of them in `checkout/` with an index in reading order. Read and mark up the copies.
-Return proposes your edits to the originals as one change, and keeps the checkout in
-`tool/returned/` as you left it. A ledger lists every checkout.
+### Librarian
+
+Ask to "check out all the material on reinforcement learning" or whatever topic you have in your vault. The librarian finds all relevant pages, follows their links only as far as they stay relevant, and puts copies of them in `checkout/` with a reading list. Read and mark up the copies. The (optional) `Return` action proposes your edits to the originals as one change, and a ledger lists every checkout.
 
 ### Wikify a note (experimental)
 
-Take any draft you are working on. The agent marks what the wiki already knows, with a
-link, and the subjects that are new and worth a page. Each mark is a small bubble: Accept
-or Ignore a link, Create or Ignore a new subject. The wikified note is a copy in your
-scratchpad, and it never enters the wiki by itself.
+Take any draft you are working on. The agent marks what the wiki already knows, then marks the subjects that are new and worth a page. You can Accept or Ignore new links directly on the UI. The wikified note stays where you are working on it, and does not need to enter the knowledge base until you are ready to ingest it.
 
 ### Safe delete
 
-Not sure whether you can delete a page? Safe delete moves it to `tool/trash/` when nothing
-links it. When something does, it shows the links, and an agent can repoint them for
-you. Empty `tool/trash/` yourself when you like.
+Not sure whether you can delete a page? Don't want to break anything? Safe delete moves it to `tool/trash/` when nothing links it. When something does, it shows the links, and an agent can repoint them for you. Empty `tool/trash/` yourself when you like.
 
-### A light touch on Obsidian
+### Agent Conversations
 
-Installing Almagest does not change how your Obsidian behaves. It adds its own callouts,
-widgets inside its documents, and one pane of its own, the palette, with one ribbon button.
-In the file explorer it colors the folders you use: `wiki-view/` in cyan, `journals/` and
-`ingest/` in purple, and `tool/` dimmed (a setting turns this off). With the Duet plugin,
-the agents work in Obsidian beside you; without it, they start in your terminal.
+Supports agent sessions in a terminal of your choice or directly in Obsidian using the Duet plugin.
+
 
 ## Quickstart
+
+>[!warning]
+>Unfortunately Windows support has not been added for the plugin. It's coming soon.
 
 You need macOS or Linux with `git` and `curl`, Claude Code (or Codex), and Obsidian.
 
