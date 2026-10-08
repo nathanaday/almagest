@@ -46,6 +46,13 @@ func New(t *testing.T) *T {
 	t.Setenv("GIT_AUTHOR_EMAIL", "test@example.com")
 	t.Setenv("GIT_COMMITTER_NAME", "test")
 	t.Setenv("GIT_COMMITTER_EMAIL", "test@example.com")
+	// A commit can start detached maintenance that writes .git/objects after the test,
+	// so the cleanup of TempDir fails.
+	t.Setenv("GIT_CONFIG_COUNT", "2")
+	t.Setenv("GIT_CONFIG_KEY_0", "maintenance.auto")
+	t.Setenv("GIT_CONFIG_VALUE_0", "false")
+	t.Setenv("GIT_CONFIG_KEY_1", "gc.auto")
+	t.Setenv("GIT_CONFIG_VALUE_1", "0")
 	v, err := vault.Init(vault.InitOptions{Path: filepath.Join(dir, "work"), Name: "Work", Description: "Work notes: the p3 product.", Tagging: "open"}, h, Now)
 	if err != nil {
 		t.Fatal(err)
