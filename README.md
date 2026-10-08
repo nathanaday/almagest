@@ -23,6 +23,11 @@ But there were drawbacks in my experiences with AI second brains since day one. 
 3. Agents query the knowledge base automatically and efficiently
 4. You query the knowledge baes effortlessly and with joy
 
+<p align="center">
+  <img src="docs/knowledge_graph.png" alt="Graph view of a vault, with the Library panel" width="49%">
+  <img src="docs/knowledge_graph_2.png" alt="Graph view of a vault, centered on one topic" width="49%">
+</p>
+
 # Features
 
 ### Claude / Codex MCP Plugin
@@ -36,11 +41,18 @@ Paired with the [Duet] plugin, which lets you start agent conversations within O
 Drop papers, PDFs, or notes into `ingest/`, and press Ingest. Each ingest task becomes one
 document that you watch as it works. Change logs can be approved, canceled, edited, and questioned.
 
+<p align="center">
+  <img src="docs/ingest_agent_example.png" alt="An agent ingests seven files from ingest/" width="80%">
+</p>
+
 
 ### Approve / Reject Flow for all Agent Changes
 
 Any change to your knowledge base gets a dedicated "changes" page with a clear approve or deny path. You can also edit the change plan, or ask your agents for clarifications. This keeps your knowledge base under your control.
 
+<p align="center">
+  <img src="docs/approve_change_example.png" alt="A proposed change with Approve and Cancel" width="80%">
+</p>
 
 
 ### Wiki View for humans, Wiki Core for agents
@@ -48,6 +60,11 @@ Any change to your knowledge base gets a dedicated "changes" page with a clear a
 All raw sources, change logs, and llm doc live under the hood in a `tool/` directory. It's self-updating, but you don't have to look at it. This is where the MCP tools do fast information queries and where all new sources are ingested.
 
 The plugin constructs your `wiki-view` from these sources: a home age, timeline, library, and a navigation page for each tag. The user-interface can evolve over time with improvements with no impact to the core structure.
+
+<p align="center">
+  <img src="docs/library_view_example.png" alt="The Library view in wiki-view" width="48%">
+  <img src="docs/article_example.png" alt="A wiki topic with cited sources" width="50%">
+</p>
 
 
 ### Repository Links
@@ -66,9 +83,18 @@ When you want the wiki to learn from a volume, use the Publish action. Almagest 
 
 Ask to "check out all the material on reinforcement learning" or whatever topic you have in your vault. The librarian finds all relevant pages, follows their links only as far as they stay relevant, and puts copies of them in `checkout/` with a reading list. Read and mark up the copies. The (optional) `Return` action proposes your edits to the originals as one change, and a ledger lists every checkout.
 
+<p align="center">
+  <img src="docs/librarian_index_page.png" alt="A checkout's reading list" width="49%">
+  <img src="docs/librarian_checkout_ledger.png" alt="The checkout ledger" width="49%">
+</p>
+
 ### Wikify a note (experimental)
 
 Take any draft you are working on. The agent marks what the wiki already knows, then marks the subjects that are new and worth a page. You can Accept or Ignore new links directly on the UI. The wikified note stays where you are working on it, and does not need to enter the knowledge base until you are ready to ingest it.
+
+<p align="center">
+  <img src="docs/wikify_example.png" alt="A wikified note with link and new marks" width="80%">
+</p>
 
 ### Safe delete
 
@@ -77,6 +103,10 @@ Not sure whether you can delete a page? Don't want to break anything? Safe delet
 ### Agent Conversations
 
 Supports agent sessions in a terminal of your choice or directly in Obsidian using the Duet plugin.
+
+<p align="center">
+  <img src="docs/wezterm_example.png" alt="An Almagest session in a terminal" width="50%">
+</p>
 
 
 ## Quickstart
