@@ -243,7 +243,9 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **The navigator is a Base, not code.** A sync writes `wiki-view/View · Navigator.base`
   (first line `views.BaseNotice`, which the stale pass reads). In the right sidebar,
   `this` is the open note, and one table grouped by a formula shows Up, Beside, Below,
-  Sources below, Sources, and Cited by. Beside uses explicit `up` only: with the
+  Sources below, Sources, and Cited by. A group header shows the formula's name unless
+  its `displayName` is a space (an empty one is ignored), and the labels carry numbers,
+  since a Base sorts groups by their text. Beside uses explicit `up` only: with the
   fallback, siblings would be a whole tag, and a marker tag like `tool` would join
   unrelated documents. Verified in Obsidian 1.14.4 only. The per-tag notes of
   `wiki-view/nav/` are gone; `Tag · ` stays reserved so no document takes a title an

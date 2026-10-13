@@ -494,7 +494,8 @@ func navigatorBase() string {
 	for _, f := range []string{navUp, navUpPage, navBelow, navBelowPage, navBeside, navSources, navCitedBy} {
 		b.WriteString("        - " + yamlQuote(f) + "\n")
 	}
-	b.WriteString("views:\n  - type: table\n    name: Navigator\n    groupBy:\n      property: formula.relation\n      direction: ASC\n    order:\n      - file.name\n      - description\n    sort:\n      - property: file.name\n        direction: ASC\n")
+	b.WriteString("properties:\n  formula.relation:\n    displayName: \" \"\n")
+	b.WriteString("views:\n  - type: table\n    name: Navigator\n    groupBy:\n      property: formula.relation\n      direction: ASC\n    order:\n      - file.name\n    sort:\n      - property: file.name\n        direction: ASC\n")
 	return b.String()
 }
 
