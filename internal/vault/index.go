@@ -88,6 +88,8 @@ type Index struct {
 	pages    map[string][]*doc.Doc
 	children map[string][]string
 
+	nav nav
+
 	pendingOnce sync.Once
 	absorbed    map[string]map[string]bool // document id → hashes applied changes absorbed
 	absorbers   map[string][]absorber      // document id → the applied changes that absorbed it

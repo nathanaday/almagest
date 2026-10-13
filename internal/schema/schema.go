@@ -178,6 +178,7 @@ var Types = []*Type{
 	), Sections: []string{"Summary", "Structure", "Notes"}},
 	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "tool/source-core/documents", Fields: common(
 		Field{Name: "defines", Kind: Tag},
+		Field{Name: "up", Kind: Links, Targets: []string{"topic", "repository"}},
 		Field{Name: "path", Kind: Text},
 		Field{Name: "unlinked", Kind: Bool},
 		Field{Name: "remote", Kind: Text, Owner: Code},
@@ -194,6 +195,7 @@ var Types = []*Type{
 		Field{Name: "sources", Kind: Links},
 		Field{Name: "strength", Kind: Enum, Values: []string{"must", "should", "may"}},
 		Field{Name: "defines", Kind: Tag},
+		Field{Name: "up", Kind: Links, Targets: []string{"topic", "repository"}},
 	), Kinds: TopicKinds, KindSections: map[string][]string{
 		"concept":  {"Definition", "Explanation", "Related", "Sources", "Origin", "Notes"},
 		"entity":   {"What it is", "Facts", "Related", "Sources", "Origin", "Notes"},
