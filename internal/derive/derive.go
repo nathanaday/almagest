@@ -58,7 +58,7 @@ func derived(idx *vault.Index, d *doc.Doc) string {
 		content = doc.ReplaceLead(content, SourceLead(idx, doc.Parse(d.Path, []byte(content))))
 		content = putOriginal(content, d)
 	case "repository":
-		content = doc.ReplaceLead(content, RepositoryLead(d))
+		content = doc.ReplaceLead(content, RepositoryLead(idx, d))
 		content = putBlock(content, "almagest-repo", RepoBlock(d))
 		front, body, _ := doc.Split(content)
 		order := schema.Get("repository").Sections
@@ -222,7 +222,7 @@ func putBlock(content, lang, block string) string {
 
 // RepositoryLead is a repository's card: its path, its branch and head, its remote, and
 // how far its description is behind.
-func RepositoryLead(d *doc.Doc) string {
+func RepositoryLead(idx *vault.Index, d *doc.Doc) string {
 	p := d.Str("path")
 	if d.Front.Bool("unlinked") || p == "" {
 		return doc.Callout("repository-missing", "Unlinked", "Kept for its links. Agents no longer work in it; repo-link links it again.")
@@ -255,6 +255,9 @@ func RepositoryLead(d *doc.Doc) string {
 		desc += " · tag #" + def
 	}
 	lines = append(lines, desc)
+	if up := upLine(idx, d); up != "" {
+		lines = append(lines, up)
+	}
 	return doc.Callout("repository", "`"+p+"`", lines...)
 }
 
@@ -298,7 +301,7 @@ func TopicLead(idx *vault.Index, d *doc.Doc) string {
 	case "overview":
 		def := d.Str("defines")
 		title = "The page of #" + def
-		if p := tags.Parent(def); p != "" {
+		if p := tags.Parent(def); p != "" && upLine(idx, d) == "" {
 			if page := idx.TagPage(p); page != nil {
 				title += " · under " + doc.Link(page.Title())
 			} else {
@@ -323,7 +326,27 @@ func TopicLead(idx *vault.Index, d *doc.Doc) string {
 		}
 	}
 	lines = append(lines, meta)
+	if up := upLine(idx, d); up != "" {
+		lines = append(lines, up)
+	}
 	return doc.Callout(kind, title, lines...)
+}
+
+// upLine names the documents a document's up names, by title: "Up: [[A]] · [[B]]". A
+// document with an empty up gets none; the navigator shows the page it falls back to.
+func upLine(idx *vault.Index, d *doc.Doc) string {
+	if len(d.List("up")) == 0 {
+		return ""
+	}
+	ups := idx.Up(d)
+	if len(ups) == 0 {
+		return ""
+	}
+	names := make([]string, len(ups))
+	for i, u := range ups {
+		names[i] = doc.Link(vault.Title(u))
+	}
+	return "Up: " + strings.Join(names, " · ")
 }
 
 // TagBase is an inline Base of the documents that hold a tag or a tag below it, grouped

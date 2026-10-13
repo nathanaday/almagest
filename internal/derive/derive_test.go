@@ -54,3 +54,31 @@ func TestDerivedParts(t *testing.T) {
 		t.Fatal("a quiet repository gets no write")
 	}
 }
+
+func TestLeadShowsUp(t *testing.T) {
+	tv := testvault.New(t)
+	repo := tv.Repo("p3-edge", nil)
+	tv.Doc("topic", "Work", map[string]any{"kind": "overview", "defines": "work"}, "## Summary\n\nx\n")
+	tv.Doc("topic", "P3", map[string]any{"kind": "overview", "defines": "work/p3", "tags": []string{"work"}, "up": []string{"[[Work]]", "[[Edge AI]]"}}, "## Summary\n\nx\n")
+	tv.Doc("topic", "Edge AI", map[string]any{"kind": "concept", "tags": []string{"work"}}, "")
+	tv.Doc("repository", "p3-edge", map[string]any{"path": repo, "defines": "work/p3/p3-edge", "tags": []string{"work/p3"}, "up": []string{"[[P3]]"}}, "## What it is\n\nThe edge service.\n")
+	tv.Doc("topic", "Scoring", map[string]any{"kind": "concept", "tags": []string{"work/p3"}, "up": []string{"[[Nothing]]"}}, "")
+	if _, err := derive.Sync(tv.Index(), tv.V.WriteIfChanged); err != nil {
+		t.Fatal(err)
+	}
+	checks := map[string]struct{ has, lacks string }{
+		"P3":      {"> [!overview] The page of #work/p3\n> 0 sources · #work\n> Up: [[Work]] · [[Edge AI]]\n", "under"},
+		"p3-edge": {"\n> Up: [[P3]]\n", ""},
+		"Edge AI": {"> [!concept] Concept\n> 0 sources · #work", "Up:"},
+		"Scoring": {"> [!concept] Concept\n> 0 sources · #work/p3", "Up:"},
+	}
+	for title, c := range checks {
+		got := tv.Read("tool/source-core/documents/" + title + ".md")
+		if !strings.Contains(got, c.has) || c.lacks != "" && strings.Contains(got, c.lacks) {
+			t.Errorf("%s: want %q and no %q:\n%s", title, c.has, c.lacks, got)
+		}
+	}
+	if wrote, _ := derive.Sync(tv.Index(), tv.V.WriteIfChanged); len(wrote) != 0 {
+		t.Errorf("a second sync wrote %v", wrote)
+	}
+}
