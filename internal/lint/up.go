@@ -12,9 +12,8 @@ import (
 // before lint calls it crowded.
 const MaxBelow = 30
 
-// ups checks the up field: a source takes none, no document names itself, a link names a
-// title (the navigator does not match an alias), and no group of documents sits under
-// itself.
+// ups checks the up field: a source takes none, no document names itself, and no group of
+// documents sits under itself. A dead link, an alias too, is the schema check's.
 func (r *run) ups(docs []*doc.Doc) {
 	in := map[string]bool{}
 	for _, d := range docs {
@@ -32,12 +31,6 @@ func (r *run) ups(docs []*doc.Doc) {
 			if target == d {
 				r.add("up", Error, d, fixFor(d)+": drop that link", "up names the document itself")
 				continue
-			}
-			if target != nil {
-				continue
-			}
-			if named, err := r.idx.Resolve(doc.LinkTarget(v)); err == nil {
-				r.add("up", Warning, d, fixFor(d)+": name the title [["+vault.Title(named)+"]]", "up: %s names %s by an alias; the navigator matches titles only", v, vault.Title(named))
 			}
 		}
 	}

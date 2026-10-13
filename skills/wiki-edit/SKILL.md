@@ -36,8 +36,9 @@ Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../almagest
    - a topic checked and still true: a `confirm` with `id`;
    - a dead link: create the target, or change the link in a `modify`;
    - an `up` finding: drop a self link; break a cycle at the link that points from the
-     broader subject to the narrower one; name the title in place of an alias.
-     `crowded` is wiki-map's.
+     broader subject to the narrower one; drop the `up` of a source. `crowded` is
+     wiki-map's;
+   - a dead link that names an alias: link the title the finding names.
    Give every write a `why`: one line that says why the change makes it.
    Leave `base` out unless you read the document's hash; code records it at propose,
    and apply refuses a write whose document changed since.

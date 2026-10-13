@@ -216,6 +216,11 @@ func (r *run) schema(d *doc.Doc) {
 			case err != nil:
 				// Two files hold the title; duplicate-title reports it.
 			case typ == "":
+				if named, err := r.idx.Resolve(doc.LinkTarget(v)); err == nil {
+					title := vault.Title(named)
+					r.add("dead-link", Error, d, fixFor(d)+": link [["+title+"]]", "%s: %s names no document; it is an alias of %s, and a link names a title", f.Name, v, title)
+					continue
+				}
 				r.add("dead-link", Error, d, fixFor(d), "%s: %s names no document", f.Name, v)
 			case len(f.Targets) > 0 && !slices.Contains(f.Targets, typ):
 				r.add("schema", Error, d, fixFor(d), "%s: %s is a %s; it must be a %s", f.Name, v, typ, strings.Join(f.Targets, " or "))

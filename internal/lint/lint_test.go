@@ -152,7 +152,7 @@ func TestUpChecks(t *testing.T) {
 	f := run(t, tv, lint.Options{})
 	for _, want := range []struct{ check, title, text string }{
 		{"up", "Self", "names the document itself"},
-		{"up", "By alias", "names Machine Learning by an alias"},
+		{"dead-link", "By alias", "up: [[ML]] names no document; it is an alias of Machine Learning, and a link names a title"},
 		{"up", "A", "A, B reach themselves"},
 		{"dead-link", "Dead", "up: [[Nowhere]] names no document"},
 		{"up", "Slides", "a source takes no up"},
@@ -161,6 +161,9 @@ func TestUpChecks(t *testing.T) {
 		if !has(f, want.check, want.title, want.text) {
 			t.Errorf("no %s finding on %s with %q", want.check, want.title, want.text)
 		}
+	}
+	if has(f, "up", "By alias", "") {
+		t.Error("an alias in up is one finding: the dead link")
 	}
 	quick := run(t, tv, lint.Options{Quick: true})
 	if !has(quick, "up", "A", "reach themselves") || has(quick, "crowded", "Machine Learning", "") {
