@@ -234,8 +234,9 @@ The design pages are the spec. When the code departs from them, the reason is be
   matches tags below x, and `==` or `map(value.toString())` match nothing; a joined list
   holds each tag with its `#`, so `("," + list(tags).join(",") + ",").contains(",#" +
   defines + ",")` is exact. An `up` link resolves by title or path, as `file.asLink()`
-  matches. An alias names nothing there, as in Obsidian's own links, so lint reports a
-  link field that names an alias as a dead link that names the title.
+  matches. An id or an alias names nothing there, as in Obsidian's own links
+  (`Index.Misnamed`), so the index counts no such link, lint reports it in any link field
+  as a dead link that names the title, and a proposal refuses it with that title.
 - **A proposal refuses only the cycles it closes.** `change` checks the vault as the
   whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
   `defines`, or a redirect can close a cycle too), and compares the cycles before and

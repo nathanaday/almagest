@@ -623,6 +623,11 @@ func (c *check) checkPage(o *op, content string) {
 			continue
 		}
 		for _, v := range d.List(f.Name) {
+			if title, by := c.idx.Misnamed(v); title != "" && c.claimed[links.Key(doc.LinkTarget(v))] == nil {
+				moved[f.Name+"\x00"+v] = true
+				c.refuse("%s: %s: %s names %s by %s; Obsidian resolves a link by title, so link [[%s]]", o.label(), f.Name, v, title, by, title)
+				continue
+			}
 			gone := c.removedBy(v)
 			if gone == "" {
 				continue

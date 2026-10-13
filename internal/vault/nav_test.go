@@ -115,3 +115,22 @@ func TestCyclesFindsSelfEdges(t *testing.T) {
 		t.Fatalf("cycles = %v", got)
 	}
 }
+
+func TestUpIgnoresAnIdOrAnAlias(t *testing.T) {
+	tv := testvault.New(t)
+	ml := tv.Doc("topic", "Machine Learning", map[string]any{"kind": "overview", "defines": "ml", "aliases": []string{"ML"}}, "")
+	tv.Doc("topic", "By id", map[string]any{"kind": "concept", "tags": []string{"ml"}, "up": []string{"[[" + ml + "]]"}}, "")
+	tv.Doc("topic", "By alias", map[string]any{"kind": "concept", "tags": []string{"ml"}, "up": []string{"[[ML]]"}}, "")
+	idx := tv.Index()
+	for _, title := range []string{"By id", "By alias"} {
+		d, _ := idx.Resolve(title)
+		if got := titles(idx.Up(d)); len(got) != 0 {
+			t.Errorf("Up(%s) = %v; the navigator matches neither an id nor an alias, and a value in up stops the fallback", title, got)
+		}
+	}
+	for link, want := range map[string]string{"[[" + ml + "]]": "its id", "[[ML]]": "an alias", "[[Machine Learning]]": "", "[[Nothing]]": ""} {
+		if _, by := idx.Misnamed(link); by != want {
+			t.Errorf("Misnamed(%s) = %q, want %q", link, by, want)
+		}
+	}
+}

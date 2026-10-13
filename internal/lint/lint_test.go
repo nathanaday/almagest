@@ -139,6 +139,7 @@ func TestUpChecks(t *testing.T) {
 	tv.Doc("topic", "Machine Learning", map[string]any{"kind": "overview", "defines": "ml", "aliases": []string{"ML"}}, "")
 	tv.Doc("topic", "Self", map[string]any{"kind": "concept", "up": []string{"[[Self]]"}}, "")
 	tv.Doc("topic", "By alias", map[string]any{"kind": "concept", "up": []string{"[[ML]]"}}, "")
+	tv.Doc("topic", "By id", map[string]any{"kind": "concept", "up": []string{"[[" + tv.ID("Machine Learning") + "]]"}}, "")
 	tv.Doc("topic", "A", map[string]any{"kind": "concept", "up": []string{"[[B]]"}}, "")
 	tv.Doc("topic", "B", map[string]any{"kind": "concept", "up": []string{"[[A]]"}}, "")
 	tv.Doc("topic", "Dead", map[string]any{"kind": "concept", "up": []string{"[[Nowhere]]"}}, "")
@@ -152,7 +153,8 @@ func TestUpChecks(t *testing.T) {
 	f := run(t, tv, lint.Options{})
 	for _, want := range []struct{ check, title, text string }{
 		{"up", "Self", "names the document itself"},
-		{"dead-link", "By alias", "up: [[ML]] names no document; it is an alias of Machine Learning, and a link names a title"},
+		{"dead-link", "By alias", "up: [[ML]] names Machine Learning by an alias; Obsidian resolves a link by title, so it names no document"},
+		{"dead-link", "By id", "names Machine Learning by its id"},
 		{"up", "A", "A, B reach themselves"},
 		{"dead-link", "Dead", "up: [[Nowhere]] names no document"},
 		{"up", "Slides", "a source takes no up"},

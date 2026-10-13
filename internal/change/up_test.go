@@ -89,3 +89,16 @@ func TestARemovedTargetGetsOneRefusal(t *testing.T) {
 		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
 	}})
 }
+
+func TestAMisnamedLinkIsRefusedWithItsTitle(t *testing.T) {
+	tv := upVault(t)
+	tv.Doc("topic", "Machine Learning", map[string]any{"id": tv.ID("Machine Learning"), "kind": "overview", "defines": "ml", "aliases": []string{"ML"}}, "")
+	tv.Doc("topic", "Fine-Tuning", map[string]any{"id": tv.ID("Fine-Tuning"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"[[ML]]"}}, "")
+	tv.Commit()
+	_, err := change.Propose(tv.V, change.Plan{Title: "Describe", Writes: []change.Write{
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
+	}}, tv.Tick(time.Minute))
+	if err == nil || strings.Count(err.Error(), "\n- ") != 1 || !strings.Contains(err.Error(), "up: [[ML]] names Machine Learning by an alias; Obsidian resolves a link by title, so link [[Machine Learning]]") {
+		t.Fatalf("want one refusal that names the title, got %v", err)
+	}
+}

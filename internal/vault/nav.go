@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	"github.com/nathanaday/almagest/internal/doc"
+	"github.com/nathanaday/almagest/internal/links"
 )
 
 // NavNode is what the rule of Up reads of one document.
@@ -122,7 +123,7 @@ type nav struct {
 }
 
 // NavNodeOf reads a document for the rule of Up. Its up links resolve by title or path,
-// as the navigator's Base matches them; an alias names nothing here.
+// as the navigator's Base and Obsidian match them; an id or an alias names nothing here.
 func (idx *Index) NavNodeOf(d *doc.Doc) NavNode {
 	n := NavNode{ID: d.ID(), Type: d.Type(), Tags: d.List("tags"), Defines: d.Str("defines")}
 	for _, v := range d.List("up") {
@@ -130,11 +131,31 @@ func (idx *Index) NavNodeOf(d *doc.Doc) NavNode {
 			continue
 		}
 		n.HasUp = true
+		if title, _ := idx.Misnamed(v); title != "" {
+			continue
+		}
 		if target := idx.Linked(v); target != nil {
 			n.Up = append(n.Up, target.ID())
 		}
 	}
 	return n
+}
+
+// Misnamed is the title of the document a link names by its id or by an alias, and which
+// of the two: a link that no file's title or path holds, so Obsidian resolves it to
+// nothing. It is "" for a link that a file holds, or that names nothing.
+func (idx *Index) Misnamed(link string) (title, by string) {
+	t := doc.LinkTarget(link)
+	if t == "" || len(idx.LinkPaths(t)) > 0 {
+		return "", ""
+	}
+	if d := idx.byID[t]; d != nil {
+		return Title(d), "its id"
+	}
+	for _, d := range idx.byAlias[links.Key(t)] {
+		return Title(d), "an alias"
+	}
+	return "", ""
 }
 
 func (idx *Index) readNav() {
