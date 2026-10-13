@@ -41,14 +41,19 @@ const (
 // Notice opens every view.
 const Notice = "> [!view] Written by Almagest from the documents. Edits here are lost at the next sync."
 
-// TagTitle is the title of a tag's view: Tag · school › cs513.
+// TagTitle is the title of a tag's view, from the tag's last part: Tag · cs513.
 func TagTitle(t string) string {
-	return "Tag · " + strings.ReplaceAll(t, "/", " › ")
+	return "Tag · " + tags.Leaf(t)
 }
 
 // TagPath is where a tag's view lives: in a folder per tag.
 func TagPath(t string) string {
 	return vault.WikiView + "/" + NavFolder + "/" + t + "/" + TagTitle(t) + ".md"
+}
+
+// tagLink links a tag's view by its path, since two tags may share a last part.
+func tagLink(t, text string) string {
+	return "[[" + strings.TrimSuffix(TagPath(t), ".md") + "|" + text + "]]"
 }
 
 // Write writes every view from an index of the vault, a file only when its content
@@ -232,7 +237,7 @@ func (r *renderer) home() string {
 	}
 	var tagLines []string
 	for _, t := range idx.TopTags() {
-		line := fmt.Sprintf("- [[%s|#%s]] · %d", TagTitle(t), t, idx.TagCounts()[t])
+		line := fmt.Sprintf("- %s · %d", tagLink(t, "#"+t), idx.TagCounts()[t])
 		if p := idx.TagPage(t); p != nil {
 			line += " · " + doc.Link(p.Title())
 		}
@@ -317,7 +322,7 @@ func (r *renderer) repositories() string {
 			unlinked = append(unlinked, "- "+doc.Link(vault.Title(d))+" · "+d.Str("description"))
 			continue
 		}
-		link := func(t string) string { return fmt.Sprintf("[[%s|#%s]]", TagTitle(t), t) }
+		link := func(t string) string { return tagLink(t, "#"+t) }
 		own := d.Str("defines")
 		var tagParts, also []string
 		if own != "" {
@@ -451,12 +456,12 @@ func (r *renderer) tagView(t string) string {
 		lines = append(lines, "Page: "+doc.Link(p.Title()))
 	}
 	if parent := tags.Parent(t); parent != "" {
-		lines = append(lines, "Under: "+fmt.Sprintf("[[%s|#%s]]", TagTitle(parent), parent))
+		lines = append(lines, "Under: "+tagLink(parent, "#"+parent))
 	}
 	if kids := idx.TagChildren(t); len(kids) > 0 {
 		var parts []string
 		for _, k := range kids {
-			parts = append(parts, fmt.Sprintf("[[%s|%s]] (%d)", TagTitle(k), tags.Leaf(k), idx.TagCounts()[k]))
+			parts = append(parts, fmt.Sprintf("%s (%d)", tagLink(k, tags.Leaf(k)), idx.TagCounts()[k]))
 		}
 		lines = append(lines, "Below: "+strings.Join(parts, " · "))
 	}

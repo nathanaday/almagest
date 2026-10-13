@@ -224,6 +224,11 @@ The design pages are the spec. When the code departs from them, the reason is be
   refuse it). So a link to the note names one file: the ledger is
   `checkout/Checkout · Ledger.md`, and a volume's history `Journal · <folder>.md`. A
   checkout's index is `_index.md` in its folder, which a link names by its path.
+- **A tag view takes the tag's last part** (`Tag · cs566-project`, in
+  `wiki-view/nav/<tag>/`), so a deep tag fits the file tree. Two tags may share a last
+  part, so every link to a tag view names its path (`tagLink`). The prefix still keeps a
+  view apart from a document of the same name. The plugin's `tagViewPath` builds the
+  same path.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
   reach the wiki, and an inline Base of the sources with that `volume` (the folder name

@@ -29,13 +29,13 @@ func TestViews(t *testing.T) {
 		t.Fatal("a view that stands for nothing goes, with its folder")
 	}
 	checks := map[string][]string{
-		"wiki-view/View · Home.md":                           {views.Notice, "> [!almagest] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Tags", "[[Tag · school|#school]] · 4", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
-		"wiki-view/View · Timeline.md":                       {"### 2026-09-27", "15:32 · change applied · [[2026-09-27 Add lidar]]"},
-		"wiki-view/View · Repositories.md":                   {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[Tag · school › cs513 › grid-sim|#school/cs513/grid-sim]] · Under: [[Tag · school › cs513|#school/cs513]] · Also: [[Tag · simulation|#simulation]]\n\n```almagest-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
-		"wiki-view/View · Home.md#":                          {"[[View · Repositories]]"},
-		"wiki-view/View · Library.md":                        {"## Topics", "## Needs care"},
-		"wiki-view/nav/school/cs513/Tag · school › cs513.md": {"> [!tag] #school/cs513 · 4 documents", "Page: [[CS513]]", "Under: [[Tag · school|#school]]", "## Narrow", "[self-driving (2)](obsidian://search?vault=work&query=tag:%23school%2Fcs513%20tag:%23self-driving)", "## Topics", "## Repositories", `file.hasTag("school/cs513", "school/cs513/grid-sim")`},
-		"wiki-view/nav/school/Tag · school.md":               {`file.hasTag("school", "school/cs513", "school/cs513/grid-sim")`, "Below: [[Tag · school › cs513|cs513]] (4)"},
+		"wiki-view/View · Home.md":                  {views.Notice, "> [!almagest] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Tags", "[[wiki-view/nav/school/Tag · school|#school]] · 4", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
+		"wiki-view/View · Timeline.md":              {"### 2026-09-27", "15:32 · change applied · [[2026-09-27 Add lidar]]"},
+		"wiki-view/View · Repositories.md":          {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[wiki-view/nav/school/cs513/grid-sim/Tag · grid-sim|#school/cs513/grid-sim]] · Under: [[wiki-view/nav/school/cs513/Tag · cs513|#school/cs513]] · Also: [[wiki-view/nav/simulation/Tag · simulation|#simulation]]\n\n```almagest-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
+		"wiki-view/View · Home.md#":                 {"[[View · Repositories]]"},
+		"wiki-view/View · Library.md":               {"## Topics", "## Needs care"},
+		"wiki-view/nav/school/cs513/Tag · cs513.md": {"> [!tag] #school/cs513 · 4 documents", "Page: [[CS513]]", "Under: [[wiki-view/nav/school/Tag · school|#school]]", "## Narrow", "[self-driving (2)](obsidian://search?vault=work&query=tag:%23school%2Fcs513%20tag:%23self-driving)", "## Topics", "## Repositories", `file.hasTag("school/cs513", "school/cs513/grid-sim")`},
+		"wiki-view/nav/school/Tag · school.md":      {`file.hasTag("school", "school/cs513", "school/cs513/grid-sim")`, "Below: [[wiki-view/nav/school/cs513/Tag · cs513|cs513]] (4)"},
 	}
 	for rel, wants := range checks {
 		got := tv.Read(strings.TrimSuffix(rel, "#"))
@@ -55,7 +55,7 @@ func TestViews(t *testing.T) {
 	if strings.Contains(tv.Read("wiki-view/View · Timeline.md"), "Add grids") {
 		t.Fatal("the timeline lists applied changes only")
 	}
-	for _, rel := range []string{"wiki-view/View · Repositories.md", "wiki-view/nav/school/cs513/Tag · school › cs513.md"} {
+	for _, rel := range []string{"wiki-view/View · Repositories.md", "wiki-view/nav/school/cs513/Tag · cs513.md"} {
 		if got := tv.Read(rel); strings.Contains(got, "Threads") || strings.Contains(got, "Open threads") || strings.Contains(got, "## History") {
 			t.Errorf("%s names threads or events:\n%s", rel, got)
 		}
@@ -68,4 +68,23 @@ func TestViews(t *testing.T) {
 		t.Fatalf("a second write writes nothing: %v", again)
 	}
 	tv.Clean()
+}
+
+func TestTagsShareLastPart(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("topic", "Grids", map[string]any{"kind": "concept", "tags": []string{"school/project"}}, "")
+	tv.Doc("topic", "Lidar", map[string]any{"kind": "concept", "tags": []string{"work/project"}}, "")
+	tv.Commit()
+	if _, _, err := views.Write(tv.Index(), testvault.Now); err != nil {
+		t.Fatal(err)
+	}
+	for _, top := range []string{"school", "work"} {
+		got := tv.Read("wiki-view/nav/" + top + "/Tag · " + top + ".md")
+		if want := "Below: [[wiki-view/nav/" + top + "/project/Tag · project|project]] (1)"; !strings.Contains(got, want) {
+			t.Errorf("%s lacks %q:\n%s", top, want, got)
+		}
+		if got := tv.Read("wiki-view/nav/" + top + "/project/Tag · project.md"); !strings.Contains(got, "#"+top+"/project · 1 document") {
+			t.Errorf("%s/project:\n%s", top, got)
+		}
+	}
 }
