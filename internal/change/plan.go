@@ -344,14 +344,13 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			ops[i].Why = doc.OneLine(strings.TrimSpace(w.Why), 160)
 		}
 	}
+	// Redirects first, so a content check knows which removed links a rewrite moves.
 	for i, w := range p.Writes {
 		o := ops[i]
 		if o == nil {
 			continue
 		}
 		switch o.Kind {
-		case OpCreate, OpModify:
-			c.content(o, w, idx.ByID(o.ID))
 		case OpRemove:
 			if w.Redirect != "" {
 				title, _ := c.titleOf(w.Redirect)
@@ -365,6 +364,11 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 					o.Redirect = r.ID()
 				}
 			}
+		}
+	}
+	for i, w := range p.Writes {
+		if o := ops[i]; o != nil && (o.Kind == OpCreate || o.Kind == OpModify) {
+			c.content(o, w, idx.ByID(o.ID))
 		}
 	}
 	for _, o := range ops {
@@ -611,7 +615,28 @@ func (c *check) checkPage(o *op, content string) {
 		c.refuse("%s: id and type are code's; they must stay %s and %s", o.label(), o.ID, o.Type)
 		return
 	}
+	// A link to a document this change removes: a redirect's rewrite moves it; without
+	// one, the refusal names the removal.
+	moved := map[string]bool{}
+	for _, f := range t.Fields {
+		if f.Kind != schema.Link && f.Kind != schema.Links {
+			continue
+		}
+		for _, v := range d.List(f.Name) {
+			gone := c.removedBy(v)
+			if gone == "" {
+				continue
+			}
+			moved[f.Name+"\x00"+v] = true
+			if !c.redirected(v) {
+				c.refuse("%s: %s: %s names %s, which this change removes; give the remove a redirect, or change the link", o.label(), f.Name, v, gone)
+			}
+		}
+	}
 	for _, p := range t.Check(schema.Values(d.Front.Map()), c) {
+		if target, _, ok := strings.Cut(p.Message, " names no document"); ok && moved[p.Field+"\x00"+target] {
+			continue
+		}
 		c.refuse("%s: %s", o.label(), p)
 	}
 	if o.Type == "repository" && !d.Front.Bool("unlinked") {
@@ -757,6 +782,9 @@ func (c *check) value(f *schema.Field, v any) (any, error) {
 		out := make([]string, 0, len(items))
 		for _, s := range items {
 			title, _ := c.titleOf(s)
+			if gone := c.removedBy(s); title == "" && gone != "" {
+				return nil, fmt.Errorf("%s names %s, which this change removes; link a document that stays, or drop the link", s, gone)
+			}
 			if title == "" {
 				return nil, fmt.Errorf("%s names no document; link a document that exists or that this change creates, or drop the link", s)
 			}

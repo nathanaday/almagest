@@ -125,3 +125,22 @@ func (c *check) removedBy(value string) string {
 	}
 	return ""
 }
+
+// redirected reports whether a link names a document that this change removes with a
+// redirect, so the link rewrite moves the link.
+func (c *check) redirected(value string) bool {
+	t := doc.LinkTarget(value)
+	d := c.idx.ByID(t)
+	if d == nil {
+		d = c.idx.Linked(t)
+	}
+	if d == nil {
+		return false
+	}
+	for _, o := range c.byID[d.ID()] {
+		if o.Kind == OpRemove && o.Redirect != "" {
+			return true
+		}
+	}
+	return false
+}

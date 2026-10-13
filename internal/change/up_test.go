@@ -3,6 +3,7 @@ package change_test
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/nathanaday/almagest/internal/change"
 	"github.com/nathanaday/almagest/internal/testvault"
@@ -67,4 +68,24 @@ func TestAnOldCycleBlocksNoOtherChange(t *testing.T) {
 	tv.Doc("topic", "B", map[string]any{"kind": "concept", "up": []string{"[[A]]"}}, "")
 	tv.Commit()
 	propose(t, tv, change.Plan{Title: "Unrelated", Writes: []change.Write{{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}}}})
+}
+
+func TestARemovedTargetGetsOneRefusal(t *testing.T) {
+	tv := upVault(t)
+	_, err := change.Propose(tv.V, change.Plan{Title: "Drop the hub", Writes: []change.Write{
+		{Op: "remove", ID: "Training"},
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
+	}}, tv.Tick(time.Minute))
+	if err == nil || strings.Count(err.Error(), "\n- ") != 1 || !strings.Contains(err.Error(), "up: [[Training]] names Training, which this change removes; give the remove a redirect, or change the link") {
+		t.Fatalf("want one refusal that names the removal, got %v", err)
+	}
+	refused(t, tv, change.Plan{Title: "Drop the hub", Writes: []change.Write{
+		{Op: "remove", ID: "Training"},
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"up": []any{"Training"}}},
+	}}, "up: Training names Training, which this change removes; link a document that stays, or drop the link")
+	// With a redirect, the rewrite moves the link, and the modify passes.
+	propose(t, tv, change.Plan{Title: "Merge the hub", Writes: []change.Write{
+		{Op: "remove", ID: "Training", Redirect: "Machine Learning"},
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
+	}})
 }
