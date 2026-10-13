@@ -93,12 +93,14 @@ func Run(idx *vault.Index, opts Options) (*Findings, error) {
 		}
 	}
 	r.tagPages(docs)
+	r.ups(docs)
 	if len(want) == 0 {
 		r.placement()
 	}
 	if !opts.Quick {
 		incoming := r.incoming()
 		for _, d := range docs {
+			r.crowded(d)
 			r.deadLinks(d)
 			r.knowledge(d, incoming)
 			r.info(d)

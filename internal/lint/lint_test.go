@@ -1,6 +1,7 @@
 package lint_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -130,5 +131,39 @@ func TestThreadsArchiveResolvesLinks(t *testing.T) {
 		if x.Check == "dead-link" || x.Doc.Title == "Fix alarms" {
 			t.Errorf("lint reads nothing in threads/ and a link to it resolves: %+v", x)
 		}
+	}
+}
+
+func TestUpChecks(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("topic", "Machine Learning", map[string]any{"kind": "overview", "defines": "ml", "aliases": []string{"ML"}}, "")
+	tv.Doc("topic", "Self", map[string]any{"kind": "concept", "up": []string{"[[Self]]"}}, "")
+	tv.Doc("topic", "By alias", map[string]any{"kind": "concept", "up": []string{"[[ML]]"}}, "")
+	tv.Doc("topic", "A", map[string]any{"kind": "concept", "up": []string{"[[B]]"}}, "")
+	tv.Doc("topic", "B", map[string]any{"kind": "concept", "up": []string{"[[A]]"}}, "")
+	tv.Doc("topic", "Dead", map[string]any{"kind": "concept", "up": []string{"[[Nowhere]]"}}, "")
+	tv.Doc("source", "Slides", map[string]any{"up": []string{"[[Machine Learning]]"}}, "")
+	for i := range lint.MaxBelow + 1 {
+		tv.Doc("topic", fmt.Sprintf("Leaf %d", i), map[string]any{"kind": "concept", "tags": []string{"ml"}}, "")
+	}
+	for i := range 5 {
+		tv.Doc("source", fmt.Sprintf("Source %d", i), map[string]any{"tags": []string{"ml"}}, "")
+	}
+	f := run(t, tv, lint.Options{})
+	for _, want := range []struct{ check, title, text string }{
+		{"up", "Self", "names the document itself"},
+		{"up", "By alias", "names Machine Learning by an alias"},
+		{"up", "A", "A, B reach themselves"},
+		{"dead-link", "Dead", "up: [[Nowhere]] names no document"},
+		{"up", "Slides", "a source takes no up"},
+		{"crowded", "Machine Learning", "31 topics and repositories sit directly below it"},
+	} {
+		if !has(f, want.check, want.title, want.text) {
+			t.Errorf("no %s finding on %s with %q", want.check, want.title, want.text)
+		}
+	}
+	quick := run(t, tv, lint.Options{Quick: true})
+	if !has(quick, "up", "A", "reach themselves") || has(quick, "crowded", "Machine Learning", "") {
+		t.Error("a quick run reports cycles, not crowding")
 	}
 }
