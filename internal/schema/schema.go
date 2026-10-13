@@ -424,10 +424,10 @@ func (t *Type) checkLink(f Field, target string, r Resolver) []Problem {
 		return []Problem{{Field: f.Name, Message: err.Error()}}
 	}
 	if got == "" {
-		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s names no document", target)}}
+		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s names no document; link a document that exists, or drop the link", target)}}
 	}
 	if len(f.Targets) > 0 && !slices.Contains(f.Targets, got) {
-		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s is a %s; it must be a %s", target, got, strings.Join(f.Targets, " or "))}}
+		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s is a %s; it must be a %s, so link one of those, or drop the link", target, got, strings.Join(f.Targets, " or "))}}
 	}
 	return nil
 }

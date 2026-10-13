@@ -377,6 +377,7 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 	}
 	c.rewrites(out)
 	c.deadLinks(out)
+	c.upLinks(out)
 	out.Warnings = c.warnings
 	out.NewTags = c.newTags
 	if len(c.problems) > 0 {
@@ -745,7 +746,7 @@ func (c *check) value(f *schema.Field, v any) (any, error) {
 		}
 		title, _ := c.titleOf(s)
 		if title == "" {
-			return nil, fmt.Errorf("%s names no document", s)
+			return nil, fmt.Errorf("%s names no document; link a document that exists or that this change creates, or drop the link", s)
 		}
 		return doc.Link(title), nil
 	case schema.Links:
@@ -757,7 +758,7 @@ func (c *check) value(f *schema.Field, v any) (any, error) {
 		for _, s := range items {
 			title, _ := c.titleOf(s)
 			if title == "" {
-				return nil, fmt.Errorf("%s names no document that exists or that this change creates", s)
+				return nil, fmt.Errorf("%s names no document; link a document that exists or that this change creates, or drop the link", s)
 			}
 			out = append(out, doc.Link(title))
 		}
