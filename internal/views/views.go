@@ -8,7 +8,6 @@ import (
 	"cmp"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -31,29 +30,28 @@ const (
 	Timeline    = "View · Timeline"
 	Library     = "View · Library"
 	Repos       = "View · Repositories"
-	NavFolder   = "nav"
+	Navigator   = "View · Navigator"
 	TimeFolder  = "timeline"
 	TimelineAge = 30 * 24 * time.Hour
 	MaxRecent   = 10
-	MaxNarrow   = 20
+	MaxRoots    = 20
 )
 
 // Notice opens every view.
 const Notice = "> [!view] Written by Almagest from the documents. Edits here are lost at the next sync."
 
-// TagTitle is the title of a tag's view, from the tag's last part: Tag · cs513.
-func TagTitle(t string) string {
-	return "Tag · " + tags.Leaf(t)
-}
+// BaseNotice opens every view that is a Base, as a YAML comment.
+const BaseNotice = "# Written by Almagest from the documents. Edits here are lost at the next sync."
 
-// TagPath is where a tag's view lives: in a folder per tag.
-func TagPath(t string) string {
-	return vault.WikiView + "/" + NavFolder + "/" + t + "/" + TagTitle(t) + ".md"
-}
+// NavigatorPath is where the navigator lives.
+var NavigatorPath = vault.WikiView + "/" + Navigator + ".base"
 
-// tagLink links a tag's view by its path, since two tags may share a last part.
-func tagLink(t, text string) string {
-	return "[[" + strings.TrimSuffix(TagPath(t), ".md") + "|" + text + "]]"
+// tagRef names a tag in a view: a link to its page, or the plain tag when it has none.
+func (r *renderer) tagRef(t string) string {
+	if p := r.idx.TagPage(t); p != nil {
+		return "[[" + vault.Title(p) + "|#" + t + "]]"
+	}
+	return "#" + t
 }
 
 // Write writes every view from an index of the vault, a file only when its content
@@ -78,7 +76,7 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 			return nil
 		}
 		rel := v.Rel(abs)
-		if _, ok := files[rel]; !ok && strings.HasSuffix(rel, ".md") {
+		if _, ok := files[rel]; !ok && (strings.HasSuffix(rel, ".md") || strings.HasSuffix(rel, ".base")) {
 			stale = append(stale, rel)
 		}
 		return nil
@@ -86,6 +84,14 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 	for _, rel := range stale {
 		data, err := os.ReadFile(v.Abs(rel))
 		if err != nil {
+			continue
+		}
+		if strings.HasSuffix(rel, ".base") {
+			if strings.HasPrefix(string(data), BaseNotice) {
+				if err := v.Remove(rel); err == nil {
+					written = append(written, rel)
+				}
+			}
 			continue
 		}
 		if strings.Contains(string(data), Notice) {
@@ -152,9 +158,7 @@ func Render(idx *vault.Index, now time.Time) map[string]string {
 	for month, content := range months {
 		out[vault.WikiView+"/"+TimeFolder+"/"+Timeline+" "+month+".md"] = content
 	}
-	for t := range idx.TagCounts() {
-		out[TagPath(t)] = r.tagView(t)
-	}
+	out[NavigatorPath] = navigatorBase()
 	return out
 }
 
@@ -235,15 +239,8 @@ func (r *renderer) home() string {
 	for _, t := range todos {
 		todoLines = append(todoLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)))
 	}
-	var tagLines []string
-	for _, t := range idx.TopTags() {
-		line := fmt.Sprintf("- %s · %d", tagLink(t, "#"+t), idx.TagCounts()[t])
-		if p := idx.TagPage(t); p != nil {
-			line += " · " + doc.Link(p.Title())
-		}
-		tagLines = append(tagLines, line)
-	}
 	viewsList := strings.Join([]string{
+		"- [[" + Navigator + ".base|" + Navigator + "]]: the documents above, beside, and below the note you read; open it in the right sidebar",
 		"- " + doc.Link(Timeline) + ": what happened, newest first",
 		"- " + doc.Link(Library) + ": topics, sources, repositories",
 		"- " + doc.Link(Repos) + ": every linked repository, its tags, and its git status",
@@ -251,7 +248,7 @@ func (r *renderer) home() string {
 	return r.note(Home, head,
 		section("Waiting for you", strings.Join(wait, "\n")),
 		section("To-do lines", strings.Join(todoLines, "\n")),
-		section("Tags", strings.Join(tagLines, "\n")),
+		section("Start here", r.startHere()),
 		section("Views", viewsList),
 		section("Recent", strings.Join(r.recentLines(MaxRecent), "\n")))
 }
@@ -282,25 +279,6 @@ func base(name string, filters []string, order []string, groupBy string, sortBy 
 	return b.String()
 }
 
-// hasTag is the Base filter of the documents that hold a tag or a tag below it: code
-// names each, since it knows the tree.
-func (r *renderer) hasTag(t string) string {
-	list := []string{t}
-	var walk func(string)
-	walk = func(x string) {
-		for _, c := range r.idx.TagChildren(x) {
-			list = append(list, c)
-			walk(c)
-		}
-	}
-	walk(t)
-	quoted := make([]string, len(list))
-	for i, x := range list {
-		quoted[i] = `"` + x + `"`
-	}
-	return "file.hasTag(" + strings.Join(quoted, ", ") + ")"
-}
-
 // library is the knowledge, for browsing.
 func (r *renderer) library() string {
 	topics := base("Topics", []string{`type == "topic"`}, []string{"file.name", "kind", "description", "tags", "status", "refreshed"}, "kind", "file.name ASC")
@@ -322,7 +300,7 @@ func (r *renderer) repositories() string {
 			unlinked = append(unlinked, "- "+doc.Link(vault.Title(d))+" · "+d.Str("description"))
 			continue
 		}
-		link := func(t string) string { return tagLink(t, "#"+t) }
+		link := r.tagRef
 		own := d.Str("defines")
 		var tagParts, also []string
 		if own != "" {
@@ -447,73 +425,77 @@ func (r *renderer) recentLines(n int) []string {
 	return out
 }
 
-// tagView is one tag's note.
-func (r *renderer) tagView(t string) string {
-	idx := r.idx
-	count := idx.TagCounts()[t]
-	var lines []string
-	if p := idx.TagPage(t); p != nil {
-		lines = append(lines, "Page: "+doc.Link(p.Title()))
+// startHere lists the roots, the documents with nothing above them, that have documents
+// under them: the most under first.
+func (r *renderer) startHere() string {
+	type root struct {
+		d     *doc.Doc
+		under int
 	}
-	if parent := tags.Parent(t); parent != "" {
-		lines = append(lines, "Under: "+tagLink(parent, "#"+parent))
-	}
-	if kids := idx.TagChildren(t); len(kids) > 0 {
-		var parts []string
-		for _, k := range kids {
-			parts = append(parts, fmt.Sprintf("%s (%d)", tagLink(k, tags.Leaf(k)), idx.TagCounts()[k]))
-		}
-		lines = append(lines, "Below: "+strings.Join(parts, " · "))
-	}
-	head := doc.Callout("tag", fmt.Sprintf("#%s · %d %s", t, count, doc.Plural(count, "document", "documents")), lines...)
-	// Narrow: the tags that occur with this one, most first.
-	with := map[string]int{}
-	var holders []*doc.Doc
-	for _, d := range idx.Documents() {
-		if !vault.Holds(d, t) {
+	var roots []root
+	alone := 0
+	for _, d := range r.idx.Documents() {
+		if len(r.idx.Up(d)) > 0 {
 			continue
 		}
-		holders = append(holders, d)
-		for _, x := range tags.Expand(vault.DocTags(d)) {
-			if !tags.Under(x, t) && !tags.Under(t, x) {
-				with[x]++
-			}
+		if n := r.idx.Under(d); n > 0 {
+			roots = append(roots, root{d, n})
+		} else {
+			alone++
 		}
 	}
-	var narrow []string
-	keys := make([]string, 0, len(with))
-	for k := range with {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if with[keys[i]] != with[keys[j]] {
-			return with[keys[i]] > with[keys[j]]
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].under != roots[j].under {
+			return roots[i].under > roots[j].under
 		}
-		return keys[i] < keys[j]
+		return strings.ToLower(vault.Title(roots[i].d)) < strings.ToLower(vault.Title(roots[j].d))
 	})
-	for i, k := range keys {
-		if i == MaxNarrow {
+	var lines []string
+	for i, x := range roots {
+		if i == MaxRoots {
 			break
 		}
-		// Obsidian decodes with decodeURIComponent, which reads + as a plus, not a space.
-		q := url.PathEscape("tag:#" + t + " tag:#" + k)
-		narrow = append(narrow, fmt.Sprintf("[%s (%d)](obsidian://search?vault=%s&query=%s)", k, with[k], url.PathEscape(r.name), q))
+		lines = append(lines, fmt.Sprintf("- %s · %d under it", doc.Link(vault.Title(x.d)), x.under))
 	}
-	has := map[string]bool{}
-	for _, d := range holders {
-		has[d.Type()] = true
+	var rest []string
+	if more := len(roots) - MaxRoots; more > 0 {
+		rest = append(rest, fmt.Sprintf("%d more with documents under them", more))
 	}
-	filter := r.hasTag(t)
-	var sections []string
-	sections = append(sections, head, section("Narrow", strings.Join(narrow, " · ")))
-	if has["topic"] {
-		sections = append(sections, section("Topics", base("Topics", []string{filter, `type == "topic"`}, []string{"file.name", "kind", "description", "status"}, "kind", "file.name ASC")))
+	if alone > 0 {
+		rest = append(rest, fmt.Sprintf("%d %s with nothing above or below", alone, doc.Plural(alone, "document", "documents")))
 	}
-	if has["source"] {
-		sections = append(sections, section("Sources", base("Sources", []string{filter, `type == "source"`}, []string{"file.name", "media", "authority", "status"}, "", "status DESC")))
+	if len(rest) > 0 {
+		lines = append(lines, "- "+doc.Capital(strings.Join(rest, ", and ")))
 	}
-	if has["repository"] {
-		sections = append(sections, section("Repositories", base("Repositories", []string{filter, `type == "repository"`}, []string{"file.name", "path", "branch", "behind"}, "", "file.name ASC")))
-	}
-	return r.note(TagTitle(t), sections...)
+	return strings.Join(lines, "\n")
 }
+
+// The navigator's relations. A document falls back to the page of each tag it holds
+// exactly when its up is empty, as vault.UpEdges says. A tag joins with its # in a Base,
+// and the commas keep a tag from matching a tag below it.
+const (
+	navUp        = `list(this.up).contains(file.asLink())`
+	navUpPage    = `!defines.isEmpty() && this.up.isEmpty() && ("," + list(this.tags).join(",") + ",").contains(",#" + defines + ",")`
+	navBelow     = `list(up).contains(this.file.asLink())`
+	navBelowPage = `!this.defines.isEmpty() && up.isEmpty() && ("," + list(tags).join(",") + ",").contains(",#" + this.defines + ",")`
+	navBeside    = `!this.up.isEmpty() && list(up).containsAny(list(this.up))`
+	navSources   = `list(this.sources).contains(file.asLink())`
+	navCitedBy   = `list(sources).contains(this.file.asLink())`
+)
+
+// navigatorBase is a Base for the right sidebar, where this is the note the reader has
+// open: one table of its neighbors, grouped by how each relates to it.
+func navigatorBase() string {
+	relation := `if(` + navUp + ` || (` + navUpPage + `), "1 · Up", if(` + navBelow + ` || (` + navBelowPage + `), if(type == "source", "4 · Sources below", "3 · Below"), if(` + navSources + `, "5 · Sources", if(` + navCitedBy + `, "6 · Cited by", "2 · Beside"))))`
+	var b strings.Builder
+	b.WriteString(BaseNotice + "\n# Open it in the right sidebar: it shows the neighbors of the note you read.\n")
+	b.WriteString("formulas:\n  relation: " + yamlQuote(relation) + "\n")
+	b.WriteString("filters:\n  and:\n    - file.inFolder(\"" + vault.Documents + "\")\n    - file.path != this.file.path\n    - or:\n")
+	for _, f := range []string{navUp, navUpPage, navBelow, navBelowPage, navBeside, navSources, navCitedBy} {
+		b.WriteString("        - " + yamlQuote(f) + "\n")
+	}
+	b.WriteString("views:\n  - type: table\n    name: Navigator\n    groupBy:\n      property: formula.relation\n      direction: ASC\n    order:\n      - file.name\n      - description\n    sort:\n      - property: file.name\n        direction: ASC\n")
+	return b.String()
+}
+
+func yamlQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
