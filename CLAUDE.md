@@ -557,12 +557,12 @@ Verified live in Obsidian (TESTED.md): Start agent, Resume from the palette, and
 settings tab.
 
 Verified by script in a separate Obsidian: `obsidian-almagest`'s end-to-end suite builds
-this binary from a checkout beside it and drives the plugin against it (its TESTED.md).
+this binary from a checkout beside it and drives the plugin against it (its TESTED.md),
+the navigator's rows for each relation too (Obsidian 1.14.4).
 
 Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
 the rest is untested on Codex), an almagest tool called from a Codex session, the
-Notification types in a live session, and, inside Obsidian, the Almagest navigator and the
-repository panel.
+Notification types in a live session, and, inside Obsidian, the repository panel.
 
 ## Constraints
 
