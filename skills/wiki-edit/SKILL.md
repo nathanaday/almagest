@@ -29,10 +29,15 @@ Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../almagest
    - remove: a `remove` with `redirect` set to the document that links now name; tell
      the user that the document goes to `tool/trash/`;
    - new tags on a document: a `modify` of `fields.tags` (the whole list);
+   - a new place on the map: a `modify` of `fields.up` (the whole list; see Up in
+     [pages.md](../almagest/references/pages.md));
    - rename or merge a tag: a `retag` with `from` and `to`; code rewrites the tag in
      every document, the tags below it too; a `to` that exists merges the two;
    - a topic checked and still true: a `confirm` with `id`;
-   - a dead link: create the target, or change the link in a `modify`.
+   - a dead link: create the target, or change the link in a `modify`;
+   - an `up` finding: drop a self link; break a cycle at the link that points from the
+     broader subject to the narrower one; name the title in place of an alias.
+     `crowded` is wiki-map's.
    Give every write a `why`: one line that says why the change makes it.
    Leave `base` out unless you read the document's hash; code records it at propose,
    and apply refuses a write whose document changed since.

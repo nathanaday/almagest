@@ -35,6 +35,10 @@ Tools: `lint`, `vault`, `change` (progress, propose, on the repair path). Agents
    - `repository-path` → [repo-link](../repo-link/SKILL.md) with the new path,
      [repo-unlink](../repo-unlink/SKILL.md), or [wiki-edit](../wiki-edit/SKILL.md), as
      the finding's `fix` says;
+   - `up` (a self link, a cycle, an alias in place of a title) →
+     [wiki-edit](../wiki-edit/SKILL.md);
+   - `crowded` → [wiki-map](../wiki-map/SKILL.md) on the tag of that page, which
+     groups the topics below it under hubs;
    - `pending` → [wiki-sync](../wiki-sync/SKILL.md);
    - `untyped` → [wiki-ingest](../wiki-ingest/SKILL.md);
 

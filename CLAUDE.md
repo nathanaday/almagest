@@ -224,11 +224,35 @@ The design pages are the spec. When the code departs from them, the reason is be
   refuse it). So a link to the note names one file: the ledger is
   `checkout/Checkout · Ledger.md`, and a volume's history `Journal · <folder>.md`. A
   checkout's index is `_index.md` in its folder, which a link names by its path.
-- **A tag view takes the tag's last part** (`Tag · cs566-project`, in
-  `wiki-view/nav/<tag>/`), so a deep tag fits the file tree. Two tags may share a last
-  part, so every link to a tag view names its path (`tagLink`). The prefix still keeps a
-  view apart from a document of the same name. The plugin's `tagViewPath` builds the
-  same path.
+- **A topic or repository names its broader topics in `up`** (links to topics or
+  repositories), so the subjects form a map with several parents per node. `up` is the
+  model's; code writes the rest. One rule gives Up (`vault.UpEdges`, which the index,
+  lint, and the change check share): the explicit `up`, or, when `up` is empty, the page
+  of each tag the document holds exactly. Sources take no `up`; they fall back like any
+  document. The fallback is exact, not the nearest page above, because the navigator's
+  Base can test only an exact match: in Obsidian 1.14.4, `list(tags).contains(x)` also
+  matches tags below x, and `==` or `map(value.toString())` match nothing; a joined list
+  holds each tag with its `#`, so `("," + list(tags).join(",") + ",").contains(",#" +
+  defines + ",")` is exact. An `up` link resolves by title or path, as `file.asLink()`
+  matches; lint warns about an alias.
+- **A proposal refuses only the cycles it closes.** `change` checks the vault as the
+  whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
+  `defines`, or a redirect can close a cycle too), and compares the cycles before and
+  after, so an old cycle blocks no unrelated change; lint reports it. A remove that
+  leaves an `up` naming the removed document is refused without a redirect.
+- **The navigator is a Base, not code.** A sync writes `wiki-view/View · Navigator.base`
+  (first line `views.BaseNotice`, which the stale pass reads). In the right sidebar,
+  `this` is the open note, and one table grouped by a formula shows Up, Beside, Below,
+  Sources below, Sources, and Cited by. Beside uses explicit `up` only: with the
+  fallback, siblings would be a whole tag, and a marker tag like `tool` would join
+  unrelated documents. Verified in Obsidian 1.14.4 only. The per-tag notes of
+  `wiki-view/nav/` are gone; `Tag · ` stays reserved so no document takes a title an
+  older vault links.
+- **Start here and crowded are code**, since a Base cannot count. Home lists the roots
+  with documents under them, at most 20 (`views.MaxRoots`), by the count under each.
+  Lint warns about a document with more than 30 topics and repositories directly below
+  (`lint.MaxBelow`); sources do not count, since no map could move them. The lead's
+  `Up:` line shows explicit `up` only, so a change of a tag page rewrites no other lead.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
   reach the wiki, and an inline Base of the sources with that `volume` (the folder name
