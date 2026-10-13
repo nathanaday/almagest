@@ -58,11 +58,13 @@ func TestDerivedParts(t *testing.T) {
 func TestLeadShowsUp(t *testing.T) {
 	tv := testvault.New(t)
 	repo := tv.Repo("p3-edge", nil)
-	tv.Doc("topic", "Work", map[string]any{"kind": "overview", "defines": "work"}, "## Summary\n\nx\n")
+	tv.Doc("topic", "Work", map[string]any{"kind": "overview", "defines": "work", "aliases": []string{"WK"}}, "## Summary\n\nx\n")
 	tv.Doc("topic", "P3", map[string]any{"kind": "overview", "defines": "work/p3", "tags": []string{"work"}, "up": []string{"[[Work]]", "[[Edge AI]]"}}, "## Summary\n\nx\n")
 	tv.Doc("topic", "Edge AI", map[string]any{"kind": "concept", "tags": []string{"work"}}, "")
 	tv.Doc("repository", "p3-edge", map[string]any{"path": repo, "defines": "work/p3/p3-edge", "tags": []string{"work/p3"}, "up": []string{"[[P3]]"}}, "## What it is\n\nThe edge service.\n")
 	tv.Doc("topic", "Scoring", map[string]any{"kind": "concept", "tags": []string{"work/p3"}, "up": []string{"[[Nothing]]"}}, "")
+	tv.Doc("topic", "AL", map[string]any{"kind": "overview", "defines": "work/al", "tags": []string{"work"}, "aliases": []string{"Active learning"}, "up": []string{"[[WK]]"}}, "## Summary\n\nx\n")
+	tv.Doc("topic", "Dead", map[string]any{"kind": "overview", "defines": "work/dead", "tags": []string{"work"}, "up": []string{"[[Nothing]]"}}, "## Summary\n\nx\n")
 	if _, err := derive.Sync(tv.Index(), tv.V.WriteIfChanged); err != nil {
 		t.Fatal(err)
 	}
@@ -71,6 +73,8 @@ func TestLeadShowsUp(t *testing.T) {
 		"p3-edge": {"\n> Up: [[P3]]\n", ""},
 		"Edge AI": {"> [!concept] Concept\n> 0 sources · #work", "Up:"},
 		"Scoring": {"> [!concept] Concept\n> 0 sources · #work/p3", "Up:"},
+		"AL":      {"> [!overview] The page of #work/al\n", "under"},
+		"Dead":    {"> [!overview] The page of #work/dead\n", "under"},
 	}
 	for title, c := range checks {
 		got := tv.Read("tool/source-core/documents/" + title + ".md")

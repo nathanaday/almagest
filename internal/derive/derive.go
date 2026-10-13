@@ -301,7 +301,7 @@ func TopicLead(idx *vault.Index, d *doc.Doc) string {
 	case "overview":
 		def := d.Str("defines")
 		title = "The page of #" + def
-		if p := tags.Parent(def); p != "" && upLine(idx, d) == "" {
+		if p := tags.Parent(def); p != "" && len(d.List("up")) == 0 {
 			if page := idx.TagPage(p); page != nil {
 				title += " · under " + doc.Link(page.Title())
 			} else {
