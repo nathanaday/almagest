@@ -240,7 +240,7 @@ func (r *renderer) home() string {
 		todoLines = append(todoLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)))
 	}
 	viewsList := strings.Join([]string{
-		"- [[" + Navigator + ".base|" + Navigator + "]]: the documents above, beside, and below the note you read; open it in the right sidebar",
+		"- The navigator: the documents above, beside, and below the note you read. Run \"Almagest: Open the navigator\" to show it in the right sidebar",
 		"- " + doc.Link(Timeline) + ": what happened, newest first",
 		"- " + doc.Link(Library) + ": topics, sources, repositories",
 		"- " + doc.Link(Repos) + ": every linked repository, its tags, and its git status",

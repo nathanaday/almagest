@@ -35,7 +35,7 @@ func TestViews(t *testing.T) {
 		t.Fatal("a Base without the notice is the user's")
 	}
 	checks := map[string][]string{
-		"wiki-view/View · Home.md":         {views.Notice, "> [!almagest] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Start here\n\n- [[CS513]] · 3 under it\n- 1 document with nothing above or below\n\n## Views\n\n- [[View · Navigator.base|View · Navigator]]", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
+		"wiki-view/View · Home.md":         {views.Notice, "> [!almagest] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Start here\n\n- [[CS513]] · 3 under it\n- 1 document with nothing above or below\n\n## Views\n\n- The navigator: the documents above, beside, and below the note you read. Run \"Almagest: Open the navigator\"", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
 		"wiki-view/View · Timeline.md":     {"### 2026-09-27", "15:32 · change applied · [[2026-09-27 Add lidar]]"},
 		"wiki-view/View · Repositories.md": {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[grid-sim|#school/cs513/grid-sim]] · Under: [[CS513|#school/cs513]] · Also: #simulation\n\n```almagest-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
 		"wiki-view/View · Home.md#":        {"[[View · Repositories]]"},
