@@ -234,18 +234,23 @@ The design pages are the spec. When the code departs from them, the reason is be
   matches tags below x, and `==` or `map(value.toString())` match nothing; a joined list
   holds each tag with its `#`, so `("," + list(tags).join(",") + ",").contains(",#" +
   defines + ",")` is exact. An `up` link resolves by title or path, as `file.asLink()`
-  matches; lint warns about an alias.
+  matches. An alias names nothing there, as in Obsidian's own links, so lint reports a
+  link field that names an alias as a dead link that names the title.
 - **A proposal refuses only the cycles it closes.** `change` checks the vault as the
   whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
   `defines`, or a redirect can close a cycle too), and compares the cycles before and
-  after, so an old cycle blocks no unrelated change; lint reports it. A remove that
-  leaves an `up` naming the removed document is refused without a redirect.
+  after, so an old cycle blocks no unrelated change; lint reports it. A plan's redirects
+  resolve before any content check, so a modify of a document that links a document the
+  change removes with a redirect passes: the rewrite moves the link. Without a redirect,
+  a link of any field to the removed document gets one refusal that names the removal.
 - **The navigator is a Base, not code.** A sync writes `wiki-view/View · Navigator.base`
   (first line `views.BaseNotice`, which the stale pass reads). In the right sidebar,
   `this` is the open note, and one table grouped by a formula shows Up, Beside, Below,
   Sources below, Sources, and Cited by. A group header shows the formula's name unless
   its `displayName` is a space (an empty one is ignored), and the labels carry numbers,
-  since a Base sorts groups by their text. Beside uses explicit `up` only: with the
+  since a Base sorts groups by their text. Home names the command "Open the navigator",
+  not the Base: in a main tab the Base's `this` is the Base itself, and it shows nothing.
+  Beside uses explicit `up` only: with the
   fallback, siblings would be a whole tag, and a marker tag like `tool` would join
   unrelated documents. Verified in Obsidian 1.14.4 only. The per-tag notes of
   `wiki-view/nav/` are gone; `Tag · ` stays reserved so no document takes a title an
