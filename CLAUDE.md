@@ -237,7 +237,8 @@ The design pages are the spec. When the code departs from them, the reason is be
   matches. An id, an alias, or plain text (a value with no `[[ ]]`) names nothing there,
   as in Obsidian's own links (`Index.Misnamed`), so the index counts no such value, lint
   reports it in any link field as a dead link that names the title, and a proposal
-  refuses it with that title.
+  refuses it with that title. The navigator's Beside still matches a plain-text `up`
+  (Obsidian 1.14.4), until lint's fix makes it a link.
 - **A proposal refuses only the cycles it closes.** `change` checks the vault as the
   whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
   `defines`, or a redirect can close a cycle too), and compares the cycles before and
