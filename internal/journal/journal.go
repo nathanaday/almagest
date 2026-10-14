@@ -140,6 +140,18 @@ func notesOf(v *vault.Vault, folder string) ([]string, error) {
 	return out, err
 }
 
+// Entry is the file that stands for a volume in a list: its publication history, else its
+// first note; "" for a volume with neither.
+func Entry(v *vault.Vault, folder string) string {
+	if h := historyPath(folder); v.Exists(h) {
+		return h
+	}
+	if notes, err := notesOf(v, folder); err == nil && len(notes) > 0 {
+		return notes[0]
+	}
+	return ""
+}
+
 func historyPath(folder string) string {
 	return path.Join(vault.Journals, folder, HistoryPrefix+folder+".md")
 }

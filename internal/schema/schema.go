@@ -178,6 +178,7 @@ var Types = []*Type{
 	), Sections: []string{"Summary", "Structure", "Notes"}},
 	{Name: "repository", Prefix: DocPrefix, Family: Knowledge, Folder: "tool/source-core/documents", Fields: common(
 		Field{Name: "defines", Kind: Tag},
+		Field{Name: "up", Kind: Links, Targets: []string{"topic", "repository"}},
 		Field{Name: "path", Kind: Text},
 		Field{Name: "unlinked", Kind: Bool},
 		Field{Name: "remote", Kind: Text, Owner: Code},
@@ -194,6 +195,7 @@ var Types = []*Type{
 		Field{Name: "sources", Kind: Links},
 		Field{Name: "strength", Kind: Enum, Values: []string{"must", "should", "may"}},
 		Field{Name: "defines", Kind: Tag},
+		Field{Name: "up", Kind: Links, Targets: []string{"topic", "repository"}},
 	), Kinds: TopicKinds, KindSections: map[string][]string{
 		"concept":  {"Definition", "Explanation", "Related", "Sources", "Origin", "Notes"},
 		"entity":   {"What it is", "Facts", "Related", "Sources", "Origin", "Notes"},
@@ -403,17 +405,19 @@ func (t *Type) Check(v Values, r Resolver) []Problem {
 				add(f.Name, "holds %d links; it takes one", len(v.list(f.Name)))
 				continue
 			}
-			out = append(out, t.checkLink(f, v.str(f.Name), r)...)
+			out = append(out, t.CheckLink(f, v.str(f.Name), r)...)
 		case Links:
 			for _, l := range v.list(f.Name) {
-				out = append(out, t.checkLink(f, l, r)...)
+				out = append(out, t.CheckLink(f, l, r)...)
 			}
 		}
 	}
 	return out
 }
 
-func (t *Type) checkLink(f Field, target string, r Resolver) []Problem {
+// CheckLink checks one link of a field: that it names one document of a type the field
+// allows. A nil resolver checks nothing.
+func (t *Type) CheckLink(f Field, target string, r Resolver) []Problem {
 	if r == nil || strings.TrimSpace(target) == "" {
 		return nil
 	}
@@ -422,10 +426,10 @@ func (t *Type) checkLink(f Field, target string, r Resolver) []Problem {
 		return []Problem{{Field: f.Name, Message: err.Error()}}
 	}
 	if got == "" {
-		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s names no document", target)}}
+		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s names no document; link a document that exists, or drop the link", target)}}
 	}
 	if len(f.Targets) > 0 && !slices.Contains(f.Targets, got) {
-		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s is a %s; it must be a %s", target, got, strings.Join(f.Targets, " or "))}}
+		return []Problem{{Field: f.Name, Message: fmt.Sprintf("%s is a %s; it must be a %s, so link one of those, or drop the link", target, got, strings.Join(f.Targets, " or "))}}
 	}
 	return nil
 }

@@ -62,6 +62,35 @@ in `defines` (`defines: school/cs513`).
   `context` tool returns the pages of every tag a repository holds, from the top down.
 - A tag without a page is valid. The wiki-map skill writes the pages worth writing.
 
+### Up: the map of subjects
+
+`up` names the broader topics of a topic or a repository: the articles a reader opens
+before this one. A reader starts at the broadest page and moves down.
+
+```yaml
+up: ["[[Transfer Learning]]", "[[CS566-project]]"]
+```
+
+- `up` links topics or repositories, by title. A source takes no `up`: it sits under
+  the page of its tag, and the topics that cite it list it in `sources`.
+- A document may name several: one for each path a reader takes to it.
+- Name the narrowest topic that holds the subject: Fine-Tuning sits under Transfer
+  Learning, not under Machine Learning.
+- With an empty `up`, a document sits under the page of each tag it holds exactly: a
+  document tagged `ml/cs566` sits under the page of `ml/cs566`, not under the page of
+  `ml`. An `up` that is not empty replaces this, so list the tag's page too when the
+  document should stay under it.
+- A hub is a concept topic that gathers a group of topics under a page. It gives broad
+  details about the domain, links each member under `## Related`, and cites the sources
+  of its members. Its members name it in `up`.
+- No document sits under itself. The change tool refuses a self link, a cycle, and an
+  `up` that names a document the change removes without a redirect. Lint reports a
+  document with more than 30 topics and repositories directly below it as `crowded`;
+  wiki-map fixes it.
+- Code shows `Up:` in the lead callout. The navigator in the Almagest palette shows
+  the documents above, beside, and below the open document, its sources, and what
+  cites it.
+
 ## Source
 
 Capture writes a source with the fields code owns: `status` (pending, absorbed),
@@ -102,6 +131,7 @@ keep `authority: primary`, and never change the journal or the edition.
 |---|---|---|
 | `description`, `tags`, `aliases` | you | as every document; `tags` holds the parent of its own tag |
 | `defines` | you | the tag of its own knowledge |
+| `up` | you | the topics or repositories directly above it (see Up) |
 | `path` | you | absolute or `~/…`; the root of a git work tree outside the vault |
 | `unlinked` | you | `true` when unlinked; code then empties `path` |
 | `remote`, `branch`, `head`, `head_time`, `described`, `behind` | code | the git facts; apply sets `described` when a change absorbs a snapshot |
@@ -120,6 +150,7 @@ status: stable             # draft | stable | contested | deprecated
 sources: ["[[DINOv2]]"]    # every document the topic cites
 strength: ""               # policy only: must | should | may
 defines: ""                # overview only: the tag this topic is the page of
+up: ["[[Transfer Learning]]"]   # the topics directly above it (see Up)
 ```
 
 | Kind | Is | Sections |

@@ -68,7 +68,7 @@ or `draft`:
 | `/almagest:wiki-edit Remove [[<title>]] …: point each backlink elsewhere …` | [wiki-edit](../wiki-edit/SKILL.md), its Safe delete path |
 | `/almagest:wiki-checkout Check out the material on: <request>` | [wiki-checkout](../wiki-checkout/SKILL.md) |
 | `/almagest:wiki-wikify Wikify [[<copy title>]]: mark what the wiki knows …` | [wiki-wikify](../wiki-wikify/SKILL.md) |
-| `/almagest:wiki-edit Draft a topic titled <Title> from [[<note>]] … Your work document is [[…]] (<id>) …` with a draft work document | [wiki-edit](../wiki-edit/SKILL.md), its Draft path |
+| `/almagest:wiki-edit Draft a topic titled <Title> from [[<note>]] …` or `… from the note <path>, where the user linked "<phrase>" to it …`, each with a draft work document | [wiki-edit](../wiki-edit/SKILL.md), its Draft path |
 
 The user decides in the document (Approve or Cancel), so these tasks do not stop for a
 yes before they propose. Ask the user only for a real edge case that the skill names.

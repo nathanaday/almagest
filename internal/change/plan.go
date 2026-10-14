@@ -202,6 +202,9 @@ func (c *check) titleOf(value string) (string, string) {
 	if d := c.idx.ByID(t); d != nil && !c.removed(d.ID()) {
 		return c.finalTitle(d), d.Type()
 	}
+	if o := c.renaming(t); o != nil {
+		return o.NewTitle, o.Type
+	}
 	if c.gone[links.Key(t)] {
 		return "", ""
 	}
@@ -344,14 +347,13 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			ops[i].Why = doc.OneLine(strings.TrimSpace(w.Why), 160)
 		}
 	}
+	// Redirects first, so a content check knows which removed links a rewrite moves.
 	for i, w := range p.Writes {
 		o := ops[i]
 		if o == nil {
 			continue
 		}
 		switch o.Kind {
-		case OpCreate, OpModify:
-			c.content(o, w, idx.ByID(o.ID))
 		case OpRemove:
 			if w.Redirect != "" {
 				title, _ := c.titleOf(w.Redirect)
@@ -367,6 +369,11 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 			}
 		}
 	}
+	for i, w := range p.Writes {
+		if o := ops[i]; o != nil && (o.Kind == OpCreate || o.Kind == OpModify) {
+			c.content(o, w, idx.ByID(o.ID))
+		}
+	}
 	for _, o := range ops {
 		if o != nil {
 			out.Ops = append(out.Ops, o)
@@ -376,7 +383,9 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 		return nil, &Refusal{Problems: c.problems}
 	}
 	c.rewrites(out)
+	c.links(out, false)
 	c.deadLinks(out)
+	c.upLinks(out)
 	out.Warnings = c.warnings
 	out.NewTags = c.newTags
 	if len(c.problems) > 0 {
@@ -610,7 +619,8 @@ func (c *check) checkPage(o *op, content string) {
 		c.refuse("%s: id and type are code's; they must stay %s and %s", o.label(), o.ID, o.Type)
 		return
 	}
-	for _, p := range t.Check(schema.Values(d.Front.Map()), c) {
+	// The links wait for the rewrites: c.links checks them as the change leaves them.
+	for _, p := range t.Check(schema.Values(d.Front.Map()), nil) {
 		c.refuse("%s: %s", o.label(), p)
 	}
 	if o.Type == "repository" && !d.Front.Bool("unlinked") {
@@ -745,7 +755,7 @@ func (c *check) value(f *schema.Field, v any) (any, error) {
 		}
 		title, _ := c.titleOf(s)
 		if title == "" {
-			return nil, fmt.Errorf("%s names no document", s)
+			return nil, fmt.Errorf("%s names no document; link a document that exists or that this change creates, or drop the link", s)
 		}
 		return doc.Link(title), nil
 	case schema.Links:
@@ -756,8 +766,11 @@ func (c *check) value(f *schema.Field, v any) (any, error) {
 		out := make([]string, 0, len(items))
 		for _, s := range items {
 			title, _ := c.titleOf(s)
+			if gone := c.removedBy(s); title == "" && gone != "" {
+				return nil, fmt.Errorf("%s names %s, which this change removes; link a document that stays, or drop the link", s, gone)
+			}
 			if title == "" {
-				return nil, fmt.Errorf("%s names no document that exists or that this change creates", s)
+				return nil, fmt.Errorf("%s names no document; link a document that exists or that this change creates, or drop the link", s)
 			}
 			out = append(out, doc.Link(title))
 		}

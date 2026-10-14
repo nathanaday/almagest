@@ -18,7 +18,7 @@ being absorbed, their tags, and the tag vocabulary with the vault's `tagging` mo
 ```json
 {
   "writes": [
-    {"op": "create", "why": "one line", "type": "topic", "kind": "concept", "title": "…", "fields": {"description": "…", "tags": ["…"], "aliases": [], "status": "stable", "sources": ["doc-…"]}, "body": "## Definition\n…"},
+    {"op": "create", "why": "one line", "type": "topic", "kind": "concept", "title": "…", "fields": {"description": "…", "tags": ["…"], "aliases": [], "status": "stable", "sources": ["doc-…"], "up": ["…"]}, "body": "## Definition\n…"},
     {"op": "modify", "why": "one line", "id": "doc-…", "base": "…", "fields": {"sources": ["…"]}, "body": "…the whole new body…"}
   ],
   "skipped": [{"subject": "…", "reason": "one line"}],
@@ -73,6 +73,10 @@ subject is lost without a reason.
   user first.
 - A policy's tags set its reach: give it the tags of the repositories it binds, no
   more.
+- Give each create an `up`: the narrowest topics directly above the subject, by title
+  ([pages.md](../skills/almagest/references/pages.md), Up). `search` the subject's
+  broader words under its tags, and read the hubs and pages you find. Leave `up` out
+  when the page of the topic's tag is the right place. A modify keeps the topic's `up`.
 - A modify gives the whole new body, and `base`, the hash of the topic as read. Read
   the topic first with Read.
 - Call `source` read when an item's claim needs the text around it.

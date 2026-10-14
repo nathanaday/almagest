@@ -10,7 +10,9 @@ import (
 	"github.com/nathanaday/almagest/internal/brief"
 	"github.com/nathanaday/almagest/internal/lint"
 	"github.com/nathanaday/almagest/internal/match"
+	"github.com/nathanaday/almagest/internal/schema"
 	"github.com/nathanaday/almagest/internal/search"
+	"github.com/nathanaday/almagest/internal/vault"
 )
 
 // searchCmd is almagest search, the ranked search of the documents.
@@ -45,6 +47,35 @@ func (c *CLI) searchCmd(argv []string) error {
 			}
 			sort.Strings(list)
 			fmt.Fprintf(w, "with: %s\n", strings.Join(list, " · "))
+		}
+	})
+}
+
+// neighborsCmd is almagest neighbors: the documents around one document, by group.
+func (c *CLI) neighborsCmd(argv []string) error {
+	a := parse(argv)
+	idx, err := c.index(a)
+	if err != nil {
+		return err
+	}
+	d, err := idx.ResolveType(a.arg(0), schema.DocumentTypes...)
+	if err != nil {
+		return err
+	}
+	n := idx.Neighbors(d)
+	return c.emit(a, n, func(w io.Writer) {
+		for _, g := range []struct {
+			name string
+			refs []vault.Ref
+		}{{"Up", n.Up}, {"Beside", n.Beside}, {"Below", n.Below}, {"Sources below", n.SourcesBelow}, {"Sources", n.Sources}, {"Cited by", n.CitedBy}} {
+			if len(g.refs) == 0 {
+				continue
+			}
+			var titles []string
+			for _, r := range g.refs {
+				titles = append(titles, r.Title)
+			}
+			fmt.Fprintf(w, "%s: %s\n", g.name, strings.Join(titles, " · "))
 		}
 	})
 }

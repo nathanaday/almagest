@@ -224,6 +224,60 @@ The design pages are the spec. When the code departs from them, the reason is be
   refuse it). So a link to the note names one file: the ledger is
   `checkout/Checkout · Ledger.md`, and a volume's history `Journal · <folder>.md`. A
   checkout's index is `_index.md` in its folder, which a link names by its path.
+- **A topic or repository names its broader topics in `up`** (links to topics or
+  repositories), so the subjects form a map with several parents per node. `up` is the
+  model's; code writes the rest. One rule gives Up (`vault.UpEdges`, which the index,
+  lint, and the change check share): the explicit `up`, or, when `up` is empty, the page
+  of each tag the document holds exactly. Sources take no `up`; they fall back like any
+  document. The fallback is exact: the page of the tag itself, not the nearest page
+  above. An `up` link resolves by title or path, as Obsidian's links do. An id, an
+  alias, or plain text (a value with no `[[ ]]`) names nothing there (`Index.Misnamed`),
+  so the index counts no such value, lint reports it in any link field as a dead link
+  that names the title, and a proposal refuses it with that title.
+- **A proposal refuses only the cycles it closes.** `change` checks the vault as the
+  whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
+  `defines`, or a redirect can close a cycle too), and compares the cycles before and
+  after, so an old cycle blocks no unrelated change, and neither does an old self link;
+  lint reports both. Every link of a
+  write is checked after the rewrites, on the content the change leaves (`check.links`,
+  at propose and at apply): a link a rename or a redirect moves counts at its new place,
+  with its type check. A plan may name a title its own rename frees; `titleOf` gives the
+  new title. A link of any field to a removed document, by title, id, or alias, gets one
+  refusal that names the removal, or says that the redirect is of a type the field
+  cannot take.
+- **The navigator is a page of the Obsidian plugin's palette, and the binary gives its
+  rows.** `almagest neighbors DOC` (`Index.Neighbors`) prints the documents around one
+  document: Up and Below by `vault.UpEdges`, Below split from Sources below, Sources (its
+  `sources`), Cited by, and Beside. Each document stands in one group, the first of Up,
+  Below, Sources below, Sources, Cited by, and Beside, and each group is in title order.
+  Beside uses explicit `up` only: with the fallback, siblings would be a whole tag, and
+  a marker tag like `tool` would join unrelated documents. The plugin passes the open
+  document's `id`. The navigator was a Base in `wiki-view/` until 11.1: a Base that
+  Obsidian opens in a main tab reads itself and shows nothing, and every other view is a
+  note. A sync removes the old `View · Navigator.base`, also when Obsidian saved it
+  without `views.BaseNotice`, since the stale pass takes a `.base` with a `View · ` title
+  as code's. The command came with protocol 3.
+- **Start here and crowded are code**, since a Base cannot count. Home lists the roots
+  with documents under them, at most 20 (`views.MaxRoots`), by the count under each.
+  Lint warns about a document with more than 30 topics and repositories directly below
+  (`lint.MaxBelow`); sources do not count, since no map could move them. The lead's
+  `Up:` line shows explicit `up` only, so a change of a tag page rewrites no other lead.
+- **Home's sections are inline Bases; what only code knows goes in Home's frontmatter.**
+  An embedded Base reads the note it sits in as `this`, so code writes there the roots
+  (`start_here`, path links) and the count under each (`under`, an object by path, read
+  as `this.under[file.path]`), the notes with open `#todo` lines (`todo`, `todo_lines`),
+  and the journal volumes with changes (`journals`, `journal_lines`; a volume stands as
+  its history note, else its first note, `journal.Entry`). Waiting for you is one Base:
+  proposed and running changes, waiting sessions, and pending sources (`status`, which
+  derive keeps) by their own fields, so they update live, and the journals by `this`.
+  Recent filters the applied changes, newest first, `limit: 10`, and a formula drops the
+  zero counts. Links are by path, which name one file wherever a name repeats. The
+  totals and the links to the other views are lines of the callout: Obsidian excludes
+  `wiki-view/` (`userIgnoreFilters`), and a Base lists no excluded file. Home's
+  `cssclasses` (`almagest-home`) lets the Obsidian plugin hide the frontmatter. Verified
+  in Obsidian 1.14.4: object access by a key, `filter(!value…)` on a list, `limit`, and
+  an `or` across folders work; `indexOf`, `file.tasks`, and a `Count` summary of
+  `file.name` do not.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
   reach the wiki, and an inline Base of the sources with that `volume` (the folder name
@@ -528,12 +582,12 @@ Verified live in Obsidian (TESTED.md): Start agent, Resume from the palette, and
 settings tab.
 
 Verified by script in a separate Obsidian: `obsidian-almagest`'s end-to-end suite builds
-this binary from a checkout beside it and drives the plugin against it (its TESTED.md).
+this binary from a checkout beside it and drives the plugin against it (its TESTED.md),
+the palette's navigator for each relation too (Obsidian 1.14.4).
 
 Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
 the rest is untested on Codex), an almagest tool called from a Codex session, the
-Notification types in a live session, and, inside Obsidian, the Almagest navigator and the
-repository panel.
+Notification types in a live session, and, inside Obsidian, the repository panel.
 
 ## Constraints
 

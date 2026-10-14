@@ -109,7 +109,8 @@ agent proposes into it.
    names one, call `change` with `action: start`, `kind` (`ingest`, `repair`, or
    `draft`), a `title`, and for an ingest `files` (the names of the files in
    `ingest/`). Keep the `ref.id` of the result. A `draft` work document holds the
-   drafting of one topic: Create on a new mark of a wikified note starts one, titled
+   drafting of one topic: Create on a new mark of a wikified note, or Make topic on a
+   selection in a note, starts one, titled
    "Draft <Title>" ([wiki-edit](../../wiki-edit/SKILL.md), its Draft path). Its
    default title is "Draft a topic".
 2. **Progress.** After each step, call `change` with `action: progress`, the `id`, and

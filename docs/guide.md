@@ -83,9 +83,27 @@ almagest vault snapshot             # commit your hand edits now
 ```
 
 In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
-Repositories, one timeline per month under `wiki-view/timeline/`, and one view per tag
-under `wiki-view/nav/`. `tool/sessions/Sessions.base` shows what runs now, and
+Repositories, and one timeline per month under `wiki-view/timeline/`.
+`tool/sessions/Sessions.base` shows what runs now, and
 `changes/Changes.base` lists the changes that wait for you.
+
+### Find your way by subject
+
+Each topic or repository may name its broader topics in `up`. The subjects then form a
+map with several paths to one article: Fine-Tuning sits under Transfer Learning, and
+under a project's dataset strategy too. A document with an empty `up` sits under the
+page of each tag it holds.
+
+1. Open Home. "Start here" lists the broadest topics, the most documents under them
+   first.
+2. Open one of them. In the Almagest palette, open Navigator. It shows the documents
+   above the open document, beside it (they share an `up`), and below it, the sources
+   it cites, and what cites it.
+3. Click a document in the navigator to open it. The navigator follows.
+
+The lead callout of a topic shows its `Up:` links. Lint reports a page with more than
+30 topics directly below it as `crowded`; ask an agent to map that tag (wiki-map), and
+it groups the topics under hubs.
 
 ## Install and update
 

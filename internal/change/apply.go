@@ -514,6 +514,8 @@ func Apply(v *vault.Vault, key string, now time.Time, gate Gate) (_ *Preview, er
 		}
 	}
 	c.rewrites(p)
+	c.links(p, true)
+	c.upLinks(p)
 	if len(c.problems) > 0 {
 		return nil, &Refusal{Problems: c.problems}
 	}

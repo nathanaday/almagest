@@ -1,6 +1,6 @@
 ---
 name: wiki-edit
-description: "Change knowledge that exists: rewrite, rename, merge, split, remove with a redirect, retag, confirm a topic is current, or repair what lint found, as one reviewed change; and draft the topic of a subject that a wikified note marks as new. Use for rewrite this topic, rename, merge these topics, split this topic, tag this under p3, rename a tag, this page is still right, fix the lint findings, fix the dead links, draft a topic titled X from this note. New knowledge from documents is wiki-sync; unlinking a repository is repo-unlink."
+description: "Change knowledge that exists: rewrite, rename, merge, split, remove with a redirect, retag, confirm a topic is current, or repair what lint found, as one reviewed change; and draft the topic of a subject that a wikified note marks as new, or that the user selects in a note with Make topic. Use for rewrite this topic, rename, merge these topics, split this topic, tag this under p3, rename a tag, this page is still right, fix the lint findings, fix the dead links, draft a topic titled X from this note. New knowledge from documents is wiki-sync; unlinking a repository is repo-unlink."
 ---
 
 # wiki-edit
@@ -29,10 +29,17 @@ Tools: `vault`, `search`, `lint`, `change`. References: [changes.md](../almagest
    - remove: a `remove` with `redirect` set to the document that links now name; tell
      the user that the document goes to `tool/trash/`;
    - new tags on a document: a `modify` of `fields.tags` (the whole list);
+   - a new place on the map: a `modify` of `fields.up` (the whole list; see Up in
+     [pages.md](../almagest/references/pages.md));
    - rename or merge a tag: a `retag` with `from` and `to`; code rewrites the tag in
      every document, the tags below it too; a `to` that exists merges the two;
    - a topic checked and still true: a `confirm` with `id`;
-   - a dead link: create the target, or change the link in a `modify`.
+   - a dead link: create the target, or change the link in a `modify`;
+   - an `up` finding: drop a self link; break a cycle at the link that points from the
+     broader subject to the narrower one; drop the `up` of a source. `crowded` is
+     wiki-map's;
+   - a dead link that names an alias, an id, or plain text: link the title the finding
+     names.
    Give every write a `why`: one line that says why the change makes it.
    Leave `base` out unless you read the document's hash; code records it at propose,
    and apply refuses a write whose document changed since.
@@ -64,25 +71,32 @@ them: "[[<note>]] is the user's to fix, so leave it and propose no remove".
    from the palette, and no change removes it. A source's original in
    `tool/source-core/originals/` leaves only with its source.
 
-## Draft a topic from a wikified note
+## Draft a topic from a note
 
-Create on a new mark of a wikified note
-([wiki-wikify](../wiki-wikify/SKILL.md)) starts a work document of kind `draft` and
-sends: "Draft a topic titled <Title> from [[<note>]] and what the wiki holds; give it a
-why. Your work document is [[<doc>]] (<id>): report each step with change progress, and
-propose into it with change propose and id <id>." The note is the wikified copy in
-`scratchpad/`. Report each step below with `change` `action: progress` and that `id`.
+Two acts in Obsidian start a work document of kind `draft` and send you its first
+message. Report each step below with `change` `action: progress` and that `id`.
+
+- Create on a new mark of a wikified note ([wiki-wikify](../wiki-wikify/SKILL.md)):
+  "Draft a topic titled <Title> from [[<note>]] and what the wiki holds; give it a why.
+  Your work document is [[<doc>]] (<id>): report each step with change progress, and
+  propose into it with change propose and id <id>." The note is the wikified copy in
+  `scratchpad/`, and the mark `{{new:<Title>|…}}` names the subject.
+- Make topic on a selection in any note of the user's: "Draft a topic titled <Title>
+  from the note <path>, where the user linked "<phrase>" to it, and what the wiki holds;
+  …" with the same end. The note may be a topic, a journal note, or a scratchpad note.
+  The selection is a link `[[<Title>|<phrase>]]` (or `[[<Title>]]`) already, so the
+  topic resolves it.
 
 1. `search` the title. When a document holds it already, propose nothing: call
-   `change` with `action: reject`, the `id`, and the reason ("<Title> exists"). The
-   bubble in the note then offers Link.
-2. Read the note with Read: the passage around the mark `{{new:<Title>|…}}`, and every
-   other place where the note speaks of the subject.
+   `change` with `action: reject`, the `id`, and the reason ("<Title> exists", or
+   "<Title> is an alias of <Other>"). The bubble in a wikified note then offers Link.
+2. Read the note with Read: the passage around the mark or the link, and every other
+   place where the note speaks of the subject. Never edit the note.
 3. `search` the wiki for the subject: its title, the note's wording, and its aliases.
    Read the topics and sources that say something about it.
 4. Build one `create` write: `type: topic`, the `kind` that fits the subject (concept,
    entity, or policy), and `title` set to `<Title>` exactly, so that the bubble's Link
-   finds the topic. Give it `fields`: a one-sentence `description`, `tags` that exist
+   finds the topic and the user's link resolves. Give it `fields`: a one-sentence `description`, `tags` that exist
    (the tags of the documents it draws on; the tag list is in the session-start
    context, or `vault`), `aliases` (the note's wording when it differs), `status`
    (`draft` when the topic is thin), and `sources`. Write the body with the sections of

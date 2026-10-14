@@ -8,12 +8,12 @@ import (
 	"cmp"
 	"fmt"
 	"io/fs"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -25,30 +25,33 @@ import (
 	"github.com/nathanaday/almagest/internal/vault"
 )
 
+// viewPrefix opens the title of every view; no document takes it (vault.ReservedPrefixes).
+const viewPrefix = "View · "
+
 // Titles and places of the views.
 const (
-	Home        = "View · Home"
-	Timeline    = "View · Timeline"
-	Library     = "View · Library"
-	Repos       = "View · Repositories"
-	NavFolder   = "nav"
+	Home        = viewPrefix + "Home"
+	Timeline    = viewPrefix + "Timeline"
+	Library     = viewPrefix + "Library"
+	Repos       = viewPrefix + "Repositories"
 	TimeFolder  = "timeline"
 	TimelineAge = 30 * 24 * time.Hour
 	MaxRecent   = 10
-	MaxNarrow   = 20
+	MaxRoots    = 20
 )
 
 // Notice opens every view.
 const Notice = "> [!view] Written by Almagest from the documents. Edits here are lost at the next sync."
 
-// TagTitle is the title of a tag's view: Tag · school › cs513.
-func TagTitle(t string) string {
-	return "Tag · " + strings.ReplaceAll(t, "/", " › ")
-}
+// BaseNotice opens every view that is a Base, as a YAML comment.
+const BaseNotice = "# Written by Almagest from the documents. Edits here are lost at the next sync."
 
-// TagPath is where a tag's view lives: in a folder per tag.
-func TagPath(t string) string {
-	return vault.WikiView + "/" + NavFolder + "/" + t + "/" + TagTitle(t) + ".md"
+// tagRef names a tag in a view: a link to its page, or the plain tag when it has none.
+func (r *renderer) tagRef(t string) string {
+	if p := r.idx.TagPage(t); p != nil {
+		return "[[" + vault.Title(p) + "|#" + t + "]]"
+	}
+	return "#" + t
 }
 
 // Write writes every view from an index of the vault, a file only when its content
@@ -73,7 +76,7 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 			return nil
 		}
 		rel := v.Rel(abs)
-		if _, ok := files[rel]; !ok && strings.HasSuffix(rel, ".md") {
+		if _, ok := files[rel]; !ok && (strings.HasSuffix(rel, ".md") || strings.HasSuffix(rel, ".base")) {
 			stale = append(stale, rel)
 		}
 		return nil
@@ -81,6 +84,15 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 	for _, rel := range stale {
 		data, err := os.ReadFile(v.Abs(rel))
 		if err != nil {
+			continue
+		}
+		if strings.HasSuffix(rel, ".base") {
+			// Obsidian drops the notice when it saves a Base; a reserved title still marks it as code's.
+			if strings.HasPrefix(string(data), BaseNotice) || strings.HasPrefix(path.Base(rel), viewPrefix) {
+				if err := v.Remove(rel); err == nil {
+					written = append(written, rel)
+				}
+			}
 			continue
 		}
 		if strings.Contains(string(data), Notice) {
@@ -137,18 +149,15 @@ func pruneEmpty(root string) {
 // Render builds every view in memory, by path.
 func Render(idx *vault.Index, now time.Time) map[string]string {
 	r := &renderer{idx: idx, now: now, name: filepath.Base(idx.V.Root)}
-	out := map[string]string{
-		vault.WikiView + "/" + Home + ".md":    r.home(),
-		vault.WikiView + "/" + Library + ".md": r.library(),
-		vault.WikiView + "/" + Repos + ".md":   r.repositories(),
-	}
 	main, months := r.timeline()
-	out[vault.WikiView+"/"+Timeline+".md"] = main
+	out := map[string]string{
+		vault.WikiView + "/" + Home + ".md":     r.home(),
+		vault.WikiView + "/" + Library + ".md":  r.library(),
+		vault.WikiView + "/" + Repos + ".md":    r.repositories(),
+		vault.WikiView + "/" + Timeline + ".md": main,
+	}
 	for month, content := range months {
 		out[vault.WikiView+"/"+TimeFolder+"/"+Timeline+" "+month+".md"] = content
-	}
-	for t := range idx.TagCounts() {
-		out[TagPath(t)] = r.tagView(t)
 	}
 	return out
 }
@@ -176,79 +185,278 @@ func section(title, body string) string {
 	return "## " + title + "\n\n" + strings.TrimSpace(body)
 }
 
-// home is the entry to the vault.
+// home is the entry to the vault. Its sections are inline Bases. A Base reads only files,
+// so what only code knows (how many documents lie under a root, the open task lines, the
+// journals with changes) goes in Home's own frontmatter, which a Base reads as this.
 func (r *renderer) home() string {
 	idx := r.idx
 	counts := map[string]int{}
 	for _, d := range idx.Documents() {
 		counts[d.Type()]++
 	}
-	var proposed, running, waiting, live []*doc.Doc
+	waits := len(idx.PendingDocs())
 	for _, c := range idx.Of("change") {
-		switch c.Str("status") {
-		case "proposed":
-			proposed = append(proposed, c)
-		case "running":
-			running = append(running, c)
+		if s := c.Str("status"); s == "proposed" || s == "running" {
+			waits++
 		}
 	}
 	for _, s := range idx.Of("session") {
-		switch s.Str("status") {
-		case "waiting":
-			waiting = append(waiting, s)
-			live = append(live, s)
-		case "running", "idle":
-			live = append(live, s)
+		if s.Str("status") == "waiting" {
+			waits++
 		}
 	}
-	todos := idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.WikiView, vault.Changes, vault.Scratchpad)
-	pending := len(idx.PendingDocs())
+	var journals []string
+	journalLines := &flowMap{}
+	for _, vol := range journal.Volumes(idx) {
+		if entry := journal.Entry(idx.V, vol.Volume); vol.Changed && entry != "" {
+			journals = append(journals, pathLink(entry))
+			journalLines.set(entry, vol.Name+" ("+vault.Journals+"/"+vol.Volume+") has changes to publish")
+		}
+	}
+	waits += len(journals)
+	var todo []string
+	todoLines := &flowMap{}
+	for _, t := range idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.WikiView, vault.Changes, vault.Scratchpad) {
+		if !todoLines.has(t.Doc.Path) {
+			todo = append(todo, pathLink(t.Doc.Path))
+		}
+		todoLines.append(t.Doc.Path, doc.OneLine(t.Text, 160))
+	}
+	roots, rest := r.roots()
+	var start []string
+	under := &flowMap{}
+	for _, x := range roots {
+		start = append(start, pathLink(x.d.Path))
+		under.number(x.d.Path, x.under)
+	}
 	var typeCounts []string
 	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories"}
 	for _, t := range []string{"topic", "source", "repository"} {
 		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], doc.Plural(counts[t], t, plurals[t])))
 	}
-	head := doc.Callout("almagest", r.idx.V.Name(),
-		strings.Join(typeCounts, " · "),
-		fmt.Sprintf("%d pending · %d proposed %s · %d live %s", pending, len(proposed), doc.Plural(len(proposed), "change", "changes"), len(live), doc.Plural(len(live), "session", "sessions")))
-	var wait []string
-	for _, c := range proposed {
-		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · proposed change · "+c.Str("counts"))
+	// A Base cannot list the views: Obsidian excludes wiki-view/, and a Base skips what it excludes.
+	lines := []string{strings.Join(typeCounts, " · "), "Views: " + doc.Link(Library) + " · " + doc.Link(Timeline) + " · " + doc.Link(Repos)}
+	if desc := idx.V.Description(); desc != "" {
+		lines = append([]string{desc}, lines...)
 	}
-	for _, c := range running {
-		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · "+cmp.Or(c.Str("kind"), "work")+" running")
+	head := doc.Callout("almagest", idx.V.Name(), lines...)
+
+	var waitSection, todoSection, recentSection string
+	if waits > 0 {
+		waitSection = section("Waiting for you", inlineBase(baseSpec{
+			name: "Waiting for you",
+			or: []string{
+				`file.inFolder("` + vault.Changes + `") && (status == "proposed" || status == "running")`,
+				`file.inFolder("` + vault.Sessions + `") && status == "waiting"`,
+				`file.inFolder("` + vault.Documents + `") && type == "source" && status == "pending"`,
+				`list(this.journals).contains(file.asLink())`,
+			},
+			formulas: [][2]string{
+				{"what", `if(type == "change", if(status == "proposed", "Proposed change", "Work running"), if(type == "session", "Session waits for you", if(type == "source", "Source to absorb", "Journal to publish")))`},
+				{"detail", `if(type == "change", if(status == "proposed", ` + writesFormula + `, kind), if(type == "session", description, if(type == "source", "Not in the wiki yet: ask an agent to sync the wiki", this.journal_lines[file.path])))`},
+			},
+			order:   []string{"file.name", "formula.detail"},
+			groupBy: "formula.what",
+			sort:    []string{"file.name ASC"},
+		}))
 	}
-	for _, vol := range journal.Volumes(idx) {
-		if vol.Changed {
-			wait = append(wait, "- the journal "+vol.Name+" ("+vault.Journals+"/"+vol.Volume+") has changes to publish")
+	if len(todo) > 0 {
+		todoSection = section("To-do lines", inlineBase(baseSpec{
+			name:     "To-do lines",
+			or:       []string{`list(this.todo).contains(file.asLink())`},
+			formulas: [][2]string{{"lines", `this.todo_lines[file.path]`}},
+			order:    []string{"file.name", "formula.lines"},
+			sort:     []string{"file.name ASC"},
+		}))
+	}
+	var startParts []string
+	if len(roots) > 0 {
+		startParts = append(startParts, "Open one, then Navigator in the Almagest palette: it shows the documents above, beside, and below the note you read.", inlineBase(baseSpec{
+			name:     "Start here",
+			and:      []string{`file.inFolder("` + vault.Documents + `")`, `list(this.start_here).contains(file.asLink())`},
+			formulas: [][2]string{{"under", `this.under[file.path]`}},
+			order:    []string{"file.name", "formula.under", "description"},
+			sort:     []string{"formula.under DESC", "file.name ASC"},
+		}))
+	}
+	if rest != "" {
+		startParts = append(startParts, rest)
+	}
+	if len(r.entries()) > 0 {
+		recentSection = section("Recent", inlineBase(baseSpec{
+			name:     "Recent",
+			and:      []string{`file.inFolder("` + vault.Changes + `")`, `type == "change"`, `status == "applied"`},
+			formulas: [][2]string{{"applied", `date(applied).format("YYYY-MM-DD HH:mm")`}, {"writes", writesFormula}},
+			order:    []string{"formula.applied", "file.name", "formula.writes"},
+			sort:     []string{"applied DESC"},
+			limit:    MaxRecent,
+		}))
+	}
+	front := []string{
+		"cssclasses: " + doc.FormatValue([]string{HomeClass}),
+		"start_here: " + doc.FormatValue(doc.NonNil(start)),
+		"under: " + under.String(),
+		"todo: " + doc.FormatValue(doc.NonNil(todo)),
+		"todo_lines: " + todoLines.String(),
+		"journals: " + doc.FormatValue(doc.NonNil(journals)),
+		"journal_lines: " + journalLines.String(),
+	}
+	body := r.note(Home, head, waitSection, todoSection, section("Start here", strings.Join(startParts, "\n\n")), recentSection)
+	return doc.Join(strings.Join(front, "\n"), "\n"+body)
+}
+
+// HomeClass styles Home in Obsidian: the plugin hides its frontmatter, which only its Bases read.
+const HomeClass = "almagest-home"
+
+// writesFormula is a change's counts without the zero ones: "3 create, 1 modify".
+const writesFormula = `counts.split(", ").filter(!value.startsWith("0 ")).join(", ")`
+
+// pathLink is a wikilink by path, which names one file wherever its name repeats.
+func pathLink(rel string) string { return "[[" + strings.TrimSuffix(rel, ".md") + "]]" }
+
+// flowMap is a YAML flow mapping by path, in the order its keys came, which a Base reads as
+// an object: this.under[file.path].
+type flowMap struct {
+	keys []string
+	vals map[string]string
+}
+
+func (m *flowMap) has(k string) bool {
+	_, ok := m.vals[k]
+	return ok
+}
+
+func (m *flowMap) set(k, v string) {
+	if m.vals == nil {
+		m.vals = map[string]string{}
+	}
+	if !m.has(k) {
+		m.keys = append(m.keys, k)
+	}
+	m.vals[k] = strconv.Quote(v)
+}
+
+// number sets a key to a number, which a Base sorts as one.
+func (m *flowMap) number(k string, n int) {
+	m.set(k, "")
+	m.vals[k] = strconv.Itoa(n)
+}
+
+// append adds a line to a key's text, after " · ".
+func (m *flowMap) append(k, v string) {
+	if old, ok := m.vals[k]; ok {
+		prev, _ := strconv.Unquote(old)
+		v = prev + " · " + v
+	}
+	m.set(k, v)
+}
+
+func (m *flowMap) String() string {
+	parts := make([]string, len(m.keys))
+	for i, k := range m.keys {
+		parts[i] = strconv.Quote(k) + ": " + m.vals[k]
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// baseSpec is an inline Base with one table view: its filters (and, with or as one of
+// them, or or alone), formulas, columns, grouping, sort ("property DIR"), and row limit.
+type baseSpec struct {
+	name     string
+	and, or  []string
+	formulas [][2]string
+	order    []string
+	groupBy  string
+	sort     []string
+	limit    int
+}
+
+func inlineBase(s baseSpec) string {
+	var b strings.Builder
+	b.WriteString("```base\nfilters:\n")
+	indent := "    "
+	if len(s.and) > 0 {
+		b.WriteString("  and:\n")
+		for _, f := range s.and {
+			b.WriteString("    - " + yamlQuote(f) + "\n")
+		}
+		if len(s.or) > 0 {
+			b.WriteString("    - or:\n")
+			indent = "        "
+		}
+	} else {
+		b.WriteString("  or:\n")
+	}
+	for _, f := range s.or {
+		b.WriteString(indent + "- " + yamlQuote(f) + "\n")
+	}
+	if len(s.formulas) > 0 {
+		b.WriteString("formulas:\n")
+		for _, f := range s.formulas {
+			b.WriteString("  " + f[0] + ": " + yamlQuote(f[1]) + "\n")
 		}
 	}
-	for _, s := range waiting {
-		wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))
+	b.WriteString("views:\n  - type: table\n    name: " + s.name + "\n")
+	if s.groupBy != "" {
+		b.WriteString("    groupBy:\n      property: " + s.groupBy + "\n      direction: ASC\n")
 	}
-	var todoLines []string
-	for _, t := range todos {
-		todoLines = append(todoLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)))
+	if s.limit > 0 {
+		b.WriteString("    limit: " + strconv.Itoa(s.limit) + "\n")
 	}
-	var tagLines []string
-	for _, t := range idx.TopTags() {
-		line := fmt.Sprintf("- [[%s|#%s]] · %d", TagTitle(t), t, idx.TagCounts()[t])
-		if p := idx.TagPage(t); p != nil {
-			line += " · " + doc.Link(p.Title())
+	b.WriteString("    order:\n")
+	for _, o := range s.order {
+		b.WriteString("      - " + o + "\n")
+	}
+	if len(s.sort) > 0 {
+		b.WriteString("    sort:\n")
+		for _, x := range s.sort {
+			prop, dir, _ := strings.Cut(x, " ")
+			b.WriteString("      - property: " + prop + "\n        direction: " + cmp.Or(dir, "ASC") + "\n")
 		}
-		tagLines = append(tagLines, line)
 	}
-	viewsList := strings.Join([]string{
-		"- " + doc.Link(Timeline) + ": what happened, newest first",
-		"- " + doc.Link(Library) + ": topics, sources, repositories",
-		"- " + doc.Link(Repos) + ": every linked repository, its tags, and its git status",
-	}, "\n")
-	return r.note(Home, head,
-		section("Waiting for you", strings.Join(wait, "\n")),
-		section("To-do lines", strings.Join(todoLines, "\n")),
-		section("Tags", strings.Join(tagLines, "\n")),
-		section("Views", viewsList),
-		section("Recent", strings.Join(r.recentLines(MaxRecent), "\n")))
+	b.WriteString("```")
+	return b.String()
+}
+
+func yamlQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+
+type root struct {
+	d     *doc.Doc
+	under int
+}
+
+// roots are the documents with nothing above them that have documents under them, the
+// most under first, at most MaxRoots; rest is the line for the others.
+func (r *renderer) roots() (roots []root, rest string) {
+	alone := 0
+	for _, d := range r.idx.Documents() {
+		if len(r.idx.Up(d)) > 0 {
+			continue
+		}
+		if n := r.idx.Under(d); n > 0 {
+			roots = append(roots, root{d, n})
+		} else {
+			alone++
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].under != roots[j].under {
+			return roots[i].under > roots[j].under
+		}
+		return strings.ToLower(vault.Title(roots[i].d)) < strings.ToLower(vault.Title(roots[j].d))
+	})
+	var parts []string
+	if more := len(roots) - MaxRoots; more > 0 {
+		parts = append(parts, fmt.Sprintf("%d more with documents under them", more))
+		roots = roots[:MaxRoots]
+	}
+	if alone > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s with nothing above or below", alone, doc.Plural(alone, "document", "documents")))
+	}
+	if len(parts) > 0 {
+		rest = doc.Capital(strings.Join(parts, ", and ")) + "."
+	}
+	return roots, rest
 }
 
 // base is an inline Base over the documents with the filters given and one table view.
@@ -277,25 +485,6 @@ func base(name string, filters []string, order []string, groupBy string, sortBy 
 	return b.String()
 }
 
-// hasTag is the Base filter of the documents that hold a tag or a tag below it: code
-// names each, since it knows the tree.
-func (r *renderer) hasTag(t string) string {
-	list := []string{t}
-	var walk func(string)
-	walk = func(x string) {
-		for _, c := range r.idx.TagChildren(x) {
-			list = append(list, c)
-			walk(c)
-		}
-	}
-	walk(t)
-	quoted := make([]string, len(list))
-	for i, x := range list {
-		quoted[i] = `"` + x + `"`
-	}
-	return "file.hasTag(" + strings.Join(quoted, ", ") + ")"
-}
-
 // library is the knowledge, for browsing.
 func (r *renderer) library() string {
 	topics := base("Topics", []string{`type == "topic"`}, []string{"file.name", "kind", "description", "tags", "status", "refreshed"}, "kind", "file.name ASC")
@@ -317,7 +506,7 @@ func (r *renderer) repositories() string {
 			unlinked = append(unlinked, "- "+doc.Link(vault.Title(d))+" · "+d.Str("description"))
 			continue
 		}
-		link := func(t string) string { return fmt.Sprintf("[[%s|#%s]]", TagTitle(t), t) }
+		link := r.tagRef
 		own := d.Str("defines")
 		var tagParts, also []string
 		if own != "" {
@@ -357,8 +546,9 @@ func (r *renderer) repositories() string {
 
 // timelineEntry is one line of the timeline, at a time.
 type timelineEntry struct {
-	at   time.Time
-	line string
+	at     time.Time
+	line   string
+	change *doc.Doc
 }
 
 func (r *renderer) entries() []timelineEntry {
@@ -371,7 +561,7 @@ func (r *renderer) entries() []timelineEntry {
 		if !ok {
 			continue
 		}
-		out = append(out, timelineEntry{t, fmt.Sprintf("%s · change applied · %s · %s", t.Format(vault.ClockFormat), doc.Link(vault.Title(c)), shortCounts(c.Str("counts")))})
+		out = append(out, timelineEntry{t, fmt.Sprintf("%s · change applied · %s · %s", t.Format(vault.ClockFormat), doc.Link(vault.Title(c)), shortCounts(c.Str("counts"))), c})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].at.After(out[j].at) })
 	return out
@@ -429,86 +619,4 @@ func byDay(list []timelineEntry) string {
 		b.WriteString("- " + e.line + "\n")
 	}
 	return strings.TrimSpace(b.String())
-}
-
-func (r *renderer) recentLines(n int) []string {
-	var out []string
-	for i, e := range r.entries() {
-		if i == n {
-			break
-		}
-		out = append(out, "- "+vault.Date(e.at)+" "+e.line)
-	}
-	return out
-}
-
-// tagView is one tag's note.
-func (r *renderer) tagView(t string) string {
-	idx := r.idx
-	count := idx.TagCounts()[t]
-	var lines []string
-	if p := idx.TagPage(t); p != nil {
-		lines = append(lines, "Page: "+doc.Link(p.Title()))
-	}
-	if parent := tags.Parent(t); parent != "" {
-		lines = append(lines, "Under: "+fmt.Sprintf("[[%s|#%s]]", TagTitle(parent), parent))
-	}
-	if kids := idx.TagChildren(t); len(kids) > 0 {
-		var parts []string
-		for _, k := range kids {
-			parts = append(parts, fmt.Sprintf("[[%s|%s]] (%d)", TagTitle(k), tags.Leaf(k), idx.TagCounts()[k]))
-		}
-		lines = append(lines, "Below: "+strings.Join(parts, " · "))
-	}
-	head := doc.Callout("tag", fmt.Sprintf("#%s · %d %s", t, count, doc.Plural(count, "document", "documents")), lines...)
-	// Narrow: the tags that occur with this one, most first.
-	with := map[string]int{}
-	var holders []*doc.Doc
-	for _, d := range idx.Documents() {
-		if !vault.Holds(d, t) {
-			continue
-		}
-		holders = append(holders, d)
-		for _, x := range tags.Expand(vault.DocTags(d)) {
-			if !tags.Under(x, t) && !tags.Under(t, x) {
-				with[x]++
-			}
-		}
-	}
-	var narrow []string
-	keys := make([]string, 0, len(with))
-	for k := range with {
-		keys = append(keys, k)
-	}
-	sort.Slice(keys, func(i, j int) bool {
-		if with[keys[i]] != with[keys[j]] {
-			return with[keys[i]] > with[keys[j]]
-		}
-		return keys[i] < keys[j]
-	})
-	for i, k := range keys {
-		if i == MaxNarrow {
-			break
-		}
-		// Obsidian decodes with decodeURIComponent, which reads + as a plus, not a space.
-		q := url.PathEscape("tag:#" + t + " tag:#" + k)
-		narrow = append(narrow, fmt.Sprintf("[%s (%d)](obsidian://search?vault=%s&query=%s)", k, with[k], url.PathEscape(r.name), q))
-	}
-	has := map[string]bool{}
-	for _, d := range holders {
-		has[d.Type()] = true
-	}
-	filter := r.hasTag(t)
-	var sections []string
-	sections = append(sections, head, section("Narrow", strings.Join(narrow, " · ")))
-	if has["topic"] {
-		sections = append(sections, section("Topics", base("Topics", []string{filter, `type == "topic"`}, []string{"file.name", "kind", "description", "status"}, "kind", "file.name ASC")))
-	}
-	if has["source"] {
-		sections = append(sections, section("Sources", base("Sources", []string{filter, `type == "source"`}, []string{"file.name", "media", "authority", "status"}, "", "status DESC")))
-	}
-	if has["repository"] {
-		sections = append(sections, section("Repositories", base("Repositories", []string{filter, `type == "repository"`}, []string{"file.name", "path", "branch", "behind"}, "", "file.name ASC")))
-	}
-	return r.note(TagTitle(t), sections...)
 }

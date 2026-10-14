@@ -1,6 +1,7 @@
 package lint_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -130,5 +131,59 @@ func TestThreadsArchiveResolvesLinks(t *testing.T) {
 		if x.Check == "dead-link" || x.Doc.Title == "Fix alarms" {
 			t.Errorf("lint reads nothing in threads/ and a link to it resolves: %+v", x)
 		}
+	}
+}
+
+func TestUpChecks(t *testing.T) {
+	tv := testvault.New(t)
+	tv.Doc("topic", "Machine Learning", map[string]any{"kind": "overview", "defines": "ml", "aliases": []string{"ML"}}, "")
+	tv.Doc("topic", "Self", map[string]any{"kind": "concept", "up": []string{"[[Self]]"}}, "")
+	tv.Doc("topic", "By alias", map[string]any{"kind": "concept", "up": []string{"[[ML]]"}}, "")
+	tv.Doc("topic", "By id", map[string]any{"kind": "concept", "up": []string{"[[" + tv.ID("Machine Learning") + "]]"}}, "")
+	tv.Doc("topic", "As text", map[string]any{"kind": "concept", "up": []string{"Machine Learning"}}, "")
+	tv.Doc("topic", "Self by id", map[string]any{"id": "doc-selfid", "kind": "concept", "aliases": []string{"Me"}, "up": []string{"[[doc-selfid]]", "[[Me]]"}}, "")
+	tv.Doc("topic", "A", map[string]any{"kind": "concept", "up": []string{"[[B]]"}}, "")
+	tv.Doc("topic", "B", map[string]any{"kind": "concept", "up": []string{"[[A]]"}}, "")
+	tv.Doc("topic", "Dead", map[string]any{"kind": "concept", "up": []string{"[[Nowhere]]"}}, "")
+	tv.Doc("source", "Slides", map[string]any{"up": []string{"[[Machine Learning]]"}}, "")
+	for i := range lint.MaxBelow + 1 {
+		tv.Doc("topic", fmt.Sprintf("Leaf %d", i), map[string]any{"kind": "concept", "tags": []string{"ml"}}, "")
+	}
+	for i := range 5 {
+		tv.Doc("source", fmt.Sprintf("Source %d", i), map[string]any{"tags": []string{"ml"}}, "")
+	}
+	f := run(t, tv, lint.Options{})
+	for _, want := range []struct{ check, title, text string }{
+		{"up", "Self", "names the document itself"},
+		{"dead-link", "By alias", "up: [[ML]] names Machine Learning by an alias; Obsidian links only a [[title]], so it names no document"},
+		{"dead-link", "By id", "names Machine Learning by its id"},
+		{"dead-link", "As text", "up: Machine Learning names Machine Learning as plain text; Obsidian links only a [[title]]"},
+		{"up", "A", "A, B reach themselves"},
+		{"dead-link", "Dead", "up: [[Nowhere]] names no document"},
+		{"up", "Slides", "a source takes no up"},
+		{"crowded", "Machine Learning", "31 topics and repositories sit directly below it"},
+	} {
+		if !has(f, want.check, want.title, want.text) {
+			t.Errorf("no %s finding on %s with %q", want.check, want.title, want.text)
+		}
+	}
+	selfs := 0
+	for _, x := range f.Findings {
+		if x.Doc.Title == "Self by id" && (x.Check == "up" || x.Check == "dead-link") {
+			if x.Check != "up" || !strings.Contains(x.Message, "names the document itself") {
+				t.Errorf("a self link by id or alias is a self link, nothing else: %+v", x)
+			}
+			selfs++
+		}
+	}
+	if selfs != 2 {
+		t.Errorf("Self by id has %d findings, want one per self link", selfs)
+	}
+	if has(f, "up", "By alias", "") {
+		t.Error("an alias in up is one finding: the dead link")
+	}
+	quick := run(t, tv, lint.Options{Quick: true})
+	if !has(quick, "up", "A", "reach themselves") || has(quick, "crowded", "Machine Learning", "") {
+		t.Error("a quick run reports cycles, not crowding")
 	}
 }
