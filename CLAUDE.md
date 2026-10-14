@@ -260,11 +260,24 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **Start here and crowded are code**, since a Base cannot count. Home lists the roots
   with documents under them, at most 20 (`views.MaxRoots`), by the count under each.
   Lint warns about a document with more than 30 topics and repositories directly below
-  (`lint.MaxBelow`); sources do not count, since no map could move them. Home is
-  markdown tables, not lists: the numbers, Waiting for you, To-do lines, Start here
-  (each root's description cut to 120 characters), Views, and Recent. Code writes them,
-  since a Base can neither count nor show a change's writes. The lead's
+  (`lint.MaxBelow`); sources do not count, since no map could move them. The lead's
   `Up:` line shows explicit `up` only, so a change of a tag page rewrites no other lead.
+- **Home's sections are inline Bases; what only code knows goes in Home's frontmatter.**
+  An embedded Base reads the note it sits in as `this`, so code writes there the roots
+  (`start_here`, path links) and the count under each (`under`, an object by path, read
+  as `this.under[file.path]`), the notes with open `#todo` lines (`todo`, `todo_lines`),
+  and the journal volumes with changes (`journals`, `journal_lines`; a volume stands as
+  its history note, else its first note, `journal.Entry`). Waiting for you is one Base:
+  proposed and running changes, waiting sessions, and pending sources (`status`, which
+  derive keeps) by their own fields, so they update live, and the journals by `this`.
+  Recent filters the applied changes, newest first, `limit: 10`, and a formula drops the
+  zero counts. Links are by path, which name one file wherever a name repeats. The
+  totals and the links to the other views are lines of the callout: Obsidian excludes
+  `wiki-view/` (`userIgnoreFilters`), and a Base lists no excluded file. Home's
+  `cssclasses` (`almagest-home`) lets the Obsidian plugin hide the frontmatter. Verified
+  in Obsidian 1.14.4: object access by a key, `filter(!value…)` on a list, `limit`, and
+  an `or` across folders work; `indexOf`, `file.tasks`, and a `Count` summary of
+  `file.name` do not.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
   reach the wiki, and an inline Base of the sources with that `volume` (the folder name

@@ -149,13 +149,13 @@ func pruneEmpty(root string) {
 // Render builds every view in memory, by path.
 func Render(idx *vault.Index, now time.Time) map[string]string {
 	r := &renderer{idx: idx, now: now, name: filepath.Base(idx.V.Root)}
-	out := map[string]string{
-		vault.WikiView + "/" + Home + ".md":    r.home(),
-		vault.WikiView + "/" + Library + ".md": r.library(),
-		vault.WikiView + "/" + Repos + ".md":   r.repositories(),
-	}
 	main, months := r.timeline()
-	out[vault.WikiView+"/"+Timeline+".md"] = main
+	out := map[string]string{
+		vault.WikiView + "/" + Home + ".md":     r.home(),
+		vault.WikiView + "/" + Library + ".md":  r.library(),
+		vault.WikiView + "/" + Repos + ".md":    r.repositories(),
+		vault.WikiView + "/" + Timeline + ".md": main,
+	}
 	for month, content := range months {
 		out[vault.WikiView+"/"+TimeFolder+"/"+Timeline+" "+month+".md"] = content
 	}
@@ -185,103 +185,278 @@ func section(title, body string) string {
 	return "## " + title + "\n\n" + strings.TrimSpace(body)
 }
 
-// home is the entry to the vault.
+// home is the entry to the vault. Its sections are inline Bases. A Base reads only files,
+// so what only code knows (how many documents lie under a root, the open task lines, the
+// journals with changes) goes in Home's own frontmatter, which a Base reads as this.
 func (r *renderer) home() string {
 	idx := r.idx
 	counts := map[string]int{}
 	for _, d := range idx.Documents() {
 		counts[d.Type()]++
 	}
-	var proposed, running, waiting []*doc.Doc
+	waits := len(idx.PendingDocs())
 	for _, c := range idx.Of("change") {
-		switch c.Str("status") {
-		case "proposed":
-			proposed = append(proposed, c)
-		case "running":
-			running = append(running, c)
+		if s := c.Str("status"); s == "proposed" || s == "running" {
+			waits++
 		}
 	}
 	for _, s := range idx.Of("session") {
 		if s.Str("status") == "waiting" {
-			waiting = append(waiting, s)
+			waits++
 		}
 	}
-	todos := idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.WikiView, vault.Changes, vault.Scratchpad)
-	pending := len(idx.PendingDocs())
-	head := doc.Callout("almagest", r.idx.V.Name())
-	if desc := r.idx.V.Description(); desc != "" {
-		head = doc.Callout("almagest", r.idx.V.Name(), desc)
-	}
-	numbers := table([]string{"Topics", "Sources", "Repositories"}, []int{0, 1, 2},
-		[]string{strconv.Itoa(counts["topic"]), strconv.Itoa(counts["source"]), strconv.Itoa(counts["repository"])})
-	var wait [][]string
-	if pending > 0 {
-		wait = append(wait, []string{fmt.Sprintf("%d %s", pending, doc.Plural(pending, "source", "sources")), "Pending", "The wiki has not absorbed them yet: ask an agent to sync the wiki"})
-	}
-	for _, c := range proposed {
-		wait = append(wait, []string{doc.Link(vault.Title(c)), "Proposed change", shortCounts(c.Str("counts"))})
-	}
-	for _, c := range running {
-		wait = append(wait, []string{doc.Link(vault.Title(c)), "Work running", doc.Capital(cmp.Or(c.Str("kind"), "work"))})
-	}
+	var journals []string
+	journalLines := &flowMap{}
 	for _, vol := range journal.Volumes(idx) {
-		if vol.Changed {
-			wait = append(wait, []string{vol.Name, "Journal", "`" + vault.Journals + "/" + vol.Volume + "` has changes to publish"})
+		if entry := journal.Entry(idx.V, vol.Volume); vol.Changed && entry != "" {
+			journals = append(journals, pathLink(entry))
+			journalLines.set(entry, vol.Name+" ("+vault.Journals+"/"+vol.Volume+") has changes to publish")
 		}
 	}
-	for _, s := range waiting {
-		wait = append(wait, []string{doc.Link(s.Title()), "Session", "Waits for your answer: " + s.Str("description")})
-	}
-	var todoRows [][]string
-	for _, t := range todos {
-		todoRows = append(todoRows, []string{doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)})
-	}
-	viewRows := [][]string{
-		{doc.Link(Library), "Topics, sources, and repositories"},
-		{doc.Link(Timeline), "What happened, newest first"},
-		{doc.Link(Repos), "Every linked repository, its tags, and its git status"},
-	}
-	var recent [][]string
-	for i, e := range r.entries() {
-		if i == MaxRecent {
-			break
+	waits += len(journals)
+	var todo []string
+	todoLines := &flowMap{}
+	for _, t := range idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.WikiView, vault.Changes, vault.Scratchpad) {
+		if !todoLines.has(t.Doc.Path) {
+			todo = append(todo, pathLink(t.Doc.Path))
 		}
-		recent = append(recent, []string{vault.Date(e.at) + " " + e.at.Format(vault.ClockFormat), doc.Link(vault.Title(e.change)), shortCounts(e.change.Str("counts"))})
+		todoLines.append(t.Doc.Path, doc.OneLine(t.Text, 160))
 	}
-	return r.note(Home, head, numbers,
-		section("Waiting for you", table([]string{"What", "Kind", "Detail"}, nil, wait...)),
-		section("To-do lines", table([]string{"Note", "Line"}, nil, todoRows...)),
-		section("Start here", r.startHere()),
-		section("Views", table([]string{"View", "What it shows"}, nil, viewRows...)),
-		section("Recent", table([]string{"Applied", "Change", "Writes"}, nil, recent...)))
+	roots, rest := r.roots()
+	var start []string
+	under := &flowMap{}
+	for _, x := range roots {
+		start = append(start, pathLink(x.d.Path))
+		under.number(x.d.Path, x.under)
+	}
+	var typeCounts []string
+	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories"}
+	for _, t := range []string{"topic", "source", "repository"} {
+		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], doc.Plural(counts[t], t, plurals[t])))
+	}
+	// A Base cannot list the views: Obsidian excludes wiki-view/, and a Base skips what it excludes.
+	lines := []string{strings.Join(typeCounts, " · "), "Views: " + doc.Link(Library) + " · " + doc.Link(Timeline) + " · " + doc.Link(Repos)}
+	if desc := idx.V.Description(); desc != "" {
+		lines = append([]string{desc}, lines...)
+	}
+	head := doc.Callout("almagest", idx.V.Name(), lines...)
+
+	var waitSection, todoSection, recentSection string
+	if waits > 0 {
+		waitSection = section("Waiting for you", inlineBase(baseSpec{
+			name: "Waiting for you",
+			or: []string{
+				`file.inFolder("` + vault.Changes + `") && (status == "proposed" || status == "running")`,
+				`file.inFolder("` + vault.Sessions + `") && status == "waiting"`,
+				`file.inFolder("` + vault.Documents + `") && type == "source" && status == "pending"`,
+				`list(this.journals).contains(file.asLink())`,
+			},
+			formulas: [][2]string{
+				{"what", `if(type == "change", if(status == "proposed", "Proposed change", "Work running"), if(type == "session", "Session waits for you", if(type == "source", "Source to absorb", "Journal to publish")))`},
+				{"detail", `if(type == "change", if(status == "proposed", ` + writesFormula + `, kind), if(type == "session", description, if(type == "source", "Not in the wiki yet: ask an agent to sync the wiki", this.journal_lines[file.path])))`},
+			},
+			order:   []string{"file.name", "formula.detail"},
+			groupBy: "formula.what",
+			sort:    []string{"file.name ASC"},
+		}))
+	}
+	if len(todo) > 0 {
+		todoSection = section("To-do lines", inlineBase(baseSpec{
+			name:     "To-do lines",
+			or:       []string{`list(this.todo).contains(file.asLink())`},
+			formulas: [][2]string{{"lines", `this.todo_lines[file.path]`}},
+			order:    []string{"file.name", "formula.lines"},
+			sort:     []string{"file.name ASC"},
+		}))
+	}
+	var startParts []string
+	if len(roots) > 0 {
+		startParts = append(startParts, "Open one, then Navigator in the Almagest palette: it shows the documents above, beside, and below the note you read.", inlineBase(baseSpec{
+			name:     "Start here",
+			and:      []string{`file.inFolder("` + vault.Documents + `")`, `list(this.start_here).contains(file.asLink())`},
+			formulas: [][2]string{{"under", `this.under[file.path]`}},
+			order:    []string{"file.name", "formula.under", "description"},
+			sort:     []string{"formula.under DESC", "file.name ASC"},
+		}))
+	}
+	if rest != "" {
+		startParts = append(startParts, rest)
+	}
+	if len(r.entries()) > 0 {
+		recentSection = section("Recent", inlineBase(baseSpec{
+			name:     "Recent",
+			and:      []string{`file.inFolder("` + vault.Changes + `")`, `type == "change"`, `status == "applied"`},
+			formulas: [][2]string{{"applied", `date(applied).format("YYYY-MM-DD HH:mm")`}, {"writes", writesFormula}},
+			order:    []string{"formula.applied", "file.name", "formula.writes"},
+			sort:     []string{"applied DESC"},
+			limit:    MaxRecent,
+		}))
+	}
+	front := []string{
+		"cssclasses: " + doc.FormatValue([]string{HomeClass}),
+		"start_here: " + doc.FormatValue(doc.NonNil(start)),
+		"under: " + under.String(),
+		"todo: " + doc.FormatValue(doc.NonNil(todo)),
+		"todo_lines: " + todoLines.String(),
+		"journals: " + doc.FormatValue(doc.NonNil(journals)),
+		"journal_lines: " + journalLines.String(),
+	}
+	body := r.note(Home, head, waitSection, todoSection, section("Start here", strings.Join(startParts, "\n\n")), recentSection)
+	return doc.Join(strings.Join(front, "\n"), "\n"+body)
 }
 
-// table is a markdown table, or "" with no rows. The columns in numbers align right.
-func table(header []string, numbers []int, rows ...[]string) string {
-	if len(rows) == 0 {
-		return ""
-	}
-	divider := make([]string, len(header))
-	for i := range divider {
-		divider[i] = "---"
-		if slices.Contains(numbers, i) {
-			divider[i] = "---:"
-		}
-	}
-	lines := []string{tableRow(header), tableRow(divider)}
-	for _, r := range rows {
-		lines = append(lines, tableRow(r))
-	}
-	return strings.Join(lines, "\n")
+// HomeClass styles Home in Obsidian: the plugin hides its frontmatter, which only its Bases read.
+const HomeClass = "almagest-home"
+
+// writesFormula is a change's counts without the zero ones: "3 create, 1 modify".
+const writesFormula = `counts.split(", ").filter(!value.startsWith("0 ")).join(", ")`
+
+// pathLink is a wikilink by path, which names one file wherever its name repeats.
+func pathLink(rel string) string { return "[[" + strings.TrimSuffix(rel, ".md") + "]]" }
+
+// flowMap is a YAML flow mapping by path, in the order its keys came, which a Base reads as
+// an object: this.under[file.path].
+type flowMap struct {
+	keys []string
+	vals map[string]string
 }
 
-// tableRow is one row; a | in a cell would split it, and a newline would end the table.
-func tableRow(cells []string) string {
-	out := make([]string, len(cells))
-	for i, c := range cells {
-		out[i] = strings.ReplaceAll(doc.OneLine(c, 1<<20), "|", "\\|")
+func (m *flowMap) has(k string) bool {
+	_, ok := m.vals[k]
+	return ok
+}
+
+func (m *flowMap) set(k, v string) {
+	if m.vals == nil {
+		m.vals = map[string]string{}
 	}
-	return "| " + strings.Join(out, " | ") + " |"
+	if !m.has(k) {
+		m.keys = append(m.keys, k)
+	}
+	m.vals[k] = strconv.Quote(v)
+}
+
+// number sets a key to a number, which a Base sorts as one.
+func (m *flowMap) number(k string, n int) {
+	m.set(k, "")
+	m.vals[k] = strconv.Itoa(n)
+}
+
+// append adds a line to a key's text, after " · ".
+func (m *flowMap) append(k, v string) {
+	if old, ok := m.vals[k]; ok {
+		prev, _ := strconv.Unquote(old)
+		v = prev + " · " + v
+	}
+	m.set(k, v)
+}
+
+func (m *flowMap) String() string {
+	parts := make([]string, len(m.keys))
+	for i, k := range m.keys {
+		parts[i] = strconv.Quote(k) + ": " + m.vals[k]
+	}
+	return "{" + strings.Join(parts, ", ") + "}"
+}
+
+// baseSpec is an inline Base with one table view: its filters (and, with or as one of
+// them, or or alone), formulas, columns, grouping, sort ("property DIR"), and row limit.
+type baseSpec struct {
+	name     string
+	and, or  []string
+	formulas [][2]string
+	order    []string
+	groupBy  string
+	sort     []string
+	limit    int
+}
+
+func inlineBase(s baseSpec) string {
+	var b strings.Builder
+	b.WriteString("```base\nfilters:\n")
+	indent := "    "
+	if len(s.and) > 0 {
+		b.WriteString("  and:\n")
+		for _, f := range s.and {
+			b.WriteString("    - " + yamlQuote(f) + "\n")
+		}
+		if len(s.or) > 0 {
+			b.WriteString("    - or:\n")
+			indent = "        "
+		}
+	} else {
+		b.WriteString("  or:\n")
+	}
+	for _, f := range s.or {
+		b.WriteString(indent + "- " + yamlQuote(f) + "\n")
+	}
+	if len(s.formulas) > 0 {
+		b.WriteString("formulas:\n")
+		for _, f := range s.formulas {
+			b.WriteString("  " + f[0] + ": " + yamlQuote(f[1]) + "\n")
+		}
+	}
+	b.WriteString("views:\n  - type: table\n    name: " + s.name + "\n")
+	if s.groupBy != "" {
+		b.WriteString("    groupBy:\n      property: " + s.groupBy + "\n      direction: ASC\n")
+	}
+	if s.limit > 0 {
+		b.WriteString("    limit: " + strconv.Itoa(s.limit) + "\n")
+	}
+	b.WriteString("    order:\n")
+	for _, o := range s.order {
+		b.WriteString("      - " + o + "\n")
+	}
+	if len(s.sort) > 0 {
+		b.WriteString("    sort:\n")
+		for _, x := range s.sort {
+			prop, dir, _ := strings.Cut(x, " ")
+			b.WriteString("      - property: " + prop + "\n        direction: " + cmp.Or(dir, "ASC") + "\n")
+		}
+	}
+	b.WriteString("```")
+	return b.String()
+}
+
+func yamlQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }
+
+type root struct {
+	d     *doc.Doc
+	under int
+}
+
+// roots are the documents with nothing above them that have documents under them, the
+// most under first, at most MaxRoots; rest is the line for the others.
+func (r *renderer) roots() (roots []root, rest string) {
+	alone := 0
+	for _, d := range r.idx.Documents() {
+		if len(r.idx.Up(d)) > 0 {
+			continue
+		}
+		if n := r.idx.Under(d); n > 0 {
+			roots = append(roots, root{d, n})
+		} else {
+			alone++
+		}
+	}
+	sort.Slice(roots, func(i, j int) bool {
+		if roots[i].under != roots[j].under {
+			return roots[i].under > roots[j].under
+		}
+		return strings.ToLower(vault.Title(roots[i].d)) < strings.ToLower(vault.Title(roots[j].d))
+	})
+	var parts []string
+	if more := len(roots) - MaxRoots; more > 0 {
+		parts = append(parts, fmt.Sprintf("%d more with documents under them", more))
+		roots = roots[:MaxRoots]
+	}
+	if alone > 0 {
+		parts = append(parts, fmt.Sprintf("%d %s with nothing above or below", alone, doc.Plural(alone, "document", "documents")))
+	}
+	if len(parts) > 0 {
+		rest = doc.Capital(strings.Join(parts, ", and ")) + "."
+	}
+	return roots, rest
 }
 
 // base is an inline Base over the documents with the filters given and one table view.
@@ -444,53 +619,4 @@ func byDay(list []timelineEntry) string {
 		b.WriteString("- " + e.line + "\n")
 	}
 	return strings.TrimSpace(b.String())
-}
-
-// startHere lists the roots, the documents with nothing above them, that have documents
-// under them: the most under first.
-func (r *renderer) startHere() string {
-	type root struct {
-		d     *doc.Doc
-		under int
-	}
-	var roots []root
-	alone := 0
-	for _, d := range r.idx.Documents() {
-		if len(r.idx.Up(d)) > 0 {
-			continue
-		}
-		if n := r.idx.Under(d); n > 0 {
-			roots = append(roots, root{d, n})
-		} else {
-			alone++
-		}
-	}
-	sort.Slice(roots, func(i, j int) bool {
-		if roots[i].under != roots[j].under {
-			return roots[i].under > roots[j].under
-		}
-		return strings.ToLower(vault.Title(roots[i].d)) < strings.ToLower(vault.Title(roots[j].d))
-	})
-	var rows [][]string
-	for i, x := range roots {
-		if i == MaxRoots {
-			break
-		}
-		rows = append(rows, []string{doc.Link(vault.Title(x.d)), strconv.Itoa(x.under), doc.OneLine(x.d.Str("description"), 120)})
-	}
-	var rest []string
-	if more := len(roots) - MaxRoots; more > 0 {
-		rest = append(rest, fmt.Sprintf("%d more with documents under them", more))
-	}
-	if alone > 0 {
-		rest = append(rest, fmt.Sprintf("%d %s with nothing above or below", alone, doc.Plural(alone, "document", "documents")))
-	}
-	var parts []string
-	if t := table([]string{"Start at", "Under it", "Description"}, []int{1}, rows...); t != "" {
-		parts = append(parts, "Open one, then Navigator in the Almagest palette: it shows the documents above, beside, and below the note you read.", t)
-	}
-	if len(rest) > 0 {
-		parts = append(parts, doc.Capital(strings.Join(rest, ", and "))+".")
-	}
-	return strings.Join(parts, "\n\n")
 }
