@@ -149,3 +149,23 @@ func TestLinksCheckAsTheChangeLeavesThem(t *testing.T) {
 	refused(t, tv, change.Plan{Title: "Merge into the slides", Writes: []change.Write{{Op: "remove", ID: "Training", Redirect: "Block 7 Slides"}}},
 		"Fine-Tuning: up names Training, which this change removes, and its redirect is no topic or repository")
 }
+
+func TestApplyChecksLinksAfterTheRewritesToo(t *testing.T) {
+	tv := upVault(t)
+	pv := propose(t, tv, change.Plan{Title: "Rename the hub", Writes: []change.Write{
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
+		{Op: "rename", ID: "Training", Title: "Model Training"},
+	}})
+	apply(t, tv, pv.Ref.ID)
+	if got := tv.Read("tool/source-core/documents/Fine-Tuning.md"); !strings.Contains(got, `up: ["[[Model Training]]"]`) || !strings.Contains(got, "> Up: [[Model Training]]") {
+		t.Fatalf("Fine-Tuning after the apply:\n%s", got)
+	}
+	pv = propose(t, tv, change.Plan{Title: "Merge the hub", Writes: []change.Write{
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Tuning a trained model."}},
+		{Op: "remove", ID: "Model Training", Redirect: "Machine Learning"},
+	}})
+	apply(t, tv, pv.Ref.ID)
+	if got := tv.Read("tool/source-core/documents/Fine-Tuning.md"); !strings.Contains(got, `up: ["[[Machine Learning]]"]`) {
+		t.Fatalf("Fine-Tuning after the merge:\n%s", got)
+	}
+}
