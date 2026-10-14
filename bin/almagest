@@ -1,17 +1,17 @@
 #!/bin/sh
 # The almagest launcher, made by `make pin` from internal/release/launcher.sh: do not edit.
-# It runs the almagest binary of this plugin's version, 11.1.0. When that binary is not
+# It runs the almagest binary of this plugin's version, 11.2.0. When that binary is not
 # installed yet, it downloads it once from the plugin's own GitHub release, checks its
 # sha256 against the checksums below, which the plugin pins, and installs it under
 # ~/.almagest/bin/. It writes nowhere else, and needs no sudo.
 #   ALMAGEST_BIN          runs that binary instead; nothing is downloaded.
 #   ALMAGEST_HOME         the machine folder, ~/.almagest by default.
 #   ALMAGEST_NO_DOWNLOAD  set to 1, it never downloads.
-version='11.1.0'
-checksums='2d6fd3e4932b6eb1f3328495002d7cc73195c55c7d45a84843b87363ce11580f  almagest-11.1.0-darwin-amd64
-040dcb0d29bdcf68be88eb46f80a72e915c9f6152dcdaa33386208b5487a8e68  almagest-11.1.0-darwin-arm64
-4625be8d925e5d62b44235a3ce57cbc68d58831be4ae06bad1216a9d4d90c484  almagest-11.1.0-linux-amd64
-bcea035f7e17694c687d029cf4f1efc0976c9e9f65503f8776e3f1cd4effa8c3  almagest-11.1.0-linux-arm64'
+version='11.2.0'
+checksums='90770b27d23e4942f5340633f1de9389e43b2cbbc91a649a4d43e5640becc3dc  almagest-11.2.0-darwin-amd64
+13dc56d9bd851560139896693a8aff37fb71c4e4e06c9a3a536d6ad6cda262a3  almagest-11.2.0-darwin-arm64
+b3e24aa0f85e93e80e63fdd8213c2f7b5d6a488b706315491c95b8e7d472baea  almagest-11.2.0-linux-amd64
+62388b00948906e0b93083e626c7d1939f8ce65f97da8b5ba4b683ba16ca613b  almagest-11.2.0-linux-arm64'
 
 missing() {
 	why=$1
