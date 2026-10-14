@@ -257,6 +257,7 @@ The design pages are the spec. When the code departs from them, the reason is be
   its `displayName` is a space (an empty one is ignored), and the labels carry numbers,
   since a Base sorts groups by their text. Home names the command "Open the navigator",
   not the Base: in a main tab the Base's `this` is the Base itself, and it shows nothing.
+  The Obsidian plugin moves a navigator that opens outside the sidebars to the right one.
   Beside uses explicit `up` only: with the
   fallback, siblings would be a whole tag, and a marker tag like `tool` would join
   unrelated documents. Verified in Obsidian 1.14.4 only. The per-tag notes of

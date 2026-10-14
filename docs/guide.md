@@ -97,7 +97,8 @@ page of each tag it holds.
 1. Open Home. "Start here" lists the broadest topics, the most documents under them
    first.
 2. Run "Almagest: Open the navigator" in Obsidian. The navigator opens in the right
-   sidebar.
+   sidebar. If you open `View · Navigator.base` from the file explorer, the plugin
+   moves it to the right sidebar too: in a main tab, it would show nothing.
 3. Open a topic. The navigator shows the documents above it, beside it (they share an
    `up`), and below it, the sources it cites, and what cites it. Click one to move
    there; the navigator follows.
