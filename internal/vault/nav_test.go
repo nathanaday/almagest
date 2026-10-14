@@ -128,7 +128,12 @@ func TestUpIgnoresAnIdOrAnAlias(t *testing.T) {
 			t.Errorf("Up(%s) = %v; the navigator matches neither an id nor an alias, and a value in up stops the fallback", title, got)
 		}
 	}
-	for link, want := range map[string]string{"[[" + ml + "]]": "its id", "[[ML]]": "an alias", "[[Machine Learning]]": "", "[[Nothing]]": ""} {
+	tv.Doc("topic", "As text", map[string]any{"kind": "concept", "tags": []string{"ml"}, "up": []string{"Machine Learning"}}, "")
+	idx = tv.Index()
+	if d, _ := idx.Resolve("As text"); len(idx.Up(d)) != 0 {
+		t.Errorf("Up(As text) = %v; plain text is no link", titles(idx.Up(d)))
+	}
+	for link, want := range map[string]string{"[[" + ml + "]]": "by its id", "[[ML]]": "by an alias", "Machine Learning": "as plain text", "[[Machine Learning]]": "", "[[Nothing]]": "", "Nothing": ""} {
 		if _, by := idx.Misnamed(link); by != want {
 			t.Errorf("Misnamed(%s) = %q, want %q", link, by, want)
 		}

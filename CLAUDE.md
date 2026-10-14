@@ -234,13 +234,15 @@ The design pages are the spec. When the code departs from them, the reason is be
   matches tags below x, and `==` or `map(value.toString())` match nothing; a joined list
   holds each tag with its `#`, so `("," + list(tags).join(",") + ",").contains(",#" +
   defines + ",")` is exact. An `up` link resolves by title or path, as `file.asLink()`
-  matches. An id or an alias names nothing there, as in Obsidian's own links
-  (`Index.Misnamed`), so the index counts no such link, lint reports it in any link field
-  as a dead link that names the title, and a proposal refuses it with that title.
+  matches. An id, an alias, or plain text (a value with no `[[ ]]`) names nothing there,
+  as in Obsidian's own links (`Index.Misnamed`), so the index counts no such value, lint
+  reports it in any link field as a dead link that names the title, and a proposal
+  refuses it with that title.
 - **A proposal refuses only the cycles it closes.** `change` checks the vault as the
   whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
   `defines`, or a redirect can close a cycle too), and compares the cycles before and
-  after, so an old cycle blocks no unrelated change; lint reports it. Every link of a
+  after, so an old cycle blocks no unrelated change, and neither does an old self link;
+  lint reports both. Every link of a
   write is checked after the rewrites, on the content the change leaves (`check.links`,
   at propose and at apply): a link a rename or a redirect moves counts at its new place,
   with its type check. A plan may name a title its own rename frees; `titleOf` gives the

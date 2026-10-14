@@ -1,6 +1,7 @@
 package change_test
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -98,7 +99,7 @@ func TestAMisnamedLinkIsRefusedWithItsTitle(t *testing.T) {
 	_, err := change.Propose(tv.V, change.Plan{Title: "Describe", Writes: []change.Write{
 		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
 	}}, tv.Tick(time.Minute))
-	if err == nil || strings.Count(err.Error(), "\n- ") != 1 || !strings.Contains(err.Error(), "up: [[ML]] names Machine Learning by an alias; Obsidian resolves a link by title, so link [[Machine Learning]]") {
+	if err == nil || strings.Count(err.Error(), "\n- ") != 1 || !strings.Contains(err.Error(), "up: [[ML]] names Machine Learning by an alias; Obsidian links only a [[title]], so link [[Machine Learning]]") {
 		t.Fatalf("want one refusal that names the title, got %v", err)
 	}
 }
@@ -212,4 +213,26 @@ func TestAnOldSelfLinkBlocksNoOtherChange(t *testing.T) {
 	tv.Commit()
 	propose(t, tv, change.Plan{Title: "Unrelated", Writes: []change.Write{{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Tuning a trained model."}}}})
 	refused(t, tv, change.Plan{Title: "Self", Writes: []change.Write{{Op: "modify", ID: "Training", Fields: map[string]any{"up": []any{"Training"}}}}}, "up names Training itself")
+}
+
+func TestPlainTextIsNoLink(t *testing.T) {
+	tv := upVault(t)
+	tv.Doc("topic", "Fine-Tuning", map[string]any{"id": tv.ID("Fine-Tuning"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"Training"}, "sources": []string{"Block 7 Slides"}}, "")
+	tv.Commit()
+	_, err := change.Propose(tv.V, change.Plan{Title: "Merge the hub", Writes: []change.Write{
+		{Op: "remove", ID: "Training", Redirect: "Machine Learning"},
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Tuning a trained model."}},
+	}}, tv.Tick(time.Minute))
+	msg := fmt.Sprint(err)
+	for _, want := range []string{
+		"up: Training names Training as plain text, and this change removes Training; change the link",
+		"sources: Block 7 Slides names Block 7 Slides as plain text; Obsidian links only a [[title]], so link [[Block 7 Slides]]",
+	} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("want %q in %s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "redirect is no") || strings.Contains(msg, "a , or") {
+		t.Errorf("the refusal blames the redirect: %s", msg)
+	}
 }

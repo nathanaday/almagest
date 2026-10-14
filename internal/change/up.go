@@ -51,7 +51,10 @@ func (c *check) upLinks(out *planned) {
 				continue
 			}
 			n.HasUp = true
-			target := c.idOf(v)
+			target := ""
+			if misnamed, _ := c.idx.Misnamed(v); misnamed == "" && doc.IsLink(v) {
+				target = c.idOf(v)
+			}
 			switch {
 			case target == id && !c.namedItself(id):
 				c.refuse("%s: up names %s itself; drop that link", title(id), title(id))
@@ -178,15 +181,15 @@ func (c *check) links(out *planned, rewrites bool) {
 				case named != nil && c.removed(named.ID()) && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
 					switch {
 					case title != "":
-						c.refuse("%s: %s: %s names %s by %s, and this change removes %s; change the link", o.label(), f.Name, v, title, by, title)
-					case c.redirected(v):
+						c.refuse("%s: %s: %s names %s %s, and this change removes %s; change the link", o.label(), f.Name, v, title, by, title)
+					case c.redirected(v) && len(f.Targets) > 0:
 						c.refuse("%s: %s: %s names %s, which this change removes, and its redirect is no %s; redirect to a %s, or change the link", o.label(), f.Name, v, vault.Title(named), strings.Join(f.Targets, " or "), strings.Join(f.Targets, " or "))
 					default:
 						c.refuse("%s: %s: %s names %s, which this change removes; give the remove a redirect, or change the link", o.label(), f.Name, v, vault.Title(named))
 					}
 				case title != "" && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
 					final := c.finalTitle(named)
-					c.refuse("%s: %s: %s names %s by %s; Obsidian resolves a link by title, so link [[%s]]", o.label(), f.Name, v, final, by, final)
+					c.refuse("%s: %s: %s names %s %s; Obsidian links only a [[title]], so link [[%s]]", o.label(), f.Name, v, final, by, final)
 				default:
 					for _, p := range t.CheckLink(f, v, c) {
 						c.refuse("%s: %s", o.label(), p)
