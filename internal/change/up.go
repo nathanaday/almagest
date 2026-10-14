@@ -113,27 +113,48 @@ func (c *check) idOf(value string) string {
 	return ""
 }
 
+// named is the document a link names by title, path, id, or alias, as the vault stands
+// before the change; nil when it names none.
+func (c *check) named(value string) *doc.Doc {
+	t := doc.LinkTarget(value)
+	if t == "" {
+		return nil
+	}
+	if d := c.idx.Linked(t); d != nil {
+		return d
+	}
+	if d, err := c.idx.Resolve(t); err == nil {
+		return d
+	}
+	return nil
+}
+
 // removedBy is the title of the document a link names that this change removes, or "".
 func (c *check) removedBy(value string) string {
-	t := doc.LinkTarget(value)
-	d := c.idx.ByID(t)
-	if d == nil {
-		d = c.idx.Linked(t)
-	}
-	if d != nil && c.removed(d.ID()) {
+	if d := c.named(value); d != nil && c.removed(d.ID()) {
 		return vault.Title(d)
 	}
 	return ""
 }
 
+// renamedFrom reports whether a link names the old title of a document this change
+// renames, so the link rewrite moves it.
+func (c *check) renamedFrom(value string) bool {
+	key := links.Key(doc.LinkTarget(value))
+	for _, ops := range c.byID {
+		for _, o := range ops {
+			if o.Kind == OpRename && o.NewTitle != "" && links.Key(o.Title) == key {
+				return true
+			}
+		}
+	}
+	return false
+}
+
 // redirected reports whether a link names a document that this change removes with a
 // redirect, so the link rewrite moves the link.
 func (c *check) redirected(value string) bool {
-	t := doc.LinkTarget(value)
-	d := c.idx.ByID(t)
-	if d == nil {
-		d = c.idx.Linked(t)
-	}
+	d := c.named(value)
 	if d == nil {
 		return false
 	}

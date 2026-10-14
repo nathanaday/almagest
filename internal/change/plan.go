@@ -615,26 +615,33 @@ func (c *check) checkPage(o *op, content string) {
 		c.refuse("%s: id and type are code's; they must stay %s and %s", o.label(), o.ID, o.Type)
 		return
 	}
-	// A link to a document this change removes: a redirect's rewrite moves it; without
-	// one, the refusal names the removal.
+	// The links of the page as the change leaves it, before the rewrites run: a rename's
+	// rewrite and a redirect's move a link by title, so such a link passes here. A link to a
+	// removed document is named for its removal first; a link by id or alias, for its title.
 	moved := map[string]bool{}
 	for _, f := range t.Fields {
 		if f.Kind != schema.Link && f.Kind != schema.Links {
 			continue
 		}
 		for _, v := range d.List(f.Name) {
-			if title, by := c.idx.Misnamed(v); title != "" && c.claimed[links.Key(doc.LinkTarget(v))] == nil {
-				moved[f.Name+"\x00"+v] = true
-				c.refuse("%s: %s: %s names %s by %s; Obsidian resolves a link by title, so link [[%s]]", o.label(), f.Name, v, title, by, title)
-				continue
-			}
-			gone := c.removedBy(v)
-			if gone == "" {
-				continue
-			}
-			moved[f.Name+"\x00"+v] = true
-			if !c.redirected(v) {
-				c.refuse("%s: %s: %s names %s, which this change removes; give the remove a redirect, or change the link", o.label(), f.Name, v, gone)
+			key := f.Name + "\x00" + v
+			named := c.named(v)
+			title, by := c.idx.Misnamed(v)
+			switch {
+			case named != nil && c.removed(named.ID()):
+				moved[key] = true
+				switch {
+				case title != "":
+					c.refuse("%s: %s: %s names %s by %s, and this change removes %s; change the link", o.label(), f.Name, v, title, by, title)
+				case !c.redirected(v):
+					c.refuse("%s: %s: %s names %s, which this change removes; give the remove a redirect, or change the link", o.label(), f.Name, v, vault.Title(named))
+				}
+			case title != "" && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
+				moved[key] = true
+				final := c.finalTitle(named)
+				c.refuse("%s: %s: %s names %s by %s; Obsidian resolves a link by title, so link [[%s]]", o.label(), f.Name, v, final, by, final)
+			case c.renamedFrom(v):
+				moved[key] = true
 			}
 		}
 	}

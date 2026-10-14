@@ -212,6 +212,9 @@ func (r *run) schema(d *doc.Doc) {
 		}
 		for _, v := range d.List(f.Name) {
 			if title, by := r.idx.Misnamed(v); title != "" {
+				if named, _ := r.idx.Resolve(doc.LinkTarget(v)); f.Name == "up" && named == d {
+					continue // the up check reports the self link
+				}
 				r.add("dead-link", Error, d, fixFor(d)+": link [["+title+"]]", "%s: %s names %s by %s; Obsidian resolves a link by title, so it names no document", f.Name, v, title, by)
 				continue
 			}

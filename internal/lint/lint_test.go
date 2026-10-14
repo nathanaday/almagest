@@ -140,6 +140,7 @@ func TestUpChecks(t *testing.T) {
 	tv.Doc("topic", "Self", map[string]any{"kind": "concept", "up": []string{"[[Self]]"}}, "")
 	tv.Doc("topic", "By alias", map[string]any{"kind": "concept", "up": []string{"[[ML]]"}}, "")
 	tv.Doc("topic", "By id", map[string]any{"kind": "concept", "up": []string{"[[" + tv.ID("Machine Learning") + "]]"}}, "")
+	tv.Doc("topic", "Self by id", map[string]any{"id": "doc-selfid", "kind": "concept", "aliases": []string{"Me"}, "up": []string{"[[doc-selfid]]", "[[Me]]"}}, "")
 	tv.Doc("topic", "A", map[string]any{"kind": "concept", "up": []string{"[[B]]"}}, "")
 	tv.Doc("topic", "B", map[string]any{"kind": "concept", "up": []string{"[[A]]"}}, "")
 	tv.Doc("topic", "Dead", map[string]any{"kind": "concept", "up": []string{"[[Nowhere]]"}}, "")
@@ -163,6 +164,18 @@ func TestUpChecks(t *testing.T) {
 		if !has(f, want.check, want.title, want.text) {
 			t.Errorf("no %s finding on %s with %q", want.check, want.title, want.text)
 		}
+	}
+	selfs := 0
+	for _, x := range f.Findings {
+		if x.Doc.Title == "Self by id" && (x.Check == "up" || x.Check == "dead-link") {
+			if x.Check != "up" || !strings.Contains(x.Message, "names the document itself") {
+				t.Errorf("a self link by id or alias is a self link, nothing else: %+v", x)
+			}
+			selfs++
+		}
+	}
+	if selfs != 2 {
+		t.Errorf("Self by id has %d findings, want one per self link", selfs)
 	}
 	if has(f, "up", "By alias", "") {
 		t.Error("an alias in up is one finding: the dead link")

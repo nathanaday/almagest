@@ -102,3 +102,26 @@ func TestAMisnamedLinkIsRefusedWithItsTitle(t *testing.T) {
 		t.Fatalf("want one refusal that names the title, got %v", err)
 	}
 }
+
+func TestALinkChecksAfterItsRewrite(t *testing.T) {
+	tv := upVault(t)
+	// A rename moves the up of the document below it, which the same change modifies.
+	pv := propose(t, tv, change.Plan{Title: "Rename the page", Writes: []change.Write{
+		{Op: "modify", ID: "Training", Fields: map[string]any{"description": "How a model learns."}},
+		{Op: "rename", ID: "Machine Learning", Title: "ML Field"},
+	}})
+	if content := tv.Read(pv.Ref.Path); !strings.Contains(content, `up: ["[[ML Field]]"]`) {
+		t.Fatalf("Training's up does not follow the rename:\n%s", content)
+	}
+	// A link by id to a document the change removes is named for the removal, not its title.
+	tv.Doc("topic", "Training", map[string]any{"id": tv.ID("Training"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"[[" + tv.ID("Machine Learning") + "]]"}}, "")
+	tv.Commit()
+	_, err := change.Propose(tv.V, change.Plan{Title: "Drop the page", Writes: []change.Write{
+		{Op: "remove", ID: "Machine Learning"},
+		{Op: "modify", ID: "Training", Fields: map[string]any{"description": "How a model learns."}},
+	}}, tv.Tick(time.Minute))
+	want := "names Machine Learning by its id, and this change removes Machine Learning; change the link"
+	if err == nil || !strings.Contains(err.Error(), want) || strings.Contains(err.Error(), "so link [[Machine Learning]]") {
+		t.Fatalf("want %q and no advice to link it, got %v", want, err)
+	}
+}

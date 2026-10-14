@@ -28,9 +28,11 @@ func (r *run) ups(docs []*doc.Doc) {
 		}
 		for _, v := range values {
 			target := r.idx.Linked(v)
+			if target == nil {
+				target, _ = r.idx.Resolve(doc.LinkTarget(v))
+			}
 			if target == d {
 				r.add("up", Error, d, fixFor(d)+": drop that link", "up names the document itself")
-				continue
 			}
 		}
 	}

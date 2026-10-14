@@ -242,8 +242,9 @@ The design pages are the spec. When the code departs from them, the reason is be
   `defines`, or a redirect can close a cycle too), and compares the cycles before and
   after, so an old cycle blocks no unrelated change; lint reports it. A plan's redirects
   resolve before any content check, so a modify of a document that links a document the
-  change removes with a redirect passes: the rewrite moves the link. Without a redirect,
-  a link of any field to the removed document gets one refusal that names the removal.
+  change removes with a redirect passes: the rewrite moves the link. A link to a title
+  that a rename in the change frees passes too. Without a redirect, a link of any field to
+  the removed document, by title, id, or alias, gets one refusal that names the removal.
 - **The navigator is a Base, not code.** A sync writes `wiki-view/View · Navigator.base`
   (first line `views.BaseNotice`, which the stale pass reads). In the right sidebar,
   `this` is the open note, and one table grouped by a formula shows Up, Beside, Below,
