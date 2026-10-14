@@ -236,3 +236,17 @@ func TestPlainTextIsNoLink(t *testing.T) {
 		t.Errorf("the refusal blames the redirect: %s", msg)
 	}
 }
+
+func TestARewriteThatCannotMoveAnUpSaysWhy(t *testing.T) {
+	tv := upVault(t)
+	for _, up := range []string{"Training", "[[TR]]", "[[" + tv.ID("Training") + "]]"} {
+		tv.Doc("topic", "Training", map[string]any{"id": tv.ID("Training"), "kind": "concept", "tags": []string{"ml"}, "aliases": []string{"TR"}, "up": []string{"[[Machine Learning]]"}}, "")
+		tv.Doc("topic", "Fine-Tuning", map[string]any{"id": tv.ID("Fine-Tuning"), "kind": "concept", "tags": []string{"ml"}, "up": []string{up}}, "")
+		tv.Commit()
+		_, err := change.Propose(tv.V, change.Plan{Title: "Merge the hub", Writes: []change.Write{{Op: "remove", ID: "Training", Redirect: "Machine Learning"}}}, tv.Tick(time.Minute))
+		msg := fmt.Sprint(err)
+		if !strings.Contains(msg, "Fine-Tuning: up: "+up+" names Training ") || !strings.Contains(msg, "a rewrite moves only a [[title]], so modify the up of Fine-Tuning") || strings.Contains(msg, "redirect is no") {
+			t.Errorf("up %s: %s", up, msg)
+		}
+	}
+}

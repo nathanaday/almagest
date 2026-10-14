@@ -59,9 +59,15 @@ func (c *check) upLinks(out *planned) {
 			case target == id && !c.namedItself(id):
 				c.refuse("%s: up names %s itself; drop that link", title(id), title(id))
 			case target == "" && !checked[id]:
-				if gone := c.removedBy(v); gone != "" && c.redirected(v) {
+				gone := c.removedBy(v)
+				_, how := c.idx.Misnamed(v)
+				switch {
+				case gone == "":
+				case how != "":
+					c.refuse("%s: up: %s names %s %s, and this change removes %s; a rewrite moves only a [[title]], so modify the up of %s", title(id), v, gone, how, gone, title(id))
+				case c.redirected(v):
 					c.refuse("%s: up names %s, which this change removes, and its redirect is no topic or repository; redirect to a topic or repository, or modify the up of %s", title(id), gone, title(id))
-				} else if gone != "" {
+				default:
 					c.refuse("%s: up names %s, which this change removes; give the remove a redirect, or modify the up of %s", title(id), gone, title(id))
 				}
 			}
