@@ -183,8 +183,15 @@ func (c *check) links(out *planned, rewrites bool) {
 			for _, v := range d.List(f.Name) {
 				named := c.named(v)
 				title, by := c.idx.Misnamed(v)
+				claimed := c.claimed[links.Key(doc.LinkTarget(v))]
 				switch {
-				case named != nil && c.removed(named.ID()) && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
+				case claimed != nil && !doc.IsLink(v):
+					final := claimed.Title
+					if claimed.NewTitle != "" {
+						final = claimed.NewTitle
+					}
+					c.refuse("%s: %s: %s names %s as plain text; Obsidian links only a [[title]], so link [[%s]]", o.label(), f.Name, v, final, final)
+				case named != nil && c.removed(named.ID()) && claimed == nil:
 					switch {
 					case title != "":
 						c.refuse("%s: %s: %s names %s %s, and this change removes %s; change the link", o.label(), f.Name, v, title, by, title)

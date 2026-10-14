@@ -250,3 +250,20 @@ func TestARewriteThatCannotMoveAnUpSaysWhy(t *testing.T) {
 		}
 	}
 }
+
+func TestPlainTextIsNoLinkToACreateEither(t *testing.T) {
+	tv := upVault(t)
+	tv.Doc("topic", "Fine-Tuning", map[string]any{"id": tv.ID("Fine-Tuning"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"Hub"}}, "")
+	tv.Commit()
+	refused(t, tv, change.Plan{Title: "Add the hub", Writes: []change.Write{
+		{Op: "create", Type: "topic", Kind: "concept", Title: "Hub", Fields: map[string]any{"description": "A hub.", "tags": []any{"ml"}}},
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Tuning a trained model."}},
+	}}, "up: Hub names Hub as plain text; Obsidian links only a [[title]], so link [[Hub]]")
+	tv.Doc("topic", "Fine-Tuning", map[string]any{"id": tv.ID("Fine-Tuning"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"Training"}}, "")
+	tv.Commit()
+	refused(t, tv, change.Plan{Title: "Make the hub again", Writes: []change.Write{
+		{Op: "remove", ID: "Training"},
+		{Op: "create", Type: "topic", Kind: "concept", Title: "Training", Fields: map[string]any{"description": "How a model learns.", "tags": []any{"ml"}}},
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Tuning a trained model."}},
+	}}, "up: Training names Training as plain text; Obsidian links only a [[title]], so link [[Training]]")
+}
