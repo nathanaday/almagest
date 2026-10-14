@@ -139,3 +139,41 @@ func TestUpIgnoresAnIdOrAnAlias(t *testing.T) {
 		}
 	}
 }
+
+func TestNeighbors(t *testing.T) {
+	_, idx := navVault(t)
+	refTitles := func(rs []vault.Ref) []string {
+		out := []string{}
+		for _, r := range rs {
+			out = append(out, r.Title)
+		}
+		return out
+	}
+	type groups struct{ up, beside, below, sourcesBelow, sources, citedBy []string }
+	for title, want := range map[string]groups{
+		"Machine Learning":  {below: []string{"CS566", "Training"}},
+		"CS566":             {up: []string{"Machine Learning"}, below: []string{"Backprop", "Optimizers"}, sourcesBelow: []string{"Block 7 Slides"}},
+		"Transfer Learning": {up: []string{"Training"}, beside: []string{"Optimizers"}, below: []string{"Fine-Tuning"}},
+		// Fine-Tuning sits below Optimizers and shares Training with it: it stands in Below only.
+		"Optimizers":     {up: []string{"CS566", "Training"}, beside: []string{"Transfer Learning"}, below: []string{"Fine-Tuning"}},
+		"Fine-Tuning":    {up: []string{"Optimizers", "Transfer Learning"}, sources: []string{"Block 7 Slides"}},
+		"Block 7 Slides": {up: []string{"CS566"}, citedBy: []string{"Fine-Tuning"}},
+		// The fallback puts nothing beside: Backprop's siblings would be a whole tag.
+		"Backprop": {up: []string{"CS566"}},
+	} {
+		d, err := idx.Resolve(title)
+		if err != nil {
+			t.Fatal(err)
+		}
+		n := idx.Neighbors(d)
+		got := groups{refTitles(n.Up), refTitles(n.Beside), refTitles(n.Below), refTitles(n.SourcesBelow), refTitles(n.Sources), refTitles(n.CitedBy)}
+		for _, g := range []*[]string{&want.up, &want.beside, &want.below, &want.sourcesBelow, &want.sources, &want.citedBy} {
+			if *g == nil {
+				*g = []string{}
+			}
+		}
+		if !reflect.DeepEqual(got, want) || n.Document.Title != title {
+			t.Errorf("Neighbors(%s) = %+v, want %+v", title, got, want)
+		}
+	}
+}

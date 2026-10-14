@@ -83,8 +83,8 @@ almagest vault snapshot             # commit your hand edits now
 ```
 
 In Obsidian, `wiki-view/` holds the notes that code writes: Home, Timeline, Library,
-Repositories, one timeline per month under `wiki-view/timeline/`, and the navigator,
-`View · Navigator.base`. `tool/sessions/Sessions.base` shows what runs now, and
+Repositories, and one timeline per month under `wiki-view/timeline/`.
+`tool/sessions/Sessions.base` shows what runs now, and
 `changes/Changes.base` lists the changes that wait for you.
 
 ### Find your way by subject
@@ -96,12 +96,10 @@ page of each tag it holds.
 
 1. Open Home. "Start here" lists the broadest topics, the most documents under them
    first.
-2. Run "Almagest: Open the navigator" in Obsidian. The navigator opens in the right
-   sidebar. If you open `View · Navigator.base` from the file explorer, the plugin
-   moves it to the right sidebar too: in a main tab, it would show nothing.
-3. Open a topic. The navigator shows the documents above it, beside it (they share an
-   `up`), and below it, the sources it cites, and what cites it. Click one to move
-   there; the navigator follows.
+2. Open one of them. In the Almagest palette, open Navigator. It shows the documents
+   above the open document, beside it (they share an `up`), and below it, the sources
+   it cites, and what cites it.
+3. Click a document in the navigator to open it. The navigator follows.
 
 The lead callout of a topic shows its `Up:` links. Lint reports a page with more than
 30 topics directly below it as `crowded`; ask an agent to map that tag (wiki-map), and

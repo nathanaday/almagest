@@ -229,16 +229,11 @@ The design pages are the spec. When the code departs from them, the reason is be
   model's; code writes the rest. One rule gives Up (`vault.UpEdges`, which the index,
   lint, and the change check share): the explicit `up`, or, when `up` is empty, the page
   of each tag the document holds exactly. Sources take no `up`; they fall back like any
-  document. The fallback is exact, not the nearest page above, because the navigator's
-  Base can test only an exact match: in Obsidian 1.14.4, `list(tags).contains(x)` also
-  matches tags below x, and `==` or `map(value.toString())` match nothing; a joined list
-  holds each tag with its `#`, so `("," + list(tags).join(",") + ",").contains(",#" +
-  defines + ",")` is exact. An `up` link resolves by title or path, as `file.asLink()`
-  matches. An id, an alias, or plain text (a value with no `[[ ]]`) names nothing there,
-  as in Obsidian's own links (`Index.Misnamed`), so the index counts no such value, lint
-  reports it in any link field as a dead link that names the title, and a proposal
-  refuses it with that title. The navigator's Beside still matches a plain-text `up`
-  (Obsidian 1.14.4), until lint's fix makes it a link.
+  document. The fallback is exact: the page of the tag itself, not the nearest page
+  above. An `up` link resolves by title or path, as Obsidian's links do. An id, an
+  alias, or plain text (a value with no `[[ ]]`) names nothing there (`Index.Misnamed`),
+  so the index counts no such value, lint reports it in any link field as a dead link
+  that names the title, and a proposal refuses it with that title.
 - **A proposal refuses only the cycles it closes.** `change` checks the vault as the
   whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
   `defines`, or a redirect can close a cycle too), and compares the cycles before and
@@ -250,23 +245,25 @@ The design pages are the spec. When the code departs from them, the reason is be
   new title. A link of any field to a removed document, by title, id, or alias, gets one
   refusal that names the removal, or says that the redirect is of a type the field
   cannot take.
-- **The navigator is a Base, not code.** A sync writes `wiki-view/View · Navigator.base`
-  (first line `views.BaseNotice`, which the stale pass reads). In the right sidebar,
-  `this` is the open note, and one table grouped by a formula shows Up, Beside, Below,
-  Sources below, Sources, and Cited by. A group header shows the formula's name unless
-  its `displayName` is a space (an empty one is ignored), and the labels carry numbers,
-  since a Base sorts groups by their text. Home names the command "Open the navigator",
-  not the Base: in a main tab the Base's `this` is the Base itself, and it shows nothing.
-  The Obsidian plugin moves a navigator that opens outside the sidebars to the right one.
-  Beside uses explicit `up` only: with the
-  fallback, siblings would be a whole tag, and a marker tag like `tool` would join
-  unrelated documents. Verified in Obsidian 1.14.4 only. The per-tag notes of
-  `wiki-view/nav/` are gone; `Tag · ` stays reserved so no document takes a title an
-  older vault links.
+- **The navigator is a page of the Obsidian plugin's palette, and the binary gives its
+  rows.** `almagest neighbors DOC` (`Index.Neighbors`) prints the documents around one
+  document: Up and Below by `vault.UpEdges`, Below split from Sources below, Sources (its
+  `sources`), Cited by, and Beside. Each document stands in one group, the first of Up,
+  Below, Sources below, Sources, Cited by, and Beside, and each group is in title order.
+  Beside uses explicit `up` only: with the fallback, siblings would be a whole tag, and
+  a marker tag like `tool` would join unrelated documents. The plugin passes the open
+  document's `id`. The navigator was a Base in `wiki-view/` until 11.1: a Base that
+  Obsidian opens in a main tab reads itself and shows nothing, and every other view is a
+  note. A sync removes the old `View · Navigator.base`, also when Obsidian saved it
+  without `views.BaseNotice`, since the stale pass takes a `.base` with a `View · ` title
+  as code's. The command came with protocol 3.
 - **Start here and crowded are code**, since a Base cannot count. Home lists the roots
   with documents under them, at most 20 (`views.MaxRoots`), by the count under each.
   Lint warns about a document with more than 30 topics and repositories directly below
-  (`lint.MaxBelow`); sources do not count, since no map could move them. The lead's
+  (`lint.MaxBelow`); sources do not count, since no map could move them. Home is
+  markdown tables, not lists: the numbers, Waiting for you, To-do lines, Start here
+  (each root's description cut to 120 characters), Views, and Recent. Code writes them,
+  since a Base can neither count nor show a change's writes. The lead's
   `Up:` line shows explicit `up` only, so a change of a tag page rewrites no other lead.
 - **The publication history is code's.** `journal.HistoryNote` opens with its own
   notice (`HistoryNotice`, not `views.Notice`), then a heading, one line on how editions
@@ -573,7 +570,7 @@ settings tab.
 
 Verified by script in a separate Obsidian: `obsidian-almagest`'s end-to-end suite builds
 this binary from a checkout beside it and drives the plugin against it (its TESTED.md),
-the navigator's rows for each relation too (Obsidian 1.14.4).
+the palette's navigator for each relation too (Obsidian 1.14.4).
 
 Not yet verified: Codex's hook events in a session (the guard reads `apply_patch` paths;
 the rest is untested on Codex), an almagest tool called from a Codex session, the

@@ -87,9 +87,9 @@ up: ["[[Transfer Learning]]", "[[CS566-project]]"]
   `up` that names a document the change removes without a redirect. Lint reports a
   document with more than 30 topics and repositories directly below it as `crowded`;
   wiki-map fixes it.
-- Code shows `Up:` in the lead callout. `wiki-view/View · Navigator.base`, open in
-  Obsidian's right sidebar, shows the documents above, beside, and below the open
-  note, its sources, and what cites it.
+- Code shows `Up:` in the lead callout. The navigator in the Almagest palette shows
+  the documents above, beside, and below the open document, its sources, and what
+  cites it.
 
 ## Source
 

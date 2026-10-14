@@ -168,7 +168,7 @@ func TestEveryToolAndAction(t *testing.T) {
 	if dig(applied, "commit") == "" || dig(applied, "status") != "applied" {
 		t.Fatalf("apply %v", applied)
 	}
-	if !tv.V.Exists("wiki-view/View · Navigator.base") || !strings.Contains(tv.Read("wiki-view/View · Home.md"), "## Start here") {
+	if !tv.V.Exists("wiki-view/View · Library.md") || !strings.Contains(tv.Read("wiki-view/View · Home.md"), "## Start here") {
 		t.Fatal("a write refreshes the views")
 	}
 

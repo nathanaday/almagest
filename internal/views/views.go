@@ -13,6 +13,7 @@ import (
 	"path/filepath"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -24,13 +25,15 @@ import (
 	"github.com/nathanaday/almagest/internal/vault"
 )
 
+// viewPrefix opens the title of every view; no document takes it (vault.ReservedPrefixes).
+const viewPrefix = "View · "
+
 // Titles and places of the views.
 const (
-	Home        = "View · Home"
-	Timeline    = "View · Timeline"
-	Library     = "View · Library"
-	Repos       = "View · Repositories"
-	Navigator   = "View · Navigator"
+	Home        = viewPrefix + "Home"
+	Timeline    = viewPrefix + "Timeline"
+	Library     = viewPrefix + "Library"
+	Repos       = viewPrefix + "Repositories"
 	TimeFolder  = "timeline"
 	TimelineAge = 30 * 24 * time.Hour
 	MaxRecent   = 10
@@ -42,9 +45,6 @@ const Notice = "> [!view] Written by Almagest from the documents. Edits here are
 
 // BaseNotice opens every view that is a Base, as a YAML comment.
 const BaseNotice = "# Written by Almagest from the documents. Edits here are lost at the next sync."
-
-// NavigatorPath is where the navigator lives.
-var NavigatorPath = vault.WikiView + "/" + Navigator + ".base"
 
 // tagRef names a tag in a view: a link to its page, or the plain tag when it has none.
 func (r *renderer) tagRef(t string) string {
@@ -87,7 +87,8 @@ func Write(idx *vault.Index, now time.Time) (written []string, strays []vault.Mo
 			continue
 		}
 		if strings.HasSuffix(rel, ".base") {
-			if strings.HasPrefix(string(data), BaseNotice) {
+			// Obsidian drops the notice when it saves a Base; a reserved title still marks it as code's.
+			if strings.HasPrefix(string(data), BaseNotice) || strings.HasPrefix(path.Base(rel), viewPrefix) {
 				if err := v.Remove(rel); err == nil {
 					written = append(written, rel)
 				}
@@ -158,7 +159,6 @@ func Render(idx *vault.Index, now time.Time) map[string]string {
 	for month, content := range months {
 		out[vault.WikiView+"/"+TimeFolder+"/"+Timeline+" "+month+".md"] = content
 	}
-	out[NavigatorPath] = navigatorBase()
 	return out
 }
 
@@ -192,7 +192,7 @@ func (r *renderer) home() string {
 	for _, d := range idx.Documents() {
 		counts[d.Type()]++
 	}
-	var proposed, running, waiting, live []*doc.Doc
+	var proposed, running, waiting []*doc.Doc
 	for _, c := range idx.Of("change") {
 		switch c.Str("status") {
 		case "proposed":
@@ -202,55 +202,86 @@ func (r *renderer) home() string {
 		}
 	}
 	for _, s := range idx.Of("session") {
-		switch s.Str("status") {
-		case "waiting":
+		if s.Str("status") == "waiting" {
 			waiting = append(waiting, s)
-			live = append(live, s)
-		case "running", "idle":
-			live = append(live, s)
 		}
 	}
 	todos := idx.OpenTasks(func(t string) bool { return slices.Contains(tags.Inline(t), "todo") }, vault.WikiView, vault.Changes, vault.Scratchpad)
 	pending := len(idx.PendingDocs())
-	var typeCounts []string
-	plurals := map[string]string{"topic": "topics", "source": "sources", "repository": "repositories"}
-	for _, t := range []string{"topic", "source", "repository"} {
-		typeCounts = append(typeCounts, fmt.Sprintf("%d %s", counts[t], doc.Plural(counts[t], t, plurals[t])))
+	head := doc.Callout("almagest", r.idx.V.Name())
+	if desc := r.idx.V.Description(); desc != "" {
+		head = doc.Callout("almagest", r.idx.V.Name(), desc)
 	}
-	head := doc.Callout("almagest", r.idx.V.Name(),
-		strings.Join(typeCounts, " · "),
-		fmt.Sprintf("%d pending · %d proposed %s · %d live %s", pending, len(proposed), doc.Plural(len(proposed), "change", "changes"), len(live), doc.Plural(len(live), "session", "sessions")))
-	var wait []string
+	numbers := table([]string{"Topics", "Sources", "Repositories"}, []int{0, 1, 2},
+		[]string{strconv.Itoa(counts["topic"]), strconv.Itoa(counts["source"]), strconv.Itoa(counts["repository"])})
+	var wait [][]string
+	if pending > 0 {
+		wait = append(wait, []string{fmt.Sprintf("%d %s", pending, doc.Plural(pending, "source", "sources")), "Pending", "The wiki has not absorbed them yet: ask an agent to sync the wiki"})
+	}
 	for _, c := range proposed {
-		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · proposed change · "+c.Str("counts"))
+		wait = append(wait, []string{doc.Link(vault.Title(c)), "Proposed change", shortCounts(c.Str("counts"))})
 	}
 	for _, c := range running {
-		wait = append(wait, "- "+doc.Link(vault.Title(c))+" · "+cmp.Or(c.Str("kind"), "work")+" running")
+		wait = append(wait, []string{doc.Link(vault.Title(c)), "Work running", doc.Capital(cmp.Or(c.Str("kind"), "work"))})
 	}
 	for _, vol := range journal.Volumes(idx) {
 		if vol.Changed {
-			wait = append(wait, "- the journal "+vol.Name+" ("+vault.Journals+"/"+vol.Volume+") has changes to publish")
+			wait = append(wait, []string{vol.Name, "Journal", "`" + vault.Journals + "/" + vol.Volume + "` has changes to publish"})
 		}
 	}
 	for _, s := range waiting {
-		wait = append(wait, "- "+doc.Link(s.Title())+" · waits for your answer · "+s.Str("description"))
+		wait = append(wait, []string{doc.Link(s.Title()), "Session", "Waits for your answer: " + s.Str("description")})
 	}
-	var todoLines []string
+	var todoRows [][]string
 	for _, t := range todos {
-		todoLines = append(todoLines, fmt.Sprintf("- %s: %s", doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)))
+		todoRows = append(todoRows, []string{doc.Link(vault.Title(t.Doc)), doc.OneLine(t.Text, 160)})
 	}
-	viewsList := strings.Join([]string{
-		"- The navigator: the documents above, beside, and below the note you read. Run \"Almagest: Open the navigator\" to show it in the right sidebar",
-		"- " + doc.Link(Timeline) + ": what happened, newest first",
-		"- " + doc.Link(Library) + ": topics, sources, repositories",
-		"- " + doc.Link(Repos) + ": every linked repository, its tags, and its git status",
-	}, "\n")
-	return r.note(Home, head,
-		section("Waiting for you", strings.Join(wait, "\n")),
-		section("To-do lines", strings.Join(todoLines, "\n")),
+	viewRows := [][]string{
+		{doc.Link(Library), "Topics, sources, and repositories"},
+		{doc.Link(Timeline), "What happened, newest first"},
+		{doc.Link(Repos), "Every linked repository, its tags, and its git status"},
+	}
+	var recent [][]string
+	for i, e := range r.entries() {
+		if i == MaxRecent {
+			break
+		}
+		recent = append(recent, []string{vault.Date(e.at) + " " + e.at.Format(vault.ClockFormat), doc.Link(vault.Title(e.change)), shortCounts(e.change.Str("counts"))})
+	}
+	return r.note(Home, head, numbers,
+		section("Waiting for you", table([]string{"What", "Kind", "Detail"}, nil, wait...)),
+		section("To-do lines", table([]string{"Note", "Line"}, nil, todoRows...)),
 		section("Start here", r.startHere()),
-		section("Views", viewsList),
-		section("Recent", strings.Join(r.recentLines(MaxRecent), "\n")))
+		section("Views", table([]string{"View", "What it shows"}, nil, viewRows...)),
+		section("Recent", table([]string{"Applied", "Change", "Writes"}, nil, recent...)))
+}
+
+// table is a markdown table, or "" with no rows. The columns in numbers align right.
+func table(header []string, numbers []int, rows ...[]string) string {
+	if len(rows) == 0 {
+		return ""
+	}
+	divider := make([]string, len(header))
+	for i := range divider {
+		divider[i] = "---"
+		if slices.Contains(numbers, i) {
+			divider[i] = "---:"
+		}
+	}
+	lines := []string{tableRow(header), tableRow(divider)}
+	for _, r := range rows {
+		lines = append(lines, tableRow(r))
+	}
+	return strings.Join(lines, "\n")
+}
+
+// tableRow is one row; a | in a cell would split it, and a newline would end the table.
+func tableRow(cells []string) string {
+	out := make([]string, len(cells))
+	for i, c := range cells {
+		out[i] = strings.ReplaceAll(doc.OneLine(c, 1<<20), "|", "\\|")
+	}
+	return "| " + strings.Join(out, " | ") + " |"
 }
 
 // base is an inline Base over the documents with the filters given and one table view.
@@ -340,8 +371,9 @@ func (r *renderer) repositories() string {
 
 // timelineEntry is one line of the timeline, at a time.
 type timelineEntry struct {
-	at   time.Time
-	line string
+	at     time.Time
+	line   string
+	change *doc.Doc
 }
 
 func (r *renderer) entries() []timelineEntry {
@@ -354,7 +386,7 @@ func (r *renderer) entries() []timelineEntry {
 		if !ok {
 			continue
 		}
-		out = append(out, timelineEntry{t, fmt.Sprintf("%s · change applied · %s · %s", t.Format(vault.ClockFormat), doc.Link(vault.Title(c)), shortCounts(c.Str("counts")))})
+		out = append(out, timelineEntry{t, fmt.Sprintf("%s · change applied · %s · %s", t.Format(vault.ClockFormat), doc.Link(vault.Title(c)), shortCounts(c.Str("counts"))), c})
 	}
 	sort.SliceStable(out, func(i, j int) bool { return out[i].at.After(out[j].at) })
 	return out
@@ -414,17 +446,6 @@ func byDay(list []timelineEntry) string {
 	return strings.TrimSpace(b.String())
 }
 
-func (r *renderer) recentLines(n int) []string {
-	var out []string
-	for i, e := range r.entries() {
-		if i == n {
-			break
-		}
-		out = append(out, "- "+vault.Date(e.at)+" "+e.line)
-	}
-	return out
-}
-
 // startHere lists the roots, the documents with nothing above them, that have documents
 // under them: the most under first.
 func (r *renderer) startHere() string {
@@ -450,12 +471,12 @@ func (r *renderer) startHere() string {
 		}
 		return strings.ToLower(vault.Title(roots[i].d)) < strings.ToLower(vault.Title(roots[j].d))
 	})
-	var lines []string
+	var rows [][]string
 	for i, x := range roots {
 		if i == MaxRoots {
 			break
 		}
-		lines = append(lines, fmt.Sprintf("- %s · %d under it", doc.Link(vault.Title(x.d)), x.under))
+		rows = append(rows, []string{doc.Link(vault.Title(x.d)), strconv.Itoa(x.under), doc.OneLine(x.d.Str("description"), 120)})
 	}
 	var rest []string
 	if more := len(roots) - MaxRoots; more > 0 {
@@ -464,39 +485,12 @@ func (r *renderer) startHere() string {
 	if alone > 0 {
 		rest = append(rest, fmt.Sprintf("%d %s with nothing above or below", alone, doc.Plural(alone, "document", "documents")))
 	}
+	var parts []string
+	if t := table([]string{"Start at", "Under it", "Description"}, []int{1}, rows...); t != "" {
+		parts = append(parts, "Open one, then Navigator in the Almagest palette: it shows the documents above, beside, and below the note you read.", t)
+	}
 	if len(rest) > 0 {
-		lines = append(lines, "- "+doc.Capital(strings.Join(rest, ", and ")))
+		parts = append(parts, doc.Capital(strings.Join(rest, ", and "))+".")
 	}
-	return strings.Join(lines, "\n")
+	return strings.Join(parts, "\n\n")
 }
-
-// The navigator's relations. A document falls back to the page of each tag it holds
-// exactly when its up is empty, as vault.UpEdges says. A tag joins with its # in a Base,
-// and the commas keep a tag from matching a tag below it.
-const (
-	navUp        = `list(this.up).contains(file.asLink())`
-	navUpPage    = `!defines.isEmpty() && this.up.isEmpty() && ("," + list(this.tags).join(",") + ",").contains(",#" + defines + ",")`
-	navBelow     = `list(up).contains(this.file.asLink())`
-	navBelowPage = `!this.defines.isEmpty() && up.isEmpty() && ("," + list(tags).join(",") + ",").contains(",#" + this.defines + ",")`
-	navBeside    = `!this.up.isEmpty() && list(up).containsAny(list(this.up))`
-	navSources   = `list(this.sources).contains(file.asLink())`
-	navCitedBy   = `list(sources).contains(this.file.asLink())`
-)
-
-// navigatorBase is a Base for the right sidebar, where this is the note the reader has
-// open: one table of its neighbors, grouped by how each relates to it.
-func navigatorBase() string {
-	relation := `if(` + navUp + ` || (` + navUpPage + `), "1 · Up", if(` + navBelow + ` || (` + navBelowPage + `), if(type == "source", "4 · Sources below", "3 · Below"), if(` + navSources + `, "5 · Sources", if(` + navCitedBy + `, "6 · Cited by", "2 · Beside"))))`
-	var b strings.Builder
-	b.WriteString(BaseNotice + "\n# Open it in the right sidebar: it shows the neighbors of the note you read.\n")
-	b.WriteString("formulas:\n  relation: " + yamlQuote(relation) + "\n")
-	b.WriteString("filters:\n  and:\n    - file.inFolder(\"" + vault.Documents + "\")\n    - file.path != this.file.path\n    - or:\n")
-	for _, f := range []string{navUp, navUpPage, navBelow, navBelowPage, navBeside, navSources, navCitedBy} {
-		b.WriteString("        - " + yamlQuote(f) + "\n")
-	}
-	b.WriteString("properties:\n  formula.relation:\n    displayName: \" \"\n")
-	b.WriteString("views:\n  - type: table\n    name: Navigator\n    groupBy:\n      property: formula.relation\n      direction: ASC\n    order:\n      - file.name\n    sort:\n      - property: file.name\n        direction: ASC\n")
-	return b.String()
-}
-
-func yamlQuote(s string) string { return "'" + strings.ReplaceAll(s, "'", "''") + "'" }

@@ -22,7 +22,7 @@ var Version = "dev"
 // Protocol is the version of what the Obsidian plugin reads: the commands it runs, their
 // flags, and their JSON. It goes up when one of them changes in a way an older plugin
 // would misread, and the plugin names the update that each side needs.
-const Protocol = 2
+const Protocol = 3
 
 // CLI is one run of the command.
 type CLI struct {
@@ -62,7 +62,7 @@ A command that acts on a vault takes --vault (a path, or a name from ~/.almagest
 else $ALMAGEST_VAULT, else the vault above the working folder. setup's --vault is the folder
 of a new vault, vault init takes --path, and doctor, version, help, hook, and mcp take no
 --vault.
---json prints JSON from: vault, search, context, source, change, checkout, wikify, journal, lint, config.
+--json prints JSON from: vault, search, neighbors, context, source, change, checkout, wikify, journal, lint, config.
 match always prints JSON.
 No --json: setup, open, doctor, version, help, hook, mcp.
 `
@@ -73,6 +73,8 @@ var commands = []struct{ name, usage string }{
                        | init [--path FOLDER | FOLDER] --name N [--description D] [--tagging open|known]
 `},
 	{"search", `  almagest search TEXT [--type T]... [--kind K]... [--tag T]... [--status S]... [--repository R] [--limit N]
+`},
+	{"neighbors", `  almagest neighbors DOC                      the documents above, beside, and below DOC, as the navigator shows them
 `},
 	{"context", `  almagest context [REPOSITORY] [--tag T]... [--path P]
 `},
@@ -172,6 +174,8 @@ func (c *CLI) Run(argv []string) int {
 		err = c.vaultCmd(rest)
 	case "search":
 		err = c.searchCmd(rest)
+	case "neighbors":
+		err = c.neighborsCmd(rest)
 	case "context":
 		err = c.contextCmd(rest)
 	case "match":

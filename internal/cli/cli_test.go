@@ -86,6 +86,18 @@ func TestCommands(t *testing.T) {
 	if out := r.ok("", "search", "--tag", "work"); !strings.Contains(out, "2 of 2") || !strings.Contains(out, "with: ") {
 		t.Fatalf("search by tag:\n%s", out)
 	}
+	if out := r.ok("", "neighbors", "P3"); out != "Below: p3-edge\n" {
+		t.Fatalf("neighbors:\n%s", out)
+	}
+	var nb struct {
+		Document struct{ Title string }
+		Up       []struct{ ID, Title string }
+		Beside   []any
+	}
+	json.Unmarshal([]byte(r.ok("", "neighbors", "p3-edge", "--json")), &nb)
+	if nb.Document.Title != "p3-edge" || len(nb.Up) != 1 || nb.Up[0].Title != "P3" || nb.Beside == nil {
+		t.Fatalf("neighbors --json: %+v", nb)
+	}
 
 	out := r.ok("", "source", "capture", "--ingest", "notes.md", "--tag", "work/p3/p3-edge")
 	if !strings.Contains(out, "captured: notes (doc-") {

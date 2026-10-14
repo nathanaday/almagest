@@ -24,23 +24,29 @@ func TestViews(t *testing.T) {
 	tv.Write("wiki-view/nav/gone/Tag · gone.md", views.Notice+"\n\nold\n")
 	tv.Write("wiki-view/Old.base", views.BaseNotice+"\nviews: []\n")
 	tv.Write("wiki-view/Mine.base", "views: []\n")
+	// The navigator Base of an older version, as Obsidian saves it: without the notice.
+	tv.Write("wiki-view/View · Navigator.base", "filters:\n  and: []\nviews: []\n")
 	wrote, _, err := views.Write(tv.Index(), testvault.Now.Add(2*time.Hour))
 	if err != nil {
 		t.Fatal(err)
 	}
-	if tv.V.Exists("wiki-view/nav/gone/Tag · gone.md") || tv.V.Exists("wiki-view/nav") || tv.V.Exists("wiki-view/Old.base") {
+	if tv.V.Exists("wiki-view/nav/gone/Tag · gone.md") || tv.V.Exists("wiki-view/nav") || tv.V.Exists("wiki-view/Old.base") || tv.V.Exists("wiki-view/View · Navigator.base") {
 		t.Fatal("a view that stands for nothing goes, with its folder")
 	}
 	if !tv.V.Exists("wiki-view/Mine.base") {
 		t.Fatal("a Base without the notice is the user's")
 	}
 	checks := map[string][]string{
-		"wiki-view/View · Home.md":         {views.Notice, "> [!almagest] Work", "## Waiting for you\n\n- [[2026-09-27 Add grids]] · proposed change", "## To-do lines\n\n- [[Notes]]: buy a lidar #todo\n\n## Start here\n\n- [[CS513]] · 3 under it\n- 1 document with nothing above or below\n\n## Views\n\n- The navigator: the documents above, beside, and below the note you read. Run \"Almagest: Open the navigator\"", "## Recent", "change applied · [[2026-09-27 Add lidar]]"},
+		"wiki-view/View · Home.md": {views.Notice, "> [!almagest] Work",
+			"| Topics | Sources | Repositories |\n| ---: | ---: | ---: |\n| 3 | 0 | 2 |",
+			"## Waiting for you\n\n| What | Kind | Detail |\n| --- | --- | --- |\n| [[2026-09-27 Add grids]] | Proposed change | 1 modify |",
+			"## To-do lines\n\n| Note | Line |\n| --- | --- |\n| [[Notes]] | buy a lidar #todo |",
+			"## Start here\n\nOpen one, then Navigator in the Almagest palette: it shows the documents above, beside, and below the note you read.\n\n| Start at | Under it | Description |\n| --- | ---: | --- |\n| [[CS513]] | 3 | The CS513 document. |\n\n1 document with nothing above or below.\n\n## Views\n\n| View | What it shows |",
+			"## Recent\n\n| Applied | Change | Writes |\n| --- | --- | --- |\n| 2026-09-27 15:32 | [[2026-09-27 Add lidar]] | 1 create |"},
 		"wiki-view/View · Timeline.md":     {"### 2026-09-27", "15:32 · change applied · [[2026-09-27 Add lidar]]"},
 		"wiki-view/View · Repositories.md": {"## [[grid-sim]]\n\nThe grid simulator.\n\n`~/code/grid-sim`\n\nTag: [[grid-sim|#school/cs513/grid-sim]] · Under: [[CS513|#school/cs513]] · Also: #simulation\n\n```almagest-repo\n", "## Unlinked\n\n- [[old-sim]] · The first simulator."},
 		"wiki-view/View · Home.md#":        {"[[View · Repositories]]"},
 		"wiki-view/View · Library.md":      {"## Topics", "## Needs care"},
-		"wiki-view/View · Navigator.base":  {views.BaseNotice, "groupBy:\n      property: formula.relation", `file.inFolder("tool/source-core/documents")`},
 	}
 	for rel, wants := range checks {
 		got := tv.Read(strings.TrimSuffix(rel, "#"))
@@ -90,30 +96,14 @@ func TestStartHere(t *testing.T) {
 	}
 	tv.Commit()
 	home := views.Render(tv.Index(), testvault.Now)["wiki-view/View · Home.md"]
-	want := "## Start here\n\n- [[Machine Learning]] · 3 under it\n- [[Autonomous Driving]] · 2 under it\n- [[Root 00]] · 1 under it\n"
+	want := "| --- | ---: | --- |\n| [[Machine Learning]] | 3 | The Machine Learning document. |\n| [[Autonomous Driving]] | 2 | The Autonomous Driving document. |\n| [[Root 00]] | 1 | The Root 00 document. |\n"
 	if !strings.Contains(home, want) {
 		t.Fatalf("Start here lacks %q:\n%s", want, home)
 	}
-	if !strings.Contains(home, "- [[Root 17]] · 1 under it\n- 3 more with documents under them, and 1 document with nothing above or below\n") {
+	if !strings.Contains(home, "| 1 source | Pending | The wiki has not absorbed them yet: ask an agent to sync the wiki |") {
+		t.Fatalf("Waiting for you counts the pending sources:\n%s", home)
+	}
+	if !strings.Contains(home, "| [[Root 17]] | 1 | The Root 17 document. |\n\n3 more with documents under them, and 1 document with nothing above or below.\n") {
 		t.Fatalf("Start here holds 20 roots and a line for the rest:\n%s", home)
-	}
-}
-
-func TestNavigatorBase(t *testing.T) {
-	tv := testvault.New(t)
-	base := views.Render(tv.Index(), testvault.Now)[views.NavigatorPath]
-	for _, want := range []string{
-		`- 'list(this.up).contains(file.asLink())'`,
-		`- '!this.defines.isEmpty() && up.isEmpty() && ("," + list(tags).join(",") + ",").contains(",#" + this.defines + ",")'`,
-		`- '!this.up.isEmpty() && list(up).containsAny(list(this.up))'`,
-		`"4 · Sources below", "3 · Below"`,
-		"- file.path != this.file.path",
-	} {
-		if !strings.Contains(base, want) {
-			t.Errorf("the navigator lacks %q:\n%s", want, base)
-		}
-	}
-	if !strings.HasPrefix(base, views.BaseNotice) {
-		t.Errorf("the navigator opens with the notice:\n%s", base)
 	}
 }

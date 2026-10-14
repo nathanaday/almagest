@@ -117,13 +117,15 @@ func Cycles(nodes []string, edges map[string][]string) [][]string {
 }
 
 type nav struct {
-	once  sync.Once
-	up    map[string][]string
-	below map[string][]string
+	once    sync.Once
+	nodes   map[string]NavNode
+	up      map[string][]string
+	below   map[string][]string
+	citedBy map[string][]string
 }
 
 // NavNodeOf reads a document for the rule of Up. Its up links resolve by title or path,
-// as the navigator's Base and Obsidian match them; an id, an alias, or plain text names
+// as Obsidian matches them; an id, an alias, or plain text names
 // nothing here.
 func (idx *Index) NavNodeOf(d *doc.Doc) NavNode {
 	n := NavNode{ID: d.ID(), Type: d.Type(), Tags: d.List("tags"), Defines: d.Str("defines")}
@@ -176,11 +178,23 @@ func (idx *Index) readNav() {
 	for _, d := range idx.Documents() {
 		nodes = append(nodes, idx.NavNodeOf(d))
 	}
+	idx.nav.nodes = map[string]NavNode{}
+	for _, n := range nodes {
+		idx.nav.nodes[n.ID] = n
+	}
 	idx.nav.up = UpEdges(nodes)
 	idx.nav.below = map[string][]string{}
 	for _, n := range nodes {
 		for _, u := range idx.nav.up[n.ID] {
 			idx.nav.below[u] = append(idx.nav.below[u], n.ID)
+		}
+	}
+	idx.nav.citedBy = map[string][]string{}
+	for _, d := range idx.Documents() {
+		for _, v := range d.List("sources") {
+			if s := idx.Linked(v); s != nil && s.ID() != d.ID() && !slices.Contains(idx.nav.citedBy[s.ID()], d.ID()) {
+				idx.nav.citedBy[s.ID()] = append(idx.nav.citedBy[s.ID()], d.ID())
+			}
 		}
 	}
 }
@@ -224,6 +238,68 @@ func (idx *Index) Under(d *doc.Doc) int {
 		}
 	}
 	return len(seen) - 1
+}
+
+// Neighbors are the documents around one document, as the navigator shows them. Each
+// document stands in one group, the first of Up, Below (topics and repositories) or
+// Sources below, Sources, Cited by, and Beside; each group is in title order.
+type Neighbors struct {
+	Document     Ref   `json:"document"`
+	Up           []Ref `json:"up"`
+	Beside       []Ref `json:"beside"`
+	Below        []Ref `json:"below"`
+	SourcesBelow []Ref `json:"sources_below"`
+	Sources      []Ref `json:"sources"`
+	CitedBy      []Ref `json:"cited_by"`
+}
+
+// Neighbors gives the documents around d. Beside are the documents whose explicit up
+// shares a document with d's: with the fallback, a whole tag would stand beside d.
+func (idx *Index) Neighbors(d *doc.Doc) Neighbors {
+	idx.nav.once.Do(idx.readNav)
+	id := d.ID()
+	seen := map[string]bool{id: true}
+	group := func(ids []string) []Ref {
+		var ds []*doc.Doc
+		for _, x := range idx.docs(ids) {
+			if !seen[x.ID()] {
+				seen[x.ID()] = true
+				ds = append(ds, x)
+			}
+		}
+		sort.Slice(ds, func(i, j int) bool { return strings.ToLower(Title(ds[i])) < strings.ToLower(Title(ds[j])) })
+		return idx.Refs(ds)
+	}
+	var below, sourcesBelow, sources, beside []string
+	for _, b := range idx.nav.below[id] {
+		if idx.byID[b].Type() == "source" {
+			sourcesBelow = append(sourcesBelow, b)
+		} else {
+			below = append(below, b)
+		}
+	}
+	for _, v := range d.List("sources") {
+		if s := idx.Linked(v); s != nil {
+			sources = append(sources, s.ID())
+		}
+	}
+	if n := idx.nav.nodes[id]; n.HasUp && takesUp(n.Type) {
+		for _, u := range idx.nav.up[id] {
+			for _, b := range idx.nav.below[u] {
+				if m := idx.nav.nodes[b]; m.HasUp && takesUp(m.Type) {
+					beside = append(beside, b)
+				}
+			}
+		}
+	}
+	out := Neighbors{Document: idx.Ref(d)}
+	out.Up = group(idx.nav.up[id])
+	out.Below = group(below)
+	out.SourcesBelow = group(sourcesBelow)
+	out.Sources = group(sources)
+	out.CitedBy = group(idx.nav.citedBy[id])
+	out.Beside = group(beside)
+	return out
 }
 
 // UpCycles are the groups of documents that reach themselves by Up.
