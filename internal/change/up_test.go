@@ -169,3 +169,39 @@ func TestApplyChecksLinksAfterTheRewritesToo(t *testing.T) {
 		t.Fatalf("Fine-Tuning after the merge:\n%s", got)
 	}
 }
+
+func TestApplyRefusesABadLinkEditedIntoTheChange(t *testing.T) {
+	tv := upVault(t)
+	pv := propose(t, tv, change.Plan{Title: "Describe", Writes: []change.Write{
+		{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Training a trained model further."}},
+	}})
+	record := tv.Read(pv.Ref.Path)
+	if !strings.Contains(record, `up: ["[[Training]]"]`) {
+		t.Fatalf("the change document holds no up to edit:\n%s", record)
+	}
+	before := tv.Read("tool/source-core/documents/Fine-Tuning.md")
+	for edit, want := range map[string]string{
+		`up: ["[[Block 7 Slides]]"]`:                    "is a source; it must be a topic or repository",
+		`up: ["[[Nowhere]]"]`:                           "[[Nowhere]] names no document",
+		`up: ["[[Fine-Tuning]]"]`:                       "up names Fine-Tuning itself",
+		`up: ["[[` + tv.ID("Machine Learning") + `]]"]`: "names Machine Learning by its id",
+	} {
+		tv.Write(pv.Ref.Path, strings.Replace(record, `up: ["[[Training]]"]`, edit, 1))
+		_, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil)
+		if err == nil || !strings.Contains(err.Error(), want) {
+			t.Errorf("apply with %s: want %q, got %v", edit, want, err)
+		}
+		if got := tv.Read("tool/source-core/documents/Fine-Tuning.md"); got != before {
+			t.Errorf("a refused apply changed Fine-Tuning:\n%s", got)
+		}
+	}
+	// A cycle edited into the change: Machine Learning under Fine-Tuning, which sits under it.
+	pv = propose(t, tv, change.Plan{Title: "Describe the page", Writes: []change.Write{
+		{Op: "modify", ID: "Machine Learning", Fields: map[string]any{"description": "Learning from data."}},
+	}})
+	record = tv.Read(pv.Ref.Path)
+	tv.Write(pv.Ref.Path, strings.Replace(record, "defines: ml\n", "defines: ml\nup: [\"[[Fine-Tuning]]\"]\n", 1))
+	if _, err := change.Apply(tv.V, pv.Ref.ID, tv.Tick(time.Minute), nil); err == nil || !strings.Contains(err.Error(), "reach themselves through their up links") {
+		t.Errorf("apply with a cycle: got %v", err)
+	}
+}
