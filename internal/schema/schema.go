@@ -405,17 +405,19 @@ func (t *Type) Check(v Values, r Resolver) []Problem {
 				add(f.Name, "holds %d links; it takes one", len(v.list(f.Name)))
 				continue
 			}
-			out = append(out, t.checkLink(f, v.str(f.Name), r)...)
+			out = append(out, t.CheckLink(f, v.str(f.Name), r)...)
 		case Links:
 			for _, l := range v.list(f.Name) {
-				out = append(out, t.checkLink(f, l, r)...)
+				out = append(out, t.CheckLink(f, l, r)...)
 			}
 		}
 	}
 	return out
 }
 
-func (t *Type) checkLink(f Field, target string, r Resolver) []Problem {
+// CheckLink checks one link of a field: that it names one document of a type the field
+// allows. A nil resolver checks nothing.
+func (t *Type) CheckLink(f Field, target string, r Resolver) []Problem {
 	if r == nil || strings.TrimSpace(target) == "" {
 		return nil
 	}

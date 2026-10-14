@@ -125,3 +125,27 @@ func TestALinkChecksAfterItsRewrite(t *testing.T) {
 		t.Fatalf("want %q and no advice to link it, got %v", want, err)
 	}
 }
+
+func TestLinksCheckAsTheChangeLeavesThem(t *testing.T) {
+	tv := upVault(t)
+	// A rename keeps the type check: Training's up names a source, renamed or not.
+	tv.Doc("topic", "Training", map[string]any{"id": tv.ID("Training"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"[[Block 7 Slides]]"}}, "")
+	tv.Commit()
+	refused(t, tv, change.Plan{Title: "Rename the slides", Writes: []change.Write{
+		{Op: "modify", ID: "Training", Fields: map[string]any{"description": "How a model learns."}},
+		{Op: "rename", ID: "Block 7 Slides", Title: "B7S"},
+	}}, "up: [[B7S]] is a source; it must be a topic or repository")
+	// A plan may name a title its own rename frees: the link names the new title.
+	pv := propose(t, tv, change.Plan{Title: "Rename and add", Writes: []change.Write{
+		{Op: "rename", ID: "Machine Learning", Title: "ML Field"},
+		{Op: "create", Type: "topic", Kind: "concept", Title: "Deep Learning", Fields: map[string]any{"description": "Many layers.", "tags": []any{"ml"}, "up": []any{"Machine Learning"}}},
+	}})
+	if content := tv.Read(pv.Ref.Path); !strings.Contains(content, `up: ["[[ML Field]]"]`) {
+		t.Fatalf("the create's up does not name the new title:\n%s", content)
+	}
+	// A redirect that up cannot take says so.
+	tv.Doc("topic", "Training", map[string]any{"id": tv.ID("Training"), "kind": "concept", "tags": []string{"ml"}, "up": []string{"[[Machine Learning]]"}}, "")
+	tv.Commit()
+	refused(t, tv, change.Plan{Title: "Merge into the slides", Writes: []change.Write{{Op: "remove", ID: "Training", Redirect: "Block 7 Slides"}}},
+		"Fine-Tuning: up names Training, which this change removes, and its redirect is no topic or repository")
+}

@@ -240,11 +240,13 @@ The design pages are the spec. When the code departs from them, the reason is be
 - **A proposal refuses only the cycles it closes.** `change` checks the vault as the
   whole change leaves it, after the link rewrites, on the effective edges (a retag, a new
   `defines`, or a redirect can close a cycle too), and compares the cycles before and
-  after, so an old cycle blocks no unrelated change; lint reports it. A plan's redirects
-  resolve before any content check, so a modify of a document that links a document the
-  change removes with a redirect passes: the rewrite moves the link. A link to a title
-  that a rename in the change frees passes too. Without a redirect, a link of any field to
-  the removed document, by title, id, or alias, gets one refusal that names the removal.
+  after, so an old cycle blocks no unrelated change; lint reports it. Every link of a
+  write is checked after the rewrites, on the content the change leaves (`check.links`,
+  at propose and at apply): a link a rename or a redirect moves counts at its new place,
+  with its type check. A plan may name a title its own rename frees; `titleOf` gives the
+  new title. A link of any field to a removed document, by title, id, or alias, gets one
+  refusal that names the removal, or says that the redirect is of a type the field
+  cannot take.
 - **The navigator is a Base, not code.** A sync writes `wiki-view/View · Navigator.base`
   (first line `views.BaseNotice`, which the stale pass reads). In the right sidebar,
   `this` is the open note, and one table grouped by a formula shows Up, Beside, Below,

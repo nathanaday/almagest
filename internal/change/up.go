@@ -6,6 +6,7 @@ import (
 
 	"github.com/nathanaday/almagest/internal/doc"
 	"github.com/nathanaday/almagest/internal/links"
+	"github.com/nathanaday/almagest/internal/schema"
 	"github.com/nathanaday/almagest/internal/vault"
 )
 
@@ -55,7 +56,9 @@ func (c *check) upLinks(out *planned) {
 			case target == id:
 				c.refuse("%s: up names %s itself; drop that link", title(id), title(id))
 			case target == "" && !checked[id]:
-				if gone := c.removedBy(v); gone != "" {
+				if gone := c.removedBy(v); gone != "" && c.redirected(v) {
+					c.refuse("%s: up names %s, which this change removes, and its redirect is no topic or repository; redirect to a topic or repository, or modify the up of %s", title(id), gone, title(id))
+				} else if gone != "" {
 					c.refuse("%s: up names %s, which this change removes; give the remove a redirect, or modify the up of %s", title(id), gone, title(id))
 				}
 			}
@@ -137,18 +140,61 @@ func (c *check) removedBy(value string) string {
 	return ""
 }
 
-// renamedFrom reports whether a link names the old title of a document this change
-// renames, so the link rewrite moves it.
-func (c *check) renamedFrom(value string) bool {
+// renaming is the rename in this change that frees a link's title, or nil.
+func (c *check) renaming(value string) *op {
 	key := links.Key(doc.LinkTarget(value))
 	for _, ops := range c.byID {
 		for _, o := range ops {
 			if o.Kind == OpRename && o.NewTitle != "" && links.Key(o.Title) == key {
-				return true
+				return o
 			}
 		}
 	}
-	return false
+	return nil
+}
+
+// links checks every link of the writes as the change leaves them, after the rewrites,
+// so a link a rename or a redirect moves counts at its new place. A link to a removed
+// document, or one by id or alias, gets a refusal of its own; any other, the field's
+// check. Propose checks the plan's own writes; apply, every write of the document.
+func (c *check) links(out *planned, rewrites bool) {
+	for _, o := range out.Ops {
+		if !o.writesContent() || o.Rewrite && !rewrites {
+			continue
+		}
+		d := doc.Parse(o.finalPath(), []byte(o.Content))
+		t := schema.Get(o.Type)
+		if d.FrontErr != nil || t == nil {
+			continue
+		}
+		for _, f := range t.Fields {
+			if f.Kind != schema.Link && f.Kind != schema.Links {
+				continue
+			}
+			for _, v := range d.List(f.Name) {
+				named := c.named(v)
+				title, by := c.idx.Misnamed(v)
+				switch {
+				case named != nil && c.removed(named.ID()) && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
+					switch {
+					case title != "":
+						c.refuse("%s: %s: %s names %s by %s, and this change removes %s; change the link", o.label(), f.Name, v, title, by, title)
+					case c.redirected(v):
+						c.refuse("%s: %s: %s names %s, which this change removes, and its redirect is no %s; redirect to a %s, or change the link", o.label(), f.Name, v, vault.Title(named), strings.Join(f.Targets, " or "), strings.Join(f.Targets, " or "))
+					default:
+						c.refuse("%s: %s: %s names %s, which this change removes; give the remove a redirect, or change the link", o.label(), f.Name, v, vault.Title(named))
+					}
+				case title != "" && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
+					final := c.finalTitle(named)
+					c.refuse("%s: %s: %s names %s by %s; Obsidian resolves a link by title, so link [[%s]]", o.label(), f.Name, v, final, by, final)
+				default:
+					for _, p := range t.CheckLink(f, v, c) {
+						c.refuse("%s: %s", o.label(), p)
+					}
+				}
+			}
+		}
+	}
 }
 
 // redirected reports whether a link names a document that this change removes with a

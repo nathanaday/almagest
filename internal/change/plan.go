@@ -202,6 +202,9 @@ func (c *check) titleOf(value string) (string, string) {
 	if d := c.idx.ByID(t); d != nil && !c.removed(d.ID()) {
 		return c.finalTitle(d), d.Type()
 	}
+	if o := c.renaming(t); o != nil {
+		return o.NewTitle, o.Type
+	}
 	if c.gone[links.Key(t)] {
 		return "", ""
 	}
@@ -380,6 +383,7 @@ func validate(idx *vault.Index, p Plan, now time.Time) (*planned, error) {
 		return nil, &Refusal{Problems: c.problems}
 	}
 	c.rewrites(out)
+	c.links(out, false)
 	c.deadLinks(out)
 	c.upLinks(out)
 	out.Warnings = c.warnings
@@ -615,40 +619,8 @@ func (c *check) checkPage(o *op, content string) {
 		c.refuse("%s: id and type are code's; they must stay %s and %s", o.label(), o.ID, o.Type)
 		return
 	}
-	// The links of the page as the change leaves it, before the rewrites run: a rename's
-	// rewrite and a redirect's move a link by title, so such a link passes here. A link to a
-	// removed document is named for its removal first; a link by id or alias, for its title.
-	moved := map[string]bool{}
-	for _, f := range t.Fields {
-		if f.Kind != schema.Link && f.Kind != schema.Links {
-			continue
-		}
-		for _, v := range d.List(f.Name) {
-			key := f.Name + "\x00" + v
-			named := c.named(v)
-			title, by := c.idx.Misnamed(v)
-			switch {
-			case named != nil && c.removed(named.ID()):
-				moved[key] = true
-				switch {
-				case title != "":
-					c.refuse("%s: %s: %s names %s by %s, and this change removes %s; change the link", o.label(), f.Name, v, title, by, title)
-				case !c.redirected(v):
-					c.refuse("%s: %s: %s names %s, which this change removes; give the remove a redirect, or change the link", o.label(), f.Name, v, vault.Title(named))
-				}
-			case title != "" && c.claimed[links.Key(doc.LinkTarget(v))] == nil:
-				moved[key] = true
-				final := c.finalTitle(named)
-				c.refuse("%s: %s: %s names %s by %s; Obsidian resolves a link by title, so link [[%s]]", o.label(), f.Name, v, final, by, final)
-			case c.renamedFrom(v):
-				moved[key] = true
-			}
-		}
-	}
-	for _, p := range t.Check(schema.Values(d.Front.Map()), c) {
-		if target, _, ok := strings.Cut(p.Message, " names no document"); ok && moved[p.Field+"\x00"+target] {
-			continue
-		}
+	// The links wait for the rewrites: c.links checks them as the change leaves them.
+	for _, p := range t.Check(schema.Values(d.Front.Map()), nil) {
 		c.refuse("%s: %s", o.label(), p)
 	}
 	if o.Type == "repository" && !d.Front.Bool("unlinked") {
