@@ -205,3 +205,11 @@ func TestApplyRefusesABadLinkEditedIntoTheChange(t *testing.T) {
 		t.Errorf("apply with a cycle: got %v", err)
 	}
 }
+
+func TestAnOldSelfLinkBlocksNoOtherChange(t *testing.T) {
+	tv := upVault(t)
+	tv.Doc("topic", "Loner", map[string]any{"kind": "concept", "up": []string{"[[Loner]]"}}, "")
+	tv.Commit()
+	propose(t, tv, change.Plan{Title: "Unrelated", Writes: []change.Write{{Op: "modify", ID: "Fine-Tuning", Fields: map[string]any{"description": "Tuning a trained model."}}}})
+	refused(t, tv, change.Plan{Title: "Self", Writes: []change.Write{{Op: "modify", ID: "Training", Fields: map[string]any{"up": []any{"Training"}}}}}, "up names Training itself")
+}

@@ -53,7 +53,7 @@ func (c *check) upLinks(out *planned) {
 			n.HasUp = true
 			target := c.idOf(v)
 			switch {
-			case target == id:
+			case target == id && !c.namedItself(id):
 				c.refuse("%s: up names %s itself; drop that link", title(id), title(id))
 			case target == "" && !checked[id]:
 				if gone := c.removedBy(v); gone != "" && c.redirected(v) {
@@ -206,6 +206,21 @@ func (c *check) redirected(value string) bool {
 	}
 	for _, o := range c.byID[d.ID()] {
 		if o.Kind == OpRemove && o.Redirect != "" {
+			return true
+		}
+	}
+	return false
+}
+
+// namedItself reports whether a document's up named the document itself before the
+// change: lint reports that self link, and it blocks no unrelated change.
+func (c *check) namedItself(id string) bool {
+	d := c.idx.ByID(id)
+	if d == nil {
+		return false
+	}
+	for _, v := range d.List("up") {
+		if c.named(v) == d {
 			return true
 		}
 	}
